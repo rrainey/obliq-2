@@ -1,105 +1,210 @@
+// app/api/generate-code/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseClient'
 import { CodeGenerator } from '@/lib/codeGeneration'
+import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
 import JSZip from 'jszip'
 
-export async function POST(request: NextRequest) {
+async function generateCodeHandler(request: NextRequest): Promise<NextResponse> {
+  // Parse and validate request body
+  let requestBody: any
   try {
-    const { modelId } = await request.json()
+    requestBody = await request.json()
+  } catch (error) {
+    throw new AppError(
+      'Invalid JSON in request body',
+      400,
+      ErrorTypes.VALIDATION_ERROR
+    )
+  }
 
-    if (!modelId) {
-      return NextResponse.json(
-        { error: 'Model ID is required' },
-        { status: 400 }
-      )
-    }
+  // Validate required fields
+  validateRequiredFields(requestBody, ['modelId'])
+  
+  const { modelId } = requestBody
 
-    // Fetch the model from the database
-    const { data: model, error } = await supabase
-      .from('models')
-      .select('*')
-      .eq('id', modelId)
-      .single()
+  // Validate modelId format (should be UUID)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  if (!uuidRegex.test(modelId)) {
+    throw new AppError(
+      'Invalid model ID format',
+      400,
+      ErrorTypes.VALIDATION_ERROR,
+      { providedModelId: modelId }
+    )
+  }
 
-    if (error) {
-      console.error('Database error:', error)
-      return NextResponse.json(
-        { error: 'Failed to fetch model' },
-        { status: 500 }
-      )
-    }
+  // Fetch the model from the database
+  const { data: model, error: dbError } = await supabase
+    .from('models')
+    .select('*')
+    .eq('id', modelId)
+    .single()
 
-    if (!model) {
-      return NextResponse.json(
-        { error: 'Model not found' },
-        { status: 404 }
-      )
-    }
+  if (dbError) {
+    throw dbError // Will be handled by the error handler
+  }
 
-    // Extract the main sheet (for now, we'll generate code for the main sheet)
-    const sheets = model.data.sheets || []
-    const mainSheet = sheets.find((s: any) => s.id === 'main') || sheets[0]
+  if (!model) {
+    throw new AppError(
+      'Model not found',
+      404,
+      ErrorTypes.NOT_FOUND,
+      { modelId }
+    )
+  }
 
-    if (!mainSheet) {
-      return NextResponse.json(
-        { error: 'No main sheet found in model' },
-        { status: 400 }
-      )
-    }
+  // Validate model structure
+  if (!model.data || !model.data.sheets || !Array.isArray(model.data.sheets)) {
+    throw new AppError(
+      'Invalid model structure: missing or invalid sheets data',
+      400,
+      ErrorTypes.VALIDATION_ERROR,
+      { modelId, modelName: model.name }
+    )
+  }
 
-    // Generate the code
-    const codeGenerator = new CodeGenerator(
-      mainSheet.blocks || [],
+  // Extract the main sheet
+  const sheets = model.data.sheets
+  const mainSheet = sheets.find((s: any) => s.id === 'main') || sheets[0]
+
+  if (!mainSheet) {
+    throw new AppError(
+      'No sheets found in model',
+      400,
+      ErrorTypes.VALIDATION_ERROR,
+      { modelId, modelName: model.name, availableSheets: sheets.length }
+    )
+  }
+
+  // Validate sheet has blocks
+  const blocks = mainSheet.blocks || []
+  if (blocks.length === 0) {
+    throw new AppError(
+      'Cannot generate code: model contains no blocks',
+      400,
+      ErrorTypes.VALIDATION_ERROR,
+      { modelId, modelName: model.name, sheetName: mainSheet.name }
+    )
+  }
+
+  // Generate the code
+  let codeGenerator: CodeGenerator
+  try {
+    codeGenerator = new CodeGenerator(
+      blocks,
       mainSheet.connections || [],
       sheets,
       model.name
     )
+  } catch (error) {
+    throw new AppError(
+      'Failed to initialize code generator',
+      500,
+      ErrorTypes.INTERNAL_ERROR,
+      { originalError: error instanceof Error ? error.message : 'Unknown error' }
+    )
+  }
 
-    const result = codeGenerator.generateCode()
+  const result = codeGenerator.generateCode()
 
-    if (!result.success) {
-      return NextResponse.json(
-        { 
-          error: 'Code generation failed',
-          details: result.errors
-        },
-        { status: 400 }
-      )
-    }
+  if (!result.success) {
+    throw new AppError(
+      'Code generation failed',
+      400,
+      ErrorTypes.VALIDATION_ERROR,
+      { 
+        errors: result.errors,
+        modelId,
+        modelName: model.name
+      }
+    )
+  }
 
-    // Create a ZIP file with the generated code
-    const zip = new JSZip()
+  // Validate generated files
+  if (!result.files || result.files.length === 0) {
+    throw new AppError(
+      'Code generation produced no files',
+      500,
+      ErrorTypes.INTERNAL_ERROR,
+      { modelId, modelName: model.name }
+    )
+  }
+
+  // Create ZIP file
+  let zip: JSZip
+  let zipBuffer: Buffer
+
+  try {
+    zip = new JSZip()
     
     // Add generated files to the zip
     for (const file of result.files) {
+      if (!file.name || !file.content) {
+        throw new AppError(
+          'Generated file missing name or content',
+          500,
+          ErrorTypes.INTERNAL_ERROR,
+          { fileName: file.name, hasContent: !!file.content }
+        )
+      }
       zip.file(file.name, file.content)
     }
 
     // Add a README file
-    const readmeContent = `# ${model.name} - Generated C Library
+    const readmeContent = generateReadmeContent(model.name)
+    zip.file('README.md', readmeContent)
+
+    // Generate the ZIP buffer
+    zipBuffer = await zip.generateAsync({ type: 'nodebuffer' })
+
+  } catch (error) {
+    throw new AppError(
+      'Failed to create ZIP file',
+      500,
+      ErrorTypes.INTERNAL_ERROR,
+      { 
+        originalError: error instanceof Error ? error.message : 'Unknown error',
+        modelId,
+        modelName: model.name
+      }
+    )
+  }
+
+  // Return the ZIP file
+  return new NextResponse(zipBuffer, {
+    headers: {
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="${sanitizeFilename(model.name)}_library.zip"`
+    }
+  })
+}
+
+function generateReadmeContent(modelName: string): string {
+  return `# ${modelName} - Generated C Library
 
 This library was automatically generated from a visual block diagram model.
 
 ## Files:
-- ${model.name}.h - Header file with data structures and function declarations
-- ${model.name}.c - Implementation file with the model logic
+- ${modelName}.h - Header file with data structures and function declarations
+- ${modelName}.c - Implementation file with the model logic
 - library.properties - PlatformIO library configuration
 
 ## Usage:
 1. Include this library in your PlatformIO project
-2. Include the header: #include "${model.name}.h"
-3. Create an instance: ${model.name}_t model_instance;
-4. Initialize: ${model.name}_init(&model_instance, 0.01); // 10ms time step
-5. In your main loop: ${model.name}_step(&model_instance);
+2. Include the header: #include "${modelName}.h"
+3. Create an instance: ${modelName}_t model_instance;
+4. Initialize: ${modelName}_init(&model_instance, 0.01); // 10ms time step
+5. In your main loop: ${modelName}_step(&model_instance);
 
 ## Example:
 \`\`\`c
-#include "${model.name}.h"
+#include "${modelName}.h"
 
-${model.name}_t model;
+${modelName}_t model;
 
 void setup() {
-  ${model.name}_init(&model, 0.01); // 10ms time step
+  ${modelName}_init(&model, 0.01); // 10ms time step
 }
 
 void loop() {
@@ -107,7 +212,7 @@ void loop() {
   model.inputs.Input1 = analogRead(A0) / 1023.0;
   
   // Execute one step
-  ${model.name}_step(&model);
+  ${modelName}_step(&model);
   
   // Use outputs
   analogWrite(9, (int)(model.outputs.Output1 * 255));
@@ -118,25 +223,11 @@ void loop() {
 
 Generated on: ${new Date().toISOString()}
 `
-    
-    zip.file('README.md', readmeContent)
-
-    // Generate the ZIP file
-    const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' })
-
-    // Return the ZIP file
-    return new NextResponse(zipBuffer, {
-      headers: {
-        'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${model.name}_library.zip"`
-      }
-    })
-
-  } catch (error) {
-    console.error('Code generation error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
 }
+
+function sanitizeFilename(filename: string): string {
+  return filename.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
+// Export the wrapped handler
+export const POST = withErrorHandling(generateCodeHandler, 'generate-code')
