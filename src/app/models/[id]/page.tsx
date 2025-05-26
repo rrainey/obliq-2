@@ -13,6 +13,7 @@ import InputPortConfig from '@/components/InputPortConfig'
 import SourceConfig from '@/components/SourceConfig'
 import Lookup1DConfig from '@/components/Lookup1DConfig'
 import Lookup2DConfig from '@/components/Lookup2DConfig'
+import ScaleConfig from '@/components/ScaleConfig'
 import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -265,7 +266,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'output_port' || 
       block.type === 'source' ||
       block.type === 'lookup_1d' ||
-      block.type === 'lookup_2d'
+      block.type === 'lookup_2d' ||
+      block.type === 'scale'
     )) {
       setConfigBlock(block)
     } else {
@@ -519,6 +521,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'lookup_2d' && (
             <Lookup2DConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'scale' && (
+            <ScaleConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}
