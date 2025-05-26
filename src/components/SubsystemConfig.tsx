@@ -3,13 +3,25 @@
 import { useState } from 'react'
 import { BlockData } from './Block'
 
+export interface Sheet {
+  id: string
+  name: string
+  blocks: any[]
+  connections: any[]
+  extents: {
+    width: number
+    height: number
+  }
+}
+
 interface SubsystemConfigProps {
   block: BlockData
+  availableSheets?: Sheet[]
   onUpdate: (parameters: Record<string, any>) => void
   onClose: () => void
 }
 
-export default function SubsystemConfig({ block, onUpdate, onClose }: SubsystemConfigProps) {
+export default function SubsystemConfig({ block, availableSheets = [], onUpdate, onClose }: SubsystemConfigProps) {
   const [sheetId, setSheetId] = useState(block.parameters?.sheetId || '')
   const [sheetName, setSheetName] = useState(block.parameters?.sheetName || 'Subsystem')
   const [inputPorts, setInputPorts] = useState(block.parameters?.inputPorts || ['Input1'])
@@ -86,6 +98,29 @@ export default function SubsystemConfig({ block, onUpdate, onClose }: SubsystemC
               placeholder="Enter subsystem name"
             />
           </div>
+
+          {availableSheets.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Reference Sheet
+              </label>
+              <select
+                value={sheetId}
+                onChange={(e) => setSheetId(e.target.value)}
+                className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
+              >
+                <option value="">Create New Sheet</option>
+                {availableSheets.map(sheet => (
+                  <option key={sheet.id} value={sheet.id}>
+                    {sheet.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Select existing sheet or leave empty to create new
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
