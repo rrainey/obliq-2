@@ -4,6 +4,7 @@ import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
 import { SimulationResults, SimulationEngine } from '@/lib/simulationEngine'
 import { Model } from '@/lib/types'
+import { supabase } from '@/lib/supabaseClient'
 
 export interface Sheet {
   id: string
@@ -39,7 +40,12 @@ export interface ModelState {
   
   // Loading states
   modelLoading: boolean
+  saving: boolean
   error: string | null
+  
+  // Auto-save state
+  autoSaveEnabled: boolean
+  lastAutoSave: string | null
 }
 
 export interface ModelActions {
@@ -47,6 +53,10 @@ export interface ModelActions {
   setModel: (model: Model | null) => void
   setError: (error: string | null) => void
   setModelLoading: (loading: boolean) => void
+  saveModel: () => Promise<boolean>
+  saveAutoSave: () => Promise<boolean>
+  enableAutoSave: () => void
+  disableAutoSave: () => void
   
   // Sheet actions
   setSheets: (sheets: Sheet[]) => void
@@ -101,12 +111,160 @@ export const useModelStore = create<ModelStore>()(
     simulationEngine: null,
     outputPortValues: null,
     modelLoading: true,
+    saving: false,
     error: null,
+    autoSaveEnabled: true,
+    lastAutoSave: null,
 
     // Model actions
     setModel: (model) => set({ model }),
     setError: (error) => set({ error }),
     setModelLoading: (modelLoading) => set({ modelLoading }),
+    
+    saveModel: async () => {
+      const state = get()
+      
+      if (!state.model) {
+        set({ error: 'No model to save' })
+        return false
+      }
+
+      set({ saving: true, error: null })
+      
+      try {
+        // Ensure current sheet data is saved before persisting to database
+        get().saveCurrentSheetData()
+        
+        // Get the updated model with current sheet data
+        const updatedState = get()
+        
+        // Double-check model still exists after state update
+        if (!updatedState.model) {
+          set({ error: 'Model was lost during save preparation', saving: false })
+          return false
+        }
+        
+        const modelData = {
+          ...updatedState.model.data,
+          sheets: updatedState.sheets
+        }
+
+        const { error } = await supabase
+          .from('models')
+          .update({ 
+            data: modelData,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', updatedState.model.id)
+
+        if (error) {
+          console.error('Save error:', error)
+          set({ error: `Failed to save model: ${error.message}`, saving: false })
+          return false
+        }
+
+        // Update the model with the new data
+        set({ 
+          model: {
+            ...updatedState.model,
+            data: modelData,
+            updated_at: new Date().toISOString()
+          },
+          saving: false,
+          error: null
+        })
+        
+        console.log('Model saved successfully')
+        return true
+
+      } catch (error) {
+        console.error('Save error:', error)
+        set({ 
+          error: `Failed to save model: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          saving: false 
+        })
+        return false
+      }
+    },
+    
+    saveAutoSave: async () => {
+      const state = get()
+      
+      if (!state.model || !state.autoSaveEnabled) {
+        return false
+      }
+
+      try {
+        // Ensure current sheet data is saved
+        get().saveCurrentSheetData()
+        
+        // Get the updated state and check model still exists
+        const updatedState = get()
+        if (!updatedState.model) {
+          console.error('Model was lost during auto-save preparation')
+          return false
+        }
+        
+        const modelData = {
+          ...updatedState.model.data,
+          sheets: updatedState.sheets
+        }
+
+        // Create auto-save model name
+        const autoSaveName = `${updatedState.model.name} (auto-save)`
+        
+        // Check if auto-save model already exists
+        const { data: existingAutoSave } = await supabase
+          .from('models')
+          .select('id')
+          .eq('user_id', updatedState.model.user_id)
+          .eq('name', autoSaveName)
+          .single()
+
+        if (existingAutoSave) {
+          // Update existing auto-save
+          const { error } = await supabase
+            .from('models')
+            .update({ 
+              data: modelData,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingAutoSave.id)
+
+          if (error) {
+            console.error('Auto-save update error:', error)
+            return false
+          }
+        } else {
+          // Create new auto-save
+          const { error } = await supabase
+            .from('models')
+            .insert({
+              user_id: updatedState.model.user_id,
+              name: autoSaveName,
+              data: modelData,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+
+          if (error) {
+            console.error('Auto-save create error:', error)
+            return false
+          }
+        }
+
+        set({ lastAutoSave: new Date().toISOString() })
+        console.log('Auto-save completed')
+        return true
+
+      } catch (error) {
+        console.error('Auto-save error:', error)
+        return false
+      }
+    },
+    
+    enableAutoSave: () => set({ autoSaveEnabled: true }),
+    disableAutoSave: () => set({ autoSaveEnabled: false }),
 
     // Sheet actions
     setSheets: (sheets) => set({ sheets }),

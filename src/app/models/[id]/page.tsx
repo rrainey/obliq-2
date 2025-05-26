@@ -16,6 +16,7 @@ import SubsystemConfig from '@/components/SubsystemConfig'
 import Lookup1DConfig from '@/components/Lookup1DConfig'
 import Lookup2DConfig from '@/components/Lookup2DConfig'
 import { useModelStore } from '@/lib/modelStore'
+import { useAutoSave } from '@/lib/useAutoSave'
 import { use, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -36,10 +37,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     model, sheets, activeSheetId, blocks, wires,
     selectedBlockId, selectedWireId, configBlock,
     simulationResults, isSimulating, simulationEngine, outputPortValues,
-    modelLoading, error,
+    modelLoading, saving, error,
     
     // Actions
-    setModel, setError, setModelLoading,
+    setModel, setError, setModelLoading, saveModel,
     switchToSheet, addSheet, renameSheet, deleteSheet,
     addBlock, updateBlock, addWire, deleteWire,
     setSelectedBlockId, setSelectedWireId, setConfigBlock,
@@ -49,6 +50,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   
   // Unwrap the params Promise
   const { id } = use(params)
+
+  // Enable auto-save
+  useAutoSave()
 
   useEffect(() => {
     if (!loading && !user) {
@@ -86,6 +90,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     } finally {
       setModelLoading(false)
     }
+  }
+
+  const handleSave = async () => {
+    const success = await saveModel()
+    if (success) {
+      // Optional: Show success message
+      console.log('Model saved successfully')
+    }
+    // Error messages are handled by the store
   }
 
   const getDefaultParameters = (blockType: string) => {
@@ -428,14 +441,24 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               </Link>
               <h1 className="text-xl font-semibold text-gray-900">
                 {model.name}
+                {error && (
+                  <span className="ml-2 text-sm text-red-600 font-normal">
+                    ({error})
+                  </span>
+                )}
               </h1>
             </div>
             <div className="flex items-center space-x-4">
               <button 
-                className="px-4 py-2 bg-green-700 text-white rounded-md hover:bg-green-800 border border-green-600 font-medium"
-                onClick={() => console.log('Save functionality coming in later tasks')}
+                className={`px-4 py-2 rounded-md font-medium border ${
+                  saving
+                    ? 'bg-gray-500 text-white cursor-not-allowed border-gray-400'
+                    : 'bg-green-700 text-white hover:bg-green-800 border-green-600'
+                }`}
+                onClick={handleSave}
+                disabled={saving}
               >
-                Save
+                {saving ? 'Saving...' : 'Save'}
               </button>
               <button 
                 className={`px-4 py-2 rounded-md text-white font-medium border ${
