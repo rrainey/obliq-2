@@ -3,13 +3,13 @@
 import { useState } from 'react'
 import { BlockData } from './Block'
 
-interface PortConfigProps {
+interface InputPortConfigProps {
   block: BlockData
   onUpdate: (parameters: Record<string, any>) => void
   onClose: () => void
 }
 
-export default function InputPortConfig({ block, onUpdate, onClose }: PortConfigProps) {
+export default function InputPortConfig({ block, onUpdate, onClose }: InputPortConfigProps) {
   const [portName, setPortName] = useState(block.parameters?.portName || 'Input')
   const [defaultValue, setDefaultValue] = useState(block.parameters?.defaultValue || 0)
 

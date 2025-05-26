@@ -10,6 +10,7 @@ import Canvas from '@/components/Canvas'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SignalDisplay from '@/components/SignalDisplay'
 import InputPortConfig from '@/components/InputPortConfig'
+import SourceConfig from '@/components/SourceConfig'
 import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -452,13 +453,24 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         </div>
       </div>
       
-      {/* Input Port Configuration Modal */}
+      {/* Configuration Modals */}
       {configBlock && (
-        <InputPortConfig
-          block={configBlock}
-          onUpdate={handleBlockConfigUpdate}
-          onClose={() => setConfigBlock(null)}
-        />
+        <>
+          {(configBlock.type === 'input_port' || configBlock.type === 'output_port') && (
+            <InputPortConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'source' && (
+            <SourceConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+        </>
       )}
     </div>
   )
