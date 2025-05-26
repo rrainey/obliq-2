@@ -93,6 +93,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }
 
+  const handleSave = async () => {
+    const success = await saveModel()
+    if (success) {
+      // Optional: Show success message
+      console.log('Model saved successfully')
+    }
+    // Error messages are handled by the store
+  }
+
   const getDefaultParameters = (blockType: string) => {
     switch (blockType) {
       case 'source':
@@ -277,12 +286,47 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }
 
-  const handleSave = async () => {
-    const success = await saveModel()
-    if (success) {
-      console.log('Model saved successfully')
+  const handleGenerateCode = async () => {
+    if (!model) {
+      alert('No model loaded')
+      return
     }
-    // Error messages are handled by the store
+
+    try {
+      // Save current work before generating code
+      saveCurrentSheetData()
+
+      const response = await fetch('/api/generate-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          modelId: model.id
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Code generation failed')
+      }
+
+      // Download the generated ZIP file
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${model.name}_library.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      console.log('Code generation completed successfully')
+    } catch (error) {
+      console.error('Code generation error:', error)
+      alert(`Code generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   const handleBlockDoubleClick = (blockId: string) => {
@@ -474,7 +518,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               </button>
               <button 
                 className="px-4 py-2 bg-purple-700 text-white rounded-md hover:bg-purple-800 border border-purple-600 font-medium"
-                onClick={() => console.log('Code generation coming in later tasks')}
+                onClick={handleGenerateCode}
               >
                 Generate Code
               </button>
