@@ -11,6 +11,7 @@ import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SignalDisplay from '@/components/SignalDisplay'
 import InputPortConfig from '@/components/InputPortConfig'
 import SourceConfig from '@/components/SourceConfig'
+import Lookup1DConfig from '@/components/Lookup1DConfig'
 import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -35,6 +36,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const [isSimulating, setIsSimulating] = useState(false)
   const [simulationEngine, setSimulationEngine] = useState<SimulationEngine | null>(null)
   const [configBlock, setConfigBlock] = useState<BlockData | null>(null)
+  const [outputPortValues, setOutputPortValues] = useState<Map<string, number> | null>(null)
   
   // Unwrap the params Promise
   const { id } = use(params)
@@ -112,6 +114,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       case 'output_port':
         return {
           portName: 'Output'
+        }
+      case 'scale':
+        return { gain: 1 }
+      case 'transfer_function':
+        return { 
+          numerator: [1], 
+          denominator: [1, 1] // Default: 1/(s+1)
         }
       case 'lookup_1d':
         return {
@@ -199,6 +208,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       
       setSimulationResults(results)
       setSimulationEngine(engine) // Store engine for CSV export
+      setOutputPortValues(engine.getOutputPortValues()) // Store output port values
       console.log('Simulation completed:', results)
     } catch (error) {
       console.error('Simulation error:', error)
@@ -239,7 +249,12 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
   const handleBlockDoubleClick = (blockId: string) => {
     const block = blocks.find(b => b.id === blockId)
-    if (block && (block.type === 'input_port' || block.type === 'output_port' || block.type === 'source')) {
+    if (block && (
+      block.type === 'input_port' || 
+      block.type === 'output_port' || 
+      block.type === 'source' ||
+      block.type === 'lookup_1d'
+    )) {
       setConfigBlock(block)
     } else {
       console.log('Block double-clicked:', blockId)
@@ -325,16 +340,16 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             </div>
             <div className="flex items-center space-x-4">
               <button 
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                className="px-4 py-2 bg-green-700 text-white rounded-md hover:bg-green-800 border border-green-600 font-medium"
                 onClick={() => console.log('Save functionality coming in later tasks')}
               >
                 Save
               </button>
               <button 
-                className={`px-4 py-2 rounded-md text-white ${
+                className={`px-4 py-2 rounded-md text-white font-medium border ${
                   isSimulating 
-                    ? 'bg-gray-400 cursor-not-allowed' 
-                    : 'bg-blue-600 hover:bg-blue-700'
+                    ? 'bg-gray-500 cursor-not-allowed border-gray-400' 
+                    : 'bg-blue-700 hover:bg-blue-800 border-blue-600'
                 }`}
                 onClick={handleRunSimulation}
                 disabled={isSimulating}
@@ -342,7 +357,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                 {isSimulating ? 'Running...' : 'Run Simulation'}
               </button>
               <button 
-                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                className="px-4 py-2 bg-purple-700 text-white rounded-md hover:bg-purple-800 border border-purple-600 font-medium"
                 onClick={() => console.log('Code generation coming in later tasks')}
               >
                 Generate Code
@@ -428,6 +443,19 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                   )
                 })}
 
+                {/* Output Port Values */}
+                {outputPortValues && outputPortValues.size > 0 && (
+                  <div className="mt-4">
+                    <h4 className="font-medium mb-2">Output Port Values</h4>
+                    {Array.from(outputPortValues.entries()).map(([portName, value]) => (
+                      <div key={portName} className="bg-amber-50 p-3 rounded mb-2">
+                        <div className="text-sm font-medium text-amber-800">{portName}</div>
+                        <div className="text-lg font-mono text-amber-900">{value.toFixed(3)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* CSV Export Button */}
                 {Array.from(simulationResults.signalData.entries()).some(([blockId]) => 
                   blocks.find(b => b.id === blockId && b.type === 'signal_logger')
@@ -435,7 +463,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                   <div className="mt-4">
                     <button
                       onClick={handleExportCSV}
-                      className="w-full px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
+                      className="w-full px-4 py-2 bg-green-700 text-white text-sm rounded-md hover:bg-green-800 border border-green-600 font-medium"
                     >
                       Export Logger Data as CSV
                     </button>
@@ -452,7 +480,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           </div>
         </div>
       </div>
-      
+
       {/* Configuration Modals */}
       {configBlock && (
         <>
@@ -465,6 +493,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'source' && (
             <SourceConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'lookup_1d' && (
+            <Lookup1DConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

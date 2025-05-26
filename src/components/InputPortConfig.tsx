@@ -49,7 +49,7 @@ export default function InputPortConfig({ block, onUpdate, onClose }: InputPortC
               type="text"
               value={portName}
               onChange={(e) => setPortName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
               placeholder="Enter port name"
             />
             <p className="text-xs text-gray-500 mt-1">
@@ -67,7 +67,7 @@ export default function InputPortConfig({ block, onUpdate, onClose }: InputPortC
                 step="any"
                 value={defaultValue}
                 onChange={(e) => setDefaultValue(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Value used when no external input is connected

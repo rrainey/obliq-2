@@ -535,11 +535,79 @@ export class SimulationEngine {
 
   private executeLookup1DBlock(blockState: BlockState, inputs: number[]) {
     const input = inputs[0] || 0
-    const { inputValues, outputValues } = blockState.internalState
+    const { inputValues, outputValues, extrapolation } = blockState.internalState
     
-    // Linear interpolation
-    const result = this.interpolate1D(input, inputValues, outputValues)
-    blockState.outputs[0] = result
+    // Validate that we have data
+    if (!inputValues || !outputValues || inputValues.length === 0 || outputValues.length === 0) {
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    // Ensure arrays are the same length
+    const minLength = Math.min(inputValues.length, outputValues.length)
+    if (minLength === 0) {
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    // Single point case
+    if (minLength === 1) {
+      blockState.outputs[0] = outputValues[0]
+      return
+    }
+    
+    // Handle extrapolation cases
+    if (input <= inputValues[0]) {
+      if (extrapolation === 'clamp') {
+        blockState.outputs[0] = outputValues[0]
+      } else { // extrapolate
+        if (minLength >= 2) {
+          const slope = (outputValues[1] - outputValues[0]) / (inputValues[1] - inputValues[0])
+          blockState.outputs[0] = outputValues[0] + slope * (input - inputValues[0])
+        } else {
+          blockState.outputs[0] = outputValues[0]
+        }
+      }
+      return
+    }
+    
+    if (input >= inputValues[minLength - 1]) {
+      if (extrapolation === 'clamp') {
+        blockState.outputs[0] = outputValues[minLength - 1]
+      } else { // extrapolate
+        if (minLength >= 2) {
+          const slope = (outputValues[minLength - 1] - outputValues[minLength - 2]) / 
+                       (inputValues[minLength - 1] - inputValues[minLength - 2])
+          blockState.outputs[0] = outputValues[minLength - 1] + slope * (input - inputValues[minLength - 1])
+        } else {
+          blockState.outputs[0] = outputValues[minLength - 1]
+        }
+      }
+      return
+    }
+    
+    // Find the interpolation interval
+    for (let i = 0; i < minLength - 1; i++) {
+      if (input >= inputValues[i] && input <= inputValues[i + 1]) {
+        // Linear interpolation
+        const x0 = inputValues[i]
+        const x1 = inputValues[i + 1]
+        const y0 = outputValues[i]
+        const y1 = outputValues[i + 1]
+        
+        // Avoid division by zero
+        if (x1 === x0) {
+          blockState.outputs[0] = y0
+        } else {
+          const t = (input - x0) / (x1 - x0)
+          blockState.outputs[0] = y0 + t * (y1 - y0)
+        }
+        return
+      }
+    }
+    
+    // Fallback (shouldn't reach here)
+    blockState.outputs[0] = outputValues[0]
   }
 
   private executeLookup2DBlock(blockState: BlockState, inputs: number[]) {
@@ -583,11 +651,24 @@ export class SimulationEngine {
   }
 
   private executeOutputPortBlock(blockState: BlockState, inputs: number[]) {
-    // Output ports just pass the input through (for monitoring)
-    // They don't produce outputs to other blocks
+    // Output ports represent external outputs to parent subsystem/model
+    // In simulation, they act as interface points where internal signals exit
+    // For top-level models, they can be monitored or logged
+    // For subsystems, they provide values to the parent model connections
+    
     const input = inputs[0] || 0
-    // Store the value for external access if needed
-    blockState.internalState = { value: input }
+    const portName = blockState.internalState?.portName || `Output_${blockState.blockId}`
+    
+    // Store the current input value for external access
+    // In a hierarchical system, this would be available to the parent model
+    blockState.internalState = {
+      portName,
+      currentValue: input,
+      isConnectedToParent: false // Would be true in subsystem context
+    }
+    
+    // Output ports don't produce outputs to other blocks within the same level
+    // They represent the final destination of signals leaving the current subsystem
   }
 
   private interpolate1D(x: number, xValues: number[], yValues: number[]): number {
@@ -743,6 +824,37 @@ export class SimulationEngine {
     }
     
     return csv
+  }
+
+  public getOutputPortValues(): Map<string, number> {
+    const outputValues = new Map<string, number>()
+    
+    for (const block of this.blocks) {
+      if (block.type === 'output_port') {
+        const blockState = this.state.blockStates.get(block.id)
+        if (blockState && blockState.internalState) {
+          const portName = blockState.internalState.portName
+          const value = blockState.internalState.currentValue || 0
+          outputValues.set(portName, value)
+        }
+      }
+    }
+    
+    return outputValues
+  }
+
+  public getOutputPortValue(portName: string): number | undefined {
+    for (const block of this.blocks) {
+      if (block.type === 'output_port') {
+        const blockState = this.state.blockStates.get(block.id)
+        if (blockState && 
+            blockState.internalState && 
+            blockState.internalState.portName === portName) {
+          return blockState.internalState.currentValue || 0
+        }
+      }
+    }
+    return undefined
   }
 
   public reset() {

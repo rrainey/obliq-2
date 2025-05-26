@@ -60,7 +60,7 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 step="any"
                 value={value}
                 onChange={(e) => setValue(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
               />
               <p className="text-xs text-gray-500 mt-1">Constant output value</p>
             </div>
@@ -79,7 +79,7 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 step="any"
                 value={stepTime}
                 onChange={(e) => setStepTime(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                className="w-full px-3 py-2 border-2 border-gray-300 rounded-md text-sm bg-white text-gray-800 focus:border-blue-500 focus:outline-none"
               />
               <p className="text-xs text-gray-500 mt-1">Time when step occurs</p>
             </div>
@@ -332,7 +332,7 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
             <select
               value={signalType}
               onChange={(e) => setSignalType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
             >
               <option value="constant">Constant</option>
               <option value="step">Step</option>
