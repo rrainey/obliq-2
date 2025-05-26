@@ -230,6 +230,3 @@ Each task below has a clear start and end. They’re designed to be executed one
 - Tasks are incremental—no leap of logic; each small step is independently verifiable.
 - Tasks can be parallelized cautiously (e.g., separate block types by different devs).
 
----
-
-Would you like me to package this as a downloadable `.md` file or generate a JSON-based task manifest? Let me know how you’d like to deploy it! 🚀
