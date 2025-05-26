@@ -1,3 +1,4 @@
+// app/models/page.tsx
 'use client'
 
 import { useUser } from '@/lib/auth'

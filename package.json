@@ -9,8 +9,10 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/auth-ui-react": "^0.4.7",
     "@supabase/auth-ui-shared": "^0.1.8",
+    "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.8",
     "jszip": "^3.10.1",
     "next": "15.3.2",
