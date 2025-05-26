@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import Block, { BlockData, PortInfo } from './Block'
 import Wire, { WireData } from './Wire'
+import { validateConnection, validatePortForConnection, detectAlgebraicLoop } from '@/lib/connectionValidation'
 
 interface CanvasProps {
   width?: number
@@ -43,6 +44,7 @@ export default function Canvas({
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectionStart, setConnectionStart] = useState<PortInfo | null>(null)
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+  const [connectionError, setConnectionError] = useState<string | null>(null)
 
   // Handle mouse wheel for zoom
   const handleWheel = useCallback((e: WheelEvent) => {
@@ -104,41 +106,6 @@ export default function Canvas({
     e.preventDefault()
   }, [])
 
-  /*
-  // Handle port clicks for wire creation
-  const handlePortClick = useCallback((portInfo: PortInfo) => {
-    if (!isConnecting) {
-      // Start connection from this port
-      setIsConnecting(true)
-      setConnectionStart(portInfo)
-    } else if (connectionStart) {
-      // Complete connection to this port
-      if (onWireCreate && 
-          portInfo.blockId !== connectionStart.blockId && 
-          portInfo.isOutput !== connectionStart.isOutput) {
-        // Valid connection: different blocks and opposite port types
-        const sourcePort = connectionStart.isOutput ? connectionStart : portInfo
-        const targetPort = connectionStart.isOutput ? portInfo : connectionStart
-        onWireCreate(sourcePort, targetPort)
-      }
-      setIsConnecting(false)
-      setConnectionStart(null)
-    }
-  }, [isConnecting, connectionStart, onWireCreate])
-
-  // Get port position for wire rendering
-  const getPortPosition = useCallback((blockId: string, portIndex: number, isOutput: boolean) => {
-    const block = blocks.find(b => b.id === blockId)
-    if (!block) return { x: 0, y: 0 }
-    
-    const portOffsetY = portIndex * 6 // Spacing between ports
-    return {
-      x: block.position.x + (isOutput ? 80 : 0), // Block width is 80px
-      y: block.position.y + 32 + portOffsetY - (portIndex * 2) // Center vertically
-    }
-  }, [blocks])
-
-  */
   // Handle drop for adding blocks
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -150,26 +117,6 @@ export default function Canvas({
       onDrop(x, y, blockType)
     }
   }, [onDrop, pan, zoom])
-  // Handle port clicks for wire creation
-  const handlePortClick = useCallback((portInfo: PortInfo) => {
-    if (!isConnecting) {
-      // Start connection from this port
-      setIsConnecting(true)
-      setConnectionStart(portInfo)
-    } else if (connectionStart) {
-      // Complete connection to this port
-      if (onWireCreate && 
-          portInfo.blockId !== connectionStart.blockId && 
-          portInfo.isOutput !== connectionStart.isOutput) {
-        // Valid connection: different blocks and opposite port types
-        const sourcePort = connectionStart.isOutput ? connectionStart : portInfo
-        const targetPort = connectionStart.isOutput ? portInfo : connectionStart
-        onWireCreate(sourcePort, targetPort)
-      }
-      setIsConnecting(false)
-      setConnectionStart(null)
-    }
-  }, [isConnecting, connectionStart, onWireCreate])
 
   // Get port position for wire rendering
   const getPortPosition = useCallback((blockId: string, portIndex: number, isOutput: boolean) => {
@@ -182,6 +129,64 @@ export default function Canvas({
       y: block.position.y + 32 + portOffsetY - (portIndex * 2) // Center vertically
     }
   }, [blocks])
+
+  // Handle port clicks for wire creation
+  const handlePortClick = useCallback((portInfo: PortInfo) => {
+    if (!isConnecting) {
+      // Validate if this port can start a connection
+      const validation = validatePortForConnection(portInfo, blocks, wires)
+      if (!validation.isValid) {
+        setConnectionError(validation.errorMessage || 'Invalid port')
+        setTimeout(() => setConnectionError(null), 3000)
+        return
+      }
+
+      // Start connection from this port
+      setIsConnecting(true)
+      setConnectionStart(portInfo)
+      setConnectionError(null)
+    } else if (connectionStart) {
+      // Validate the complete connection
+      const validation = validateConnection(connectionStart, portInfo, blocks, wires)
+      
+      if (!validation.isValid) {
+        setConnectionError(validation.errorMessage || 'Invalid connection')
+        setTimeout(() => setConnectionError(null), 3000)
+        setIsConnecting(false)
+        setConnectionStart(null)
+        return
+      }
+
+      // Check for algebraic loops
+      const newWire: WireData = {
+        id: 'temp',
+        sourceBlockId: connectionStart.isOutput ? connectionStart.blockId : portInfo.blockId,
+        sourcePortIndex: connectionStart.isOutput ? connectionStart.portIndex : portInfo.portIndex,
+        targetBlockId: connectionStart.isOutput ? portInfo.blockId : connectionStart.blockId,
+        targetPortIndex: connectionStart.isOutput ? portInfo.portIndex : connectionStart.portIndex
+      }
+
+      const loopValidation = detectAlgebraicLoop(newWire, wires)
+      if (!loopValidation.isValid) {
+        setConnectionError(loopValidation.errorMessage || 'Would create algebraic loop')
+        setTimeout(() => setConnectionError(null), 3000)
+        setIsConnecting(false)
+        setConnectionStart(null)
+        return
+      }
+
+      // Valid connection - create the wire
+      if (onWireCreate) {
+        const sourcePort = connectionStart.isOutput ? connectionStart : portInfo
+        const targetPort = connectionStart.isOutput ? portInfo : connectionStart
+        onWireCreate(sourcePort, targetPort)
+      }
+      
+      setIsConnecting(false)
+      setConnectionStart(null)
+      setConnectionError(null)
+    }
+  }, [isConnecting, connectionStart, onWireCreate, blocks, wires])
 
   // Add wheel event listener
   useEffect(() => {
@@ -194,13 +199,6 @@ export default function Canvas({
 
   // Grid pattern for background
   const gridSize = 20
-  const gridPattern = `
-    <defs>
-      <pattern id="grid" width="${gridSize}" height="${gridSize}" patternUnits="userSpaceOnUse">
-        <path d="M ${gridSize} 0 L 0 0 0 ${gridSize}" fill="none" stroke="#e5e7eb" stroke-width="1"/>
-      </pattern>
-    </defs>
-  `
 
   return (
     <div 
@@ -329,6 +327,20 @@ export default function Canvas({
           ⌂
         </button>
       </div>
+
+      {/* Connection Error Display */}
+      {connectionError && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
+          {connectionError}
+        </div>
+      )}
+
+      {/* Connection Status */}
+      {isConnecting && (
+        <div className="absolute bottom-4 left-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
+          Click an input port to complete connection (or click canvas to cancel)
+        </div>
+      )}
 
       {/* Zoom indicator */}
       <div className="absolute bottom-4 right-4 bg-white rounded-md shadow-md px-2 py-1 text-xs text-gray-600">

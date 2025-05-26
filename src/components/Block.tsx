@@ -162,15 +162,22 @@ export default function Block({
 
       {/* Input Ports (left side) */}
       <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1">
-        {getInputPorts(block.type).map((_, index) => (
-          <div
-            key={`input-${index}`}
-            className="w-2 h-2 bg-white border border-gray-400 rounded-full mb-1 hover:bg-blue-200 cursor-pointer"
-            style={{ marginTop: index > 0 ? '4px' : '0' }}
-            title={`Input ${index + 1}`}
-            onClick={handlePortClick(index, false)}
-          />
-        ))}
+        {getInputPorts(block.type).map((_, index) => {
+          const hasConnection = false // TODO: Check if port has connection
+          return (
+            <div
+              key={`input-${index}`}
+              className={`w-2 h-2 border rounded-full mb-1 cursor-pointer transition-colors ${
+                hasConnection 
+                  ? 'bg-blue-300 border-blue-500 hover:bg-blue-400' 
+                  : 'bg-white border-gray-400 hover:bg-blue-200'
+              }`}
+              style={{ marginTop: index > 0 ? '4px' : '0' }}
+              title={`Input ${index + 1}${hasConnection ? ' (connected)' : ''}`}
+              onClick={handlePortClick(index, false)}
+            />
+          )
+        })}
       </div>
 
       {/* Output Ports (right side) */}
@@ -178,7 +185,7 @@ export default function Block({
         {getOutputPorts(block.type).map((_, index) => (
           <div
             key={`output-${index}`}
-            className="w-2 h-2 bg-white border border-gray-400 rounded-full mb-1 hover:bg-green-200 cursor-pointer"
+            className="w-2 h-2 bg-white border border-gray-400 rounded-full mb-1 hover:bg-green-200 cursor-pointer transition-colors"
             style={{ marginTop: index > 0 ? '4px' : '0' }}
             title={`Output ${index + 1}`}
             onClick={handlePortClick(index, true)}
