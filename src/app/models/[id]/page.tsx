@@ -13,6 +13,7 @@ import InputPortConfig from '@/components/InputPortConfig'
 import SourceConfig from '@/components/SourceConfig'
 import ScaleConfig from '@/components/ScaleConfig'
 import SubsystemConfig from '@/components/SubsystemConfig'
+import TransferFunctionConfig from '@/components/TransferFunctionConfig'
 import Lookup1DConfig from '@/components/Lookup1DConfig'
 import Lookup2DConfig from '@/components/Lookup2DConfig'
 import { useModelStore } from '@/lib/modelStore'
@@ -90,15 +91,6 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     } finally {
       setModelLoading(false)
     }
-  }
-
-  const handleSave = async () => {
-    const success = await saveModel()
-    if (success) {
-      // Optional: Show success message
-      console.log('Model saved successfully')
-    }
-    // Error messages are handled by the store
   }
 
   const getDefaultParameters = (blockType: string) => {
@@ -285,6 +277,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }
 
+  const handleSave = async () => {
+    const success = await saveModel()
+    if (success) {
+      console.log('Model saved successfully')
+    }
+    // Error messages are handled by the store
+  }
+
   const handleBlockDoubleClick = (blockId: string) => {
     const block = blocks.find(b => b.id === blockId)
     if (!block) return
@@ -344,6 +344,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'output_port' || 
       block.type === 'source' ||
       block.type === 'scale' ||
+      block.type === 'transfer_function' ||
       block.type === 'subsystem' ||
       block.type === 'lookup_1d' ||
       block.type === 'lookup_2d'
@@ -631,6 +632,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'scale' && (
             <ScaleConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'transfer_function' && (
+            <TransferFunctionConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}
