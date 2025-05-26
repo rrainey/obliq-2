@@ -1,6 +1,17 @@
 import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
 
+export interface Sheet {
+  id: string
+  name: string
+  blocks: BlockData[]
+  connections: WireData[]
+  extents: {
+    width: number
+    height: number
+  }
+}
+
 export interface SimulationState {
   time: number
   timeStep: number
@@ -34,11 +45,14 @@ export class SimulationEngine {
   private state: SimulationState
   private executionOrder: string[] = []
   private getExternalInput?: (portName: string) => number | undefined
+  private allSheets: Sheet[] = [] // Store all sheets for subsystem simulation
+  private subsystemEngines: Map<string, SimulationEngine> = new Map() // Cache for subsystem engines
 
-  constructor(blocks: BlockData[], wires: WireData[], config: SimulationConfig, externalInputs?: (portName: string) => number | undefined) {
+  constructor(blocks: BlockData[], wires: WireData[], config: SimulationConfig, externalInputs?: (portName: string) => number | undefined, allSheets?: Sheet[]) {
     this.blocks = blocks
     this.wires = wires
     this.getExternalInput = externalInputs
+    this.allSheets = allSheets || []
     this.state = {
       time: 0,
       timeStep: config.timeStep,
@@ -763,19 +777,96 @@ export class SimulationEngine {
   }
 
   private executeSubsystemBlock(blockState: BlockState, inputs: number[]) {
-    // For now, implement a simple pass-through behavior
-    // In Task 27, this will be replaced with proper subsystem simulation
-    const { inputPorts, outputPorts } = blockState.internalState
+    const { sheetId, inputPorts, outputPorts } = blockState.internalState
     
-    // Simple pass-through: map inputs to outputs
-    // If more inputs than outputs, use only the first N inputs
-    // If more outputs than inputs, pad with zeros
+    // If no sheet is referenced, fall back to pass-through behavior
+    if (!sheetId || !this.allSheets.length) {
+      // Simple pass-through: map inputs to outputs
+      for (let i = 0; i < outputPorts.length; i++) {
+        blockState.outputs[i] = inputs[i] || 0
+      }
+      blockState.internalState.currentOutputs = [...blockState.outputs]
+      return
+    }
+    
+    // Find the referenced sheet
+    const referencedSheet = this.allSheets.find(sheet => sheet.id === sheetId)
+    if (!referencedSheet) {
+      console.warn(`Subsystem references non-existent sheet: ${sheetId}`)
+      // Fall back to pass-through
+      for (let i = 0; i < outputPorts.length; i++) {
+        blockState.outputs[i] = inputs[i] || 0
+      }
+      blockState.internalState.currentOutputs = [...blockState.outputs]
+      return
+    }
+    
+    // Get or create subsystem simulation engine
+    let subsystemEngine = this.subsystemEngines.get(blockState.blockId)
+    if (!subsystemEngine) {
+      // Create external input provider for subsystem
+      const subsystemInputProvider = (portName: string) => {
+        // Map subsystem input port names to actual input values
+        const portIndex = inputPorts.findIndex((port: string) => port === portName)
+        return portIndex >= 0 ? inputs[portIndex] : 0
+      }
+      
+      // Create simulation config matching parent
+      const subsystemConfig = {
+        timeStep: this.state.timeStep,
+        duration: this.state.duration
+      }
+      
+      // Create subsystem engine with the referenced sheet's blocks and connections
+      subsystemEngine = new SimulationEngine(
+        referencedSheet.blocks,
+        referencedSheet.connections,
+        subsystemConfig,
+        subsystemInputProvider,
+        this.allSheets // Pass sheets for nested subsystems
+      )
+      
+      // Cache the engine
+      this.subsystemEngines.set(blockState.blockId, subsystemEngine)
+    }
+    
+    // Update subsystem's external inputs (input ports in the subsystem)
+    const subsystemInputProvider = (portName: string) => {
+      const portIndex = inputPorts.findIndex((port: string) => port === portName)
+      return portIndex >= 0 ? inputs[portIndex] : 0
+    }
+    
+    // Update the subsystem engine's external input provider
+    subsystemEngine.updateExternalInputs(subsystemInputProvider)
+    
+    // Synchronize subsystem time with parent
+    subsystemEngine.syncTime(this.state.time)
+    
+    // Execute one step of the subsystem
+    subsystemEngine.step()
+    
+    // Get output port values from the subsystem
+    const subsystemOutputs = subsystemEngine.getOutputPortValues()
+    
+    // Map subsystem outputs to this block's outputs
     for (let i = 0; i < outputPorts.length; i++) {
-      blockState.outputs[i] = inputs[i] || 0
+      const outputPortName = outputPorts[i]
+      const outputValue = subsystemOutputs.get(outputPortName) || 0
+      blockState.outputs[i] = outputValue
     }
     
     // Store current outputs for debugging/inspection
     blockState.internalState.currentOutputs = [...blockState.outputs]
+  }
+
+  // Helper method to update external inputs (for subsystem simulation)
+  public updateExternalInputs(inputProvider: (portName: string) => number | undefined) {
+    this.getExternalInput = inputProvider
+  }
+  
+  // Helper method to synchronize time with parent simulation
+  public syncTime(parentTime: number) {
+    this.state.time = parentTime
   }
 
   private interpolate1D(x: number, xValues: number[], yValues: number[]): number {

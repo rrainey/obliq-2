@@ -147,6 +147,7 @@ export default function Block({
           ${colors.bg} ${colors.border}
           flex flex-col items-center justify-center
           hover:shadow-md transition-shadow
+          ${block.type === 'subsystem' && block.parameters?.sheetId ? 'ring-1 ring-blue-300' : ''}
         `}
       >
         {/* Icon */}
@@ -158,6 +159,13 @@ export default function Block({
         <div className={`text-xs font-medium ${colors.text} text-center px-1 truncate w-full`}>
           {block.name}
         </div>
+        
+        {/* Subsystem indicator */}
+        {block.type === 'subsystem' && block.parameters?.sheetId && (
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full text-white text-xs flex items-center justify-center">
+            ↓
+          </div>
+        )}
       </div>
 
       {/* Input Ports (left side) */}

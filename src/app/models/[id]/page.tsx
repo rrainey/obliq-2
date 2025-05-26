@@ -156,7 +156,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         return { maxSamples: 1000 }
       case 'subsystem':
         return { 
-          sheetId: `subsystem_${Date.now()}`,
+          sheetId: '', // Will be set when block is created
           sheetName: 'Subsystem',
           inputPorts: ['Input1'],
           outputPorts: ['Output1']
@@ -262,7 +262,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleDeleteSheet = (sheetId: string) => {
-    if (sheets.length <= 1) return // Don't delete the last sheet
+    // Prevent deletion of main sheets
+    const isMainSheet = sheetId === 'main' || sheetId.endsWith('_main')
+    if (sheets.length <= 1 || isMainSheet) {
+      if (isMainSheet) {
+        alert('Cannot delete main sheets. Main sheets are required for proper model structure.')
+      }
+      return
+    }
     
     const remainingSheets = sheets.filter(sheet => sheet.id !== sheetId)
     setSheets(remainingSheets)
@@ -292,6 +299,44 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       name: `${blockType.charAt(0).toUpperCase() + blockType.slice(1).replace('_', ' ')}${blocks.length + 1}`,
       position: { x, y },
       parameters: getDefaultParameters(blockType)
+    }
+    
+    // Special handling for subsystem blocks - automatically create their main sheet
+    if (blockType === 'subsystem') {
+      const subsystemMainSheetId = `${newBlock.id}_main`
+      const subsystemMainSheet: Sheet = {
+        id: subsystemMainSheetId,
+        name: `${newBlock.name} Main`,
+        blocks: [],
+        connections: [],
+        extents: {
+          width: 1000,
+          height: 800
+        }
+      }
+      
+      // Update the subsystem parameters to reference its main sheet
+      newBlock.parameters = {
+        ...newBlock.parameters,
+        sheetId: subsystemMainSheetId,
+        sheetName: `${newBlock.name} Main`
+      }
+      
+      // Add the subsystem's main sheet to the model
+      const updatedSheets = [...sheets, subsystemMainSheet]
+      setSheets(updatedSheets)
+      
+      // Update model data
+      if (model) {
+        const updatedModel = {
+          ...model,
+          data: {
+            ...model.data,
+            sheets: updatedSheets
+          }
+        }
+        setModel(updatedModel)
+      }
     }
     
     const updatedBlocks = [...blocks, newBlock]
@@ -349,13 +394,16 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
     setIsSimulating(true)
     try {
-      // Create simulation engine
+      // Ensure current sheet data is saved before simulation
+      updateCurrentSheet({ blocks, connections: wires })
+      
+      // Create simulation engine with all sheets for subsystem support
       const config = {
         timeStep: model?.data?.globalSettings?.simulationTimeStep || 0.01,
         duration: model?.data?.globalSettings?.simulationDuration || 10.0
       }
       
-      const engine = new SimulationEngine(blocks, wires, config)
+      const engine = new SimulationEngine(blocks, wires, config, undefined, sheets)
       const results = engine.run()
       
       setSimulationResults(results)
@@ -401,6 +449,94 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
   const handleBlockDoubleClick = (blockId: string) => {
     const block = blocks.find(b => b.id === blockId)
+    if (!block) return
+    
+    // Special handling for subsystem blocks - always offer navigation choice
+    if (block.type === 'subsystem') {
+      const sheetId = block.parameters?.sheetId
+      let hasInternalSheet = null
+      
+      if (sheetId) {
+        hasInternalSheet = sheets.find(s => s.id === sheetId)
+      }
+      
+      if (hasInternalSheet) {
+        // Subsystem has a valid internal sheet - offer navigation choice
+        const choice = window.confirm(
+          `Navigate to subsystem "${block.parameters?.sheetName || block.name}" internal sheet?\n\n` +
+          'Click "OK" to navigate to the internal sheet, or "Cancel" to configure the subsystem block.'
+        )
+        if (choice) {
+          // Save current sheet before navigating
+          if (activeSheetId && (blocks.length > 0 || wires.length > 0)) {
+            updateCurrentSheet({ blocks, connections: wires })
+          }
+          // Navigate to the subsystem's internal sheet
+          setActiveSheetId(sheetId)
+          return
+        }
+        // If user chose Cancel, fall through to open config dialog
+      } else {
+        // Subsystem doesn't have a valid internal sheet - offer to create one
+        const choice = window.confirm(
+          `Create internal sheet for subsystem "${block.name}"?\n\n` +
+          'Click "OK" to create and navigate to a new internal sheet, or "Cancel" to configure the subsystem block.'
+        )
+        if (choice) {
+          // Create a main sheet for this subsystem
+          const newSheetId = `${block.id}_main`
+          const newSheet: Sheet = {
+            id: newSheetId,
+            name: `${block.name} Main`,
+            blocks: [],
+            connections: [],
+            extents: {
+              width: 1000,
+              height: 800
+            }
+          }
+          
+          // Add the new sheet
+          const updatedSheets = [...sheets, newSheet]
+          setSheets(updatedSheets)
+          
+          // Update the subsystem block to reference this sheet
+          const updatedBlocks = blocks.map(b =>
+            b.id === blockId
+              ? { 
+                  ...b, 
+                  parameters: { 
+                    ...b.parameters, 
+                    sheetId: newSheetId, 
+                    sheetName: newSheet.name 
+                  } 
+                }
+              : b
+          )
+          setBlocks(updatedBlocks)
+          updateCurrentSheet({ blocks: updatedBlocks })
+          
+          // Update model data
+          if (model) {
+            const updatedModel = {
+              ...model,
+              data: {
+                ...model.data,
+                sheets: updatedSheets
+              }
+            }
+            setModel(updatedModel)
+          }
+          
+          // Navigate to the new sheet
+          setActiveSheetId(newSheetId)
+          return
+        }
+        // If user chose Cancel, fall through to open config dialog
+      }
+    }
+    
+    // Handle configurable block types
     if (block && (
       block.type === 'input_port' || 
       block.type === 'output_port' || 

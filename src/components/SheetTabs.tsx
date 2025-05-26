@@ -22,6 +22,11 @@ interface SheetTabsProps {
   onDeleteSheet: (sheetId: string) => void
 }
 
+// Helper function to determine if a sheet is a main sheet (cannot be deleted)
+const isMainSheet = (sheet: Sheet): boolean => {
+  return sheet.id === 'main' || sheet.id.endsWith('_main')
+}
+
 export default function SheetTabs({ 
   sheets, 
   activeSheetId, 
@@ -92,8 +97,8 @@ export default function SheetTabs({
               </button>
             )}
             
-            {/* Delete button - only show if not editing and there's more than one sheet */}
-            {editingSheetId !== sheet.id && sheets.length > 1 && (
+            {/* Delete button - only show if not editing, there's more than one sheet, and it's not a main sheet */}
+            {editingSheetId !== sheet.id && sheets.length > 1 && !isMainSheet(sheet) && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
