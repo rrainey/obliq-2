@@ -162,7 +162,7 @@ export default function Block({
 
       {/* Input Ports (left side) */}
       <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1">
-        {getInputPorts(block.type).map((_, index) => {
+        {getInputPorts(block.type, block.parameters).map((_, index) => {
           const hasConnection = false // TODO: Check if port has connection
           return (
             <div
@@ -182,7 +182,7 @@ export default function Block({
 
       {/* Output Ports (right side) */}
       <div className="absolute right-0 top-1/2 transform -translate-y-1/2 translate-x-1">
-        {getOutputPorts(block.type).map((_, index) => (
+        {getOutputPorts(block.type, block.parameters).map((_, index) => (
           <div
             key={`output-${index}`}
             className="w-2 h-2 bg-white border border-gray-400 rounded-full mb-1 hover:bg-green-200 cursor-pointer transition-colors"
@@ -197,7 +197,7 @@ export default function Block({
 }
 
 // Helper functions to determine ports based on block type
-function getInputPorts(blockType: string): string[] {
+function getInputPorts(blockType: string, parameters?: Record<string, any>): string[] {
   switch (blockType) {
     case 'sum':
     case 'multiply':
@@ -216,13 +216,13 @@ function getInputPorts(blockType: string): string[] {
     case 'source':
       return [] // No inputs
     case 'subsystem':
-      return ['input'] // Can be configured
+      return parameters?.inputPorts || ['input']
     default:
       return []
   }
 }
 
-function getOutputPorts(blockType: string): string[] {
+function getOutputPorts(blockType: string, parameters?: Record<string, any>): string[] {
   switch (blockType) {
     case 'sum':
     case 'multiply':
@@ -238,7 +238,7 @@ function getOutputPorts(blockType: string): string[] {
     case 'signal_logger':
       return [] // No outputs
     case 'subsystem':
-      return ['output'] // Can be configured
+      return parameters?.outputPorts || ['output']
     default:
       return []
   }

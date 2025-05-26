@@ -56,14 +56,14 @@ export class SimulationEngine {
       const blockState: BlockState = {
         blockId: block.id,
         blockType: block.type,
-        outputs: this.getInitialOutputs(block.type),
+        outputs: this.getInitialOutputs(block.type, block.parameters),
         internalState: this.getInitialInternalState(block.type, block.parameters)
       }
       this.state.blockStates.set(block.id, blockState)
     }
   }
 
-  private getInitialOutputs(blockType: string): number[] {
+  private getInitialOutputs(blockType: string, parameters?: Record<string, any>): number[] {
     switch (blockType) {
       case 'sum':
       case 'multiply':
@@ -80,7 +80,8 @@ export class SimulationEngine {
       case 'signal_logger':
         return [] // No outputs
       case 'subsystem':
-        return [0] // Can be configured
+        const outputPorts = parameters?.outputPorts || ['output']
+        return new Array(outputPorts.length).fill(0)
       default:
         return []
     }
@@ -155,6 +156,15 @@ export class SimulationEngine {
         return {
           loggedData: [],
           timeStamps: []
+        }
+      case 'subsystem':
+        return {
+          sheetId: parameters?.sheetId || '',
+          sheetName: parameters?.sheetName || 'Subsystem',
+          inputPorts: parameters?.inputPorts || ['Input1'],
+          outputPorts: parameters?.outputPorts || ['Output1'],
+          // For now, subsystem outputs pass through from inputs as placeholders
+          currentOutputs: new Array(parameters?.outputPorts?.length || 1).fill(0)
         }
       default:
         return {}
@@ -271,6 +281,9 @@ export class SimulationEngine {
         break
       case 'output_port':
         this.executeOutputPortBlock(blockState, inputs)
+        break
+      case 'subsystem':
+        this.executeSubsystemBlock(blockState, inputs)
         break
     }
 
@@ -747,6 +760,22 @@ export class SimulationEngine {
     
     // Output ports don't produce outputs to other blocks within the same level
     // They represent the final destination of signals leaving the current subsystem
+  }
+
+  private executeSubsystemBlock(blockState: BlockState, inputs: number[]) {
+    // For now, implement a simple pass-through behavior
+    // In Task 27, this will be replaced with proper subsystem simulation
+    const { inputPorts, outputPorts } = blockState.internalState
+    
+    // Simple pass-through: map inputs to outputs
+    // If more inputs than outputs, use only the first N inputs
+    // If more outputs than inputs, pad with zeros
+    for (let i = 0; i < outputPorts.length; i++) {
+      blockState.outputs[i] = inputs[i] || 0
+    }
+    
+    // Store current outputs for debugging/inspection
+    blockState.internalState.currentOutputs = [...blockState.outputs]
   }
 
   private interpolate1D(x: number, xValues: number[], yValues: number[]): number {

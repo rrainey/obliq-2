@@ -11,9 +11,10 @@ import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SignalDisplay from '@/components/SignalDisplay'
 import InputPortConfig from '@/components/InputPortConfig'
 import SourceConfig from '@/components/SourceConfig'
+import ScaleConfig from '@/components/ScaleConfig'
+import SubsystemConfig from '@/components/SubsystemConfig'
 import Lookup1DConfig from '@/components/Lookup1DConfig'
 import Lookup2DConfig from '@/components/Lookup2DConfig'
-import ScaleConfig from '@/components/ScaleConfig'
 import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -137,16 +138,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         }
       case 'signal_display':
       case 'signal_logger':
-      case 'lookup_2d':
-        return {
-          input1Values: [0, 1],
-          input2Values: [0, 1],
-          outputTable: [[0, 1], [2, 3]],
-          extrapolation: 'clamp'
-        }
-      case 'signal_display':
-      case 'signal_logger':
         return { maxSamples: 1000 }
+      case 'subsystem':
+        return { 
+          sheetId: `subsystem_${Date.now()}`,
+          sheetName: 'Subsystem',
+          inputPorts: ['Input1'],
+          outputPorts: ['Output1']
+        }
       default:
         return {}
     }
@@ -265,9 +264,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'input_port' || 
       block.type === 'output_port' || 
       block.type === 'source' ||
+      block.type === 'scale' ||
+      block.type === 'subsystem' ||
       block.type === 'lookup_1d' ||
-      block.type === 'lookup_2d' ||
-      block.type === 'scale'
+      block.type === 'lookup_2d'
     )) {
       setConfigBlock(block)
     } else {
@@ -512,6 +512,20 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onClose={() => setConfigBlock(null)}
             />
           )}
+          {configBlock.type === 'scale' && (
+            <ScaleConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'subsystem' && (
+            <SubsystemConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
           {configBlock.type === 'lookup_1d' && (
             <Lookup1DConfig
               block={configBlock}
@@ -521,13 +535,6 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'lookup_2d' && (
             <Lookup2DConfig
-              block={configBlock}
-              onUpdate={handleBlockConfigUpdate}
-              onClose={() => setConfigBlock(null)}
-            />
-          )}
-          {configBlock.type === 'scale' && (
-            <ScaleConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}
