@@ -613,11 +613,89 @@ export class SimulationEngine {
   private executeLookup2DBlock(blockState: BlockState, inputs: number[]) {
     const input1 = inputs[0] || 0
     const input2 = inputs[1] || 0
-    const { input1Values, input2Values, outputTable } = blockState.internalState
+    const { input1Values, input2Values, outputTable, extrapolation } = blockState.internalState
+    
+    // Validate that we have data
+    if (!input1Values || !input2Values || !outputTable || 
+        input1Values.length === 0 || input2Values.length === 0 || outputTable.length === 0) {
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    // Ensure table dimensions match input arrays
+    const rows = input1Values.length
+    const cols = input2Values.length
+    
+    if (outputTable.length !== rows) {
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    // Single point case
+    if (rows === 1 && cols === 1) {
+      blockState.outputs[0] = outputTable[0][0] || 0
+      return
+    }
+    
+    // Find input1 (row) indices
+    let i0 = 0, i1 = 0, t1 = 0
+    if (input1 <= input1Values[0]) {
+      i0 = i1 = 0
+      t1 = 0
+    } else if (input1 >= input1Values[rows - 1]) {
+      i0 = i1 = rows - 1
+      t1 = 0
+    } else {
+      for (let i = 0; i < rows - 1; i++) {
+        if (input1 >= input1Values[i] && input1 <= input1Values[i + 1]) {
+          i0 = i
+          i1 = i + 1
+          t1 = (input1Values[i + 1] - input1Values[i]) !== 0 ? 
+               (input1 - input1Values[i]) / (input1Values[i + 1] - input1Values[i]) : 0
+          break
+        }
+      }
+    }
+    
+    // Find input2 (column) indices
+    let j0 = 0, j1 = 0, t2 = 0
+    if (input2 <= input2Values[0]) {
+      j0 = j1 = 0
+      t2 = 0
+    } else if (input2 >= input2Values[cols - 1]) {
+      j0 = j1 = cols - 1
+      t2 = 0
+    } else {
+      for (let j = 0; j < cols - 1; j++) {
+        if (input2 >= input2Values[j] && input2 <= input2Values[j + 1]) {
+          j0 = j
+          j1 = j + 1
+          t2 = (input2Values[j + 1] - input2Values[j]) !== 0 ? 
+               (input2 - input2Values[j]) / (input2Values[j + 1] - input2Values[j]) : 0
+          break
+        }
+      }
+    }
+    
+    // Get the four corner values for bilinear interpolation
+    const v00 = (outputTable[i0] && outputTable[i0][j0] !== undefined) ? outputTable[i0][j0] : 0
+    const v01 = (outputTable[i0] && outputTable[i0][j1] !== undefined) ? outputTable[i0][j1] : 0
+    const v10 = (outputTable[i1] && outputTable[i1][j0] !== undefined) ? outputTable[i1][j0] : 0
+    const v11 = (outputTable[i1] && outputTable[i1][j1] !== undefined) ? outputTable[i1][j1] : 0
     
     // Bilinear interpolation
-    const result = this.interpolate2D(input1, input2, input1Values, input2Values, outputTable)
-    blockState.outputs[0] = result
+    const v0 = v00 + t2 * (v01 - v00)  // Interpolate along input2 axis at i0
+    const v1 = v10 + t2 * (v11 - v10)  // Interpolate along input2 axis at i1
+    const result = v0 + t1 * (v1 - v0) // Interpolate along input1 axis
+    
+    // Handle extrapolation if needed
+    if (extrapolation === 'clamp') {
+      // Clamping is already handled by the index finding logic above
+      blockState.outputs[0] = result
+    } else {
+      // For extrapolation, we could extend the gradients, but for now use the result
+      blockState.outputs[0] = result
+    }
   }
 
   private executeSignalDisplayBlock(blockState: BlockState, inputs: number[]) {
