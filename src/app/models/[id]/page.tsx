@@ -2,10 +2,9 @@
 
 import { useUser } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
-import { Model } from '@/lib/types'
 import { BlockData, PortInfo } from '@/components/Block'
 import { WireData } from '@/components/Wire'
-import { SimulationEngine, SimulationResults } from '@/lib/simulationEngine'
+import { SimulationEngine } from '@/lib/simulationEngine'
 import Canvas from '@/components/Canvas'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SignalDisplay from '@/components/SignalDisplay'
@@ -16,7 +15,8 @@ import ScaleConfig from '@/components/ScaleConfig'
 import SubsystemConfig from '@/components/SubsystemConfig'
 import Lookup1DConfig from '@/components/Lookup1DConfig'
 import Lookup2DConfig from '@/components/Lookup2DConfig'
-import { use, useEffect, useState } from 'react'
+import { useModelStore } from '@/lib/modelStore'
+import { use, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -29,20 +29,23 @@ interface ModelEditorPageProps {
 export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const { user, loading } = useUser()
   const router = useRouter()
-  const [model, setModel] = useState<Model | null>(null)
-  const [modelLoading, setModelLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [sheets, setSheets] = useState<Sheet[]>([])
-  const [activeSheetId, setActiveSheetId] = useState<string>('main')
-  const [blocks, setBlocks] = useState<BlockData[]>([])
-  const [wires, setWires] = useState<WireData[]>([])
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null)
-  const [selectedWireId, setSelectedWireId] = useState<string | null>(null)
-  const [simulationResults, setSimulationResults] = useState<SimulationResults | null>(null)
-  const [isSimulating, setIsSimulating] = useState(false)
-  const [simulationEngine, setSimulationEngine] = useState<SimulationEngine | null>(null)
-  const [configBlock, setConfigBlock] = useState<BlockData | null>(null)
-  const [outputPortValues, setOutputPortValues] = useState<Map<string, number> | null>(null)
+  
+  // Zustand store
+  const {
+    // State
+    model, sheets, activeSheetId, blocks, wires,
+    selectedBlockId, selectedWireId, configBlock,
+    simulationResults, isSimulating, simulationEngine, outputPortValues,
+    modelLoading, error,
+    
+    // Actions
+    setModel, setError, setModelLoading,
+    switchToSheet, addSheet, renameSheet, deleteSheet,
+    addBlock, updateBlock, addWire, deleteWire,
+    setSelectedBlockId, setSelectedWireId, setConfigBlock,
+    setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
+    updateCurrentSheet, saveCurrentSheetData, initializeFromModel
+  } = useModelStore()
   
   // Unwrap the params Promise
   const { id } = use(params)
@@ -52,26 +55,6 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       router.push('/login')
     }
   }, [user, loading, router])
-
-  useEffect(() => {
-    if (model?.data?.sheets) {
-      setSheets(model.data.sheets)
-      // Set active sheet to first sheet if current activeSheetId doesn't exist
-      const sheetIds = model.data.sheets.map((s: Sheet) => s.id)
-      if (!sheetIds.includes(activeSheetId)) {
-        setActiveSheetId(sheetIds[0] || 'main')
-      }
-    }
-  }, [model, activeSheetId])
-
-  useEffect(() => {
-    const currentSheet = sheets.find(s => s.id === activeSheetId)
-    if (currentSheet) {
-      setBlocks(currentSheet.blocks || [])
-      setWires(currentSheet.connections || [])
-      console.log(`Switched to sheet "${currentSheet.name}" with ${currentSheet.blocks?.length || 0} blocks`)
-    }
-  }, [sheets, activeSheetId])
 
   useEffect(() => {
     if (user && id) {
@@ -96,7 +79,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         return
       }
 
-      setModel(data)
+      initializeFromModel(data)
     } catch (error) {
       console.error('Error fetching model:', error)
       setError('Failed to load model')
@@ -138,7 +121,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       case 'transfer_function':
         return { 
           numerator: [1], 
-          denominator: [1, 1] // Default: 1/(s+1)
+          denominator: [1, 1]
         }
       case 'lookup_1d':
         return {
@@ -156,139 +139,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         return { maxSamples: 1000 }
       case 'subsystem':
         return { 
-          sheetId: '', // Will be set when block is created
+          sheetId: '',
           sheetName: 'Subsystem',
           inputPorts: ['Input1'],
           outputPorts: ['Output1']
         }
       default:
         return {}
-    }
-  }
-
-  // Sheet management functions
-  const updateCurrentSheet = (updates: Partial<Sheet>) => {
-    const updatedSheets = sheets.map(sheet => 
-      sheet.id === activeSheetId 
-        ? { ...sheet, ...updates }
-        : sheet
-    )
-    setSheets(updatedSheets)
-    
-    // Also update the model data to keep it in sync
-    if (model) {
-      const updatedModel = {
-        ...model,
-        data: {
-          ...model.data,
-          sheets: updatedSheets
-        }
-      }
-      setModel(updatedModel)
-    }
-  }
-
-  const handleSheetChange = (sheetId: string) => {
-    // Save current sheet data before switching
-    if (activeSheetId && blocks.length > 0 || wires.length > 0) {
-      updateCurrentSheet({ blocks, connections: wires })
-    }
-    
-    setActiveSheetId(sheetId)
-    // Clear selections when switching sheets
-    setSelectedBlockId(null)
-    setSelectedWireId(null)
-    setSimulationResults(null)
-  }
-
-  const handleAddSheet = () => {
-    // First, save current sheet data
-    if (activeSheetId && (blocks.length > 0 || wires.length > 0)) {
-      updateCurrentSheet({ blocks, connections: wires })
-    }
-
-    const newSheetId = `sheet_${Date.now()}`
-    const newSheet: Sheet = {
-      id: newSheetId,
-      name: `Sheet ${sheets.length + 1}`,
-      blocks: [],
-      connections: [],
-      extents: {
-        width: 1000,
-        height: 800
-      }
-    }
-    
-    const updatedSheets = [...sheets, newSheet]
-    setSheets(updatedSheets)
-    setActiveSheetId(newSheetId)
-    
-    // Clear current blocks and wires since we're on a new empty sheet
-    setBlocks([])
-    setWires([])
-    
-    // Update the model data to persist the new sheet
-    if (model) {
-      const updatedModel = {
-        ...model,
-        data: {
-          ...model.data,
-          sheets: updatedSheets
-        }
-      }
-      setModel(updatedModel)
-    }
-  }
-
-  const handleRenameSheet = (sheetId: string, newName: string) => {
-    const updatedSheets = sheets.map(sheet =>
-      sheet.id === sheetId
-        ? { ...sheet, name: newName }
-        : sheet
-    )
-    setSheets(updatedSheets)
-    
-    // Update the model data to persist the rename
-    if (model) {
-      const updatedModel = {
-        ...model,
-        data: {
-          ...model.data,
-          sheets: updatedSheets
-        }
-      }
-      setModel(updatedModel)
-    }
-  }
-
-  const handleDeleteSheet = (sheetId: string) => {
-    // Prevent deletion of main sheets
-    const isMainSheet = sheetId === 'main' || sheetId.endsWith('_main')
-    if (sheets.length <= 1 || isMainSheet) {
-      if (isMainSheet) {
-        alert('Cannot delete main sheets. Main sheets are required for proper model structure.')
-      }
-      return
-    }
-    
-    const remainingSheets = sheets.filter(sheet => sheet.id !== sheetId)
-    setSheets(remainingSheets)
-    
-    // If we're deleting the active sheet, switch to the first remaining sheet
-    if (sheetId === activeSheetId) {
-      setActiveSheetId(remainingSheets[0].id)
-    }
-    
-    // Update the model data to persist the deletion
-    if (model) {
-      const updatedModel = {
-        ...model,
-        data: {
-          ...model.data,
-          sheets: remainingSheets
-        }
-      }
-      setModel(updatedModel)
     }
   }
 
@@ -322,40 +179,18 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         sheetName: `${newBlock.name} Main`
       }
       
-      // Add the subsystem's main sheet to the model
-      const updatedSheets = [...sheets, subsystemMainSheet]
-      setSheets(updatedSheets)
-      
-      // Update model data
-      if (model) {
-        const updatedModel = {
-          ...model,
-          data: {
-            ...model.data,
-            sheets: updatedSheets
-          }
-        }
-        setModel(updatedModel)
-      }
+      // Add the subsystem's main sheet
+      addSheet(subsystemMainSheet)
     }
     
-    const updatedBlocks = [...blocks, newBlock]
-    setBlocks(updatedBlocks)
-    updateCurrentSheet({ blocks: updatedBlocks })
+    addBlock(newBlock)
+    updateCurrentSheet({ blocks: [...blocks, newBlock] })
     console.log('Block added:', newBlock)
   }
 
   const handleBlockMove = (blockId: string, position: { x: number; y: number }) => {
-    const updatedBlocks = blocks.map(block => 
-      block.id === blockId ? { ...block, position } : block
-    )
-    setBlocks(updatedBlocks)
-    updateCurrentSheet({ blocks: updatedBlocks })
-  }
-
-  const handleBlockSelect = (blockId: string | null) => {
-    setSelectedBlockId(blockId)
-    setSelectedWireId(null) // Deselect wire when selecting block
+    updateBlock(blockId, { position })
+    saveCurrentSheetData()
   }
 
   const handleWireCreate = (sourcePort: PortInfo, targetPort: PortInfo) => {
@@ -367,22 +202,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       targetPortIndex: targetPort.portIndex
     }
     
-    const updatedWires = [...wires, newWire]
-    setWires(updatedWires)
-    updateCurrentSheet({ connections: updatedWires })
+    addWire(newWire)
+    updateCurrentSheet({ connections: [...wires, newWire] })
     console.log('Wire created:', newWire)
   }
 
-  const handleWireSelect = (wireId: string | null) => {
-    setSelectedWireId(wireId)
-    setSelectedBlockId(null) // Deselect block when selecting wire
-  }
-
   const handleWireDelete = (wireId: string) => {
-    const updatedWires = wires.filter(wire => wire.id !== wireId)
-    setWires(updatedWires)
-    updateCurrentSheet({ connections: updatedWires })
+    deleteWire(wireId)
     setSelectedWireId(null)
+    saveCurrentSheetData()
     console.log('Wire deleted:', wireId)
   }
 
@@ -394,10 +222,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
     setIsSimulating(true)
     try {
-      // Ensure current sheet data is saved before simulation
-      updateCurrentSheet({ blocks, connections: wires })
+      saveCurrentSheetData()
       
-      // Create simulation engine with all sheets for subsystem support
       const config = {
         timeStep: model?.data?.globalSettings?.simulationTimeStep || 0.01,
         duration: model?.data?.globalSettings?.simulationDuration || 10.0
@@ -407,8 +233,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       const results = engine.run()
       
       setSimulationResults(results)
-      setSimulationEngine(engine) // Store engine for CSV export
-      setOutputPortValues(engine.getOutputPortValues()) // Store output port values
+      setSimulationEngine(engine)
+      setOutputPortValues(engine.getOutputPortValues())
       console.log('Simulation completed:', results)
     } catch (error) {
       console.error('Simulation error:', error)
@@ -431,7 +257,6 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         return
       }
 
-      // Create and download CSV file
       const blob = new Blob([csvContent], { type: 'text/csv' })
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -451,7 +276,6 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     const block = blocks.find(b => b.id === blockId)
     if (!block) return
     
-    // Special handling for subsystem blocks - always offer navigation choice
     if (block.type === 'subsystem') {
       const sheetId = block.parameters?.sheetId
       let hasInternalSheet = null
@@ -461,29 +285,20 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       }
       
       if (hasInternalSheet) {
-        // Subsystem has a valid internal sheet - offer navigation choice
         const choice = window.confirm(
           `Navigate to subsystem "${block.parameters?.sheetName || block.name}" internal sheet?\n\n` +
           'Click "OK" to navigate to the internal sheet, or "Cancel" to configure the subsystem block.'
         )
         if (choice) {
-          // Save current sheet before navigating
-          if (activeSheetId && (blocks.length > 0 || wires.length > 0)) {
-            updateCurrentSheet({ blocks, connections: wires })
-          }
-          // Navigate to the subsystem's internal sheet
-          setActiveSheetId(sheetId)
+          switchToSheet(sheetId)
           return
         }
-        // If user chose Cancel, fall through to open config dialog
       } else {
-        // Subsystem doesn't have a valid internal sheet - offer to create one
         const choice = window.confirm(
           `Create internal sheet for subsystem "${block.name}"?\n\n` +
           'Click "OK" to create and navigate to a new internal sheet, or "Cancel" to configure the subsystem block.'
         )
         if (choice) {
-          // Create a main sheet for this subsystem
           const newSheetId = `${block.id}_main`
           const newSheet: Sheet = {
             id: newSheetId,
@@ -496,47 +311,21 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             }
           }
           
-          // Add the new sheet
-          const updatedSheets = [...sheets, newSheet]
-          setSheets(updatedSheets)
-          
-          // Update the subsystem block to reference this sheet
-          const updatedBlocks = blocks.map(b =>
-            b.id === blockId
-              ? { 
-                  ...b, 
-                  parameters: { 
-                    ...b.parameters, 
-                    sheetId: newSheetId, 
-                    sheetName: newSheet.name 
-                  } 
-                }
-              : b
-          )
-          setBlocks(updatedBlocks)
-          updateCurrentSheet({ blocks: updatedBlocks })
-          
-          // Update model data
-          if (model) {
-            const updatedModel = {
-              ...model,
-              data: {
-                ...model.data,
-                sheets: updatedSheets
-              }
-            }
-            setModel(updatedModel)
-          }
-          
-          // Navigate to the new sheet
-          setActiveSheetId(newSheetId)
+          addSheet(newSheet)
+          updateBlock(blockId, { 
+            parameters: { 
+              ...block.parameters, 
+              sheetId: newSheetId, 
+              sheetName: newSheet.name 
+            } 
+          })
+          saveCurrentSheetData()
+          switchToSheet(newSheetId)
           return
         }
-        // If user chose Cancel, fall through to open config dialog
       }
     }
     
-    // Handle configurable block types
     if (block && (
       block.type === 'input_port' || 
       block.type === 'output_port' || 
@@ -547,22 +336,32 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'lookup_2d'
     )) {
       setConfigBlock(block)
-    } else {
-      console.log('Block double-clicked:', blockId)
-      // TODO: Open properties panel for other block types in later tasks
     }
   }
 
   const handleBlockConfigUpdate = (parameters: Record<string, any>) => {
     if (configBlock) {
-      const updatedBlocks = blocks.map(block =>
-        block.id === configBlock.id
-          ? { ...block, parameters }
-          : block
-      )
-      setBlocks(updatedBlocks)
-      updateCurrentSheet({ blocks: updatedBlocks })
+      updateBlock(configBlock.id, { parameters })
+      saveCurrentSheetData()
     }
+  }
+
+  const handleAddSheet = () => {
+    saveCurrentSheetData()
+    const newSheetId = `sheet_${Date.now()}`
+    const newSheet: Sheet = {
+      id: newSheetId,
+      name: `Sheet ${sheets.length + 1}`,
+      blocks: [],
+      connections: [],
+      extents: {
+        width: 1000,
+        height: 800
+      }
+    }
+    
+    addSheet(newSheet)
+    switchToSheet(newSheetId)
   }
 
   if (loading || !user) {
@@ -666,10 +465,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         <SheetTabs
           sheets={sheets}
           activeSheetId={activeSheetId}
-          onSheetChange={handleSheetChange}
+          onSheetChange={switchToSheet}
           onAddSheet={handleAddSheet}
-          onRenameSheet={handleRenameSheet}
-          onDeleteSheet={handleDeleteSheet}
+          onRenameSheet={renameSheet}
+          onDeleteSheet={deleteSheet}
         />
 
         {/* Canvas and Sidebar Container */}
@@ -686,10 +485,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               selectedWireId={selectedWireId}
               onDrop={handleCanvasDrop}
               onBlockMove={handleBlockMove}
-              onBlockSelect={handleBlockSelect}
+              onBlockSelect={setSelectedBlockId}
               onBlockDoubleClick={handleBlockDoubleClick}
               onWireCreate={handleWireCreate}
-              onWireSelect={handleWireSelect}
+              onWireSelect={setSelectedWireId}
               onWireDelete={handleWireDelete}
             />
           </div>
