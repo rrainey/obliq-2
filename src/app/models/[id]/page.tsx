@@ -9,6 +9,7 @@ import { SimulationEngine, SimulationResults } from '@/lib/simulationEngine'
 import Canvas from '@/components/Canvas'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SignalDisplay from '@/components/SignalDisplay'
+import InputPortConfig from '@/components/InputPortConfig'
 import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -31,6 +32,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const [selectedWireId, setSelectedWireId] = useState<string | null>(null)
   const [simulationResults, setSimulationResults] = useState<SimulationResults | null>(null)
   const [isSimulating, setIsSimulating] = useState(false)
+  const [simulationEngine, setSimulationEngine] = useState<SimulationEngine | null>(null)
+  const [configBlock, setConfigBlock] = useState<BlockData | null>(null)
   
   // Unwrap the params Promise
   const { id } = use(params)
@@ -84,16 +87,31 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const getDefaultParameters = (blockType: string) => {
     switch (blockType) {
       case 'source':
-        return { value: 1, signalType: 'constant' }
-      case 'scale':
-        return { gain: 1 }
-      case 'transfer_function':
         return { 
-          numerator: [1], 
-          denominator: [1, 1] // Default: 1/(s+1)
+          signalType: 'constant',
+          value: 1,
+          stepTime: 1.0,
+          stepValue: 1.0,
+          slope: 1.0,
+          startTime: 0,
+          frequency: 1.0,
+          amplitude: 1.0,
+          phase: 0,
+          offset: 0,
+          f0: 0.1,
+          f1: 10,
+          duration: 10,
+          mean: 0
         }
       case 'input_port':
-        return { value: 0 }
+        return { 
+          portName: 'Input',
+          defaultValue: 0
+        }
+      case 'output_port':
+        return {
+          portName: 'Output'
+        }
       case 'lookup_1d':
         return {
           inputValues: [0, 1, 2],
@@ -179,6 +197,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       const results = engine.run()
       
       setSimulationResults(results)
+      setSimulationEngine(engine) // Store engine for CSV export
       console.log('Simulation completed:', results)
     } catch (error) {
       console.error('Simulation error:', error)
@@ -188,9 +207,53 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }
 
+  const handleExportCSV = () => {
+    if (!simulationEngine) {
+      alert('No simulation data to export')
+      return
+    }
+
+    try {
+      const csvContent = simulationEngine.exportAllLoggedDataAsCSV()
+      if (!csvContent) {
+        alert('No logger blocks found or no data to export')
+        return
+      }
+
+      // Create and download CSV file
+      const blob = new Blob([csvContent], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${model?.name || 'simulation'}_data.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Export error:', error)
+      alert('Failed to export CSV. Check console for details.')
+    }
+  }
+
   const handleBlockDoubleClick = (blockId: string) => {
-    console.log('Block double-clicked:', blockId)
-    // TODO: Open properties panel in later tasks
+    const block = blocks.find(b => b.id === blockId)
+    if (block && (block.type === 'input_port' || block.type === 'output_port' || block.type === 'source')) {
+      setConfigBlock(block)
+    } else {
+      console.log('Block double-clicked:', blockId)
+      // TODO: Open properties panel for other block types in later tasks
+    }
+  }
+
+  const handleBlockConfigUpdate = (parameters: Record<string, any>) => {
+    if (configBlock) {
+      setBlocks(prev => prev.map(block =>
+        block.id === configBlock.id
+          ? { ...block, parameters }
+          : block
+      ))
+    }
   }
 
   if (loading || !user) {
@@ -363,6 +426,20 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                     </div>
                   )
                 })}
+
+                {/* CSV Export Button */}
+                {Array.from(simulationResults.signalData.entries()).some(([blockId]) => 
+                  blocks.find(b => b.id === blockId && b.type === 'signal_logger')
+                ) && (
+                  <div className="mt-4">
+                    <button
+                      onClick={handleExportCSV}
+                      className="w-full px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
+                    >
+                      Export Logger Data as CSV
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="p-4">
@@ -374,6 +451,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           </div>
         </div>
       </div>
+      
+      {/* Input Port Configuration Modal */}
+      {configBlock && (
+        <InputPortConfig
+          block={configBlock}
+          onUpdate={handleBlockConfigUpdate}
+          onClose={() => setConfigBlock(null)}
+        />
+      )}
     </div>
   )
 }

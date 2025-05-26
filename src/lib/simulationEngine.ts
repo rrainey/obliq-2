@@ -33,10 +33,12 @@ export class SimulationEngine {
   private wires: WireData[]
   private state: SimulationState
   private executionOrder: string[] = []
+  private getExternalInput?: (portName: string) => number | undefined
 
-  constructor(blocks: BlockData[], wires: WireData[], config: SimulationConfig) {
+  constructor(blocks: BlockData[], wires: WireData[], config: SimulationConfig, externalInputs?: (portName: string) => number | undefined) {
     this.blocks = blocks
     this.wires = wires
+    this.getExternalInput = externalInputs
     this.state = {
       time: 0,
       timeStep: config.timeStep,
@@ -89,7 +91,31 @@ export class SimulationEngine {
       case 'source':
         return {
           constantValue: parameters?.value || 0,
-          signalType: parameters?.signalType || 'constant'
+          signalType: parameters?.signalType || 'constant',
+          // Signal generation parameters
+          stepTime: parameters?.stepTime || 1.0,
+          stepValue: parameters?.stepValue || 1.0,
+          slope: parameters?.slope || 1.0,
+          startTime: parameters?.startTime || 0,
+          frequency: parameters?.frequency || 1.0,
+          amplitude: parameters?.amplitude || 1.0,
+          phase: parameters?.phase || 0,
+          offset: parameters?.offset || 0,
+          f0: parameters?.f0 || 0.1,
+          f1: parameters?.f1 || 10,
+          duration: parameters?.duration || 10,
+          mean: parameters?.mean || 0
+        }
+      case 'input_port':
+        return {
+          portName: parameters?.portName || 'Input',
+          defaultValue: parameters?.defaultValue || 0,
+          isConnectedToParent: false
+        }
+      case 'output_port':
+        return {
+          portName: parameters?.portName || 'Output',
+          currentValue: 0
         }
       case 'scale':
         return {
@@ -295,30 +321,100 @@ export class SimulationEngine {
   }
 
   private executeSourceBlock(blockState: BlockState) {
+    // Source blocks are the actual signal generators
     const { constantValue, signalType } = blockState.internalState
     
     switch (signalType) {
       case 'constant':
         blockState.outputs[0] = constantValue
         break
-      case 'sine':
-        const frequency = blockState.internalState.frequency || 1
-        const amplitude = blockState.internalState.amplitude || 1
-        blockState.outputs[0] = amplitude * Math.sin(2 * Math.PI * frequency * this.state.time)
-        break
+        
       case 'step':
-        const stepTime = blockState.internalState.stepTime || 0
-        blockState.outputs[0] = this.state.time >= stepTime ? constantValue : 0
+        const stepTime = blockState.internalState.stepTime || 1.0
+        const stepValue = blockState.internalState.stepValue || constantValue
+        blockState.outputs[0] = this.state.time >= stepTime ? stepValue : 0
         break
+        
+      case 'ramp':
+        const rampSlope = blockState.internalState.slope || 1.0
+        const rampStart = blockState.internalState.startTime || 0
+        blockState.outputs[0] = this.state.time >= rampStart ? 
+          rampSlope * (this.state.time - rampStart) : 0
+        break
+        
+      case 'sine':
+        const frequency = blockState.internalState.frequency || 1.0
+        const amplitude = blockState.internalState.amplitude || 1.0
+        const phase = blockState.internalState.phase || 0
+        const offset = blockState.internalState.offset || 0
+        blockState.outputs[0] = offset + amplitude * Math.sin(2 * Math.PI * frequency * this.state.time + phase)
+        break
+        
+      case 'square':
+        const squareFreq = blockState.internalState.frequency || 1.0
+        const squareAmplitude = blockState.internalState.amplitude || 1.0
+        const period = 1.0 / squareFreq
+        const squarePhase = (this.state.time % period) / period
+        blockState.outputs[0] = squarePhase < 0.5 ? squareAmplitude : -squareAmplitude
+        break
+        
+      case 'triangle':
+        const triFreq = blockState.internalState.frequency || 1.0
+        const triAmplitude = blockState.internalState.amplitude || 1.0
+        const triPeriod = 1.0 / triFreq
+        const triPhase = (this.state.time % triPeriod) / triPeriod
+        if (triPhase < 0.5) {
+          blockState.outputs[0] = triAmplitude * (4 * triPhase - 1)
+        } else {
+          blockState.outputs[0] = triAmplitude * (3 - 4 * triPhase)
+        }
+        break
+        
+      case 'noise':
+        const noiseAmplitude = blockState.internalState.amplitude || 0.1
+        const noiseMean = blockState.internalState.mean || 0
+        // Simple uniform noise
+        blockState.outputs[0] = noiseMean + noiseAmplitude * (Math.random() - 0.5) * 2
+        break
+        
+      case 'chirp':
+        const f0 = blockState.internalState.f0 || 0.1 // Start frequency
+        const f1 = blockState.internalState.f1 || 10  // End frequency
+        const duration = blockState.internalState.duration || 10
+        const chirpAmplitude = blockState.internalState.amplitude || 1.0
+        const t = Math.min(this.state.time, duration)
+        const freq = f0 + (f1 - f0) * t / duration
+        blockState.outputs[0] = chirpAmplitude * Math.sin(2 * Math.PI * freq * t)
+        break
+        
       default:
         blockState.outputs[0] = constantValue
     }
   }
 
   private executeInputPortBlock(blockState: BlockState, parameters?: Record<string, any>) {
-    // For now, input ports just output a constant value
-    // In a real system, this would come from external inputs
-    blockState.outputs[0] = parameters?.value || 0
+    // Input ports represent external inputs from parent subsystem/model
+    // In simulation, they act as interface points where external signals enter
+    // For top-level models, they can have default values or be driven externally
+    // For subsystems, they receive values from the parent model connections
+    
+    // For now, during simulation of top-level models, use a default value
+    // In a real hierarchical system, this would be driven by parent model
+    const defaultValue = parameters?.defaultValue || 0
+    const portName = parameters?.portName || `Input_${blockState.blockId}`
+    
+    // Check if there's an external input value provided
+    // This would come from parent subsystem in hierarchical models
+    const externalValue = this.getExternalInput?.(portName) ?? defaultValue
+    
+    blockState.outputs[0] = externalValue
+    
+    // Store port information for external interface
+    blockState.internalState = {
+      portName,
+      defaultValue,
+      isConnectedToParent: false // Would be true in subsystem context
+    }
   }
 
   private executeTransferFunctionBlock(blockState: BlockState, inputs: number[]) {
@@ -477,10 +573,13 @@ export class SimulationEngine {
     const input = inputs[0] || 0
     const { loggedData, timeStamps } = blockState.internalState
     
+    // Store both the value and timestamp
     loggedData.push(input)
     timeStamps.push(this.state.time)
     
-    // Signal logger blocks don't produce outputs
+    // Signal logger blocks don't produce outputs to other blocks
+    // but we store the current value for external access
+    blockState.internalState.currentValue = input
   }
 
   private executeOutputPortBlock(blockState: BlockState, inputs: number[]) {
@@ -562,6 +661,88 @@ export class SimulationEngine {
 
   public getState(): SimulationState {
     return { ...this.state }
+  }
+
+  public getLoggedData(blockId: string): { timeStamps: number[], values: number[] } | null {
+    const blockState = this.state.blockStates.get(blockId)
+    if (!blockState || blockState.blockType !== 'signal_logger') {
+      return null
+    }
+    
+    return {
+      timeStamps: [...blockState.internalState.timeStamps],
+      values: [...blockState.internalState.loggedData]
+    }
+  }
+
+  public exportLoggedDataAsCSV(blockId: string): string {
+    const data = this.getLoggedData(blockId)
+    if (!data) {
+      return ''
+    }
+    
+    let csv = 'Time,Value\n'
+    for (let i = 0; i < data.timeStamps.length; i++) {
+      csv += `${data.timeStamps[i]},${data.values[i]}\n`
+    }
+    
+    return csv
+  }
+
+  public exportAllLoggedDataAsCSV(): string {
+    const loggerBlocks = this.blocks.filter(block => block.type === 'signal_logger')
+    if (loggerBlocks.length === 0) {
+      return ''
+    }
+    
+    // Find the maximum number of samples across all loggers
+    let maxSamples = 0
+    const blockData = new Map<string, { timeStamps: number[], values: number[] }>()
+    
+    for (const block of loggerBlocks) {
+      const data = this.getLoggedData(block.id)
+      if (data) {
+        blockData.set(block.id, data)
+        maxSamples = Math.max(maxSamples, data.timeStamps.length)
+      }
+    }
+    
+    // Create CSV header
+    let csv = 'Time'
+    for (const block of loggerBlocks) {
+      csv += `,${block.name}`
+    }
+    csv += '\n'
+    
+    // Create CSV rows
+    for (let i = 0; i < maxSamples; i++) {
+      let row = ''
+      let timeValue = ''
+      
+      // Get time from first available logger
+      for (const [blockId, data] of blockData) {
+        if (i < data.timeStamps.length) {
+          timeValue = data.timeStamps[i].toString()
+          break
+        }
+      }
+      
+      row += timeValue
+      
+      // Add values from each logger
+      for (const block of loggerBlocks) {
+        const data = blockData.get(block.id)
+        if (data && i < data.values.length) {
+          row += `,${data.values[i]}`
+        } else {
+          row += ','
+        }
+      }
+      
+      csv += row + '\n'
+    }
+    
+    return csv
   }
 
   public reset() {
