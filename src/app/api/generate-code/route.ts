@@ -1,15 +1,29 @@
-// app/api/generate-code/route.ts
+// app/api/generate-code/route.ts - Add better error logging
+
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@supabase/supabase-js'
 import { CodeGenerator } from '@/lib/codeGeneration'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
 import JSZip from 'jszip'
 
+// Create a server-side Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    persistSession: false
+  }
+})
+
 async function generateCodeHandler(request: NextRequest): Promise<NextResponse> {
+  console.log('Generate code API called')
+  
   // Parse and validate request body
   let requestBody: any
   try {
     requestBody = await request.json()
+    console.log('Request body:', requestBody)
   } catch (error) {
     throw new AppError(
       'Invalid JSON in request body',
@@ -34,15 +48,23 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
     )
   }
 
-  // Fetch the model from the database
-  const { data: model, error: dbError } = await supabase
+  console.log('Fetching model:', modelId)
+
+  // Fetch the model from the database using service role key
+  const { data: model, error: dbError } = await supabaseServer
     .from('models')
     .select('*')
     .eq('id', modelId)
     .single()
 
   if (dbError) {
-    throw dbError // Will be handled by the error handler
+    console.error('Database error:', dbError)
+    throw new AppError(
+      dbError.message || 'Database error',
+      dbError.code === 'PGRST116' ? 404 : 500,
+      dbError.code === 'PGRST116' ? ErrorTypes.NOT_FOUND : ErrorTypes.DATABASE_ERROR,
+      { modelId, dbError }
+    )
   }
 
   if (!model) {
@@ -53,6 +75,8 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
       { modelId }
     )
   }
+
+  console.log('Model found:', model.name)
 
   // Validate model structure
   if (!model.data || !model.data.sheets || !Array.isArray(model.data.sheets)) {
@@ -87,6 +111,8 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
       { modelId, modelName: model.name, sheetName: mainSheet.name }
     )
   }
+
+  console.log('Generating code for', blocks.length, 'blocks')
 
   // Generate the code
   let codeGenerator: CodeGenerator
@@ -131,6 +157,8 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
     )
   }
 
+  console.log('Code generated successfully, creating ZIP')
+
   // Create ZIP file
   let zip: JSZip
   let zipBuffer: Buffer
@@ -170,6 +198,8 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
       }
     )
   }
+
+  console.log('ZIP created, sending response')
 
   // Return the ZIP file
   return new NextResponse(zipBuffer, {

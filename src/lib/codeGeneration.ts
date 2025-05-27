@@ -1,3 +1,4 @@
+// lib/codeGeneration.ts
 import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
 
@@ -151,99 +152,6 @@ export class CodeGenerator {
     }
   }
 
-  private generateHeaderFile(): string {
-    const structName = `${this.modelName}_t`
-    const inputPorts = this.blocks.filter(b => b.type === 'input_port')
-    const outputPorts = this.blocks.filter(b => b.type === 'output_port')
-    const stateBlocks = this.blocks.filter(b => this.requiresState(b.type))
-
-    return `#ifndef ${this.modelName.toUpperCase()}_H
-#define ${this.modelName.toUpperCase()}_H
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-// Generated from visual model: ${this.modelName}
-// This file contains the interface for the model
-
-// Input structure
-typedef struct {
-${inputPorts.map(block => `    double ${this.sanitizeIdentifier(block.parameters?.portName || block.name)};`).join('\n')}
-} ${this.modelName}_inputs_t;
-
-// Output structure  
-typedef struct {
-${outputPorts.map(block => `    double ${this.sanitizeIdentifier(block.parameters?.portName || block.name)};`).join('\n')}
-} ${this.modelName}_outputs_t;
-
-// State structure
-typedef struct {
-${stateBlocks.map(block => this.generateStateDeclaration(block)).join('\n')}
-} ${this.modelName}_states_t;
-
-// Main instance structure
-typedef struct {
-    ${this.modelName}_inputs_t inputs;
-    ${this.modelName}_outputs_t outputs;
-    ${this.modelName}_states_t states;
-    double timeStep;
-} ${structName};
-
-// Function declarations
-void ${this.modelName}_init(${structName}* instance, double timeStep);
-void ${this.modelName}_step(${structName}* instance);
-void ${this.modelName}_terminate(${structName}* instance);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // ${this.modelName.toUpperCase()}_H`
-  }
-
-  private generateSourceFile(): string {
-    const structName = `${this.modelName}_t`
-    
-    return `#include "${this.modelName}.h"
-#include <math.h>
-#include <string.h>
-
-// Generated from visual model: ${this.modelName}
-
-void ${this.modelName}_init(${structName}* instance, double timeStep) {
-    if (!instance) return;
-    
-    // Initialize inputs and outputs to zero
-    memset(&instance->inputs, 0, sizeof(instance->inputs));
-    memset(&instance->outputs, 0, sizeof(instance->outputs));
-    memset(&instance->states, 0, sizeof(instance->states));
-    
-    instance->timeStep = timeStep;
-    
-    // Initialize block states
-${this.blocks.filter(b => this.requiresState(b.type)).map(block => this.generateInitCode(block)).join('\n')}
-}
-
-void ${this.modelName}_step(${structName}* instance) {
-    if (!instance) return;
-    
-    // Local variables for intermediate signals
-${this.generateSignalDeclarations()}
-    
-    // Execute blocks in order
-${this.generateExecutionCode()}
-    
-    // Update outputs
-${this.generateOutputCode()}
-}
-
-void ${this.modelName}_terminate(${structName}* instance) {
-    if (!instance) return;
-    // Cleanup code (if needed)
-}`
-  }
-
   private generateLibraryProperties(): string {
     return `name=${this.modelName}
 version=1.0.0
@@ -362,25 +270,24 @@ includes=${this.modelName}.h`
   }
 
   private generateTransferFunctionCode(block: BlockData, inputs: { signal: string }[]): string {
-    const blockName = this.sanitizeIdentifier(block.name)
-    const input = inputs[0]?.signal || '0.0'
-    const numerator = block.parameters?.numerator || [1]
-    const denominator = block.parameters?.denominator || [1, 1]
-    
-    if (denominator.length === 1) {
-      // Pure gain
-      const gain = numerator[0] / denominator[0]
-      return `    // Transfer function: ${block.name} (pure gain)
+  const blockName = this.sanitizeIdentifier(block.name)
+  const input = inputs[0]?.signal || '0.0'
+  const numerator = block.parameters?.numerator || [1]
+  const denominator = block.parameters?.denominator || [1, 1]
+  
+  if (denominator.length === 1) {
+    // Pure gain
+    const gain = numerator[0] / denominator[0]
+    return `    // Transfer function: ${block.name} (pure gain)
     ${blockName}_out = ${gain} * (${input});`
-    } else if (denominator.length === 2) {
-      // First order system: H(s) = b0 / (a1*s + a0)
-      // Differential equation: a1*dy/dt + a0*y = b0*u
-      // Discretization: y[k] = (a1*y[k-1] + b0*h*u[k]) / (a1 + a0*h)
-      const a0 = denominator[0]
-      const a1 = denominator[1]
-      const b0 = numerator[0] || 0
-      
-      return `    // Transfer function: ${block.name} (first order)
+  } else if (denominator.length === 2) {
+    // First order system: H(s) = b0 / (a1*s + a0)
+    // With descending order: denominator = [a1, a0]
+    const a1 = denominator[0] // s coefficient
+    const a0 = denominator[1] // constant term
+    const b0 = numerator[numerator.length - 1] || 0
+    
+    return `    // Transfer function: ${block.name} (first order)
     {
         double a0 = ${a0};
         double a1 = ${a1};
@@ -390,15 +297,16 @@ includes=${this.modelName}.h`
         double prev_state = instance->states.${blockName}_states[0];
         
         // First-order discrete approximation
-        instance->states.${blockName}_states[0] = (a1 * prev_state + b0 * h * input) / (a1 + a0 * h);
+        // dy/dt = (b0*u - a0*y) / a1
+        instance->states.${blockName}_states[0] = prev_state + h * (b0 * input - a0 * prev_state) / a1;
         ${blockName}_out = instance->states.${blockName}_states[0];
     }`
-    } else {
-      // Higher order - simplified implementation
-      return `    // Transfer function: ${block.name} (higher order - simplified)
+  } else {
+    // Higher order - simplified implementation
+    return `    // Transfer function: ${block.name} (higher order - simplified)
     ${blockName}_out = ${input}; // TODO: Implement higher-order transfer functions`
-    }
   }
+}
 
   private generateLookup1DCode(block: BlockData, inputs: { signal: string }[]): string {
     const blockName = this.sanitizeIdentifier(block.name)
@@ -523,4 +431,275 @@ includes=${this.modelName}.h`
       .replace(/^_+|_+$/g, '')
       || 'unnamed'
   }
+
+
+  // lib/codeGeneration.ts - Add derivatives function generation
+
+private generateHeaderFile(): string {
+  const structName = `${this.modelName}_t`
+  const inputPorts = this.blocks.filter(b => b.type === 'input_port')
+  const outputPorts = this.blocks.filter(b => b.type === 'output_port')
+  const stateBlocks = this.blocks.filter(b => this.requiresState(b.type))
+
+  return `#ifndef ${this.modelName.toUpperCase()}_H
+#define ${this.modelName.toUpperCase()}_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Generated from visual model: ${this.modelName}
+// This file contains the interface for the model
+
+// Input structure
+typedef struct {
+${inputPorts.map(block => `    double ${this.sanitizeIdentifier(block.parameters?.portName || block.name)};`).join('\n')}
+} ${this.modelName}_inputs_t;
+
+// Output structure  
+typedef struct {
+${outputPorts.map(block => `    double ${this.sanitizeIdentifier(block.parameters?.portName || block.name)};`).join('\n')}
+} ${this.modelName}_outputs_t;
+
+// State structure
+typedef struct {
+${stateBlocks.map(block => this.generateStateDeclaration(block)).join('\n')}
+} ${this.modelName}_states_t;
+
+// Main instance structure
+typedef struct {
+    ${this.modelName}_inputs_t inputs;
+    ${this.modelName}_outputs_t outputs;
+    ${this.modelName}_states_t states;
+    double timeStep;
+} ${structName};
+
+// Function declarations
+void ${this.modelName}_init(${structName}* instance, double timeStep);
+void ${this.modelName}_step(${structName}* instance);
+void ${this.modelName}_derivatives(
+    double t,
+    const ${this.modelName}_inputs_t* inputs,
+    const ${this.modelName}_states_t* current_states,
+    ${this.modelName}_states_t* state_derivatives
+);
+void ${this.modelName}_terminate(${structName}* instance);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // ${this.modelName.toUpperCase()}_H`
+}
+
+private generateSourceFile(): string {
+  const structName = `${this.modelName}_t`
+  
+  return `#include "${this.modelName}.h"
+#include <math.h>
+#include <string.h>
+
+// Generated from visual model: ${this.modelName}
+
+void ${this.modelName}_init(${structName}* instance, double timeStep) {
+    if (!instance) return;
+    
+    // Initialize inputs and outputs to zero
+    memset(&instance->inputs, 0, sizeof(instance->inputs));
+    memset(&instance->outputs, 0, sizeof(instance->outputs));
+    memset(&instance->states, 0, sizeof(instance->states));
+    
+    instance->timeStep = timeStep;
+    
+    // Initialize block states
+${this.blocks.filter(b => this.requiresState(b.type)).map(block => this.generateInitCode(block)).join('\n')}
+}
+
+void ${this.modelName}_derivatives(
+    double t,
+    const ${this.modelName}_inputs_t* inputs,
+    const ${this.modelName}_states_t* current_states,
+    ${this.modelName}_states_t* state_derivatives
+) {
+    if (!inputs || !current_states || !state_derivatives) return;
+    
+    // Clear derivatives
+    memset(state_derivatives, 0, sizeof(${this.modelName}_states_t));
+    
+    // Local variables for intermediate signals
+${this.generateSignalDeclarations()}
+    
+    // Compute block outputs using current states
+${this.generateDerivativeComputationCode()}
+}
+
+void ${this.modelName}_step(${structName}* instance) {
+    if (!instance) return;
+    
+    double h = instance->timeStep;
+    static double current_time = 0.0;
+    
+    // Runge-Kutta 4th order integration
+    ${this.modelName}_states_t k1, k2, k3, k4;
+    ${this.modelName}_states_t temp_states;
+    
+    // k1 = h * f(t, y)
+    ${this.modelName}_derivatives(current_time, &instance->inputs, &instance->states, &k1);
+    ${this.generateRK4Scaling('k1', 'h')}
+    
+    // k2 = h * f(t + h/2, y + k1/2)
+    ${this.generateRK4TempStates('temp_states', 'instance->states', 'k1', 0.5)}
+    ${this.modelName}_derivatives(current_time + h/2, &instance->inputs, &temp_states, &k2);
+    ${this.generateRK4Scaling('k2', 'h')}
+    
+    // k3 = h * f(t + h/2, y + k2/2)
+    ${this.generateRK4TempStates('temp_states', 'instance->states', 'k2', 0.5)}
+    ${this.modelName}_derivatives(current_time + h/2, &instance->inputs, &temp_states, &k3);
+    ${this.generateRK4Scaling('k3', 'h')}
+    
+    // k4 = h * f(t + h, y + k3)
+    ${this.generateRK4TempStates('temp_states', 'instance->states', 'k3', 1.0)}
+    ${this.modelName}_derivatives(current_time + h, &instance->inputs, &temp_states, &k4);
+    ${this.generateRK4Scaling('k4', 'h')}
+    
+    // y_new = y + (k1 + 2*k2 + 2*k3 + k4) / 6
+    ${this.generateRK4Update('instance->states', 'k1', 'k2', 'k3', 'k4')}
+    
+    // Update time
+    current_time += h;
+    
+    // Update outputs based on new states
+${this.generateOutputUpdateCode()}
+}
+
+void ${this.modelName}_terminate(${structName}* instance) {
+    if (!instance) return;
+    // Cleanup code (if needed)
+}`
+}
+
+private generateDerivativeComputationCode(): string {
+  // This generates code that computes derivatives for each state
+  const transferFunctionBlocks = this.blocks.filter(b => b.type === 'transfer_function')
+  
+  let code = ''
+  
+  // First, compute all non-state block outputs
+  const executionOrder = this.getExecutionOrder()
+  for (const blockId of executionOrder) {
+    const block = this.blocks.find(b => b.id === blockId)
+    if (!block || block.type === 'transfer_function') continue
+    
+    code += this.generateBlockCode(block) + '\n'
+  }
+  
+  // Then compute transfer function derivatives
+  for (const block of transferFunctionBlocks) {
+    code += this.generateTransferFunctionDerivative(block) + '\n'
+  }
+  
+  return code
+}
+
+private generateTransferFunctionDerivative(block: BlockData): string {
+  const blockName = this.sanitizeIdentifier(block.name)
+  const inputs = this.getBlockInputs(block.id)
+  const input = inputs[0]?.signal || '0.0'
+  const numerator = block.parameters?.numerator || [1]
+  const denominator = block.parameters?.denominator || [1, 1]
+  
+  if (denominator.length <= 1) {
+    // No state, no derivative
+    return `    // ${block.name} has no state (pure gain)`
+  }
+  
+  if (denominator.length === 2) {
+    // First order: a1*dy/dt + a0*y = b0*u
+    // dy/dt = (b0*u - a0*y) / a1
+    const a1 = denominator[0] // s coefficient (highest order)
+    const a0 = denominator[1] // constant term
+    const b0 = numerator[numerator.length - 1] || 0
+    
+    return `    // ${block.name} derivative (first order)
+    {
+        double u = ${input};
+        double y = current_states->${blockName}_states[0];
+        state_derivatives->${blockName}_states[0] = (${b0} * u - ${a0} * y) / ${a1};
+    }`
+  }
+  
+  // Higher order - would need state-space representation
+  return `    // ${block.name} derivative (higher order - TODO)`
+}
+
+private generateRK4Scaling(kVar: string, h: string): string {
+  const stateBlocks = this.blocks.filter(b => this.requiresState(b.type))
+  let code = ''
+  
+  for (const block of stateBlocks) {
+    const blockName = this.sanitizeIdentifier(block.name)
+    if (block.type === 'transfer_function') {
+      const denominator = block.parameters?.denominator || []
+      const stateCount = Math.max(0, denominator.length - 1)
+      for (let i = 0; i < stateCount; i++) {
+        code += `    ${kVar}.${blockName}_states[${i}] *= ${h};\n`
+      }
+    }
+  }
+  
+  return code
+}
+
+private generateRK4TempStates(tempVar: string, baseStates: string, kVar: string, factor: number): string {
+  const stateBlocks = this.blocks.filter(b => this.requiresState(b.type))
+  let code = ''
+  
+  for (const block of stateBlocks) {
+    const blockName = this.sanitizeIdentifier(block.name)
+    if (block.type === 'transfer_function') {
+      const denominator = block.parameters?.denominator || []
+      const stateCount = Math.max(0, denominator.length - 1)
+      for (let i = 0; i < stateCount; i++) {
+        code += `    ${tempVar}.${blockName}_states[${i}] = ${baseStates}.${blockName}_states[${i}] + ${factor} * ${kVar}.${blockName}_states[${i}];\n`
+      }
+    }
+  }
+  
+  return code
+}
+
+private generateRK4Update(statesVar: string, k1: string, k2: string, k3: string, k4: string): string {
+  const stateBlocks = this.blocks.filter(b => this.requiresState(b.type))
+  let code = ''
+  
+  for (const block of stateBlocks) {
+    const blockName = this.sanitizeIdentifier(block.name)
+    if (block.type === 'transfer_function') {
+      const denominator = block.parameters?.denominator || []
+      const stateCount = Math.max(0, denominator.length - 1)
+      for (let i = 0; i < stateCount; i++) {
+        code += `    ${statesVar}.${blockName}_states[${i}] += (${k1}.${blockName}_states[${i}] + 2*${k2}.${blockName}_states[${i}] + 2*${k3}.${blockName}_states[${i}] + ${k4}.${blockName}_states[${i}]) / 6.0;\n`
+      }
+    }
+  }
+  
+  return code
+}
+
+private generateOutputUpdateCode(): string {
+  // Update output ports based on current signals
+  const outputPorts = this.blocks.filter(b => b.type === 'output_port')
+  let code = '    // Compute all block outputs with updated states\n'
+  
+  // Execute all blocks to compute final outputs
+  const executionOrder = this.getExecutionOrder()
+  for (const blockId of executionOrder) {
+    const block = this.blocks.find(b => b.id === blockId)
+    if (!block) continue
+    
+    code += this.generateBlockCode(block) + '\n'
+  }
+  
+  return code
+}
 }

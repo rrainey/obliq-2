@@ -1,3 +1,4 @@
+// lib/modelSchema.ts
 import { z } from 'zod'
 
 // Block position schema

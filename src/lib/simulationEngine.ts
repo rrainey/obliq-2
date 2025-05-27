@@ -1,3 +1,4 @@
+// lib/simulationEngine.ts
 import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
 
@@ -446,77 +447,87 @@ export class SimulationEngine {
 
   private executeTransferFunctionBlock(blockState: BlockState, inputs: number[]) {
     const input = inputs[0] || 0
-    const { numerator, denominator, states, prevInput, prevOutput } = blockState.internalState
+    const { numerator, denominator, states } = blockState.internalState
     
-    // Implement transfer function using state-space representation
-    // For a transfer function H(s) = N(s)/D(s), we convert to state-space form
-    
-    if (denominator.length === 1) {
-      // Pure gain case: H(s) = K
-      blockState.outputs[0] = input * (numerator[0] / denominator[0])
+    // Validate coefficients
+    if (!denominator || denominator.length === 0) {
+      blockState.outputs[0] = 0
       return
     }
     
+    // Pure gain case: H(s) = K (only constant term)
+    if (denominator.length === 1) {
+      blockState.outputs[0] = input * (numerator[0] || 0) / denominator[0]
+      return
+    }
+    
+    // First order system: H(s) = b0 / (a1*s + a0)
+    // With descending order: denominator = [a1, a0]
+    // For pure integrator (1/s): numerator=[1], denominator=[1, 0]
+    // This gives: H(s) = 1 / (1*s + 0) = 1/s
     if (denominator.length === 2) {
-      // First order system: H(s) = b0 / (a1*s + a0)
-      // Differential equation: a1*dy/dt + a0*y = b0*u
-      // Rearranged: dy/dt = (-a0/a1)*y + (b0/a1)*u
-      
-      const a0 = denominator[0] // constant term
-      const a1 = denominator[1] // s term coefficient
-      const b0 = numerator[0] || 0 // numerator constant
+      const a1 = denominator[0] // s term coefficient (highest order)
+      const a0 = denominator[1] // constant term (lowest order)
+      const b0 = numerator[numerator.length - 1] || 0 // constant term of numerator
       
       if (a1 === 0) {
-        // Avoid division by zero
-        blockState.outputs[0] = 0
+        // Degenerate case - pure gain
+        if (a0 !== 0) {
+          blockState.outputs[0] = input * b0 / a0
+        } else {
+          blockState.outputs[0] = 0
+        }
         return
       }
       
-      // Current state is the output (for first-order system)
-      const currentState = states[0]
+      // For the general first-order case: a1*dy/dt + a0*y = b0*u
+      // Rearranged: dy/dt = (b0*u - a0*y) / a1
       
-      // Calculate derivative using Runge-Kutta 4th order method
+      const currentState = states[0] || 0
       const h = this.state.timeStep
       
-      const f = (y: number, u: number) => (-a0 / a1) * y + (b0 / a1) * u
+      // Define the derivative function
+      const dydt = (y: number, u: number) => (b0 * u - a0 * y) / a1
       
-      const k1 = f(currentState, input)
-      const k2 = f(currentState + 0.5 * h * k1, input)
-      const k3 = f(currentState + 0.5 * h * k2, input)
-      const k4 = f(currentState + h * k3, input)
+      // Runge-Kutta 4th order integration
+      const k1 = dydt(currentState, input)
+      const k2 = dydt(currentState + 0.5 * h * k1, input)
+      const k3 = dydt(currentState + 0.5 * h * k2, input)
+      const k4 = dydt(currentState + h * k3, input)
       
       // Update state using RK4
       states[0] = currentState + (h / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
       
-      // For a first-order system, output equals the state
+      // Output equals the state for first-order systems
       blockState.outputs[0] = states[0]
     }
     else if (denominator.length === 3) {
       // Second order system: H(s) = (b1*s + b0) / (a2*s^2 + a1*s + a0)
-      // State space: x1 = y, x2 = dy/dt
-      // dx1/dt = x2
-      // dx2/dt = (-a0/a2)*x1 + (-a1/a2)*x2 + (b0/a2)*u
-      
-      const a0 = denominator[0]
-      const a1 = denominator[1]
-      const a2 = denominator[2]
-      const b0 = numerator[0] || 0
-      const b1 = numerator[1] || 0
+      // With descending order: denominator = [a2, a1, a0], numerator = [b1, b0]
+      const a2 = denominator[0] // s^2 coefficient
+      const a1 = denominator[1] // s coefficient
+      const a0 = denominator[2] // constant term
+      const b0 = numerator[numerator.length - 1] || 0 // constant term
+      const b1 = numerator.length > 1 ? (numerator[numerator.length - 2] || 0) : 0 // s term
       
       if (a2 === 0) {
-        // Degenerate to first-order case
         blockState.outputs[0] = 0
         return
       }
       
-      const x1 = states[0] // position (output)
-      const x2 = states[1] || 0 // velocity (derivative)
+      // State space representation:
+      // x1 = y (output)
+      // x2 = dy/dt
+      // dx1/dt = x2
+      // dx2/dt = (b0*u - a0*x1 - a1*x2) / a2
       
+      const x1 = states[0] || 0
+      const x2 = states[1] || 0
       const h = this.state.timeStep
       
       // System equations
       const f1 = (x1: number, x2: number, u: number) => x2
-      const f2 = (x1: number, x2: number, u: number) => (-a0 / a2) * x1 + (-a1 / a2) * x2 + (b0 / a2) * u
+      const f2 = (x1: number, x2: number, u: number) => (b0 * u - a0 * x1 - a1 * x2) / a2
       
       // RK4 integration
       const k1_1 = f1(x1, x2, input)
@@ -535,27 +546,33 @@ export class SimulationEngine {
       states[0] = x1 + (h / 6) * (k1_1 + 2 * k2_1 + 2 * k3_1 + k4_1)
       states[1] = x2 + (h / 6) * (k1_2 + 2 * k2_2 + 2 * k3_2 + k4_2)
       
-      // Output calculation: y = b1*x2 + b0*x1 (if numerator has derivative term)
-      if (numerator.length > 1) {
-        blockState.outputs[0] = b1 * states[1] + b0 * states[0]
+      // Output calculation
+      // For most cases, output = x1 (the first state)
+      // If numerator has s term (b1), we need to consider it
+      if (b1 !== 0) {
+        // For proper transfer functions with numerator dynamics
+        // This would require more complex state-space formulation
+        blockState.outputs[0] = states[0]
       } else {
         blockState.outputs[0] = states[0]
       }
     }
     else {
-      // Higher order systems - simplified implementation
-      // For now, treat as first-order with the dominant pole
-      const timeConstant = denominator[1] / denominator[denominator.length - 1]
-      const gain = numerator[0] / denominator[0]
+      // Higher order systems - for now, use simplified implementation
+      // Find the dominant time constant (coefficient of highest order term)
+      const highestOrderCoeff = denominator[0]
+      const lowestOrderCoeff = denominator[denominator.length - 1]
+      const timeConstant = Math.abs(highestOrderCoeff / lowestOrderCoeff)
+      const gain = (numerator[numerator.length - 1] || 0) / (lowestOrderCoeff || 1)
       
-      const currentState = states[0]
+      const currentState = states[0] || 0
       const derivative = (gain * input - currentState) / timeConstant
       states[0] = currentState + derivative * this.state.timeStep
       
       blockState.outputs[0] = states[0]
     }
     
-    // Update previous values for next iteration
+    // Store state for next iteration
     blockState.internalState.prevInput = input
     blockState.internalState.prevOutput = blockState.outputs[0]
   }
