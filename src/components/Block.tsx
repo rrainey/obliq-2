@@ -1,6 +1,8 @@
+// components/Block.tsx - Fix port spacing and click handling
+
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 export interface BlockData {
   id: string
@@ -25,97 +27,142 @@ interface BlockProps {
   onPortClick?: (portInfo: PortInfo) => void
 }
 
-const blockIcons: Record<string, string> = {
-  sum: '∑',
-  multiply: '×',
-  scale: 'K',
-  transfer_function: 'H(s)',
-  input_port: '→',
-  output_port: '⇥',
-  source: '◦',
-  signal_display: '📊',
-  signal_logger: '📝',
-  lookup_1d: '1D',
-  lookup_2d: '2D',
-  subsystem: '📦',
-}
-
-const blockColors: Record<string, { bg: string; border: string; text: string }> = {
-  sum: { bg: 'bg-blue-100', border: 'border-blue-300', text: 'text-blue-700' },
-  multiply: { bg: 'bg-green-100', border: 'border-green-300', text: 'text-green-700' },
-  scale: { bg: 'bg-purple-100', border: 'border-purple-300', text: 'text-purple-700' },
-  transfer_function: { bg: 'bg-red-100', border: 'border-red-300', text: 'text-red-700' },
-  input_port: { bg: 'bg-yellow-100', border: 'border-yellow-300', text: 'text-yellow-700' },
-  output_port: { bg: 'bg-orange-100', border: 'border-orange-300', text: 'text-orange-700' },
-  source: { bg: 'bg-indigo-100', border: 'border-indigo-300', text: 'text-indigo-700' },
-  signal_display: { bg: 'bg-pink-100', border: 'border-pink-300', text: 'text-pink-700' },
-  signal_logger: { bg: 'bg-teal-100', border: 'border-teal-300', text: 'text-teal-700' },
-  lookup_1d: { bg: 'bg-cyan-100', border: 'border-cyan-300', text: 'text-cyan-700' },
-  lookup_2d: { bg: 'bg-lime-100', border: 'border-lime-300', text: 'text-lime-700' },
-  subsystem: { bg: 'bg-gray-100', border: 'border-gray-300', text: 'text-gray-700' },
-}
-
 export default function Block({ 
   block, 
-  isSelected = false, 
-  onMove, 
-  onSelect, 
+  isSelected = false,
+  onMove,
+  onSelect,
   onDoubleClick,
   onPortClick
 }: BlockProps) {
   const [isDragging, setIsDragging] = useState(false)
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [startPosition, setStartPosition] = useState({ x: 0, y: 0 })
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const blockRef = useRef<HTMLDivElement>(null)
 
-  const colors = blockColors[block.type] || blockColors.sum
-  const icon = blockIcons[block.type] || '?'
+  // Determine number of ports based on block type
+  const getPortCounts = () => {
+    switch (block.type) {
+      case 'sum':
+      case 'multiply':
+        return { inputs: 2, outputs: 1 }
+      case 'scale':
+      case 'transfer_function':
+      case 'signal_display':
+      case 'signal_logger':
+      case 'output_port':
+        return { inputs: 1, outputs: 0 }
+      case 'lookup_1d':
+        return { inputs: 1, outputs: 1 }
+      case 'lookup_2d':
+        return { inputs: 2, outputs: 1 }
+      case 'input_port':
+      case 'source':
+        return { inputs: 0, outputs: 1 }
+      case 'subsystem':
+        const inputPorts = block.parameters?.inputPorts || ['Input1']
+        const outputPorts = block.parameters?.outputPorts || ['Output1']
+        return { inputs: inputPorts.length, outputs: outputPorts.length }
+      default:
+        return { inputs: 1, outputs: 1 }
+    }
+  }
+
+  const { inputs: inputCount, outputs: outputCount } = getPortCounts()
+
+  // Increased port spacing for better visibility
+  const PORT_SPACING = 20 // Increased from 12 to 20
+  const BLOCK_HEIGHT = 16 // Height in tailwind h-16 = 64px
+  const BLOCK_HEIGHT_PX = 64
+
+  // Calculate port positions to center them vertically
+  const calculatePortPosition = (index: number, count: number): number => {
+    if (count === 1) {
+      return BLOCK_HEIGHT_PX / 2 - 6 // Center single port (6px is half port size)
+    }
+    const totalSpacing = (count - 1) * PORT_SPACING
+    const startY = (BLOCK_HEIGHT_PX - totalSpacing) / 2
+    return startY + index * PORT_SPACING - 6
+  }
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Check if the target is a port by looking at the element and its parents
+    let element = e.target as HTMLElement
+    while (element && element !== e.currentTarget) {
+      if (element.classList.contains('port')) {
+        // Don't start dragging if clicking on a port
+        return
+      }
+      element = element.parentElement as HTMLElement
+    }
+
     e.preventDefault()
     e.stopPropagation()
+
+    // Get the block element's bounding rect
+    const blockElement = blockRef.current
+    if (!blockElement) return
+
+    const rect = blockElement.getBoundingClientRect()
+    const parentRect = blockElement.offsetParent?.getBoundingClientRect()
+    
+    if (!parentRect) return
+
+    // Calculate offset from mouse to block position
+    const offsetX = e.clientX - rect.left
+    const offsetY = e.clientY - rect.top
+
+    console.log('Block mousedown:', {
+      blockId: block.id,
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      blockLeft: rect.left,
+      blockTop: rect.top,
+      offsetX,
+      offsetY,
+      currentPosition: block.position
+    })
+
+    setDragOffset({ x: offsetX, y: offsetY })
+    setIsDragging(true)
     
     if (onSelect) {
       onSelect(block.id)
     }
+  }
 
-    setIsDragging(true)
-    setDragStart({ x: e.clientX, y: e.clientY })
-    setStartPosition(block.position)
+  useEffect(() => {
+    if (!isDragging) return
 
-    // Add global mouse listeners
     const handleMouseMove = (e: MouseEvent) => {
+      if (!blockRef.current) return
+
+      const parentElement = blockRef.current.offsetParent as HTMLElement
+      if (!parentElement) return
+
+      const parentRect = parentElement.getBoundingClientRect()
+      
+      // Calculate new position using the stored offset
+      const newX = e.clientX - parentRect.left - dragOffset.x
+      const newY = e.clientY - parentRect.top - dragOffset.y
+
       if (onMove) {
-        const deltaX = e.clientX - dragStart.x
-        const deltaY = e.clientY - dragStart.y
-        onMove(block.id, {
-          x: startPosition.x + deltaX,
-          y: startPosition.y + deltaY
-        })
+        onMove(block.id, { x: newX, y: newY })
       }
     }
 
     const handleMouseUp = () => {
+      console.log('Block drag end:', block.id)
       setIsDragging(false)
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
     }
 
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
-  }
 
-  const handlePortClick = (portIndex: number, isOutput: boolean) => (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (onPortClick) {
-      onPortClick({
-        blockId: block.id,
-        portIndex,
-        isOutput
-      })
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
     }
-  }
+  }, [isDragging, dragOffset, block.id, onMove])
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -125,129 +172,139 @@ export default function Block({
     }
   }
 
+  const handlePortClick = (portInfo: PortInfo) => (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    console.log('Port clicked:', portInfo)
+    if (onPortClick) {
+      onPortClick(portInfo)
+    }
+  }
+
+  // Get block color based on type
+  const getBlockColor = () => {
+    switch (block.type) {
+      case 'sum':
+      case 'multiply':
+      case 'scale':
+        return 'bg-blue-100 border-blue-300'
+      case 'transfer_function':
+        return 'bg-purple-100 border-purple-300'
+      case 'signal_display':
+      case 'signal_logger':
+        return 'bg-green-100 border-green-300'
+      case 'input_port':
+      case 'output_port':
+        return 'bg-gray-100 border-gray-300'
+      case 'source':
+        return 'bg-yellow-100 border-yellow-300'
+      case 'lookup_1d':
+      case 'lookup_2d':
+        return 'bg-orange-100 border-orange-300'
+      case 'subsystem':
+        return 'bg-indigo-100 border-indigo-300'
+      default:
+        return 'bg-white border-gray-300'
+    }
+  }
+
+  // Get block symbol
+  const getBlockSymbol = () => {
+    switch (block.type) {
+      case 'sum':
+        return '∑'
+      case 'multiply':
+        return '×'
+      case 'scale':
+        return block.parameters?.gain || 'K'
+      case 'transfer_function':
+        return 'H(s)'
+      case 'signal_display':
+        return '📊'
+      case 'signal_logger':
+        return '📝'
+      case 'input_port':
+        return '▶'
+      case 'output_port':
+        return '▶'
+      case 'source':
+        return '~'
+      case 'lookup_1d':
+        return '1D'
+      case 'lookup_2d':
+        return '2D'
+      case 'subsystem':
+        return '□'
+      default:
+        return '?'
+    }
+  }
+
+  // Adjust block height based on number of ports
+  const minHeight = Math.max(64, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
+
   return (
     <div
       ref={blockRef}
-      className={`
-        absolute select-none cursor-move
-        ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1' : ''}
-        ${isDragging ? 'opacity-75' : ''}
-      `}
-      style={{
-        transform: `translate(${block.position.x}px, ${block.position.y}px)`,
-        zIndex: isSelected ? 10 : 1
+      className={`absolute cursor-move select-none ${isDragging ? 'z-50' : 'z-10'}`}
+      style={{ 
+        left: `${block.position.x}px`, 
+        top: `${block.position.y}px`,
+        touchAction: 'none' // Prevent touch scrolling when dragging
       }}
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
     >
-      {/* Block Body */}
       <div 
         className={`
-          w-20 h-16 rounded-lg border-2 shadow-sm
-          ${colors.bg} ${colors.border}
-          flex flex-col items-center justify-center
-          hover:shadow-md transition-shadow
-          ${block.type === 'subsystem' && block.parameters?.sheetId ? 'ring-1 ring-blue-300' : ''}
+          relative w-20 rounded-lg border-2 flex items-center justify-center
+          ${getBlockColor()}
+          ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}
+          ${isDragging ? 'opacity-75' : ''}
+          transition-shadow
         `}
+        style={{ height: `${minHeight}px` }}
       >
-        {/* Icon */}
-        <div className={`text-lg font-mono ${colors.text} mb-1`}>
-          {icon}
-        </div>
-        
-        {/* Block Name */}
-        <div className={`text-xs font-medium ${colors.text} text-center px-1 truncate w-full`}>
-          {block.name}
-        </div>
-        
-        {/* Subsystem indicator */}
-        {block.type === 'subsystem' && block.parameters?.sheetId && (
-          <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full text-white text-xs flex items-center justify-center">
-            ↓
-          </div>
-        )}
-      </div>
+        {/* Input Ports */}
+        {Array.from({ length: inputCount }).map((_, index) => (
+          <div
+            key={`input-${index}`}
+            className="port absolute w-3 h-3 bg-gray-600 rounded-full cursor-crosshair hover:bg-blue-500 hover:ring-2 hover:ring-blue-300 transition-all"
+            style={{ 
+              left: '-6px', 
+              top: `${calculatePortPosition(index, inputCount)}px` 
+            }}
+            onClick={handlePortClick({ blockId: block.id, portIndex: index, isOutput: false })}
+            onMouseDown={(e) => e.stopPropagation()} // Prevent block drag when clicking port
+            title={`Input ${index + 1}`}
+          />
+        ))}
 
-      {/* Input Ports (left side) */}
-      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1">
-        {getInputPorts(block.type, block.parameters).map((_, index) => {
-          const hasConnection = false // TODO: Check if port has connection
-          return (
-            <div
-              key={`input-${index}`}
-              className={`w-2 h-2 border rounded-full mb-1 cursor-pointer transition-colors ${
-                hasConnection 
-                  ? 'bg-blue-300 border-blue-500 hover:bg-blue-400' 
-                  : 'bg-white border-gray-400 hover:bg-blue-200'
-              }`}
-              style={{ marginTop: index > 0 ? '4px' : '0' }}
-              title={`Input ${index + 1}${hasConnection ? ' (connected)' : ''}`}
-              onClick={handlePortClick(index, false)}
-            />
-          )
-        })}
-      </div>
+        {/* Block Symbol */}
+        <div className="text-lg font-semibold pointer-events-none">
+          {getBlockSymbol()}
+        </div>
 
-      {/* Output Ports (right side) */}
-      <div className="absolute right-0 top-1/2 transform -translate-y-1/2 translate-x-1">
-        {getOutputPorts(block.type, block.parameters).map((_, index) => (
+        {/* Output Ports */}
+        {Array.from({ length: outputCount }).map((_, index) => (
           <div
             key={`output-${index}`}
-            className="w-2 h-2 bg-white border border-gray-400 rounded-full mb-1 hover:bg-green-200 cursor-pointer transition-colors"
-            style={{ marginTop: index > 0 ? '4px' : '0' }}
+            className="port absolute w-3 h-3 bg-gray-600 rounded-full cursor-crosshair hover:bg-blue-500 hover:ring-2 hover:ring-blue-300 transition-all"
+            style={{ 
+              right: '-6px', 
+              top: `${calculatePortPosition(index, outputCount)}px` 
+            }}
+            onClick={handlePortClick({ blockId: block.id, portIndex: index, isOutput: true })}
+            onMouseDown={(e) => e.stopPropagation()} // Prevent block drag when clicking port
             title={`Output ${index + 1}`}
-            onClick={handlePortClick(index, true)}
           />
         ))}
       </div>
+
+      {/* Block Name */}
+      <div className="absolute -bottom-5 left-0 right-0 text-xs text-center text-gray-600 pointer-events-none">
+        {block.name}
+      </div>
     </div>
   )
-}
-
-// Helper functions to determine ports based on block type
-function getInputPorts(blockType: string, parameters?: Record<string, any>): string[] {
-  switch (blockType) {
-    case 'sum':
-    case 'multiply':
-      return ['input1', 'input2'] // Can be extended for more inputs
-    case 'scale':
-    case 'transfer_function':
-    case 'output_port':
-    case 'signal_display':
-    case 'signal_logger':
-      return ['input']
-    case 'lookup_1d':
-      return ['input']
-    case 'lookup_2d':
-      return ['input1', 'input2']
-    case 'input_port':
-    case 'source':
-      return [] // No inputs
-    case 'subsystem':
-      return parameters?.inputPorts || ['input']
-    default:
-      return []
-  }
-}
-
-function getOutputPorts(blockType: string, parameters?: Record<string, any>): string[] {
-  switch (blockType) {
-    case 'sum':
-    case 'multiply':
-    case 'scale':
-    case 'transfer_function':
-    case 'input_port':
-    case 'source':
-    case 'lookup_1d':
-    case 'lookup_2d':
-      return ['output']
-    case 'output_port':
-    case 'signal_display':
-    case 'signal_logger':
-      return [] // No outputs
-    case 'subsystem':
-      return parameters?.outputPorts || ['output']
-    default:
-      return []
-  }
 }

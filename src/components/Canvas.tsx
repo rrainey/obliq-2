@@ -119,15 +119,69 @@ export default function Canvas({
     }
   }, [onDrop, pan, zoom])
 
-  // Get port position for wire rendering
   const getPortPosition = useCallback((blockId: string, portIndex: number, isOutput: boolean) => {
     const block = blocks.find(b => b.id === blockId)
     if (!block) return { x: 0, y: 0 }
     
-    const portOffsetY = portIndex * 6 // Spacing between ports
+    // Get port count for this block
+    let portCount = 1
+    if (isOutput) {
+      // Count output ports based on block type
+      switch (block.type) {
+        case 'sum':
+        case 'multiply':
+        case 'scale':
+        case 'transfer_function':
+        case 'lookup_1d':
+        case 'lookup_2d':
+          portCount = 1
+          break
+        case 'input_port':
+        case 'source':
+          portCount = 1
+          break
+        case 'subsystem':
+          portCount = block.parameters?.outputPorts?.length || 1
+          break
+        default:
+          portCount = 0
+      }
+    } else {
+      // Count input ports based on block type
+      switch (block.type) {
+        case 'sum':
+        case 'multiply':
+          portCount = 2
+          break
+        case 'lookup_2d':
+          portCount = 2
+          break
+        case 'subsystem':
+          portCount = block.parameters?.inputPorts?.length || 1
+          break
+        default:
+          portCount = 1
+      }
+    }
+    
+    // Calculate block height based on port count
+    const PORT_SPACING = 20
+    const MIN_HEIGHT = 64
+    const blockHeight = Math.max(MIN_HEIGHT, Math.max(portCount, 1) * PORT_SPACING + 20)
+    
+    // Calculate port position
+    let portY
+    if (portCount === 1) {
+      portY = blockHeight / 2
+    } else {
+      const totalSpacing = (portCount - 1) * PORT_SPACING
+      const startY = (blockHeight - totalSpacing) / 2
+      portY = startY + portIndex * PORT_SPACING
+    }
+    
     return {
-      x: block.position.x + (isOutput ? 80 : 0), // Block width is 80px
-      y: block.position.y + 32 + portOffsetY - (portIndex * 2) // Center vertically
+      x: block.position.x + (isOutput ? 80 : 0),
+      y: block.position.y + portY
     }
   }, [blocks])
 
