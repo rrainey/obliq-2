@@ -36,7 +36,7 @@ export interface ModelState {
   simulationResults: SimulationResults | null
   isSimulating: boolean
   simulationEngine: SimulationEngine | null
-  outputPortValues: Map<string, number> | null
+  outputPortValues: Map<string, number | number[] | boolean | boolean[]> | null
   
   // Loading states
   modelLoading: boolean

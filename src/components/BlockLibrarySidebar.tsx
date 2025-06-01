@@ -8,32 +8,117 @@ interface BlockType {
   category: string
   description: string
   icon: string
+  vectorSupport?: 'full' | 'scalar-only' | 'element-wise'
 }
 
 const blockTypes: BlockType[] = [
   // Math Operations
-  { id: 'sum', name: 'Sum', category: 'Math', description: 'Add multiple inputs', icon: '∑' },
-  { id: 'multiply', name: 'Multiply', category: 'Math', description: 'Multiply inputs', icon: '×' },
-  { id: 'scale', name: 'Scale', category: 'Math', description: 'Multiply by constant', icon: 'K' },
+  { 
+    id: 'sum', 
+    name: 'Sum', 
+    category: 'Math', 
+    description: 'Add multiple inputs', 
+    icon: '∑',
+    vectorSupport: 'full'
+  },
+  { 
+    id: 'multiply', 
+    name: 'Multiply', 
+    category: 'Math', 
+    description: 'Multiply inputs', 
+    icon: '×',
+    vectorSupport: 'full'
+  },
+  { 
+    id: 'scale', 
+    name: 'Scale', 
+    category: 'Math', 
+    description: 'Multiply by constant', 
+    icon: 'K',
+    vectorSupport: 'full'
+  },
   
   // Dynamic Systems
-  { id: 'transfer_function', name: 'Transfer Function', category: 'Dynamic', description: 'Laplace transfer function', icon: 'H(s)' },
+  { 
+    id: 'transfer_function', 
+    name: 'Transfer Function', 
+    category: 'Dynamic', 
+    description: 'Laplace transfer function', 
+    icon: 'H(s)',
+    vectorSupport: 'element-wise'
+  },
   
   // Sources & Sinks
-  { id: 'input_port', name: 'Input Port', category: 'Ports', description: 'External input', icon: '→' },
-  { id: 'output_port', name: 'Output Port', category: 'Ports', description: 'External output', icon: '⇥' },
-  { id: 'source', name: 'Source', category: 'Sources', description: 'Constant or signal generator', icon: '◦' },
+  { 
+    id: 'input_port', 
+    name: 'Input Port', 
+    category: 'Ports', 
+    description: 'External input', 
+    icon: '→',
+    vectorSupport: 'full'
+  },
+  { 
+    id: 'output_port', 
+    name: 'Output Port', 
+    category: 'Ports', 
+    description: 'External output', 
+    icon: '⇥',
+    vectorSupport: 'full'
+  },
+  { 
+    id: 'source', 
+    name: 'Source', 
+    category: 'Sources', 
+    description: 'Constant or signal generator', 
+    icon: '◦',
+    vectorSupport: 'full'
+  },
   
   // Display & Logging
-  { id: 'signal_display', name: 'Signal Display', category: 'Display', description: 'Plot signal values', icon: '📊' },
-  { id: 'signal_logger', name: 'Signal Logger', category: 'Display', description: 'Log signal data', icon: '📝' },
+  { 
+    id: 'signal_display', 
+    name: 'Signal Display', 
+    category: 'Display', 
+    description: 'Plot signal values', 
+    icon: '📊',
+    vectorSupport: 'full'
+  },
+  { 
+    id: 'signal_logger', 
+    name: 'Signal Logger', 
+    category: 'Display', 
+    description: 'Log signal data', 
+    icon: '📝',
+    vectorSupport: 'full'
+  },
   
   // Lookup Tables
-  { id: 'lookup_1d', name: '1-D Lookup', category: 'Lookup', description: '1D interpolation table', icon: '1D' },
-  { id: 'lookup_2d', name: '2-D Lookup', category: 'Lookup', description: '2D interpolation table', icon: '2D' },
+  { 
+    id: 'lookup_1d', 
+    name: '1-D Lookup', 
+    category: 'Lookup', 
+    description: '1D interpolation table (scalar only)', 
+    icon: '1D',
+    vectorSupport: 'scalar-only'
+  },
+  { 
+    id: 'lookup_2d', 
+    name: '2-D Lookup', 
+    category: 'Lookup', 
+    description: '2D interpolation table (scalar only)', 
+    icon: '2D',
+    vectorSupport: 'scalar-only'
+  },
   
   // Subsystems
-  { id: 'subsystem', name: 'Subsystem', category: 'Hierarchy', description: 'Nested model block', icon: '📦' },
+  { 
+    id: 'subsystem', 
+    name: 'Subsystem', 
+    category: 'Hierarchy', 
+    description: 'Nested model block', 
+    icon: '📦',
+    vectorSupport: 'full'
+  },
 ]
 
 const categories = Array.from(new Set(blockTypes.map(block => block.category)))
@@ -48,20 +133,66 @@ function DraggableBlock({ blockType }: DraggableBlockProps) {
     e.dataTransfer.effectAllowed = 'copy'
   }
 
+  // Get vector support badge
+  const getVectorBadge = () => {
+    switch (blockType.vectorSupport) {
+      case 'full':
+        return (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800" title="Supports scalar and vector signals">
+            V
+          </span>
+        )
+      case 'element-wise':
+        return (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800" title="Processes vectors element-wise">
+            E
+          </span>
+        )
+      case 'scalar-only':
+        return (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800" title="Scalar inputs only">
+            S
+          </span>
+        )
+      default:
+        return null
+    }
+  }
+
+  // Get extended tooltip
+  const getTooltip = () => {
+    let tooltip = blockType.description
+    switch (blockType.vectorSupport) {
+      case 'full':
+        tooltip += '\n✓ Supports both scalar and vector signals'
+        break
+      case 'element-wise':
+        tooltip += '\n✓ Processes vector signals element-by-element'
+        break
+      case 'scalar-only':
+        tooltip += '\n⚠ Requires scalar inputs only'
+        break
+    }
+    return tooltip
+  }
+
   return (
     <div
       draggable
       onDragStart={handleDragStart}
       className="p-3 bg-white border border-gray-200 rounded-lg cursor-grab hover:bg-gray-50 hover:border-blue-300 transition-colors group"
-      title={blockType.description}
+      title={getTooltip()}
     >
       <div className="flex items-center space-x-3">
         <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center text-blue-700 font-mono text-sm group-hover:bg-blue-200">
           {blockType.icon}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-gray-900 truncate">
-            {blockType.name}
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-medium text-gray-900 truncate">
+              {blockType.name}
+            </div>
+            {getVectorBadge()}
           </div>
           <div className="text-xs text-gray-500 truncate">
             {blockType.description}
@@ -144,10 +275,24 @@ export default function BlockLibrarySidebar() {
         </div>
       </div>
 
-      {/* Footer */}
+      {/* Footer with Legend */}
       <div className="p-4 border-t border-gray-200 bg-gray-50">
-        <div className="text-xs text-gray-500 text-center">
+        <div className="text-xs text-gray-500 text-center mb-2">
           Drag blocks onto the canvas
+        </div>
+        <div className="flex justify-center gap-3 text-xs">
+          <div className="flex items-center gap-1">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded font-medium bg-green-100 text-green-800">V</span>
+            <span className="text-gray-600">Vector</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded font-medium bg-blue-100 text-blue-800">E</span>
+            <span className="text-gray-600">Element-wise</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded font-medium bg-yellow-100 text-yellow-800">S</span>
+            <span className="text-gray-600">Scalar only</span>
+          </div>
         </div>
       </div>
     </div>

@@ -1,705 +1,909 @@
 // lib/codeGeneration.ts
+
 import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
+import { Sheet } from '@/lib/simulationEngine'
+import { propagateSignalTypes } from '@/lib/signalTypePropagation'
+import { parseType, ParsedType } from '@/lib/typeValidator'
 
-export interface Sheet {
-  id: string
-  name: string
-  blocks: BlockData[]
-  connections: WireData[]
-  extents: {
-    width: number
-    height: number
+interface CodeGenerationOptions {
+  modelName: string
+  sheets: Sheet[]
+  globalSettings?: {
+    simulationTimeStep: number
+    simulationDuration: number
   }
 }
 
-export interface CodeGenerationResult {
-  files: {
-    name: string
-    content: string
-  }[]
-  success: boolean
-  errors: string[]
+interface GeneratedCode {
+  headerFile: string
+  sourceFile: string
+  fileName: string
 }
 
-export class CodeGenerator {
-  private blocks: BlockData[]
-  private wires: WireData[]
-  private sheets: Sheet[]
-  private modelName: string
-  private errors: string[] = []
-
-  constructor(blocks: BlockData[], wires: WireData[], sheets: Sheet[], modelName: string) {
-    this.blocks = blocks
-    this.wires = wires
-    this.sheets = sheets
-    this.modelName = this.sanitizeIdentifier(modelName)
-  }
-
-  public generateCode(): CodeGenerationResult {
-    this.errors = []
-    
-    try {
-      // Validate the model first
-      if (!this.validateModel()) {
-        return {
-          files: [],
-          success: false,
-          errors: this.errors
-        }
-      }
-
-      // Generate the files
-      const files = [
-        {
-          name: `${this.modelName}.h`,
-          content: this.generateHeaderFile()
-        },
-        {
-          name: `${this.modelName}.c`,
-          content: this.generateSourceFile()
-        },
-        {
-          name: 'library.properties',
-          content: this.generateLibraryProperties()
-        }
-      ]
-
-      return {
-        files,
-        success: true,
-        errors: []
-      }
-
-    } catch (error) {
-      this.errors.push(`Code generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-      return {
-        files: [],
-        success: false,
-        errors: this.errors
-      }
-    }
-  }
-
-  private validateModel(): boolean {
-    // Check for unconnected required inputs
-    for (const block of this.blocks) {
-      const requiredInputs = this.getRequiredInputCount(block.type)
-      const connectedInputs = this.wires.filter(wire => wire.targetBlockId === block.id).length
-      
-      if (connectedInputs < requiredInputs) {
-        this.errors.push(`Block ${block.name} (${block.type}) has unconnected required inputs`)
-      }
-    }
-
-    // Check for algebraic loops (simplified check)
-    if (this.hasAlgebraicLoops()) {
-      this.errors.push('Model contains algebraic loops - not supported in generated code')
-    }
-
-    return this.errors.length === 0
-  }
-
-  private hasAlgebraicLoops(): boolean {
-    // Simplified algebraic loop detection using DFS
-    const visited = new Set<string>()
-    const visiting = new Set<string>()
-
-    const hasLoop = (blockId: string): boolean => {
-      if (visiting.has(blockId)) return true
-      if (visited.has(blockId)) return false
-
-      visiting.add(blockId)
-      
-      const dependentWires = this.wires.filter(wire => wire.sourceBlockId === blockId)
-      for (const wire of dependentWires) {
-        if (hasLoop(wire.targetBlockId)) return true
-      }
-
-      visiting.delete(blockId)
-      visited.add(blockId)
-      return false
-    }
-
-    for (const block of this.blocks) {
-      if (!visited.has(block.id) && hasLoop(block.id)) {
-        return true
-      }
-    }
-
-    return false
-  }
-
-  private getRequiredInputCount(blockType: string): number {
-    switch (blockType) {
-      case 'sum':
-      case 'multiply':
-        return 1 // At least one input required
-      case 'scale':
-      case 'transfer_function':
-      case 'lookup_1d':
-      case 'signal_display':
-      case 'signal_logger':
-      case 'output_port':
-        return 1
-      case 'lookup_2d':
-        return 2
-      case 'input_port':
-      case 'source':
-        return 0
-      default:
-        return 0
-    }
-  }
-
-  private generateLibraryProperties(): string {
-    return `name=${this.modelName}
-version=1.0.0
-author=Visual Model Generator
-maintainer=Visual Model Generator
-sentence=Generated from visual block diagram model
-paragraph=This library was automatically generated from a visual modeling tool
-category=Control
-url=
-architectures=*
-includes=${this.modelName}.h`
-  }
-
-  private requiresState(blockType: string): boolean {
-    return ['transfer_function'].includes(blockType)
-  }
-
-  private generateStateDeclaration(block: BlockData): string {
-    switch (block.type) {
-      case 'transfer_function':
-        const denominator = block.parameters?.denominator || [1, 1]
-        const stateOrder = Math.max(0, denominator.length - 1)
-        return `    double ${this.sanitizeIdentifier(block.name)}_states[${stateOrder}];`
-      default:
-        return `    double ${this.sanitizeIdentifier(block.name)}_state;`
-    }
-  }
-
-  private generateInitCode(block: BlockData): string {
-    const blockName = this.sanitizeIdentifier(block.name)
-    
-    switch (block.type) {
-      case 'transfer_function':
-        return `    // Initialize ${block.name} transfer function states to zero (done by memset)`
-      default:
-        return `    // Initialize ${block.name} state`
-    }
-  }
-
-  private generateSignalDeclarations(): string {
-    const signals = new Set<string>()
-    
-    // Add signals for each block output
-    for (const block of this.blocks) {
-      if (this.getOutputCount(block.type) > 0) {
-        signals.add(`double ${this.sanitizeIdentifier(block.name)}_out = 0.0;`)
-      }
-    }
-    
-    return Array.from(signals).map(s => `    ${s}`).join('\n')
-  }
-
-  private generateExecutionCode(): string {
-    // Get execution order (topological sort)
-    const executionOrder = this.getExecutionOrder()
-    
-    return executionOrder.map(blockId => {
-      const block = this.blocks.find(b => b.id === blockId)
-      if (!block) return ''
-      
-      return this.generateBlockCode(block)
-    }).filter(code => code.length > 0).join('\n\n')
-  }
-
-  private generateBlockCode(block: BlockData): string {
-    const blockName = this.sanitizeIdentifier(block.name)
-    const inputs = this.getBlockInputs(block.id)
-    
-    switch (block.type) {
-      case 'sum':
-        const sumInputs = inputs.map(input => input.signal).join(' + ')
-        return `    // Sum block: ${block.name}
-    ${blockName}_out = ${sumInputs || '0.0'};`
-
-      case 'multiply':
-        const multiplyInputs = inputs.map(input => input.signal).join(' * ')
-        return `    // Multiply block: ${block.name}
-    ${blockName}_out = ${multiplyInputs || '1.0'};`
-
-      case 'scale':
-        const gain = block.parameters?.gain || 1
-        const scaleInput = inputs[0]?.signal || '0.0'
-        return `    // Scale block: ${block.name}
-    ${blockName}_out = ${gain} * (${scaleInput});`
-
-      case 'transfer_function':
-        return this.generateTransferFunctionCode(block, inputs)
-
-      case 'input_port':
-        const portName = this.sanitizeIdentifier(block.parameters?.portName || block.name)
-        return `    // Input port: ${block.name}
-    ${blockName}_out = instance->inputs.${portName};`
-
-      case 'source':
-        const value = block.parameters?.value || 0
-        return `    // Source block: ${block.name}
-    ${blockName}_out = ${value};`
-
-      case 'lookup_1d':
-        return this.generateLookup1DCode(block, inputs)
-
-      case 'output_port':
-        const outputPortName = this.sanitizeIdentifier(block.parameters?.portName || block.name)
-        const outputInput = inputs[0]?.signal || '0.0'
-        return `    // Output port: ${block.name}
-    instance->outputs.${outputPortName} = ${outputInput};`
-
-      case 'signal_display':
-      case 'signal_logger':
-        // These blocks don't generate code in the final implementation
-        return `    // ${block.type}: ${block.name} (display/logging - not implemented in generated code)`
-
-      default:
-        return `    // Unsupported block type: ${block.type}`
-    }
-  }
-
-  private generateTransferFunctionCode(block: BlockData, inputs: { signal: string }[]): string {
-  const blockName = this.sanitizeIdentifier(block.name)
-  const input = inputs[0]?.signal || '0.0'
-  const numerator = block.parameters?.numerator || [1]
-  const denominator = block.parameters?.denominator || [1, 1]
+export function generateCCode(options: CodeGenerationOptions): GeneratedCode {
+  const { modelName, sheets, globalSettings } = options
+  const mainSheet = sheets.find(s => s.id === 'main') || sheets[0]
   
-  if (denominator.length === 1) {
-    // Pure gain
-    const gain = numerator[0] / denominator[0]
-    return `    // Transfer function: ${block.name} (pure gain)
-    ${blockName}_out = ${gain} * (${input});`
-  } else if (denominator.length === 2) {
-    // First order system: H(s) = b0 / (a1*s + a0)
-    // With descending order: denominator = [a1, a0]
-    const a1 = denominator[0] // s coefficient
-    const a0 = denominator[1] // constant term
-    const b0 = numerator[numerator.length - 1] || 0
-    
-    return `    // Transfer function: ${block.name} (first order)
-    {
-        double a0 = ${a0};
-        double a1 = ${a1};
-        double b0 = ${b0};
-        double h = instance->timeStep;
-        double input = ${input};
-        double prev_state = instance->states.${blockName}_states[0];
-        
-        // First-order discrete approximation
-        // dy/dt = (b0*u - a0*y) / a1
-        instance->states.${blockName}_states[0] = prev_state + h * (b0 * input - a0 * prev_state) / a1;
-        ${blockName}_out = instance->states.${blockName}_states[0];
-    }`
-  } else {
-    // Higher order - simplified implementation
-    return `    // Transfer function: ${block.name} (higher order - simplified)
-    ${blockName}_out = ${input}; // TODO: Implement higher-order transfer functions`
+  if (!mainSheet) {
+    throw new Error('No sheets found in model')
+  }
+  
+  // Propagate types through the model
+  const typeResult = propagateSignalTypes(mainSheet.blocks, mainSheet.connections)
+  
+  // Generate safe C identifier from model name
+  const safeName = modelName.replace(/[^a-zA-Z0-9_]/g, '_')
+  const upperName = safeName.toUpperCase()
+  
+  // Generate header file
+  const headerFile = generateHeaderFile(safeName, upperName, mainSheet, typeResult.blockOutputTypes)
+  
+  // Generate source file
+  const sourceFile = generateSourceFile(safeName, mainSheet, typeResult.blockOutputTypes, globalSettings)
+  
+  return {
+    headerFile,
+    sourceFile,
+    fileName: safeName.toLowerCase()
   }
 }
 
-  private generateLookup1DCode(block: BlockData, inputs: { signal: string }[]): string {
-    const blockName = this.sanitizeIdentifier(block.name)
-    const input = inputs[0]?.signal || '0.0'
-    const inputValues = block.parameters?.inputValues || [0, 1]
-    const outputValues = block.parameters?.outputValues || [0, 1]
-    
-    // Generate lookup table as static arrays
-    const inputArray = `{${inputValues.join(', ')}}`
-    const outputArray = `{${outputValues.join(', ')}}`
-    const tableSize = Math.min(inputValues.length, outputValues.length)
-    
-    return `    // 1D Lookup table: ${block.name}
-    {
-        static const double input_table[] = ${inputArray};
-        static const double output_table[] = ${outputArray};
-        static const int table_size = ${tableSize};
-        double input_val = ${input};
-        
-        // Linear interpolation
-        if (input_val <= input_table[0]) {
-            ${blockName}_out = output_table[0];
-        } else if (input_val >= input_table[table_size-1]) {
-            ${blockName}_out = output_table[table_size-1];
-        } else {
-            // Find interpolation interval
-            for (int i = 0; i < table_size-1; i++) {
-                if (input_val >= input_table[i] && input_val <= input_table[i+1]) {
-                    double t = (input_val - input_table[i]) / (input_table[i+1] - input_table[i]);
-                    ${blockName}_out = output_table[i] + t * (output_table[i+1] - output_table[i]);
-                    break;
-                }
-            }
-        }
-    }`
-  }
+function generateHeaderFile(
+  safeName: string,
+  upperName: string,
+  sheet: Sheet,
+  blockTypes: Map<string, string>
+): string {
+  const inputs = sheet.blocks.filter(b => b.type === 'input_port')
+  const outputs = sheet.blocks.filter(b => b.type === 'output_port')
+  const transferFunctions = sheet.blocks.filter(b => b.type === 'transfer_function')
+  
+  let header = `#ifndef ${upperName}_H
+#define ${upperName}_H
 
-  private getBlockInputs(blockId: string): { signal: string, portIndex: number }[] {
-    const inputWires = this.wires.filter(wire => wire.targetBlockId === blockId)
-    inputWires.sort((a, b) => a.targetPortIndex - b.targetPortIndex)
-    
-    return inputWires.map(wire => {
-      const sourceBlock = this.blocks.find(b => b.id === wire.sourceBlockId)
-      const sourceName = sourceBlock ? this.sanitizeIdentifier(sourceBlock.name) : 'unknown'
-      return {
-        signal: `${sourceName}_out`,
-        portIndex: wire.targetPortIndex
-      }
-    })
-  }
-
-  private getExecutionOrder(): string[] {
-    // Topological sort to determine execution order
-    const visited = new Set<string>()
-    const visiting = new Set<string>()
-    const order: string[] = []
-
-    const visit = (blockId: string) => {
-      if (visiting.has(blockId)) return // Cycle detection
-      if (visited.has(blockId)) return
-
-      visiting.add(blockId)
-
-      // Visit dependencies first
-      const inputWires = this.wires.filter(wire => wire.targetBlockId === blockId)
-      for (const wire of inputWires) {
-        visit(wire.sourceBlockId)
-      }
-
-      visiting.delete(blockId)
-      visited.add(blockId)
-      order.push(blockId)
-    }
-
-    // Start with source blocks
-    const sourceBlocks = this.blocks.filter(b => ['input_port', 'source'].includes(b.type))
-    for (const block of sourceBlocks) {
-      visit(block.id)
-    }
-
-    // Visit remaining blocks
-    for (const block of this.blocks) {
-      if (!visited.has(block.id)) {
-        visit(block.id)
-      }
-    }
-
-    return order
-  }
-
-  private getOutputCount(blockType: string): number {
-    switch (blockType) {
-      case 'sum':
-      case 'multiply':
-      case 'scale':
-      case 'transfer_function':
-      case 'input_port':
-      case 'source':
-      case 'lookup_1d':
-      case 'lookup_2d':
-        return 1
-      case 'output_port':
-      case 'signal_display':
-      case 'signal_logger':
-        return 0
-      default:
-        return 0
-    }
-  }
-
-  private generateOutputCode(): string {
-    // Output ports are handled in their block code generation
-    return '    // Output updates handled in block execution'
-  }
-
-  private sanitizeIdentifier(name: string): string {
-    // Convert to valid C identifier
-    return name
-      .replace(/[^a-zA-Z0-9_]/g, '_')
-      .replace(/^[0-9]/, '_$&')
-      .replace(/_{2,}/g, '_')
-      .replace(/^_+|_+$/g, '')
-      || 'unnamed'
-  }
-
-
-  // lib/codeGeneration.ts - Add derivatives function generation
-
-private generateHeaderFile(): string {
-  const structName = `${this.modelName}_t`
-  const inputPorts = this.blocks.filter(b => b.type === 'input_port')
-  const outputPorts = this.blocks.filter(b => b.type === 'output_port')
-  const stateBlocks = this.blocks.filter(b => this.requiresState(b.type))
-
-  return `#ifndef ${this.modelName.toUpperCase()}_H
-#define ${this.modelName.toUpperCase()}_H
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+#include <math.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Generated from visual model: ${this.modelName}
-// This file contains the interface for the model
+`
 
-// Input structure
-typedef struct {
-${inputPorts.map(block => `    double ${this.sanitizeIdentifier(block.parameters?.portName || block.name)};`).join('\n')}
-} ${this.modelName}_inputs_t;
+  // Generate input structure
+  if (inputs.length > 0) {
+    header += `// Input signals structure\n`
+    header += `typedef struct {\n`
+    for (const input of inputs) {
+      const portName = input.parameters?.portName || input.name
+      const dataType = input.parameters?.dataType || 'double'
+      const cType = getCType(dataType)
+      header += `    ${cType} ${sanitizeIdentifier(portName)};\n`
+    }
+    header += `} ${safeName}_inputs_t;\n\n`
+  }
 
-// Output structure  
-typedef struct {
-${outputPorts.map(block => `    double ${this.sanitizeIdentifier(block.parameters?.portName || block.name)};`).join('\n')}
-} ${this.modelName}_outputs_t;
+  // Generate output structure
+  if (outputs.length > 0) {
+    header += `// Output signals structure\n`
+    header += `typedef struct {\n`
+    for (const output of outputs) {
+      const portName = output.parameters?.portName || output.name
+      // Get type from connected wire
+      const connectedWire = sheet.connections.find(w => w.targetBlockId === output.id)
+      if (connectedWire) {
+        const sourceKey = `${connectedWire.sourceBlockId}:${connectedWire.sourcePortIndex}`
+        const signalType = blockTypes.get(sourceKey) || 'double'
+        const cType = getCType(signalType)
+        header += `    ${cType} ${sanitizeIdentifier(portName)};\n`
+      }
+    }
+    header += `} ${safeName}_outputs_t;\n\n`
+  }
 
-// State structure
-typedef struct {
-${stateBlocks.map(block => this.generateStateDeclaration(block)).join('\n')}
-} ${this.modelName}_states_t;
+  // Generate states structure
+  const needsStates = transferFunctions.length > 0 || hasVectorTransferFunctions(sheet, blockTypes)
+  if (needsStates) {
+    header += `// Internal states structure\n`
+    header += `typedef struct {\n`
+    
+    // Add states for each transfer function
+    for (const tf of transferFunctions) {
+      const tfName = sanitizeIdentifier(tf.name)
+      const denominator = tf.parameters?.denominator || [1, 1]
+      const stateOrder = Math.max(0, denominator.length - 1)
+      
+      // Check if this TF processes vectors
+      const inputWire = sheet.connections.find(w => w.targetBlockId === tf.id)
+      if (inputWire) {
+        const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
+        const inputType = blockTypes.get(sourceKey)
+        if (inputType) {
+          const parsed = tryParseType(inputType)
+          if (parsed?.isArray && parsed.arraySize) {
+            // Vector transfer function - need array of states
+            if (stateOrder > 0) {
+              header += `    double ${tfName}_states[${parsed.arraySize}][${stateOrder}];\n`
+            }
+          } else {
+            // Scalar transfer function
+            if (stateOrder > 0) {
+              header += `    double ${tfName}_states[${stateOrder}];\n`
+            }
+          }
+        }
+      }
+    }
+    
+    header += `} ${safeName}_states_t;\n\n`
+  }
 
-// Main instance structure
-typedef struct {
-    ${this.modelName}_inputs_t inputs;
-    ${this.modelName}_outputs_t outputs;
-    ${this.modelName}_states_t states;
-    double timeStep;
-} ${structName};
+  // Generate main structure
+  header += `// Main model structure\n`
+  header += `typedef struct {\n`
+  if (inputs.length > 0) header += `    ${safeName}_inputs_t inputs;\n`
+  if (outputs.length > 0) header += `    ${safeName}_outputs_t outputs;\n`
+  if (needsStates) header += `    ${safeName}_states_t states;\n`
+  header += `    double time;\n`
+  header += `    double dt;\n`
+  header += `} ${safeName}_t;\n\n`
 
-// Function declarations
-void ${this.modelName}_init(${structName}* instance, double timeStep);
-void ${this.modelName}_step(${structName}* instance);
-void ${this.modelName}_derivatives(
-    double t,
-    const ${this.modelName}_inputs_t* inputs,
-    const ${this.modelName}_states_t* current_states,
-    ${this.modelName}_states_t* state_derivatives
-);
-void ${this.modelName}_terminate(${structName}* instance);
+  // Function prototypes
+  header += `// Initialize the model\n`
+  header += `void ${safeName}_init(${safeName}_t* model, double time_step);\n\n`
 
-#ifdef __cplusplus
+  header += `// Execute one simulation step\n`
+  header += `void ${safeName}_step(${safeName}_t* model);\n\n`
+
+  if (transferFunctions.length > 0) {
+    header += `// Compute state derivatives (for RK4 integration)\n`
+    header += `void ${safeName}_derivatives(${safeName}_t* model, `
+    if (needsStates) header += `const ${safeName}_states_t* current_states, ${safeName}_states_t* state_derivatives`
+    header += `);\n\n`
+  }
+
+  header += `#ifdef __cplusplus\n}\n#endif\n\n#endif // ${upperName}_H\n`
+
+  return header
 }
-#endif
 
-#endif // ${this.modelName.toUpperCase()}_H`
-}
+function generateSourceFile(
+  safeName: string,
+  sheet: Sheet,
+  blockTypes: Map<string, string>,
+  globalSettings?: any
+): string {
+  let source = `#include "${safeName}.h"\n\n`
 
-private generateSourceFile(): string {
-  const structName = `${this.modelName}_t`
+  // Generate init function
+  source += generateInitFunction(safeName, sheet, blockTypes)
   
-  return `#include "${this.modelName}.h"
-#include <math.h>
-#include <string.h>
-
-// Generated from visual model: ${this.modelName}
-
-void ${this.modelName}_init(${structName}* instance, double timeStep) {
-    if (!instance) return;
-    
-    // Initialize inputs and outputs to zero
-    memset(&instance->inputs, 0, sizeof(instance->inputs));
-    memset(&instance->outputs, 0, sizeof(instance->outputs));
-    memset(&instance->states, 0, sizeof(instance->states));
-    
-    instance->timeStep = timeStep;
-    
-    // Initialize block states
-${this.blocks.filter(b => this.requiresState(b.type)).map(block => this.generateInitCode(block)).join('\n')}
-}
-
-void ${this.modelName}_derivatives(
-    double t,
-    const ${this.modelName}_inputs_t* inputs,
-    const ${this.modelName}_states_t* current_states,
-    ${this.modelName}_states_t* state_derivatives
-) {
-    if (!inputs || !current_states || !state_derivatives) return;
-    
-    // Clear derivatives
-    memset(state_derivatives, 0, sizeof(${this.modelName}_states_t));
-    
-    // Local variables for intermediate signals
-${this.generateSignalDeclarations()}
-    
-    // Compute block outputs using current states
-${this.generateDerivativeComputationCode()}
-}
-
-void ${this.modelName}_step(${structName}* instance) {
-    if (!instance) return;
-    
-    double h = instance->timeStep;
-    static double current_time = 0.0;
-    
-    // Runge-Kutta 4th order integration
-    ${this.modelName}_states_t k1, k2, k3, k4;
-    ${this.modelName}_states_t temp_states;
-    
-    // k1 = h * f(t, y)
-    ${this.modelName}_derivatives(current_time, &instance->inputs, &instance->states, &k1);
-    ${this.generateRK4Scaling('k1', 'h')}
-    
-    // k2 = h * f(t + h/2, y + k1/2)
-    ${this.generateRK4TempStates('temp_states', 'instance->states', 'k1', 0.5)}
-    ${this.modelName}_derivatives(current_time + h/2, &instance->inputs, &temp_states, &k2);
-    ${this.generateRK4Scaling('k2', 'h')}
-    
-    // k3 = h * f(t + h/2, y + k2/2)
-    ${this.generateRK4TempStates('temp_states', 'instance->states', 'k2', 0.5)}
-    ${this.modelName}_derivatives(current_time + h/2, &instance->inputs, &temp_states, &k3);
-    ${this.generateRK4Scaling('k3', 'h')}
-    
-    // k4 = h * f(t + h, y + k3)
-    ${this.generateRK4TempStates('temp_states', 'instance->states', 'k3', 1.0)}
-    ${this.modelName}_derivatives(current_time + h, &instance->inputs, &temp_states, &k4);
-    ${this.generateRK4Scaling('k4', 'h')}
-    
-    // y_new = y + (k1 + 2*k2 + 2*k3 + k4) / 6
-    ${this.generateRK4Update('instance->states', 'k1', 'k2', 'k3', 'k4')}
-    
-    // Update time
-    current_time += h;
-    
-    // Update outputs based on new states
-${this.generateOutputUpdateCode()}
-}
-
-void ${this.modelName}_terminate(${structName}* instance) {
-    if (!instance) return;
-    // Cleanup code (if needed)
-}`
-}
-
-private generateDerivativeComputationCode(): string {
-  // This generates code that computes derivatives for each state
-  const transferFunctionBlocks = this.blocks.filter(b => b.type === 'transfer_function')
+  // Generate step function
+  source += generateStepFunction(safeName, sheet, blockTypes)
   
-  let code = ''
+  // Generate derivatives function if needed
+  const transferFunctions = sheet.blocks.filter(b => b.type === 'transfer_function')
+  if (transferFunctions.length > 0) {
+    source += generateDerivativesFunction(safeName, sheet, blockTypes)
+  }
+
+  return source
+}
+
+function generateInitFunction(safeName: string, sheet: Sheet, blockTypes: Map<string, string>): string {
+  let code = `void ${safeName}_init(${safeName}_t* model, double time_step) {\n`
+  code += `    // Initialize model parameters\n`
+  code += `    model->time = 0.0;\n`
+  code += `    model->dt = time_step;\n\n`
+
+  // Initialize inputs
+  const inputs = sheet.blocks.filter(b => b.type === 'input_port')
+  if (inputs.length > 0) {
+    code += `    // Initialize inputs\n`
+    for (const input of inputs) {
+      const portName = input.parameters?.portName || input.name
+      const dataType = input.parameters?.dataType || 'double'
+      const defaultValue = input.parameters?.defaultValue || 0
+      const parsed = tryParseType(dataType)
+      
+      if (parsed?.isArray && parsed.arraySize) {
+        // Initialize array
+        code += `    for (int i = 0; i < ${parsed.arraySize}; i++) {\n`
+        code += `        model->inputs.${sanitizeIdentifier(portName)}[i] = ${defaultValue};\n`
+        code += `    }\n`
+      } else {
+        // Initialize scalar
+        code += `    model->inputs.${sanitizeIdentifier(portName)} = ${defaultValue};\n`
+      }
+    }
+    code += `\n`
+  }
+
+  // Initialize states
+  const transferFunctions = sheet.blocks.filter(b => b.type === 'transfer_function')
+  if (transferFunctions.length > 0) {
+    code += `    // Initialize transfer function states\n`
+    for (const tf of transferFunctions) {
+      const tfName = sanitizeIdentifier(tf.name)
+      const denominator = tf.parameters?.denominator || [1, 1]
+      const stateOrder = Math.max(0, denominator.length - 1)
+      
+      if (stateOrder > 0) {
+        // Check if this TF processes vectors
+        const inputWire = sheet.connections.find(w => w.targetBlockId === tf.id)
+        if (inputWire) {
+          const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
+          const inputType = blockTypes.get(sourceKey)
+          if (inputType) {
+            const parsed = tryParseType(inputType)
+            if (parsed?.isArray && parsed.arraySize) {
+              // Vector transfer function - initialize 2D array
+              code += `    memset(model->states.${tfName}_states, 0, sizeof(model->states.${tfName}_states));\n`
+            } else {
+              // Scalar transfer function
+              code += `    memset(model->states.${tfName}_states, 0, sizeof(model->states.${tfName}_states));\n`
+            }
+          }
+        }
+      }
+    }
+  }
+
+  code += `}\n\n`
+  return code
+}
+
+function generateStepFunction(safeName: string, sheet: Sheet, blockTypes: Map<string, string>): string {
+  let code = `void ${safeName}_step(${safeName}_t* model) {\n`
   
-  // First, compute all non-state block outputs
-  const executionOrder = this.getExecutionOrder()
+  // Generate temporary variables for internal signals
+  code += `    // Internal signals\n`
+  const internalSignals = new Map<string, { type: string, name: string }>()
+  
+  // Collect all internal signals (not input/output ports)
+  for (const block of sheet.blocks) {
+    if (block.type !== 'input_port' && block.type !== 'output_port' && 
+        block.type !== 'signal_display' && block.type !== 'signal_logger') {
+      const outputKey = `${block.id}:0`
+      const signalType = blockTypes.get(outputKey)
+      if (signalType) {
+        const signalName = `sig_${sanitizeIdentifier(block.name)}`
+        internalSignals.set(outputKey, { type: signalType, name: signalName })
+        const cType = getCType(signalType)
+        code += `    ${cType} ${signalName};\n`
+      }
+    }
+  }
+  code += `\n`
+
+  // Generate block computations in execution order
+  const executionOrder = calculateExecutionOrder(sheet.blocks, sheet.connections)
+  
+  code += `    // Compute block outputs\n`
   for (const blockId of executionOrder) {
-    const block = this.blocks.find(b => b.id === blockId)
-    if (!block || block.type === 'transfer_function') continue
-    
-    code += this.generateBlockCode(block) + '\n'
-  }
-  
-  // Then compute transfer function derivatives
-  for (const block of transferFunctionBlocks) {
-    code += this.generateTransferFunctionDerivative(block) + '\n'
-  }
-  
-  return code
-}
-
-private generateTransferFunctionDerivative(block: BlockData): string {
-  const blockName = this.sanitizeIdentifier(block.name)
-  const inputs = this.getBlockInputs(block.id)
-  const input = inputs[0]?.signal || '0.0'
-  const numerator = block.parameters?.numerator || [1]
-  const denominator = block.parameters?.denominator || [1, 1]
-  
-  if (denominator.length <= 1) {
-    // No state, no derivative
-    return `    // ${block.name} has no state (pure gain)`
-  }
-  
-  if (denominator.length === 2) {
-    // First order: a1*dy/dt + a0*y = b0*u
-    // dy/dt = (b0*u - a0*y) / a1
-    const a1 = denominator[0] // s coefficient (highest order)
-    const a0 = denominator[1] // constant term
-    const b0 = numerator[numerator.length - 1] || 0
-    
-    return `    // ${block.name} derivative (first order)
-    {
-        double u = ${input};
-        double y = current_states->${blockName}_states[0];
-        state_derivatives->${blockName}_states[0] = (${b0} * u - ${a0} * y) / ${a1};
-    }`
-  }
-  
-  // Higher order - would need state-space representation
-  return `    // ${block.name} derivative (higher order - TODO)`
-}
-
-private generateRK4Scaling(kVar: string, h: string): string {
-  const stateBlocks = this.blocks.filter(b => this.requiresState(b.type))
-  let code = ''
-  
-  for (const block of stateBlocks) {
-    const blockName = this.sanitizeIdentifier(block.name)
-    if (block.type === 'transfer_function') {
-      const denominator = block.parameters?.denominator || []
-      const stateCount = Math.max(0, denominator.length - 1)
-      for (let i = 0; i < stateCount; i++) {
-        code += `    ${kVar}.${blockName}_states[${i}] *= ${h};\n`
-      }
-    }
-  }
-  
-  return code
-}
-
-private generateRK4TempStates(tempVar: string, baseStates: string, kVar: string, factor: number): string {
-  const stateBlocks = this.blocks.filter(b => this.requiresState(b.type))
-  let code = ''
-  
-  for (const block of stateBlocks) {
-    const blockName = this.sanitizeIdentifier(block.name)
-    if (block.type === 'transfer_function') {
-      const denominator = block.parameters?.denominator || []
-      const stateCount = Math.max(0, denominator.length - 1)
-      for (let i = 0; i < stateCount; i++) {
-        code += `    ${tempVar}.${blockName}_states[${i}] = ${baseStates}.${blockName}_states[${i}] + ${factor} * ${kVar}.${blockName}_states[${i}];\n`
-      }
-    }
-  }
-  
-  return code
-}
-
-private generateRK4Update(statesVar: string, k1: string, k2: string, k3: string, k4: string): string {
-  const stateBlocks = this.blocks.filter(b => this.requiresState(b.type))
-  let code = ''
-  
-  for (const block of stateBlocks) {
-    const blockName = this.sanitizeIdentifier(block.name)
-    if (block.type === 'transfer_function') {
-      const denominator = block.parameters?.denominator || []
-      const stateCount = Math.max(0, denominator.length - 1)
-      for (let i = 0; i < stateCount; i++) {
-        code += `    ${statesVar}.${blockName}_states[${i}] += (${k1}.${blockName}_states[${i}] + 2*${k2}.${blockName}_states[${i}] + 2*${k3}.${blockName}_states[${i}] + ${k4}.${blockName}_states[${i}]) / 6.0;\n`
-      }
-    }
-  }
-  
-  return code
-}
-
-private generateOutputUpdateCode(): string {
-  // Update output ports based on current signals
-  const outputPorts = this.blocks.filter(b => b.type === 'output_port')
-  let code = '    // Compute all block outputs with updated states\n'
-  
-  // Execute all blocks to compute final outputs
-  const executionOrder = this.getExecutionOrder()
-  for (const blockId of executionOrder) {
-    const block = this.blocks.find(b => b.id === blockId)
+    const block = sheet.blocks.find(b => b.id === blockId)
     if (!block) continue
     
-    code += this.generateBlockCode(block) + '\n'
+    code += generateBlockComputation(block, sheet, blockTypes, internalSignals)
+  }
+
+  // Update time
+  code += `\n    // Update simulation time\n`
+  code += `    model->time += model->dt;\n`
+  
+  code += `}\n\n`
+  return code
+}
+
+function generateBlockComputation(
+  block: BlockData,
+  sheet: Sheet,
+  blockTypes: Map<string, string>,
+  internalSignals: Map<string, { type: string, name: string }>
+): string {
+  let code = ''
+  
+  // Skip display and logger blocks
+  if (block.type === 'signal_display' || block.type === 'signal_logger') {
+    return ''
+  }
+  
+  // Get output signal name
+  const outputKey = `${block.id}:0`
+  const outputSignal = internalSignals.get(outputKey)
+  const outputName = outputSignal?.name || `sig_${sanitizeIdentifier(block.name)}`
+  
+  // Get input connections
+  const inputWires = sheet.connections.filter(w => w.targetBlockId === block.id)
+  
+  switch (block.type) {
+    case 'input_port':
+      const portName = block.parameters?.portName || block.name
+      code += `    // Input port: ${block.name}\n`
+      const dataType = block.parameters?.dataType || 'double'
+      const parsed = tryParseType(dataType)
+      if (parsed?.isArray && parsed.arraySize) {
+        // Copy array
+        code += `    memcpy(${outputName}, model->inputs.${sanitizeIdentifier(portName)}, sizeof(${outputName}));\n`
+      } else {
+        // Copy scalar
+        code += `    ${outputName} = model->inputs.${sanitizeIdentifier(portName)};\n`
+      }
+      break
+      
+    case 'source':
+      code += generateSourceBlock(block, outputName, blockTypes.get(outputKey))
+      break
+      
+    case 'sum':
+      code += generateSumBlock(block, outputName, inputWires, internalSignals, blockTypes.get(outputKey))
+      break
+      
+    case 'multiply':
+      code += generateMultiplyBlock(block, outputName, inputWires, internalSignals, blockTypes.get(outputKey))
+      break
+      
+    case 'scale':
+      code += generateScaleBlock(block, outputName, inputWires, internalSignals, blockTypes.get(outputKey))
+      break
+      
+    case 'transfer_function':
+      code += generateTransferFunctionBlock(block, outputName, inputWires, internalSignals, blockTypes.get(outputKey))
+      break
+      
+    case 'output_port':
+      code += generateOutputPortBlock(block, inputWires, internalSignals)
+      break
   }
   
   return code
 }
+
+function generateSourceBlock(block: BlockData, outputName: string, outputType?: string): string {
+  const signalType = block.parameters?.signalType || 'constant'
+  const value = block.parameters?.value || 0
+  const parsed = outputType ? tryParseType(outputType) : null
+  
+  let code = `    // Source block: ${block.name}\n`
+  
+  if (signalType === 'constant') {
+    if (parsed?.isArray && parsed.arraySize) {
+      code += `    for (int i = 0; i < ${parsed.arraySize}; i++) {\n`
+      code += `        ${outputName}[i] = ${value};\n`
+      code += `    }\n`
+    } else {
+      code += `    ${outputName} = ${value};\n`
+    }
+  } else {
+    // For time-varying sources, generate appropriate code
+    code += `    // TODO: Implement ${signalType} signal generation\n`
+    if (parsed?.isArray && parsed.arraySize) {
+      code += `    for (int i = 0; i < ${parsed.arraySize}; i++) {\n`
+      code += `        ${outputName}[i] = 0.0; // Placeholder\n`
+      code += `    }\n`
+    } else {
+      code += `    ${outputName} = 0.0; // Placeholder\n`
+    }
+  }
+  
+  return code
+}
+
+function generateSumBlock(
+  block: BlockData,
+  outputName: string,
+  inputWires: WireData[],
+  signals: Map<string, { type: string, name: string }>,
+  outputType?: string
+): string {
+  let code = `    // Sum block: ${block.name}\n`
+  const parsed = outputType ? tryParseType(outputType) : null
+  
+  if (parsed?.isArray && parsed.arraySize) {
+    // Vector sum
+    code += `    for (int i = 0; i < ${parsed.arraySize}; i++) {\n`
+    code += `        ${outputName}[i] = `
+    
+    for (let i = 0; i < inputWires.length; i++) {
+      const wire = inputWires[i]
+      const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+      const inputSignal = signals.get(sourceKey)
+      if (inputSignal) {
+        if (i > 0) code += ` + `
+        code += `${inputSignal.name}[i]`
+      }
+    }
+    
+    code += `;\n    }\n`
+  } else {
+    // Scalar sum
+    code += `    ${outputName} = `
+    
+    for (let i = 0; i < inputWires.length; i++) {
+      const wire = inputWires[i]
+      const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+      const inputSignal = signals.get(sourceKey)
+      if (inputSignal) {
+        if (i > 0) code += ` + `
+        code += inputSignal.name
+      }
+    }
+    
+    code += `;\n`
+  }
+  
+  return code
+}
+
+function generateMultiplyBlock(
+  block: BlockData,
+  outputName: string,
+  inputWires: WireData[],
+  signals: Map<string, { type: string, name: string }>,
+  outputType?: string
+): string {
+  let code = `    // Multiply block: ${block.name}\n`
+  const parsed = outputType ? tryParseType(outputType) : null
+  
+  if (parsed?.isArray && parsed.arraySize) {
+    // Vector multiply
+    code += `    for (int i = 0; i < ${parsed.arraySize}; i++) {\n`
+    code += `        ${outputName}[i] = `
+    
+    for (let i = 0; i < inputWires.length; i++) {
+      const wire = inputWires[i]
+      const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+      const inputSignal = signals.get(sourceKey)
+      if (inputSignal) {
+        if (i > 0) code += ` * `
+        code += `${inputSignal.name}[i]`
+      }
+    }
+    
+    code += `;\n    }\n`
+  } else {
+    // Scalar multiply
+    code += `    ${outputName} = `
+    
+    for (let i = 0; i < inputWires.length; i++) {
+      const wire = inputWires[i]
+      const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+      const inputSignal = signals.get(sourceKey)
+      if (inputSignal) {
+        if (i > 0) code += ` * `
+        code += inputSignal.name
+      }
+    }
+    
+    code += `;\n`
+  }
+  
+  return code
+}
+
+function generateScaleBlock(
+  block: BlockData,
+  outputName: string,
+  inputWires: WireData[],
+  signals: Map<string, { type: string, name: string }>,
+  outputType?: string
+): string {
+  const gain = block.parameters?.gain || 1
+  let code = `    // Scale block: ${block.name}\n`
+  const parsed = outputType ? tryParseType(outputType) : null
+  
+  if (inputWires.length > 0) {
+    const wire = inputWires[0]
+    const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+    const inputSignal = signals.get(sourceKey)
+    
+    if (inputSignal) {
+      if (parsed?.isArray && parsed.arraySize) {
+        // Vector scale
+        code += `    for (int i = 0; i < ${parsed.arraySize}; i++) {\n`
+        code += `        ${outputName}[i] = ${inputSignal.name}[i] * ${gain};\n`
+        code += `    }\n`
+      } else {
+        // Scalar scale
+        code += `    ${outputName} = ${inputSignal.name} * ${gain};\n`
+      }
+    }
+  }
+  
+  return code
+}
+
+function generateTransferFunctionBlock(
+  block: BlockData,
+  outputName: string,
+  inputWires: WireData[],
+  signals: Map<string, { type: string, name: string }>,
+  outputType?: string
+): string {
+  const numerator = block.parameters?.numerator || [1]
+  const denominator = block.parameters?.denominator || [1, 1]
+  const tfName = sanitizeIdentifier(block.name)
+  const stateOrder = Math.max(0, denominator.length - 1)
+  
+  let code = `    // Transfer function block: ${block.name}\n`
+  const parsed = outputType ? tryParseType(outputType) : null
+  
+  if (inputWires.length === 0) {
+    code += `    // No input connected\n`
+    if (parsed?.isArray && parsed.arraySize) {
+      for (let i = 0; i < parsed.arraySize; i++) {
+        code += `    ${outputName}[${i}] = 0.0;\n`
+      }
+    } else {
+      code += `    ${outputName} = 0.0;\n`
+    }
+    return code
+  }
+  
+  const wire = inputWires[0]
+  const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+  const inputSignal = signals.get(sourceKey)
+  
+  if (!inputSignal) {
+    code += `    // Input signal not found\n`
+    return code
+  }
+  
+  if (parsed?.isArray && parsed.arraySize) {
+    // Vector transfer function processing
+    code += `    // Vector transfer function (element-wise processing)\n`
+    
+    // Pure gain case (no dynamics)
+    if (denominator.length === 1) {
+      const gain = (numerator[0] || 0) / (denominator[0] || 1)
+      code += `    for (int i = 0; i < ${parsed.arraySize}; i++) {\n`
+      code += `        ${outputName}[i] = ${inputSignal.name}[i] * ${gain};\n`
+      code += `    }\n`
+    } else if (stateOrder === 1) {
+      // First-order system: H(s) = b0 / (a1*s + a0)
+      const a1 = denominator[0]
+      const a0 = denominator[1]
+      const b0 = numerator[numerator.length - 1] || 0
+      
+      if (a1 === 0) {
+        // Degenerate case - pure gain
+        const gain = a0 !== 0 ? b0 / a0 : 0
+        code += `    for (int i = 0; i < ${parsed.arraySize}; i++) {\n`
+        code += `        ${outputName}[i] = ${inputSignal.name}[i] * ${gain};\n`
+        code += `    }\n`
+      } else {
+        // Dynamic first-order system with RK4 integration
+        code += `    for (int i = 0; i < ${parsed.arraySize}; i++) {\n`
+        code += `        double u = ${inputSignal.name}[i];\n`
+        code += `        double y = model->states.${tfName}_states[i][0];\n`
+        code += `        double h = model->dt;\n`
+        code += `        \n`
+        code += `        // RK4 integration for dy/dt = (b0*u - a0*y) / a1\n`
+        code += `        double k1 = (${b0} * u - ${a0} * y) / ${a1};\n`
+        code += `        double k2 = (${b0} * u - ${a0} * (y + 0.5 * h * k1)) / ${a1};\n`
+        code += `        double k3 = (${b0} * u - ${a0} * (y + 0.5 * h * k2)) / ${a1};\n`
+        code += `        double k4 = (${b0} * u - ${a0} * (y + h * k3)) / ${a1};\n`
+        code += `        \n`
+        code += `        model->states.${tfName}_states[i][0] = y + (h / 6.0) * (k1 + 2*k2 + 2*k3 + k4);\n`
+        code += `        ${outputName}[i] = model->states.${tfName}_states[i][0];\n`
+        code += `    }\n`
+      }
+    } else {
+      // Higher-order systems - placeholder
+      code += `    // TODO: Implement higher-order transfer function for vectors\n`
+      for (let i = 0; i < parsed.arraySize; i++) {
+        code += `    ${outputName}[${i}] = 0.0; // Placeholder\n`
+      }
+    }
+  } else {
+    // Scalar transfer function processing
+    code += `    // Scalar transfer function\n`
+    
+    // Pure gain case (no dynamics)
+    if (denominator.length === 1) {
+      const gain = (numerator[0] || 0) / (denominator[0] || 1)
+      code += `    ${outputName} = ${inputSignal.name} * ${gain};\n`
+    } else if (stateOrder === 1) {
+      // First-order system: H(s) = b0 / (a1*s + a0)
+      const a1 = denominator[0]
+      const a0 = denominator[1]
+      const b0 = numerator[numerator.length - 1] || 0
+      
+      if (a1 === 0) {
+        // Degenerate case - pure gain
+        const gain = a0 !== 0 ? b0 / a0 : 0
+        code += `    ${outputName} = ${inputSignal.name} * ${gain};\n`
+      } else {
+        // Dynamic first-order system with RK4 integration
+        code += `    double u = ${inputSignal.name};\n`
+        code += `    double y = model->states.${tfName}_states[0];\n`
+        code += `    double h = model->dt;\n`
+        code += `    \n`
+        code += `    // RK4 integration for dy/dt = (b0*u - a0*y) / a1\n`
+        code += `    double k1 = (${b0} * u - ${a0} * y) / ${a1};\n`
+        code += `    double k2 = (${b0} * u - ${a0} * (y + 0.5 * h * k1)) / ${a1};\n`
+        code += `    double k3 = (${b0} * u - ${a0} * (y + 0.5 * h * k2)) / ${a1};\n`
+        code += `    double k4 = (${b0} * u - ${a0} * (y + h * k3)) / ${a1};\n`
+        code += `    \n`
+        code += `    model->states.${tfName}_states[0] = y + (h / 6.0) * (k1 + 2*k2 + 2*k3 + k4);\n`
+        code += `    ${outputName} = model->states.${tfName}_states[0];\n`
+      }
+    } else if (stateOrder === 2) {
+      // Second-order system
+      const a2 = denominator[0]
+      const a1 = denominator[1]
+      const a0 = denominator[2]
+      const b0 = numerator[numerator.length - 1] || 0
+      
+      if (a2 === 0) {
+        code += `    ${outputName} = 0.0; // Invalid transfer function\n`
+      } else {
+        code += `    double u = ${inputSignal.name};\n`
+        code += `    double x1 = model->states.${tfName}_states[0];\n`
+        code += `    double x2 = model->states.${tfName}_states[1];\n`
+        code += `    double h = model->dt;\n`
+        code += `    \n`
+        code += `    // RK4 integration for second-order system\n`
+        code += `    // dx1/dt = x2, dx2/dt = (b0*u - a0*x1 - a1*x2) / a2\n`
+        code += `    double k1_1 = x2;\n`
+        code += `    double k1_2 = (${b0} * u - ${a0} * x1 - ${a1} * x2) / ${a2};\n`
+        code += `    \n`
+        code += `    double k2_1 = x2 + 0.5 * h * k1_2;\n`
+        code += `    double k2_2 = (${b0} * u - ${a0} * (x1 + 0.5 * h * k1_1) - ${a1} * (x2 + 0.5 * h * k1_2)) / ${a2};\n`
+        code += `    \n`
+        code += `    double k3_1 = x2 + 0.5 * h * k2_2;\n`
+        code += `    double k3_2 = (${b0} * u - ${a0} * (x1 + 0.5 * h * k2_1) - ${a1} * (x2 + 0.5 * h * k2_2)) / ${a2};\n`
+        code += `    \n`
+        code += `    double k4_1 = x2 + h * k3_2;\n`
+        code += `    double k4_2 = (${b0} * u - ${a0} * (x1 + h * k3_1) - ${a1} * (x2 + h * k3_2)) / ${a2};\n`
+        code += `    \n`
+        code += `    model->states.${tfName}_states[0] = x1 + (h / 6.0) * (k1_1 + 2*k2_1 + 2*k3_1 + k4_1);\n`
+        code += `    model->states.${tfName}_states[1] = x2 + (h / 6.0) * (k1_2 + 2*k2_2 + 2*k3_2 + k4_2);\n`
+        code += `    ${outputName} = model->states.${tfName}_states[0];\n`
+      }
+    } else {
+      // Higher-order systems - simplified implementation
+      code += `    // TODO: Implement higher-order transfer function\n`
+      code += `    ${outputName} = 0.0; // Placeholder\n`
+    }
+  }
+  
+  return code
+}
+
+function generateOutputPortBlock(
+  block: BlockData,
+  inputWires: WireData[],
+  signals: Map<string, { type: string, name: string }>
+): string {
+  const portName = block.parameters?.portName || block.name
+  let code = `    // Output port: ${block.name}\n`
+  
+  if (inputWires.length > 0) {
+    const wire = inputWires[0]
+    const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+    const inputSignal = signals.get(sourceKey)
+    
+    if (inputSignal) {
+      const inputType = tryParseType(inputSignal.type)
+      if (inputType?.isArray && inputType.arraySize) {
+        // Copy array
+        code += `    memcpy(model->outputs.${sanitizeIdentifier(portName)}, ${inputSignal.name}, sizeof(model->outputs.${sanitizeIdentifier(portName)}));\n`
+      } else {
+        // Copy scalar
+        code += `    model->outputs.${sanitizeIdentifier(portName)} = ${inputSignal.name};\n`
+      }
+    }
+  }
+  
+  return code
+}
+
+function generateDerivativesFunction(safeName: string, sheet: Sheet, blockTypes: Map<string, string>): string {
+  const transferFunctions = sheet.blocks.filter(b => b.type === 'transfer_function')
+  
+  if (transferFunctions.length === 0) {
+    return ''
+  }
+  
+  let code = `void ${safeName}_derivatives(${safeName}_t* model, const ${safeName}_states_t* current_states, ${safeName}_states_t* state_derivatives) {\n`
+  code += `    // Clear state derivatives\n`
+  code += `    memset(state_derivatives, 0, sizeof(${safeName}_states_t));\n\n`
+  
+  // Generate derivative calculations for each transfer function
+  for (const tf of transferFunctions) {
+    const tfName = sanitizeIdentifier(tf.name)
+    const numerator = tf.parameters?.numerator || [1]
+    const denominator = tf.parameters?.denominator || [1, 1]
+    const stateOrder = Math.max(0, denominator.length - 1)
+    
+    if (stateOrder === 0) continue // No states for pure gain
+    
+    // Get input type to determine if vector
+    const inputWire = sheet.connections.find(w => w.targetBlockId === tf.id)
+    if (inputWire) {
+      const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
+      const inputType = blockTypes.get(sourceKey)
+      const parsed = inputType ? tryParseType(inputType) : null
+      
+      code += `    // Transfer function: ${tf.name}\n`
+      
+      if (parsed?.isArray && parsed.arraySize) {
+        // Vector transfer function
+        code += `    // Vector processing - ${parsed.arraySize} elements\n`
+        
+        if (stateOrder === 1) {
+          // First-order system
+          const a1 = denominator[0]
+          const a0 = denominator[1]
+          const b0 = numerator[numerator.length - 1] || 0
+          
+          for (let i = 0; i < parsed.arraySize; i++) {
+            code += `    // Element ${i}: dy/dt = (b0*u - a0*y) / a1\n`
+            code += `    state_derivatives->${tfName}_states[${i}][0] = `
+            code += `(${b0} * input_${i} - ${a0} * current_states->${tfName}_states[${i}][0]) / ${a1};\n`
+          }
+        } else if (stateOrder === 2) {
+          // Second-order system
+          const a2 = denominator[0]
+          const a1 = denominator[1]
+          const a0 = denominator[2]
+          const b0 = numerator[numerator.length - 1] || 0
+          
+          for (let i = 0; i < parsed.arraySize; i++) {
+            code += `    // Element ${i}: dx1/dt = x2, dx2/dt = (b0*u - a0*x1 - a1*x2) / a2\n`
+            code += `    state_derivatives->${tfName}_states[${i}][0] = current_states->${tfName}_states[${i}][1];\n`
+            code += `    state_derivatives->${tfName}_states[${i}][1] = `
+            code += `(${b0} * input_${i} - ${a0} * current_states->${tfName}_states[${i}][0] - `
+            code += `${a1} * current_states->${tfName}_states[${i}][1]) / ${a2};\n`
+          }
+        }
+      } else {
+        // Scalar transfer function
+        if (stateOrder === 1) {
+          // First-order system
+          const a1 = denominator[0]
+          const a0 = denominator[1]
+          const b0 = numerator[numerator.length - 1] || 0
+          
+          code += `    // Scalar: dy/dt = (b0*u - a0*y) / a1\n`
+          code += `    state_derivatives->${tfName}_states[0] = `
+          code += `(${b0} * input - ${a0} * current_states->${tfName}_states[0]) / ${a1};\n`
+        } else if (stateOrder === 2) {
+          // Second-order system
+          const a2 = denominator[0]
+          const a1 = denominator[1]
+          const a0 = denominator[2]
+          const b0 = numerator[numerator.length - 1] || 0
+          
+          code += `    // Scalar: dx1/dt = x2, dx2/dt = (b0*u - a0*x1 - a1*x2) / a2\n`
+          code += `    state_derivatives->${tfName}_states[0] = current_states->${tfName}_states[1];\n`
+          code += `    state_derivatives->${tfName}_states[1] = `
+          code += `(${b0} * input - ${a0} * current_states->${tfName}_states[0] - `
+          code += `${a1} * current_states->${tfName}_states[1]) / ${a2};\n`
+        }
+      }
+      
+      code += `\n`
+    }
+  }
+  
+  code += `}\n\n`
+  return code
+}
+
+// Helper functions
+
+function getCType(typeString: string): string {
+  try {
+    const parsed = parseType(typeString)
+    let baseType = parsed.baseType
+    
+    // Map to C types
+    switch (baseType) {
+      case 'float':
+        baseType = 'float'
+        break
+      case 'double':
+        baseType = 'double'
+        break
+      case 'long':
+        baseType = 'long'
+        break
+      case 'bool':
+        baseType = 'bool'
+        break
+      default:
+        baseType = 'double'
+    }
+    
+    if (parsed.isArray && parsed.arraySize) {
+      return `${baseType}[${parsed.arraySize}]`
+    }
+    
+    return baseType
+  } catch {
+    return 'double'
+  }
+}
+
+function tryParseType(typeString: string): ParsedType | null {
+  try {
+    return parseType(typeString)
+  } catch {
+    return null
+  }
+}
+
+function sanitizeIdentifier(name: string): string {
+  // Replace non-alphanumeric characters with underscores
+  let safe = name.replace(/[^a-zA-Z0-9_]/g, '_')
+  
+  // Ensure it doesn't start with a number
+  if (/^\d/.test(safe)) {
+    safe = '_' + safe
+  }
+  
+  // Ensure it's not empty
+  if (!safe) {
+    safe = 'signal'
+  }
+  
+  return safe
+}
+
+function calculateExecutionOrder(blocks: BlockData[], wires: WireData[]): string[] {
+  // Simple topological sort
+  const visited = new Set<string>()
+  const order: string[] = []
+  
+  const visit = (blockId: string) => {
+    if (visited.has(blockId)) return
+    visited.add(blockId)
+    
+    // Visit dependencies first
+    const inputWires = wires.filter(w => w.targetBlockId === blockId)
+    for (const wire of inputWires) {
+      visit(wire.sourceBlockId)
+    }
+    
+    order.push(blockId)
+  }
+  
+  // Start with source blocks
+  for (const block of blocks) {
+    if (block.type === 'input_port' || block.type === 'source') {
+      visit(block.id)
+    }
+  }
+  
+  // Visit remaining blocks
+  for (const block of blocks) {
+    visit(block.id)
+  }
+  
+  return order
+}
+
+function hasVectorTransferFunctions(sheet: Sheet, blockTypes: Map<string, string>): boolean {
+  const transferFunctions = sheet.blocks.filter(b => b.type === 'transfer_function')
+  
+  for (const tf of transferFunctions) {
+    const inputWire = sheet.connections.find(w => w.targetBlockId === tf.id)
+    if (inputWire) {
+      const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
+      const inputType = blockTypes.get(sourceKey)
+      if (inputType) {
+        const parsed = tryParseType(inputType)
+        if (parsed?.isArray) {
+          return true
+        }
+      }
+    }
+  }
+  
+  return false
 }

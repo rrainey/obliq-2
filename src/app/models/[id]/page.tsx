@@ -17,6 +17,9 @@ import SubsystemConfig from '@/components/SubsystemConfig'
 import TransferFunctionConfig from '@/components/TransferFunctionConfig'
 import Lookup1DConfig from '@/components/Lookup1DConfig'
 import Lookup2DConfig from '@/components/Lookup2DConfig'
+import ModelValidationButton from '@/components/ModelValidationButton'
+import { validateModelTypeCompatibility } from '@/lib/typeCompatibilityValidator'
+import { parseType } from '@/lib/typeValidator'
 import { useModelStore } from '@/lib/modelStore'
 import { useAutoSave } from '@/lib/useAutoSave'
 import { use, useEffect } from 'react'
@@ -209,6 +212,36 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleWireCreate = (sourcePort: PortInfo, targetPort: PortInfo) => {
+    // Get the source and target blocks
+    const sourceBlock = blocks.find(b => b.id === sourcePort.blockId)
+    const targetBlock = blocks.find(b => b.id === targetPort.blockId)
+    
+    if (!sourceBlock || !targetBlock) {
+      console.error('Cannot create wire: source or target block not found')
+      return
+    }
+    
+    // Special validation for lookup blocks
+    if (targetBlock.type === 'lookup_1d' || targetBlock.type === 'lookup_2d') {
+      // Get the source block's output type
+      const sourceType = sourceBlock.type === 'source' || sourceBlock.type === 'input_port' 
+        ? sourceBlock.parameters?.dataType || 'double'
+        : null // For other blocks, we'd need to run type propagation
+      
+      if (sourceType) {
+        try {
+          const parsed = parseType(sourceType)
+          if (parsed.isArray) {
+            // Show error message and prevent connection
+            alert(`${targetBlock.name} requires scalar inputs but ${sourceBlock.name} outputs an array type: ${sourceType}`)
+            return
+          }
+        } catch (error) {
+          console.error('Error parsing source type:', error)
+        }
+      }
+    }
+    
     const newWire: WireData = {
       id: `wire_${Date.now()}`,
       sourceBlockId: sourcePort.blockId,
@@ -229,35 +262,65 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     console.log('Wire deleted:', wireId)
   }
 
-  const handleRunSimulation = async () => {
-    if (blocks.length === 0) {
-      alert('No blocks to simulate')
-      return
-    }
-
-    setIsSimulating(true)
-    try {
-      saveCurrentSheetData()
-      
-      const config = {
-        timeStep: model?.data?.globalSettings?.simulationTimeStep || 0.01,
-        duration: model?.data?.globalSettings?.simulationDuration || 10.0
-      }
-      
-      const engine = new SimulationEngine(blocks, wires, config, undefined, sheets)
-      const results = engine.run()
-      
-      setSimulationResults(results)
-      setSimulationEngine(engine)
-      setOutputPortValues(engine.getOutputPortValues())
-      console.log('Simulation completed:', results)
-    } catch (error) {
-      console.error('Simulation error:', error)
-      alert('Simulation failed. Check console for details.')
-    } finally {
-      setIsSimulating(false)
-    }
+const handleRunSimulation = async () => {
+  if (blocks.length === 0) {
+    alert('No blocks to simulate')
+    return
   }
+
+  // Validate model before simulation
+  const validationResult = validateModelTypeCompatibility(blocks, wires)
+
+  // Separate errors and warnings
+  const errors = validationResult.errors
+  const warnings = validationResult.warnings
+
+  // Block on errors
+  if (errors.length > 0) {
+    const errorMessages = errors.slice(0, 5).map(e => `• ${e.message}`).join('\n')
+    alert(
+      `Cannot run simulation due to ${errors.length} type compatibility error${errors.length > 1 ? 's' : ''}:\n\n` +
+      `${errorMessages}${errors.length > 5 ? `\n\n...and ${errors.length - 5} more errors` : ''}\n\n` +
+      'Please fix these errors before running the simulation. Use the "Validate Model" button to see all issues.'
+    )
+    return
+  }
+
+  // Allow bypass for warnings
+  if (warnings.length > 0) {
+    const warningMessages = warnings.slice(0, 3).map(w => `• ${w.message}`).join('\n')
+    const proceed = window.confirm(
+      `Found ${warnings.length} warning${warnings.length > 1 ? 's' : ''}:\n\n` +
+      `${warningMessages}${warnings.length > 3 ? `\n\n...and ${warnings.length - 3} more warnings` : ''}\n\n` +
+      'Continue with simulation anyway?'
+    )
+    if (!proceed) return
+  }
+
+  // Continue with existing simulation code...
+  setIsSimulating(true)
+  try {
+    saveCurrentSheetData()
+    
+    const config = {
+      timeStep: model?.data?.globalSettings?.simulationTimeStep || 0.01,
+      duration: model?.data?.globalSettings?.simulationDuration || 10.0
+    }
+    
+    const engine = new SimulationEngine(blocks, wires, config, undefined, sheets)
+    const results = engine.run()
+    
+    setSimulationResults(results)
+    setSimulationEngine(engine)
+    setOutputPortValues(engine.getOutputPortValues() as Map<string, number>)
+    console.log('Simulation completed:', results)
+  } catch (error) {
+    console.error('Simulation error:', error)
+    alert('Simulation failed. Check console for details.')
+  } finally {
+    setIsSimulating(false)
+  }
+}
 
   const handleExportCSV = () => {
     if (!simulationEngine) {
@@ -506,6 +569,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               >
                 {saving ? 'Saving...' : 'Save'}
               </button>
+              
+              {/* Validation Button */}
+              <ModelValidationButton
+                blocks={blocks}
+                wires={wires}
+                onSelectBlock={setSelectedBlockId}
+                onSelectWire={setSelectedWireId}
+              />
+              
               <button 
                 className={`px-4 py-2 rounded-md text-white font-medium border ${
                   isSimulating 
@@ -585,15 +657,18 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                     const block = blocks.find(b => b.id === blockId && b.type === 'signal_display')
                     if (!block) return null
                     
+                    // Transform the data to match SignalDisplay's expected format
+                    const signalData = simulationResults.timePoints.map((time, index) => ({
+                      time,
+                      value: data[index]
+                    }))
+                    
                     return (
                       <div key={blockId} className="mb-6">
                         <SignalDisplay
-                          blockId={blockId}
-                          timePoints={simulationResults.timePoints}
-                          signalData={data}
-                          title={block.name}
-                          width={320}
-                          height={180}
+                          block={block}
+                          signalData={signalData}
+                          isRunning={false}  // Simulation is complete when displaying results
                         />
                       </div>
                     )
@@ -604,15 +679,35 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                     const block = blocks.find(b => b.id === blockId && b.type === 'signal_logger')
                     if (!block) return null
                     
+                    // Get the last value for display
+                    const lastValue = data[data.length - 1]
+                    const displayValue = (() => {
+                      if (typeof lastValue === 'number') {
+                        return lastValue.toFixed(3)
+                      } else if (typeof lastValue === 'boolean') {
+                        return lastValue.toString()
+                      } else if (Array.isArray(lastValue)) {
+                        return `[${lastValue.map(v => 
+                          typeof v === 'number' ? v.toFixed(3) : v
+                        ).join(', ')}]`
+                      }
+                      return 'N/A'
+                    })()
+                    
+                    // Calculate min/max only for numeric data
+                    const numericData = data.filter(d => typeof d === 'number') as number[]
+                    const minValue = numericData.length > 0 ? Math.min(...numericData).toFixed(3) : 'N/A'
+                    const maxValue = numericData.length > 0 ? Math.max(...numericData).toFixed(3) : 'N/A'
+                    
                     return (
                       <div key={blockId} className="mb-4">
                         <div className="bg-gray-50 p-3 rounded">
                           <h4 className="font-medium text-sm mb-2">{block.name} (Logger)</h4>
                           <div className="text-xs text-gray-600 space-y-1">
-                            <div>Final value: {data[data.length - 1]?.toFixed(3) || 'N/A'}</div>
+                            <div>Final value: {displayValue}</div>
                             <div>Samples: {data.length}</div>
-                            <div>Min: {data.length > 0 ? Math.min(...data).toFixed(3) : 'N/A'}</div>
-                            <div>Max: {data.length > 0 ? Math.max(...data).toFixed(3) : 'N/A'}</div>
+                            <div>Min: {minValue}</div>
+                            <div>Max: {maxValue}</div>
                           </div>
                         </div>
                       </div>
@@ -623,12 +718,27 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                   {outputPortValues && outputPortValues.size > 0 && (
                     <div className="mt-4">
                       <h4 className="font-medium mb-2">Output Port Values</h4>
-                      {Array.from(outputPortValues.entries()).map(([portName, value]) => (
-                        <div key={portName} className="bg-amber-50 p-3 rounded mb-2">
-                          <div className="text-sm font-medium text-amber-800">{portName}</div>
-                          <div className="text-lg font-mono text-amber-900">{value.toFixed(3)}</div>
-                        </div>
-                      ))}
+                      {Array.from(outputPortValues.entries()).map(([portName, value]) => {
+                        const displayValue = (() => {
+                          if (typeof value === 'number') {
+                            return value.toFixed(3)
+                          } else if (typeof value === 'boolean') {
+                            return value.toString()
+                          } else if (Array.isArray(value)) {
+                            return `[${value.map(v => 
+                              typeof v === 'number' ? v.toFixed(3) : v
+                            ).join(', ')}]`
+                          }
+                          return 'N/A'
+                        })()
+                        
+                        return (
+                          <div key={portName} className="bg-amber-50 p-3 rounded mb-2">
+                            <div className="text-sm font-medium text-amber-800">{portName}</div>
+                            <div className="text-lg font-mono text-amber-900">{displayValue}</div>
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
 

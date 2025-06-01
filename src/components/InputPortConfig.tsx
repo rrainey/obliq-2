@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { BlockData } from './Block'
+import { isValidType, getTypeValidationError } from '@/lib/typeValidator'
 
 interface InputPortConfigProps {
   block: BlockData
@@ -11,11 +12,20 @@ interface InputPortConfigProps {
 
 export default function InputPortConfig({ block, onUpdate, onClose }: InputPortConfigProps) {
   const [portName, setPortName] = useState(block.parameters?.portName || 'Input')
+  const [dataType, setDataType] = useState(block.parameters?.dataType || 'double')
   const [defaultValue, setDefaultValue] = useState(block.parameters?.defaultValue || 0)
+  const [typeError, setTypeError] = useState<string>('')
+
+  // Validate type on change
+  useEffect(() => {
+    const error = getTypeValidationError(dataType)
+    setTypeError(error)
+  }, [dataType])
 
   const handleSave = () => {
     const parameters = {
       portName,
+      dataType,
       defaultValue
     }
     onUpdate(parameters)
@@ -58,21 +68,45 @@ export default function InputPortConfig({ block, onUpdate, onClose }: InputPortC
           </div>
 
           {isInputPort && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Default Value
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={defaultValue}
-                onChange={(e) => setDefaultValue(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Value used when no external input is connected
-              </p>
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Data Type
+                </label>
+                <input
+                  type="text"
+                  value={dataType}
+                  onChange={(e) => setDataType(e.target.value)}
+                  className={`w-full px-3 py-2 border-2 rounded-md text-sm bg-white text-gray-900 focus:outline-none ${
+                    typeError ? 'border-red-500 focus:border-red-600' : 'border-gray-400 focus:border-blue-600'
+                  }`}
+                  placeholder="e.g., double, float, int[5]"
+                />
+                {typeError ? (
+                  <p className="text-xs text-red-600 mt-1">{typeError}</p>
+                ) : (
+                  <p className="text-xs text-gray-500 mt-1">
+                    C-style data type (e.g., float, double, long, bool, double[3])
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Default Value
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={defaultValue}
+                  onChange={(e) => setDefaultValue(parseFloat(e.target.value) || 0)}
+                  className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Value used when no external input is connected
+                </p>
+              </div>
+            </>
           )}
 
           <div className="bg-blue-50 p-3 rounded-md">
@@ -92,7 +126,8 @@ export default function InputPortConfig({ block, onUpdate, onClose }: InputPortC
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            disabled={!!typeError}
           >
             Save
           </button>

@@ -7,8 +7,26 @@ const PositionSchema = z.object({
   y: z.number()
 })
 
-// Block parameters schema (flexible for different block types)
-const BlockParametersSchema = z.record(z.any()).optional()
+// Signal type schema
+const SignalTypeSchema = z.enum(['float', 'double', 'long', 'bool'])
+  .or(z.string().regex(/^(float|double|long|bool)\[\d+\]$/, 'Invalid array type syntax'))
+
+// Block parameters schema with type validation for specific block types
+const BlockParametersSchema = z.record(z.any()).optional().superRefine((params, ctx) => {
+  if (!params) return
+  
+  // Validate dataType for blocks that have it
+  if ('dataType' in params && params.dataType !== undefined) {
+    const result = SignalTypeSchema.safeParse(params.dataType)
+    if (!result.success) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Invalid dataType: ${params.dataType}. Must be a valid C-style type (float, double, long, bool) or 1D array.`,
+        path: ['dataType']
+      })
+    }
+  }
+})
 
 // Block schema
 const BlockSchema = z.object({
@@ -31,19 +49,36 @@ const WireSchema = z.object({
   targetPortIndex: z.number().min(0, 'Target port index must be non-negative')
 })
 
+// Signal type information schema (for propagated types)
+const SignalTypeInfoSchema = z.object({
+  wireId: z.string(),
+  sourceBlockId: z.string(),
+  sourcePortIndex: z.number(),
+  targetBlockId: z.string(),
+  targetPortIndex: z.number(),
+  type: SignalTypeSchema,
+  parsedType: z.object({
+    baseType: z.enum(['float', 'double', 'long', 'bool']),
+    isArray: z.boolean(),
+    arraySize: z.number().optional()
+  })
+}).optional()
+
 // Sheet extents schema
 const ExtentsSchema = z.object({
   width: z.number().positive('Width must be positive'),
   height: z.number().positive('Height must be positive')
 })
 
-// Sheet schema
+// Sheet schema with type information
 const SheetSchema = z.object({
   id: z.string().min(1, 'Sheet ID cannot be empty'),
   name: z.string().min(1, 'Sheet name cannot be empty'),
   blocks: z.array(BlockSchema),
   connections: z.array(WireSchema),
-  extents: ExtentsSchema
+  extents: ExtentsSchema,
+  // Optional: Store propagated type information for optimization
+  signalTypes: z.record(z.string(), SignalTypeInfoSchema).optional()
 })
 
 // Global settings schema
@@ -85,6 +120,8 @@ export type Position = z.infer<typeof PositionSchema>
 export type Extents = z.infer<typeof ExtentsSchema>
 export type GlobalSettings = z.infer<typeof GlobalSettingsSchema>
 export type Metadata = z.infer<typeof MetadataSchema>
+export type SignalType = z.infer<typeof SignalTypeSchema>
+export type SignalTypeInfo = z.infer<typeof SignalTypeInfoSchema>
 
 // Validation functions
 export function validateModelData(data: unknown): ModelData {
@@ -119,4 +156,39 @@ export function validateModelDataWithErrors(data: unknown) {
       code: err.code
     }))
   }
+}
+
+// Validation helper for signal types
+export function validateSignalType(type: unknown): SignalType {
+  return SignalTypeSchema.parse(type)
+}
+
+export function isValidSignalType(type: unknown): type is SignalType {
+  return SignalTypeSchema.safeParse(type).success
+}
+
+// Helper to extract type information from a model
+export function extractTypeInformation(modelData: ModelData): Map<string, string> {
+  const typeInfo = new Map<string, string>()
+  
+  for (const sheet of modelData.sheets) {
+    for (const block of sheet.blocks) {
+      // Extract explicit types from source blocks
+      if ((block.type === 'source' || block.type === 'input_port') && 
+          block.parameters?.dataType) {
+        typeInfo.set(`${block.id}:0`, block.parameters.dataType)
+      }
+    }
+    
+    // Include stored signal types if available
+    if (sheet.signalTypes) {
+      for (const [key, info] of Object.entries(sheet.signalTypes)) {
+        if (info?.type) {
+          typeInfo.set(key, info.type)
+        }
+      }
+    }
+  }
+  
+  return typeInfo
 }

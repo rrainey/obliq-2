@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { BlockData } from './Block'
+import { isValidType, getTypeValidationError } from '@/lib/typeValidator'
 
 interface SourceConfigProps {
   block: BlockData
@@ -11,6 +12,7 @@ interface SourceConfigProps {
 
 export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigProps) {
   const [signalType, setSignalType] = useState(block?.parameters?.signalType || 'constant')
+  const [dataType, setDataType] = useState(block?.parameters?.dataType || 'double')
   const [value, setValue] = useState(block?.parameters?.value || 0)
   const [stepTime, setStepTime] = useState(block?.parameters?.stepTime || 1.0)
   const [stepValue, setStepValue] = useState(block?.parameters?.stepValue || 1.0)
@@ -24,10 +26,18 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
   const [f1, setF1] = useState(block?.parameters?.f1 || 10)
   const [duration, setDuration] = useState(block?.parameters?.duration || 10)
   const [mean, setMean] = useState(block?.parameters?.mean || 0)
+  const [typeError, setTypeError] = useState<string>('')
+
+  // Validate type on change
+  useEffect(() => {
+    const error = getTypeValidationError(dataType)
+    setTypeError(error)
+  }, [dataType])
 
   const handleSave = () => {
     const parameters = {
       signalType,
+      dataType,
       value,
       stepTime,
       stepValue,
@@ -327,6 +337,28 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
+              Data Type
+            </label>
+            <input
+              type="text"
+              value={dataType}
+              onChange={(e) => setDataType(e.target.value)}
+              className={`w-full px-3 py-2 border-2 rounded-md text-sm bg-white text-gray-900 focus:outline-none ${
+                typeError ? 'border-red-500 focus:border-red-600' : 'border-gray-400 focus:border-blue-600'
+              }`}
+              placeholder="e.g., double, float, int[5]"
+            />
+            {typeError ? (
+              <p className="text-xs text-red-600 mt-1">{typeError}</p>
+            ) : (
+              <p className="text-xs text-gray-500 mt-1">
+                C-style data type (e.g., float, double, long, bool, double[3])
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Signal Type
             </label>
             <select
@@ -363,7 +395,8 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            disabled={!!typeError}
           >
             Save
           </button>

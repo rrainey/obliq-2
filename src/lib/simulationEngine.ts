@@ -1,6 +1,7 @@
 // lib/simulationEngine.ts
 import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
+import { parseType, ParsedType } from '@/lib/typeValidator'
 
 export interface Sheet {
   id: string
@@ -18,15 +19,16 @@ export interface SimulationState {
   timeStep: number
   duration: number
   blockStates: Map<string, BlockState>
-  signalValues: Map<string, number>
+  signalValues: Map<string, number | number[] | boolean | boolean[]>
   isRunning: boolean
 }
 
 export interface BlockState {
   blockId: string
   blockType: string
-  outputs: number[]
+  outputs: (number | number[] | boolean | boolean[])[]
   internalState?: any
+  outputTypes?: ParsedType[] // Track output types for each port
 }
 
 export interface SimulationConfig {
@@ -36,7 +38,7 @@ export interface SimulationConfig {
 
 export interface SimulationResults {
   timePoints: number[]
-  signalData: Map<string, number[]>
+  signalData: Map<string, (number | number[] | boolean | boolean[])[]>
   finalTime: number
 }
 
@@ -45,11 +47,11 @@ export class SimulationEngine {
   private wires: WireData[]
   private state: SimulationState
   private executionOrder: string[] = []
-  private getExternalInput?: (portName: string) => number | undefined
+  private getExternalInput?: (portName: string) => number | number[] | boolean | boolean[] | undefined
   private allSheets: Sheet[] = [] // Store all sheets for subsystem simulation
   private subsystemEngines: Map<string, SimulationEngine> = new Map() // Cache for subsystem engines
 
-  constructor(blocks: BlockData[], wires: WireData[], config: SimulationConfig, externalInputs?: (portName: string) => number | undefined, allSheets?: Sheet[]) {
+  constructor(blocks: BlockData[], wires: WireData[], config: SimulationConfig, externalInputs?: (portName: string) => number | number[] | boolean | boolean[] | undefined, allSheets?: Sheet[]) {
     this.blocks = blocks
     this.wires = wires
     this.getExternalInput = externalInputs
@@ -68,17 +70,53 @@ export class SimulationEngine {
 
   private initializeBlocks() {
     for (const block of this.blocks) {
+      const outputTypes = this.getBlockOutputTypes(block)
       const blockState: BlockState = {
         blockId: block.id,
         blockType: block.type,
         outputs: this.getInitialOutputs(block.type, block.parameters),
-        internalState: this.getInitialInternalState(block.type, block.parameters)
+        internalState: this.getInitialInternalState(block.type, block.parameters),
+        outputTypes
       }
       this.state.blockStates.set(block.id, blockState)
     }
   }
 
-  private getInitialOutputs(blockType: string, parameters?: Record<string, any>): number[] {
+  private getBlockOutputTypes(block: BlockData): ParsedType[] {
+    // For blocks with explicit data types
+    if (block.type === 'source' || block.type === 'input_port') {
+      const dataType = block.parameters?.dataType || 'double'
+      try {
+        return [parseType(dataType)]
+      } catch {
+        return [{ baseType: 'double', isArray: false }] // Default fallback
+      }
+    }
+    
+    // For other blocks, types will be determined during execution
+    // based on their inputs
+    return []
+  }
+
+  private getInitialOutputs(blockType: string, parameters?: Record<string, any>): (number | number[] | boolean | boolean[])[] {
+    // For source blocks, check if they output vectors
+    if (blockType === 'source' || blockType === 'input_port') {
+      const dataType = parameters?.dataType || 'double'
+      try {
+        const parsed = parseType(dataType)
+        if (parsed.isArray && parsed.arraySize) {
+          // Initialize array with zeros or false for boolean arrays
+          if (parsed.baseType === 'bool') {
+            return [new Array(parsed.arraySize).fill(false)]
+          } else {
+            return [new Array(parsed.arraySize).fill(0)]
+          }
+        }
+      } catch {
+        // Fall back to scalar
+      }
+    }
+    
     switch (blockType) {
       case 'sum':
       case 'multiply':
@@ -86,7 +124,7 @@ export class SimulationEngine {
       case 'transfer_function':
       case 'lookup_1d':
       case 'lookup_2d':
-        return [0] // Single output
+        return [0] // Single output, actual type determined by inputs
       case 'input_port':
       case 'source':
         return [0] // Single output
@@ -108,6 +146,7 @@ export class SimulationEngine {
         return {
           constantValue: parameters?.value || 0,
           signalType: parameters?.signalType || 'constant',
+          dataType: parameters?.dataType || 'double',
           // Signal generation parameters
           stepTime: parameters?.stepTime || 1.0,
           stepValue: parameters?.stepValue || 1.0,
@@ -125,6 +164,7 @@ export class SimulationEngine {
       case 'input_port':
         return {
           portName: parameters?.portName || 'Input',
+          dataType: parameters?.dataType || 'double',
           defaultValue: parameters?.defaultValue || 0,
           isConnectedToParent: false
         }
@@ -140,11 +180,14 @@ export class SimulationEngine {
       case 'transfer_function':
         const numerator = parameters?.numerator || [1]
         const denominator = parameters?.denominator || [1, 1]
+        const stateOrder = Math.max(0, denominator.length - 1)
         return {
           numerator,
           denominator,
           // State vector for the transfer function (order = denominator.length - 1)
-          states: new Array(Math.max(0, denominator.length - 1)).fill(0),
+          states: new Array(stateOrder).fill(0),
+          // For vector inputs, we'll need arrays of states
+          vectorStates: null, // Will be initialized when we know input is a vector
           // Previous input and output for derivative calculation
           prevInput: 0,
           prevOutput: 0
@@ -309,9 +352,9 @@ export class SimulationEngine {
     }
   }
 
-  private getBlockInputs(blockId: string): number[] {
+  private getBlockInputs(blockId: string): (number | number[] | boolean | boolean[])[] {
     const inputWires = this.wires.filter(wire => wire.targetBlockId === blockId)
-    const inputs: number[] = []
+    const inputs: (number | number[] | boolean | boolean[])[] = []
 
     // Sort by port index to ensure correct order
     inputWires.sort((a, b) => a.targetPortIndex - b.targetPortIndex)
@@ -325,48 +368,128 @@ export class SimulationEngine {
     return inputs
   }
 
-  private executeSumBlock(blockState: BlockState, inputs: number[]) {
-    const sum = inputs.reduce((acc, val) => acc + (val || 0), 0)
-    blockState.outputs[0] = sum
+  private executeSumBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+    if (inputs.length === 0) {
+      blockState.outputs[0] = 0
+      return
+    }
+
+    // Check if we're dealing with vectors
+    const firstInput = inputs[0]
+    if (Array.isArray(firstInput)) {
+      // Vector addition
+      const result = [...firstInput] as number[]
+      
+      for (let i = 1; i < inputs.length; i++) {
+        const input = inputs[i]
+        if (Array.isArray(input) && input.length === result.length) {
+          // Element-wise addition
+          for (let j = 0; j < result.length; j++) {
+            result[j] += (input[j] as number) || 0
+          }
+        } else {
+          // Type mismatch - this should have been caught by validation
+          console.warn(`Type mismatch in sum block ${blockState.blockId}`)
+        }
+      }
+      
+      blockState.outputs[0] = result
+    } else {
+      // Scalar addition
+      let sum = 0
+      for (const val of inputs) {
+        if (typeof val === 'number') {
+          sum += val
+        }
+      }
+      blockState.outputs[0] = sum
+    }
   }
 
-  private executeMultiplyBlock(blockState: BlockState, inputs: number[]) {
-    // Handle empty inputs case
+  private executeMultiplyBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
     if (inputs.length === 0) {
       blockState.outputs[0] = 0
       return
     }
     
-    // Multiply all inputs together
-    const product = inputs.reduce((acc, val) => acc * (val || 0), 1)
-    blockState.outputs[0] = product
+    // Check if we're dealing with vectors
+    const firstInput = inputs[0]
+    if (Array.isArray(firstInput)) {
+      // Vector multiplication (element-wise)
+      const result = [...firstInput] as number[]
+      
+      for (let i = 1; i < inputs.length; i++) {
+        const input = inputs[i]
+        if (Array.isArray(input) && input.length === result.length) {
+          // Element-wise multiplication
+          for (let j = 0; j < result.length; j++) {
+            result[j] *= (input[j] as number) || 0
+          }
+        } else {
+          // Type mismatch
+          console.warn(`Type mismatch in multiply block ${blockState.blockId}`)
+        }
+      }
+      
+      blockState.outputs[0] = result
+    } else {
+      // Scalar multiplication
+      let product = 1
+      for (const val of inputs) {
+        if (typeof val === 'number') {
+          product *= val
+        }
+      }
+      blockState.outputs[0] = product
+    }
   }
 
-  private executeScaleBlock(blockState: BlockState, inputs: number[]) {
-    const input = inputs[0] || 0
+  private executeScaleBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+    const input = inputs[0]
     const gain = blockState.internalState?.gain || 1
-    blockState.outputs[0] = input * gain
+    
+    if (Array.isArray(input)) {
+      // Scale each element of the vector
+      blockState.outputs[0] = input.map(val => 
+        typeof val === 'number' ? val * gain : 0
+      )
+    } else if (typeof input === 'number') {
+      blockState.outputs[0] = input * gain
+    } else {
+      blockState.outputs[0] = 0
+    }
   }
 
   private executeSourceBlock(blockState: BlockState) {
     // Source blocks are the actual signal generators
-    const { constantValue, signalType } = blockState.internalState
+    const { constantValue, signalType, dataType } = blockState.internalState
+    
+    // Parse the data type to check if it's a vector
+    let parsedType: ParsedType | null = null
+    try {
+      parsedType = parseType(dataType || 'double')
+    } catch {
+      parsedType = { baseType: 'double', isArray: false }
+    }
+    
+    // Generate the signal value
+    let scalarValue = 0
     
     switch (signalType) {
       case 'constant':
-        blockState.outputs[0] = constantValue
+        scalarValue = constantValue
         break
         
       case 'step':
         const stepTime = blockState.internalState.stepTime || 1.0
         const stepValue = blockState.internalState.stepValue || constantValue
-        blockState.outputs[0] = this.state.time >= stepTime ? stepValue : 0
+        scalarValue = this.state.time >= stepTime ? stepValue : 0
         break
         
       case 'ramp':
         const rampSlope = blockState.internalState.slope || 1.0
         const rampStart = blockState.internalState.startTime || 0
-        blockState.outputs[0] = this.state.time >= rampStart ? 
+        scalarValue = this.state.time >= rampStart ? 
           rampSlope * (this.state.time - rampStart) : 0
         break
         
@@ -375,7 +498,7 @@ export class SimulationEngine {
         const amplitude = blockState.internalState.amplitude || 1.0
         const phase = blockState.internalState.phase || 0
         const offset = blockState.internalState.offset || 0
-        blockState.outputs[0] = offset + amplitude * Math.sin(2 * Math.PI * frequency * this.state.time + phase)
+        scalarValue = offset + amplitude * Math.sin(2 * Math.PI * frequency * this.state.time + phase)
         break
         
       case 'square':
@@ -383,7 +506,7 @@ export class SimulationEngine {
         const squareAmplitude = blockState.internalState.amplitude || 1.0
         const period = 1.0 / squareFreq
         const squarePhase = (this.state.time % period) / period
-        blockState.outputs[0] = squarePhase < 0.5 ? squareAmplitude : -squareAmplitude
+        scalarValue = squarePhase < 0.5 ? squareAmplitude : -squareAmplitude
         break
         
       case 'triangle':
@@ -392,9 +515,9 @@ export class SimulationEngine {
         const triPeriod = 1.0 / triFreq
         const triPhase = (this.state.time % triPeriod) / triPeriod
         if (triPhase < 0.5) {
-          blockState.outputs[0] = triAmplitude * (4 * triPhase - 1)
+          scalarValue = triAmplitude * (4 * triPhase - 1)
         } else {
-          blockState.outputs[0] = triAmplitude * (3 - 4 * triPhase)
+          scalarValue = triAmplitude * (3 - 4 * triPhase)
         }
         break
         
@@ -402,7 +525,7 @@ export class SimulationEngine {
         const noiseAmplitude = blockState.internalState.amplitude || 0.1
         const noiseMean = blockState.internalState.mean || 0
         // Simple uniform noise
-        blockState.outputs[0] = noiseMean + noiseAmplitude * (Math.random() - 0.5) * 2
+        scalarValue = noiseMean + noiseAmplitude * (Math.random() - 0.5) * 2
         break
         
       case 'chirp':
@@ -412,79 +535,148 @@ export class SimulationEngine {
         const chirpAmplitude = blockState.internalState.amplitude || 1.0
         const t = Math.min(this.state.time, duration)
         const freq = f0 + (f1 - f0) * t / duration
-        blockState.outputs[0] = chirpAmplitude * Math.sin(2 * Math.PI * freq * t)
+        scalarValue = chirpAmplitude * Math.sin(2 * Math.PI * freq * t)
         break
         
       default:
-        blockState.outputs[0] = constantValue
+        scalarValue = constantValue
+    }
+    
+    // Apply to vector if needed
+    if (parsedType.isArray && parsedType.arraySize) {
+      // For vector output, apply the same signal to all elements
+      blockState.outputs[0] = new Array(parsedType.arraySize).fill(scalarValue)
+    } else {
+      blockState.outputs[0] = scalarValue
     }
   }
 
   private executeInputPortBlock(blockState: BlockState, parameters?: Record<string, any>) {
     // Input ports represent external inputs from parent subsystem/model
-    // In simulation, they act as interface points where external signals enter
-    // For top-level models, they can have default values or be driven externally
-    // For subsystems, they receive values from the parent model connections
-    
-    // For now, during simulation of top-level models, use a default value
-    // In a real hierarchical system, this would be driven by parent model
     const defaultValue = parameters?.defaultValue || 0
     const portName = parameters?.portName || `Input_${blockState.blockId}`
+    const dataType = parameters?.dataType || 'double'
+    
+    // Parse the data type to check if it's a vector
+    let parsedType: ParsedType | null = null
+    try {
+      parsedType = parseType(dataType)
+    } catch {
+      parsedType = { baseType: 'double', isArray: false }
+    }
     
     // Check if there's an external input value provided
-    // This would come from parent subsystem in hierarchical models
     const externalValue = this.getExternalInput?.(portName) ?? defaultValue
     
-    blockState.outputs[0] = externalValue
+    // For vector types, ensure we have an array
+    if (parsedType.isArray && parsedType.arraySize) {
+      if (Array.isArray(externalValue)) {
+        blockState.outputs[0] = externalValue
+      } else {
+        // Create array filled with the scalar value
+        blockState.outputs[0] = new Array(parsedType.arraySize).fill(externalValue)
+      }
+    } else {
+      blockState.outputs[0] = externalValue
+    }
     
     // Store port information for external interface
     blockState.internalState = {
       portName,
+      dataType,
       defaultValue,
       isConnectedToParent: false // Would be true in subsystem context
     }
   }
 
-  private executeTransferFunctionBlock(blockState: BlockState, inputs: number[]) {
-    const input = inputs[0] || 0
-    const { numerator, denominator, states } = blockState.internalState
+  private executeTransferFunctionBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+    const input = inputs[0]
+    const { numerator, denominator } = blockState.internalState
     
     // Validate coefficients
     if (!denominator || denominator.length === 0) {
-      blockState.outputs[0] = 0
+      blockState.outputs[0] = Array.isArray(input) ? new Array(input.length).fill(0) : 0
       return
     }
     
+    // Check if input is a vector
+    if (Array.isArray(input)) {
+      // Initialize vector states if needed
+      const vectorSize = input.length
+      const stateOrder = Math.max(0, denominator.length - 1)
+      
+      if (!blockState.internalState.vectorStates || 
+          blockState.internalState.vectorStates.length !== vectorSize) {
+        // Initialize states for each element
+        blockState.internalState.vectorStates = []
+        for (let i = 0; i < vectorSize; i++) {
+          blockState.internalState.vectorStates.push(new Array(stateOrder).fill(0))
+        }
+      }
+      
+      // Process each element independently
+      const output = new Array(vectorSize)
+      
+      for (let idx = 0; idx < vectorSize; idx++) {
+        const elementInput = typeof input[idx] === 'number' ? input[idx] as number : 0
+        const elementStates = blockState.internalState.vectorStates[idx]
+        
+        // Apply transfer function to this element
+        output[idx] = this.processTransferFunctionElement(
+          elementInput,
+          numerator,
+          denominator,
+          elementStates,
+          this.state.timeStep
+        )
+      }
+      
+      blockState.outputs[0] = output
+      
+    } else if (typeof input === 'number') {
+      // Scalar processing
+      const states = blockState.internalState.states
+      blockState.outputs[0] = this.processTransferFunctionElement(
+        input,
+        numerator,
+        denominator,
+        states,
+        this.state.timeStep
+      )
+    } else {
+      blockState.outputs[0] = 0
+    }
+  }
+  
+  private processTransferFunctionElement(
+    input: number,
+    numerator: number[],
+    denominator: number[],
+    states: number[],
+    timeStep: number
+  ): number {
     // Pure gain case: H(s) = K (only constant term)
     if (denominator.length === 1) {
-      blockState.outputs[0] = input * (numerator[0] || 0) / denominator[0]
-      return
+      return input * (numerator[0] || 0) / denominator[0]
     }
     
     // First order system: H(s) = b0 / (a1*s + a0)
-    // With descending order: denominator = [a1, a0]
-    // For pure integrator (1/s): numerator=[1], denominator=[1, 0]
-    // This gives: H(s) = 1 / (1*s + 0) = 1/s
     if (denominator.length === 2) {
-      const a1 = denominator[0] // s term coefficient (highest order)
-      const a0 = denominator[1] // constant term (lowest order)
-      const b0 = numerator[numerator.length - 1] || 0 // constant term of numerator
+      const a1 = denominator[0] // s term coefficient
+      const a0 = denominator[1] // constant term
+      const b0 = numerator[numerator.length - 1] || 0
       
       if (a1 === 0) {
         // Degenerate case - pure gain
         if (a0 !== 0) {
-          blockState.outputs[0] = input * b0 / a0
+          return input * b0 / a0
         } else {
-          blockState.outputs[0] = 0
+          return 0
         }
-        return
       }
       
-      // For the general first-order case: a1*dy/dt + a0*y = b0*u
-      // Rearranged: dy/dt = (b0*u - a0*y) / a1
-      
       const currentState = states[0] || 0
-      const h = this.state.timeStep
+      const h = timeStep
       
       // Define the derivative function
       const dydt = (y: number, u: number) => (b0 * u - a0 * y) / a1
@@ -499,31 +691,22 @@ export class SimulationEngine {
       states[0] = currentState + (h / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
       
       // Output equals the state for first-order systems
-      blockState.outputs[0] = states[0]
+      return states[0]
     }
     else if (denominator.length === 3) {
-      // Second order system: H(s) = (b1*s + b0) / (a2*s^2 + a1*s + a0)
-      // With descending order: denominator = [a2, a1, a0], numerator = [b1, b0]
+      // Second order system
       const a2 = denominator[0] // s^2 coefficient
       const a1 = denominator[1] // s coefficient
       const a0 = denominator[2] // constant term
-      const b0 = numerator[numerator.length - 1] || 0 // constant term
-      const b1 = numerator.length > 1 ? (numerator[numerator.length - 2] || 0) : 0 // s term
+      const b0 = numerator[numerator.length - 1] || 0
       
       if (a2 === 0) {
-        blockState.outputs[0] = 0
-        return
+        return 0
       }
-      
-      // State space representation:
-      // x1 = y (output)
-      // x2 = dy/dt
-      // dx1/dt = x2
-      // dx2/dt = (b0*u - a0*x1 - a1*x2) / a2
       
       const x1 = states[0] || 0
       const x2 = states[1] || 0
-      const h = this.state.timeStep
+      const h = timeStep
       
       // System equations
       const f1 = (x1: number, x2: number, u: number) => x2
@@ -546,20 +729,10 @@ export class SimulationEngine {
       states[0] = x1 + (h / 6) * (k1_1 + 2 * k2_1 + 2 * k3_1 + k4_1)
       states[1] = x2 + (h / 6) * (k1_2 + 2 * k2_2 + 2 * k3_2 + k4_2)
       
-      // Output calculation
-      // For most cases, output = x1 (the first state)
-      // If numerator has s term (b1), we need to consider it
-      if (b1 !== 0) {
-        // For proper transfer functions with numerator dynamics
-        // This would require more complex state-space formulation
-        blockState.outputs[0] = states[0]
-      } else {
-        blockState.outputs[0] = states[0]
-      }
+      return states[0]
     }
     else {
-      // Higher order systems - for now, use simplified implementation
-      // Find the dominant time constant (coefficient of highest order term)
+      // Higher order systems - simplified implementation
       const highestOrderCoeff = denominator[0]
       const lowestOrderCoeff = denominator[denominator.length - 1]
       const timeConstant = Math.abs(highestOrderCoeff / lowestOrderCoeff)
@@ -567,18 +740,23 @@ export class SimulationEngine {
       
       const currentState = states[0] || 0
       const derivative = (gain * input - currentState) / timeConstant
-      states[0] = currentState + derivative * this.state.timeStep
+      states[0] = currentState + derivative * timeStep
       
-      blockState.outputs[0] = states[0]
+      return states[0]
     }
-    
-    // Store state for next iteration
-    blockState.internalState.prevInput = input
-    blockState.internalState.prevOutput = blockState.outputs[0]
   }
 
-  private executeLookup1DBlock(blockState: BlockState, inputs: number[]) {
-    const input = inputs[0] || 0
+  private executeLookup1DBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+    const input = inputs[0]
+    
+    // Lookup blocks only accept scalar inputs
+    if (Array.isArray(input)) {
+      console.error(`Lookup1D block ${blockState.blockId} received vector input but expects scalar`)
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    const scalarInput = typeof input === 'number' ? input : 0
     const { inputValues, outputValues, extrapolation } = blockState.internalState
     
     // Validate that we have data
@@ -601,13 +779,13 @@ export class SimulationEngine {
     }
     
     // Handle extrapolation cases
-    if (input <= inputValues[0]) {
+    if (scalarInput <= inputValues[0]) {
       if (extrapolation === 'clamp') {
         blockState.outputs[0] = outputValues[0]
       } else { // extrapolate
         if (minLength >= 2) {
           const slope = (outputValues[1] - outputValues[0]) / (inputValues[1] - inputValues[0])
-          blockState.outputs[0] = outputValues[0] + slope * (input - inputValues[0])
+          blockState.outputs[0] = outputValues[0] + slope * (scalarInput - inputValues[0])
         } else {
           blockState.outputs[0] = outputValues[0]
         }
@@ -615,14 +793,14 @@ export class SimulationEngine {
       return
     }
     
-    if (input >= inputValues[minLength - 1]) {
+    if (scalarInput >= inputValues[minLength - 1]) {
       if (extrapolation === 'clamp') {
         blockState.outputs[0] = outputValues[minLength - 1]
       } else { // extrapolate
         if (minLength >= 2) {
           const slope = (outputValues[minLength - 1] - outputValues[minLength - 2]) / 
                        (inputValues[minLength - 1] - inputValues[minLength - 2])
-          blockState.outputs[0] = outputValues[minLength - 1] + slope * (input - inputValues[minLength - 1])
+          blockState.outputs[0] = outputValues[minLength - 1] + slope * (scalarInput - inputValues[minLength - 1])
         } else {
           blockState.outputs[0] = outputValues[minLength - 1]
         }
@@ -632,7 +810,7 @@ export class SimulationEngine {
     
     // Find the interpolation interval
     for (let i = 0; i < minLength - 1; i++) {
-      if (input >= inputValues[i] && input <= inputValues[i + 1]) {
+      if (scalarInput >= inputValues[i] && scalarInput <= inputValues[i + 1]) {
         // Linear interpolation
         const x0 = inputValues[i]
         const x1 = inputValues[i + 1]
@@ -643,7 +821,7 @@ export class SimulationEngine {
         if (x1 === x0) {
           blockState.outputs[0] = y0
         } else {
-          const t = (input - x0) / (x1 - x0)
+          const t = (scalarInput - x0) / (x1 - x0)
           blockState.outputs[0] = y0 + t * (y1 - y0)
         }
         return
@@ -654,9 +832,19 @@ export class SimulationEngine {
     blockState.outputs[0] = outputValues[0]
   }
 
-  private executeLookup2DBlock(blockState: BlockState, inputs: number[]) {
-    const input1 = inputs[0] || 0
-    const input2 = inputs[1] || 0
+  private executeLookup2DBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+    const input1 = inputs[0]
+    const input2 = inputs[1]
+    
+    // Lookup blocks only accept scalar inputs
+    if (Array.isArray(input1) || Array.isArray(input2)) {
+      console.error(`Lookup2D block ${blockState.blockId} received vector input but expects scalar inputs`)
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    const scalarInput1 = typeof input1 === 'number' ? input1 : 0
+    const scalarInput2 = typeof input2 === 'number' ? input2 : 0
     const { input1Values, input2Values, outputTable, extrapolation } = blockState.internalState
     
     // Validate that we have data
@@ -683,19 +871,19 @@ export class SimulationEngine {
     
     // Find input1 (row) indices
     let i0 = 0, i1 = 0, t1 = 0
-    if (input1 <= input1Values[0]) {
+    if (scalarInput1 <= input1Values[0]) {
       i0 = i1 = 0
       t1 = 0
-    } else if (input1 >= input1Values[rows - 1]) {
+    } else if (scalarInput1 >= input1Values[rows - 1]) {
       i0 = i1 = rows - 1
       t1 = 0
     } else {
       for (let i = 0; i < rows - 1; i++) {
-        if (input1 >= input1Values[i] && input1 <= input1Values[i + 1]) {
+        if (scalarInput1 >= input1Values[i] && scalarInput1 <= input1Values[i + 1]) {
           i0 = i
           i1 = i + 1
           t1 = (input1Values[i + 1] - input1Values[i]) !== 0 ? 
-               (input1 - input1Values[i]) / (input1Values[i + 1] - input1Values[i]) : 0
+               (scalarInput1 - input1Values[i]) / (input1Values[i + 1] - input1Values[i]) : 0
           break
         }
       }
@@ -703,19 +891,19 @@ export class SimulationEngine {
     
     // Find input2 (column) indices
     let j0 = 0, j1 = 0, t2 = 0
-    if (input2 <= input2Values[0]) {
+    if (scalarInput2 <= input2Values[0]) {
       j0 = j1 = 0
       t2 = 0
-    } else if (input2 >= input2Values[cols - 1]) {
+    } else if (scalarInput2 >= input2Values[cols - 1]) {
       j0 = j1 = cols - 1
       t2 = 0
     } else {
       for (let j = 0; j < cols - 1; j++) {
-        if (input2 >= input2Values[j] && input2 <= input2Values[j + 1]) {
+        if (scalarInput2 >= input2Values[j] && scalarInput2 <= input2Values[j + 1]) {
           j0 = j
           j1 = j + 1
           t2 = (input2Values[j + 1] - input2Values[j]) !== 0 ? 
-               (input2 - input2Values[j]) / (input2Values[j + 1] - input2Values[j]) : 0
+               (scalarInput2 - input2Values[j]) / (input2Values[j + 1] - input2Values[j]) : 0
           break
         }
       }
@@ -742,11 +930,12 @@ export class SimulationEngine {
     }
   }
 
-  private executeSignalDisplayBlock(blockState: BlockState, inputs: number[]) {
-    const input = inputs[0] || 0
+  private executeSignalDisplayBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+    const input = inputs[0]
     const { samples, maxSamples } = blockState.internalState
     
     // Store the current input value
+    // For vectors, we'll store the entire vector
     samples.push(input)
     
     // Maintain maximum sample count
@@ -759,11 +948,12 @@ export class SimulationEngine {
     blockState.internalState.currentValue = input
   }
 
-  private executeSignalLoggerBlock(blockState: BlockState, inputs: number[]) {
-    const input = inputs[0] || 0
+  private executeSignalLoggerBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+    const input = inputs[0]
     const { loggedData, timeStamps } = blockState.internalState
     
     // Store both the value and timestamp
+    // For vectors, we'll store the entire vector
     loggedData.push(input)
     timeStamps.push(this.state.time)
     
@@ -772,17 +962,13 @@ export class SimulationEngine {
     blockState.internalState.currentValue = input
   }
 
-  private executeOutputPortBlock(blockState: BlockState, inputs: number[]) {
+  private executeOutputPortBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
     // Output ports represent external outputs to parent subsystem/model
-    // In simulation, they act as interface points where internal signals exit
-    // For top-level models, they can be monitored or logged
-    // For subsystems, they provide values to the parent model connections
-    
-    const input = inputs[0] || 0
+    const input = inputs[0]
     const portName = blockState.internalState?.portName || `Output_${blockState.blockId}`
     
     // Store the current input value for external access
-    // In a hierarchical system, this would be available to the parent model
+    // Handles both scalar and vector values
     blockState.internalState = {
       portName,
       currentValue: input,
@@ -790,10 +976,9 @@ export class SimulationEngine {
     }
     
     // Output ports don't produce outputs to other blocks within the same level
-    // They represent the final destination of signals leaving the current subsystem
   }
 
-  private executeSubsystemBlock(blockState: BlockState, inputs: number[]) {
+  private executeSubsystemBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
     const { sheetId, inputPorts, outputPorts } = blockState.internalState
     
     // If no sheet is referenced, fall back to pass-through behavior
@@ -877,7 +1062,7 @@ export class SimulationEngine {
   }
 
   // Helper method to update external inputs (for subsystem simulation)
-  public updateExternalInputs(inputProvider: (portName: string) => number | undefined) {
+  public updateExternalInputs(inputProvider: (portName: string) => number | number[] | boolean | boolean[] | undefined) {
     this.getExternalInput = inputProvider
   }
   
@@ -920,7 +1105,7 @@ export class SimulationEngine {
   public run(): SimulationResults {
     this.state.isRunning = true
     const timePoints: number[] = []
-    const signalData = new Map<string, number[]>()
+    const signalData = new Map<string, (number | number[] | boolean | boolean[])[]>()
 
     // Initialize signal data arrays for display and logger blocks
     for (const block of this.blocks) {
@@ -938,9 +1123,10 @@ export class SimulationEngine {
           const blockState = this.state.blockStates.get(block.id)
           if (blockState) {
             const inputs = this.getBlockInputs(block.id)
-            const value = inputs[0] || 0
+            const value = inputs[0]
             const dataArray = signalData.get(block.id)
             if (dataArray) {
+              // Store the complete value (scalar or vector)
               dataArray.push(value)
             }
           }
@@ -959,7 +1145,7 @@ export class SimulationEngine {
     return { ...this.state }
   }
 
-  public getLoggedData(blockId: string): { timeStamps: number[], values: number[] } | null {
+  public getLoggedData(blockId: string): { timeStamps: number[], values: (number | number[] | boolean | boolean[])[] } | null {
     const blockState = this.state.blockStates.get(blockId)
     if (!blockState || blockState.blockType !== 'signal_logger') {
       return null
@@ -977,12 +1163,45 @@ export class SimulationEngine {
       return ''
     }
     
-    let csv = 'Time,Value\n'
-    for (let i = 0; i < data.timeStamps.length; i++) {
-      csv += `${data.timeStamps[i]},${data.values[i]}\n`
-    }
+    // Check if we're dealing with vector data
+    const firstValue = data.values[0]
+    const isVector = Array.isArray(firstValue)
     
-    return csv
+    if (isVector && firstValue) {
+      // For vector data, create columns for each element
+      const vectorSize = firstValue.length
+      let csv = 'Time'
+      for (let i = 0; i < vectorSize; i++) {
+        csv += `,Element_${i}`
+      }
+      csv += '\n'
+      
+      for (let i = 0; i < data.timeStamps.length; i++) {
+        csv += data.timeStamps[i]
+        const value = data.values[i]
+        if (Array.isArray(value)) {
+          for (let j = 0; j < vectorSize; j++) {
+            csv += `,${value[j] || 0}`
+          }
+        } else {
+          // Fallback for inconsistent data
+          for (let j = 0; j < vectorSize; j++) {
+            csv += ',0'
+          }
+        }
+        csv += '\n'
+      }
+      return csv
+    } else {
+      // Scalar data
+      let csv = 'Time,Value\n'
+      for (let i = 0; i < data.timeStamps.length; i++) {
+        const value = data.values[i]
+        const scalarValue = typeof value === 'number' ? value : 0
+        csv += `${data.timeStamps[i]},${scalarValue}\n`
+      }
+      return csv
+    }
   }
 
   public exportAllLoggedDataAsCSV(): string {
@@ -993,7 +1212,7 @@ export class SimulationEngine {
     
     // Find the maximum number of samples across all loggers
     let maxSamples = 0
-    const blockData = new Map<string, { timeStamps: number[], values: number[] }>()
+    const blockData = new Map<string, { timeStamps: number[], values: (number | number[] | boolean | boolean[])[] }>()
     
     for (const block of loggerBlocks) {
       const data = this.getLoggedData(block.id)
@@ -1006,7 +1225,21 @@ export class SimulationEngine {
     // Create CSV header
     let csv = 'Time'
     for (const block of loggerBlocks) {
-      csv += `,${block.name}`
+      const data = blockData.get(block.id)
+      if (data && data.values.length > 0) {
+        const firstValue = data.values[0]
+        if (Array.isArray(firstValue)) {
+          // Vector signal - add column for each element
+          for (let i = 0; i < firstValue.length; i++) {
+            csv += `,${block.name}_${i}`
+          }
+        } else {
+          // Scalar signal
+          csv += `,${block.name}`
+        }
+      } else {
+        csv += `,${block.name}`
+      }
     }
     csv += '\n'
     
@@ -1029,9 +1262,28 @@ export class SimulationEngine {
       for (const block of loggerBlocks) {
         const data = blockData.get(block.id)
         if (data && i < data.values.length) {
-          row += `,${data.values[i]}`
+          const value = data.values[i]
+          if (Array.isArray(value)) {
+            // Vector value
+            for (let j = 0; j < value.length; j++) {
+              row += `,${value[j]}`
+            }
+          } else {
+            // Scalar value
+            row += `,${value}`
+          }
         } else {
-          row += ','
+          // No data for this timestamp
+          const firstData = blockData.get(block.id)
+          if (firstData && firstData.values.length > 0 && Array.isArray(firstData.values[0])) {
+            // Fill with empty values for vector
+            const vectorSize = (firstData.values[0] as any[]).length
+            for (let j = 0; j < vectorSize; j++) {
+              row += ','
+            }
+          } else {
+            row += ','
+          }
         }
       }
       
@@ -1041,8 +1293,8 @@ export class SimulationEngine {
     return csv
   }
 
-  public getOutputPortValues(): Map<string, number> {
-    const outputValues = new Map<string, number>()
+  public getOutputPortValues(): Map<string, number | number[] | boolean | boolean[]> {
+    const outputValues = new Map<string, number | number[] | boolean | boolean[]>()
     
     for (const block of this.blocks) {
       if (block.type === 'output_port') {
@@ -1058,7 +1310,7 @@ export class SimulationEngine {
     return outputValues
   }
 
-  public getOutputPortValue(portName: string): number | undefined {
+  public getOutputPortValue(portName: string): number | number[] | boolean | boolean[] | undefined {
     for (const block of this.blocks) {
       if (block.type === 'output_port') {
         const blockState = this.state.blockStates.get(block.id)
