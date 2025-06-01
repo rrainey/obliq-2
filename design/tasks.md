@@ -217,9 +217,79 @@ Each task below has a clear start and end. They’re designed to be executed one
 
 ---
 
+## Signal Data Type Support
+
+### Task 42: Add Data Type Property to Source and Input Port Blocks
+- **Start:** Update Source and Input Port block parameters to include a dataType field with default value "double"
+- **End:** Both block types have configurable data type property in their parameters
+
+### Task 43: Create C-Style Type Validator
+- **Start:** Create lib/typeValidator.ts with functions to validate C-style type syntax
+- **End:** Validator accepts valid types (float, double, long, bool) and 1D arrays (e.g., float[3])
+
+### Task 44: Update Source and Input Port Config UIs
+- **Start:** Add data type input field to SourceConfig and InputPortConfig components
+- **End:** Users can enter and validate data types with real-time syntax validation
+
+### Task 45: Implement Signal Type Propagation Engine
+- **Start:** Create lib/signalTypePropagation.ts to analyze model and propagate types through connections
+- **End:** Function returns a map of all signal types in the model
+
+### Task 46: Update Simulation Engine for Vector Support
+- **Start:** Modify simulationEngine.ts to handle vector signals in block computations
+- **End:** All blocks correctly process scalar and vector signals according to specifications
+
+### Task 47: Implement Type Compatibility Validator
+- **Start:** Create validation functions to check type compatibility between connected blocks
+- **End:** Validator detects invalid operations (e.g., scalar + vector) and returns detailed errors
+
+### Task 48: Add Visual Type Mismatch Indicators
+- **Start:** Update Wire component to show visual indication of type mismatches
+- **End:** Invalid connections are highlighted in red with hover tooltip showing the error
+
+### Task 49: Create Model Validation UI
+- **Start:** Add "Validate Model" button to the model editor toolbar
+- **End:** Button triggers validation and displays results in a modal or panel
+
+### Task 50: Update Code Generator for Vector Types
+- **Start:** Modify codeGeneration.ts to generate C arrays for vector signals
+- **End:** Generated code correctly declares and uses arrays for vector signals
+
+### Task 51: Update Transfer Function for Vector Support
+- **Start:** Modify transfer function state allocation and processing for element-wise vector operations
+- **End:** Transfer functions correctly process vector inputs with appropriate state arrays
+
+### Task 52: Update Signal Display for Multi-Line Plotting
+- **Start:** Modify SignalDisplay component to plot vector elements as separate lines
+- **End:** Vector signals display with each element as a distinct colored line with legend
+
+### Task 53: Add Lookup Block Input Validation
+- **Start:** Add validation to ensure lookup blocks only accept scalar inputs
+- **End:** Lookup blocks reject vector connections with appropriate error messages
+
+### Task 54: Integrate Validation with Run/Generate Actions
+- **Start:** Add validation checks before simulation and code generation
+- **End:** Run and Generate Code buttons perform validation first, blocking on errors
+
+### Task 55: Update Model Schema for Type Information
+- **Start:** Update modelSchema.ts to include signal type information in the model structure
+- **End:** Model JSON properly stores and validates signal type data
+
+### Task 56: Create Type Propagation Tests
+- **Start:** Write comprehensive tests for type propagation and validation logic
+- **End:** Test suite covers all type combinations and edge cases
+
+### Task 57: Update Block Library Display
+- **Start:** Update BlockLibrarySidebar to show which blocks support vector operations
+- **End:** Block descriptions indicate scalar/vector compatibility
+
+### Task 58: Full Integration Test of Signal Types
+- **Start:** Create test models with various scalar and vector signal combinations
+- **End:** Signal types work correctly through the full workflow: edit → validate → simulate → generate code
+
 ## 🟦 Final Integration Test of MVP
 
-### Task 41: Full End-to-End Test of MVP
+### Task 59: Full End-to-End Test of MVP
 - **Start:** Manually test user flow: login → create model → build model → run simulation → generate code → export logs.
 - **End:** MVP features work seamlessly together!
 
