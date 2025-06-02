@@ -287,11 +287,134 @@ Each task below has a clear start and end. They’re designed to be executed one
 - **Start:** Create test models with various scalar and vector signal combinations
 - **End:** Signal types work correctly through the full workflow: edit → validate → simulate → generate code
 
-## 🟦 Final Integration Test of MVP
+## 🟦 Intermediate Integration Test of MVP
 
-### Task 59: Full End-to-End Test of MVP
+### Task 59: Intermediate End-to-End Test of MVP
 - **Start:** Manually test user flow: login → create model → build model → run simulation → generate code → export logs.
 - **End:** MVP features work seamlessly together!
+
+## 🟦 Sheet Label Implementation Tasks
+
+### Task 60: Add Sheet Label Block Type Definitions
+- **Start:** Add 'sheet_label_sink' and 'sheet_label_source' to the block type enums in relevant files
+- **End:** Both new block types are recognized as valid types in the type system
+
+### Task 61: Create Sheet Label Sink Block Icon
+- **Start:** Create visual representation for Sheet Label Sink block (icon/SVG)
+- **End:** Sheet Label Sink has a distinct visual appearance (e.g., arrow pointing into a label)
+
+### Task 62: Create Sheet Label Source Block Icon  
+- **Start:** Create visual representation for Sheet Label Source block (icon/SVG)
+- **End:** Sheet Label Source has a distinct visual appearance (e.g., arrow pointing out from a label)
+
+### Task 63: Add Sheet Label Blocks to Block Library
+- **Start:** Add Sheet Label Sink and Source entries to BlockLibrarySidebar component
+- **End:** Both blocks appear in the sidebar and can be dragged onto canvas
+
+### Task 64: Define Sheet Label Block Port Configuration
+- **Start:** Define port configuration for Sheet Label blocks (Sink: 1 input, 0 outputs; Source: 0 inputs, 1 output)
+- **End:** Port definitions exist in Block component for both Sheet Label types
+
+### Task 65: Add Signal Name Parameter to Sheet Label Blocks
+- **Start:** Add 'signalName' parameter to the default parameters for both Sheet Label block types
+- **End:** Sheet Label blocks have a signalName field in their parameters object
+
+### Task 66: Create Sheet Label Sink Config Component
+- **Start:** Create SheetLabelSinkConfig.tsx component with text input for signal name
+- **End:** Component exists with basic text input field
+
+### Task 67: Add Signal Name Autocomplete Data Collection
+- **Start:** Create utility function to collect all available signal names in current scope
+- **End:** Function returns array of signal names from current sheet/subsystem
+
+### Task 68: Enhance Sheet Label Sink Config with Autocomplete
+- **Start:** Add autocomplete dropdown to SheetLabelSinkConfig showing available signals
+- **End:** Users see dropdown of existing signals while typing in the signal name field
+
+### Task 69: Create Sheet Label Source Config Component
+- **Start:** Create SheetLabelSourceConfig.tsx component with dropdown for sink selection
+- **End:** Component exists with basic dropdown field
+
+### Task 70: Implement Sheet Label Sink Collection Function
+- **Start:** Create function to find all Sheet Label Sink blocks in current subsystem scope
+- **End:** Function returns array of sink blocks with their signal names
+
+### Task 71: Populate Sheet Label Source Dropdown
+- **Start:** Connect Sheet Label Source config dropdown to show all available sinks
+- **End:** Dropdown shows all Sheet Label Sink signal names in current scope
+
+### Task 72: Add Sheet Label Config to Double-Click Handler
+- **Start:** Update handleBlockDoubleClick to open config for Sheet Label blocks
+- **End:** Double-clicking Sheet Label blocks opens their configuration dialogs
+
+### Task 73: Implement Sheet Label Type Inheritance for Sinks
+- **Start:** Update type propagation to assign input wire type to Sheet Label Sink's signal
+- **End:** Sheet Label Sink inherits the data type from its connected input
+
+### Task 74: Implement Sheet Label Type Inheritance for Sources
+- **Start:** Update type propagation to copy type from associated sink to source output
+- **End:** Sheet Label Source outputs the same type as its associated sink's input
+
+### Task 75: Add Sheet Label Signal Resolution
+- **Start:** Create function to resolve Sheet Label connections (match sources to sinks by signal name)
+- **End:** Function returns map of source blocks to their associated sink blocks
+
+### Task 76: Update Simulation Engine for Sheet Label Sinks
+- **Start:** Modify simulation engine to store Sheet Label Sink values by signal name
+- **End:** Sink blocks capture their input values during simulation
+
+### Task 77: Update Simulation Engine for Sheet Label Sources  
+- **Start:** Modify simulation engine to retrieve values from associated sinks
+- **End:** Source blocks output the value from their associated sink
+
+### Task 78: Add Sheet Label Scope Validation
+- **Start:** Create validation to ensure Sheet Label signal names are unique within scope
+- **End:** Validator detects duplicate signal names in same subsystem
+
+### Task 79: Add Sheet Label Connection Validation
+- **Start:** Create validation to ensure all sources have associated sinks
+- **End:** Validator detects unmatched Sheet Label Source blocks
+
+### Task 80: Update Model Validation UI for Sheet Labels
+- **Start:** Add Sheet Label validation errors to the validation results display
+- **End:** Users see clear messages about Sheet Label issues
+
+### Task 81: Implement Sheet Label Visual Indicators
+- **Start:** Add visual indicator (e.g., label text) on Sheet Label blocks showing signal name
+- **End:** Signal names are visible on the canvas without opening config
+
+### Task 82: Update Code Generation for Sheet Label Connections
+- **Start:** Modify code generator to treat Sheet Label connections as direct wires
+- **End:** Generated C code connects source to sink values transparently
+
+### Task 83: Add Sheet Label Same-Sheet Support
+- **Start:** Enable Sheet Labels to work within the same sheet (not just across sheets)
+- **End:** Users can use Sheet Labels for organizing connections on single sheet
+
+### Task 84: Create Sheet Label Test Model
+- **Start:** Build a test model using Sheet Labels across multiple sheets
+- **End:** Test model demonstrates cross-sheet signal flow via Sheet Labels
+
+### Task 85: Add Sheet Label Integration Tests
+- **Start:** Write tests for Sheet Label signal resolution and type propagation
+- **End:** Automated tests verify Sheet Label functionality
+
+### Task 86: Document Sheet Label Usage
+- **Start:** Add Sheet Label usage examples to help text or tooltips
+- **End:** Users understand how to use Sheet Labels for cross-sheet connections
+
+### Task 87: Full Integration Test of Sheet Labels
+- **Start:** Test complete workflow: create labels → connect across sheets → simulate → generate code
+- **End:** Sheet Labels work seamlessly in all aspects of the application
+
+---
+
+💡 **Sheet Label Implementation Notes:**
+- Sheet Label signal names are distinct from block names
+- Signal name scope is limited to the current subsystem
+- Type inheritance follows the connection flow
+- Same signal name can be used on same sheet for wire organization
+- Sources without matching sinks should be caught by validation
 
 ---
 
@@ -299,4 +422,3 @@ Each task below has a clear start and end. They’re designed to be executed one
 - Each block implementation task also requires a test (unit test or manual test).
 - Tasks are incremental—no leap of logic; each small step is independently verifiable.
 - Tasks can be parallelized cautiously (e.g., separate block types by different devs).
-

@@ -21,7 +21,10 @@ The project follows a clean, modular folder structure to organize different conc
   * **`app/models/[id]/page.tsx`** – The **model editor page** for constructing and simulating a specific model. It is the core of the application's UI, loading the model JSON from Supabase (via client-side fetch or server-side prefetch) and then rendering the visual canvas. This page likely uses a mix of server and client components: for example, the initial model data can be fetched on the server (for faster load) and passed to a client component that manages the interactive editing. It also provides UI controls for actions like *Save*, *Run Simulation*, *Generate C Code*, *Download JSON*, etc.
   * **`app/api/simulate/route.ts`** – (Optional) API route to run simulation on the server. If the simulation is simple enough, we might *not* need this and instead run simulations in the browser. However, if we choose server-side simulation for consistency or offloading work, this endpoint would accept a model (ID or JSON) and perform the simulation, returning results (e.g. computed signal traces).
   * **`app/api/generate-code/route.ts`** – API route to handle **C code generation**. When the user requests a PlatformIO C library export, the frontend calls this endpoint (likely via a POST request containing the model ID or JSON). The route will load the model (if only an ID was sent), then invoke the code generation service to produce a C code bundle (source files). The response could be a file download (e.g. a zip archive of the library) or a JSON with a link to a file in Supabase Storage. This isolates the heavy or sensitive operation of code generation on the server side. For local development, this route uses the Supabase service role key (stored in `SUPABASE_SERVICE_ROLE_KEY` environment variable) to bypass Row Level Security when fetching models. This key must never be exposed to client-side code.
+  The route accepts an optional `version` parameter to generate code from specific versions. If no version is specified, it defaults to the latest version. The generated ZIP filename includes the version number for clarity.
   * **`app/api/automations/[token]/route.ts`** – API route for the **automation API**. This endpoint allows external systems (like CI/CD pipelines or validation tools) to trigger actions on a model. For example, an external request could hit `POST /api/automations/{token}` with a payload specifying a model ID and an action (simulate, validate, or code-generate). A secure token (or an API key) in the URL or headers is used to authenticate these external requests (to avoid requiring a user session). Internally, this route verifies the token, then performs the requested action by calling the appropriate logic (e.g., running a simulation or generating code) and returns a result (like success status or generated artifacts). By design, this API route decouples external automation from the UI, enabling integration with CI systems without exposing the main app's user session mechanism.
+
+  All automation API actions support an optional `version` parameter, allowing CI/CD pipelines to work with specific versions of a model. This enables reproducible builds and testing against known model states.
 
 * **`/components`**: Reusable **React components** for the UI, especially those used on the modeling canvas and related UI panels.
 
@@ -40,6 +43,8 @@ The project follows a clean, modular folder structure to organize different conc
   * **`lib/codeGeneration.ts`** – The **C Code generation service**. This module includes functions that transform a model JSON into C code files. It likely iterates through the blocks and connections to produce C structures and functions. For example, it may generate a `init()` function to initialize all blocks, an `update(step_time)` function to update the simulation each tick, and data structures for each block's state. It uses the preserved signal names from the model for variable and function names to ensure the generated code is understandable. The code generation could use templates for PlatformIO (e.g., generating a library with a `library.properties` if targeting Arduino, or a PlatformIO `src/` folder with code). This module can be used both on the server (for the API route that delivers a file) and potentially on the client (if we wanted to preview code). However, generating a downloadable library (especially if it involves bundling multiple files into a zip) is better done server-side. The output of code generation is not stored in the database; it's generated on-demand and provided to the user (or external caller) for download.
   * **`lib/modelSchema.ts`** – Definition of the **Model JSON schema** or TypeScript types for the model. This defines how a model is structured as JSON: e.g., a model object containing metadata and an array of **Sheets**, each Sheet containing a list of **Blocks** (with properties like id, type, position, parameters, etc.) and **Connections** (wires linking block outputs to inputs). It also defines how Subsystems are represented (possibly as a special block type that contains a reference to another list of blocks internally or a child sheet). Defining a clear schema (and perhaps using a validation library like Zod for it) helps maintain consistency between the front-end, simulation, and code generation logic so all interpret the model the same way.
   * **`lib/validation.ts`** – (Optional) If needed, this module could contain functions to validate a model (e.g., to ensure there are no unconnected required ports, no algebraic loops without feedback blocks, etc.). This might be used in the automation API to run model checks.
+  * **`lib/types.ts`** – TypeScript types for models and versions, including `Model`, `ModelVersion`, and `ModelWithVersion` interfaces.
+  * **`lib/useAutoSave.ts`** – React hook managing the auto-save timer, with logic to prevent auto-saves during loading or when viewing older versions.
 
 * **`/public`**: Static assets such as images or maybe example models.
 
@@ -62,19 +67,53 @@ This structure cleanly separates concerns: pages and API routes for routing, com
 
 ## Database Design and Model Storage
 
-All persistent data lives in **Supabase's PostgreSQL** database. The key pieces of data are: **Users** and **Models**. Supabase Auth manages the Users table and authentication, so we primarily focus on the Models table. We design a `models` table roughly as:
+All persistent data lives in **Supabase's PostgreSQL** database. The key pieces of data are: **Users**, **Models**, and **Model Versions**. Supabase Auth manages the Users table and authentication, so we primarily focus on the Models and Model Versions tables.
 
-* `id` (uuid or bigserial primary key)
+The database uses a two-table design for versioning:
+
+**Models table** (metadata only):
+* `id` (uuid primary key)
 * `user_id` (foreign key to auth.users – the owner of the model)
 * `name` (text, model name)
-* `data` (jsonb, the model JSON document)
+* `latest_version` (integer, the highest version number)
+* `created_at` (timestamp)
 * `updated_at` (timestamp)
+
+**Model_versions table** (version data):
+* `id` (uuid primary key)
+* `model_id` (uuid, foreign key to models.id)
+* `version` (integer, version number starting at 1)
+* `data` (jsonb, the model JSON document)
+* `created_at` (timestamp)
+* Unique constraint on (model_id, version)
+
+Version 0 is reserved for auto-save data, which is automatically deleted when a new version is saved. Regular versions start at 1 and increment monotonically. Each save operation creates a new version, providing a complete history of the model's evolution.
 
 The model JSON stored in the `data` column contains the full structure of the model (including all sheets, blocks, connections, and any metadata like sheet layouts or signal names). We use a JSONB column type for efficiency in storage and querying. We can query parts of the JSON if needed (e.g., maybe to find all models that use a certain block type, though not a primary requirement). Supabase's row-level security (RLS) is configured such that each user can only select/update their own models (using `user_id = auth.uid()` in policy). This ensures privacy and data integrity.
 
 **Application State vs. Database State:** The application maintains state both on the client and in the database. **Transient UI state** (like the current positions of blocks as the user is dragging, current simulation values, unsaved changes) lives in React state on the frontend. **Persistent state** (the saved model structure) lives in the Supabase DB as JSON. When the user is actively editing a model, changes are reflected in local state immediately for responsiveness, and the app may autosave periodically or allow the user to click "Save" to persist the JSON to Supabase. Because we avoid real-time collaboration, we don't need constant sync; a simple debounce or save-on-demand strategy is sufficient (improving performance by reducing writes).
 
 For simulation, the state of the simulation (values of signals at each time step, etc.) is not stored in the database – it's either kept in memory in the browser or returned from a simulation API call. If the user stops a simulation and closes the model, they could save the final state or any logs they want by embedding them in the model JSON or by downloading a log file, but by default, simulations are ephemeral. Similarly, generated C code isn't stored in the database; it's produced on the fly by code generation logic when requested (keeping the DB focused on core data and not large blobs of code).
+
+**Version Management:** The application tracks both the current version being viewed and whether it's an older version than the latest. When viewing an older version, the UI clearly indicates this state and changes the save behavior to prompt for a new model name (forking). The version number is passed as a query parameter when opening specific versions. Auto-save functionality is disabled when viewing older versions to prevent confusion.
+
+## Model Versioning
+
+The application implements lightweight versioning to track the evolution of models over time. This system provides several key capabilities:
+
+**Version Storage:** Each save operation creates a new version with a monotonically increasing version number. Versions are immutable once created, ensuring a reliable audit trail.
+
+**Version Selection:** Users can browse and open any previous version from the model list page. A dropdown on each model tile shows all available versions, with the latest clearly marked. Opening an older version passes the version number as a query parameter.
+
+**Fork on Save:** When saving changes to an older version, users are prompted to create a new model with a new name. This prevents accidental overwrites and maintains clear lineage while allowing experimentation with historical states.
+
+**API Version Support:** Both the code generation and automation APIs accept version parameters, enabling:
+- Generation of C code from any version
+- CI/CD pipelines that reference specific versions
+- Automated testing against known model states
+- Reproducible builds from historical versions
+
+**Performance Considerations:** The two-table design keeps the models table lightweight for fast listing operations while storing the potentially large JSON data in the versions table. Version queries use the indexed (model_id, version) pair for efficient lookups.
 
 ## Basics of the Simulation Model Document
 
@@ -202,7 +241,7 @@ Throughout the system, careful consideration is given to **where state lives** t
 * **Auth State:** Supabase Auth provides a session JWT which we keep on the client (Supabase JS library handles this, often storing in local storage or memory and refreshing it). We can also propagate the session to Next.js server-side (Next 13 App Router can use cookies or the auth helper library to get the user on the server). For simplicity, the app can rely on client-side checks for auth to protect most pages, but critical actions (like API routes) double-check the Supabase JWT or the automation token.
 * **Simulation State:** Lives in the simulation engine context (client or server depending on mode). It's not stored globally in React state because simulation is more of a transient process; however, some UI components (like a plot) might have internal state for the data points to display. The simulation engine could emit events or call callbacks (e.g., each time step, send new values to displays). This could be done via a simple pub-sub within the engine or by updating a React state that the Signal Display component is subscribed to. Because React re-renders could be expensive for many time steps, often simulation display is done by directly manipulating a canvas or using a chart library that imperatively updates. We might therefore have the Signal Display component just hold a reference to a chart instance and the simulation engine pushes data to it without full React state updates each step, which is a performance consideration.
 * **Unsaved Changes:** To help the user, we will keep track of a "document dirty" flag – whether the model has unsaved edits. This state can be in the editor component, and if the user tries to navigate away, we can prompt them to save. It's a minor detail but important for UX.
-* **Auto Save:** every five minutes, the current state of the "dirty" model document shall be "auto-saved" to a recovery version of the document.  The recovery document should be saved to the database in the same way that the document is saved by the user - the only difference being that it is saved with a " (auto-save)" name suffix.  The auto-saved version of a document should be deleted at any point that the user explicitly saves their work, either to the current document or a new one.  The deletion should only occur after the user-initiated save successfully completes. This explicit save, would also reset the timer driving five-minute auto-save logic.
+**Auto Save:** every five minutes, the current state of the "dirty" model document shall be "auto-saved" to version 0 in the model_versions table. This special version number is reserved exclusively for auto-save data. Auto-save only runs when viewing the latest version of a model and is disabled when viewing historical versions. The auto-save version is automatically deleted when the user performs an explicit save, ensuring clean version history. Auto-save data is never included in version listings shown to users.
 
 The separation of concerns in state ensures that each part of the app deals with the appropriate form of data:
 
@@ -226,7 +265,8 @@ We also consider **performance** in the architecture:
 * The serverless functions (API routes) should perform heavy tasks like code generation within reasonable time. If a model is extremely large, code generation could be slow, but typically it's string processing which is fast in Node. PlatformIO code is text, so even a few thousand lines is fine to handle.
 * We avoid using websockets or real-time subscriptions (since no collab or real-time multi-user updates). This simplifies the architecture and removes a class of issues around synchronization and race conditions.
 * We ensure that each service is used appropriately: the database is not doing computation, the client is not doing secure data storage, etc. This clear separation means each part can be optimized or replaced if needed (for instance, if we needed to support extremely heavy simulations, we could introduce a dedicated simulation microservice or WebAssembly module without restructuring the whole app).
-
+* **Version Performance:** The versioning system uses a two-table design to optimize common operations. Model listings only query the lightweight models table, while version data is fetched on-demand. The unique index on (model_id, version) ensures fast version lookups.
+* **Auto-save Efficiency:** Auto-save operations use version 0 with upsert semantics, preventing version table bloat. The system validates model state before auto-saving to prevent errors during the save cycle.
 ## Conclusion
 
 This architecture leverages **Next.js** for a unified frontend and backend codebase, keeping the project structure organized by feature. **Supabase** provides a convenient and secure data layer with minimal overhead in developing our own backend. The design outlined above emphasizes clean separation of concerns: the *UI components* manage interactivity and visualization, the *client-side state* enables responsive editing and simulation, the *server-side API* handles heavy lifting like code export and external automation, and the *database* safely persists user models. By focusing on simplicity (a single-user editing model, on-demand persistence, no unnecessary complexity), the application remains performant and easier to maintain. The folder structure and service interactions described ensure that as the application grows (more block types, larger models, more features), the codebase remains well-organized and extensible, providing a solid foundation for a visual modeling and simulation platform.
