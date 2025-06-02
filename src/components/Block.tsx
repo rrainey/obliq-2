@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, JSX } from 'react'
 
 export interface BlockData {
   id: string
@@ -203,35 +203,86 @@ export default function Block({
     }
   }
 
-  // Get block color based on type
+  // Simple block coloring
   const getBlockColor = () => {
-    switch (block.type) {
-      case 'sum':
-      case 'multiply':
-      case 'scale':
-        return 'bg-blue-100 border-blue-300'
-      case 'transfer_function':
-        return 'bg-purple-100 border-purple-300'
-      case 'signal_display':
-      case 'signal_logger':
-        return 'bg-green-100 border-green-300'
-      case 'input_port':
-      case 'output_port':
-        return 'bg-gray-100 border-gray-300'
-      case 'source':
-        return 'bg-yellow-100 border-yellow-300'
-      case 'lookup_1d':
-      case 'lookup_2d':
-        return 'bg-orange-100 border-orange-300'
-      case 'subsystem':
-        return 'bg-indigo-100 border-indigo-300'
-      default:
-        return 'bg-white border-gray-300'
+    return 'bg-white border-gray-400'
+  }
+
+  // Helper to render transfer function polynomial
+  const renderTransferFunction = () => {
+    if (block.type !== 'transfer_function') return null
+    
+    const numerator = block.parameters?.numerator || [1]
+    const denominator = block.parameters?.denominator || [1, 1]
+    
+    // Helper to format a polynomial
+    const formatPolynomial = (coeffs: number[]): JSX.Element => {
+      const terms: JSX.Element[] = []
+      const degree = coeffs.length - 1
+      
+      coeffs.forEach((coeff, index) => {
+        if (coeff === 0) return // Skip zero terms
+        
+        const power = degree - index
+        const isFirst = terms.length === 0
+        const sign = coeff >= 0 && !isFirst ? '+' : ''
+        const absCoeff = Math.abs(coeff)
+        
+        // Format coefficient (omit 1 for non-constant terms)
+        const coeffStr = (absCoeff === 1 && power > 0) ? '' : absCoeff.toString()
+        
+        if (power === 0) {
+          // Constant term
+          terms.push(
+            <span key={index}>
+              {sign}{coeff < 0 && isFirst ? '-' : ''}{absCoeff}
+            </span>
+          )
+        } else if (power === 1) {
+          // Linear term
+          terms.push(
+            <span key={index}>
+              {sign}{coeff < 0 && isFirst ? '-' : ''}{coeffStr}s
+            </span>
+          )
+        } else {
+          // Higher order terms with superscript
+          terms.push(
+            <span key={index}>
+              {sign}{coeff < 0 && isFirst ? '-' : ''}{coeffStr}s<sup>{power}</sup>
+            </span>
+          )
+        }
+      })
+      
+      // Handle case where all coefficients are zero
+      if (terms.length === 0) {
+        return <span>0</span>
+      }
+      
+      return <>{terms}</>
     }
+    
+    return (
+      <div className="flex flex-col items-center justify-center text-xs">
+        <div className="border-b border-gray-800 px-1 pb-0.5">
+          {formatPolynomial(numerator)}
+        </div>
+        <div className="px-1 pt-0.5">
+          {formatPolynomial(denominator)}
+        </div>
+      </div>
+    )
   }
 
   // Get block symbol
   const getBlockSymbol = () => {
+    // Special handling for transfer function
+    if (block.type === 'transfer_function') {
+      return renderTransferFunction()
+    }
+    
+    // Regular symbols for other blocks
     switch (block.type) {
       case 'sum':
         return '∑'
@@ -239,8 +290,6 @@ export default function Block({
         return '×'
       case 'scale':
         return block.parameters?.gain || 'K'
-      case 'transfer_function':
-        return 'H(s)'
       case 'signal_display':
         return '📊'
       case 'signal_logger':
@@ -262,6 +311,19 @@ export default function Block({
     }
   }
 
+  const getBlockWidth = () => {
+    if (block.type === 'transfer_function') {
+      // Calculate width based on polynomial complexity
+      const numerator = block.parameters?.numerator || [1]
+      const denominator = block.parameters?.denominator || [1, 1]
+      const maxLength = Math.max(numerator.length, denominator.length)
+      
+      // Base width of 80px (w-20) plus extra for complex polynomials
+      return Math.max(80, 60 + maxLength * 15)
+    }
+    return 80 // Default width (w-20)
+  }
+
   // Adjust block height based on number of ports
   const minHeight = Math.max(64, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
 
@@ -279,31 +341,34 @@ export default function Block({
     >
       <div 
         className={`
-          relative w-20 rounded-lg border-2 flex items-center justify-center
+          relative rounded-lg border-2 flex items-center justify-center
           ${getBlockColor()}
           ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}
           ${isDragging ? 'opacity-75' : ''}
           transition-shadow
         `}
-        style={{ height: `${minHeight}px` }}
+        style={{ 
+          height: `${minHeight}px`,
+          width: `${getBlockWidth()}px`
+        }}
       >
         {/* Input Ports */}
         {Array.from({ length: inputCount }).map((_, index) => (
           <div
             key={`input-${index}`}
-            className="port absolute w-3 h-3 bg-gray-600 rounded-full cursor-crosshair hover:bg-blue-500 hover:ring-2 hover:ring-blue-300 transition-all"
+            className="port absolute w-3 h-3 bg-gray-700 rounded-full cursor-crosshair hover:bg-blue-600 hover:ring-2 hover:ring-blue-400 transition-all"
             style={{ 
               left: '-6px', 
               top: `${calculatePortPosition(index, inputCount)}px` 
             }}
             onClick={handlePortClick({ blockId: block.id, portIndex: index, isOutput: false })}
-            onMouseDown={(e) => e.stopPropagation()} // Prevent block drag when clicking port
+            onMouseDown={(e) => e.stopPropagation()}
             title={`Input ${index + 1}`}
           />
         ))}
 
-        {/* Block Symbol */}
-        <div className="text-lg font-semibold pointer-events-none">
+        {/* Block Symbol - with increased contrast */}
+        <div className="text-xl font-bold text-gray-900 pointer-events-none">
           {getBlockSymbol()}
         </div>
 
@@ -311,20 +376,20 @@ export default function Block({
         {Array.from({ length: outputCount }).map((_, index) => (
           <div
             key={`output-${index}`}
-            className="port absolute w-3 h-3 bg-gray-600 rounded-full cursor-crosshair hover:bg-blue-500 hover:ring-2 hover:ring-blue-300 transition-all"
+            className="port absolute w-3 h-3 bg-gray-700 rounded-full cursor-crosshair hover:bg-blue-600 hover:ring-2 hover:ring-blue-400 transition-all"
             style={{ 
               right: '-6px', 
               top: `${calculatePortPosition(index, outputCount)}px` 
             }}
             onClick={handlePortClick({ blockId: block.id, portIndex: index, isOutput: true })}
-            onMouseDown={(e) => e.stopPropagation()} // Prevent block drag when clicking port
+            onMouseDown={(e) => e.stopPropagation()}
             title={`Output ${index + 1}`}
           />
         ))}
       </div>
 
-      {/* Block Name */}
-      <div className="absolute -bottom-5 left-0 right-0 text-xs text-center text-gray-600 pointer-events-none">
+      {/* Block Name - with increased contrast */}
+      <div className="absolute -bottom-5 left-0 right-0 text-xs text-center text-gray-800 font-medium pointer-events-none">
         {block.name}
       </div>
     </div>

@@ -14,9 +14,9 @@ interface SignalDisplayProps {
 
 // Color palette for multi-line plots
 const LINE_COLORS = [
-  '#3b82f6', // blue
   '#ef4444', // red
   '#10b981', // green
+  '#3b82f6', // blue
   '#f59e0b', // amber
   '#8b5cf6', // violet
   '#ec4899', // pink
@@ -60,16 +60,11 @@ useEffect(() => {
     console.log('About to slice with maxSamples:', maxSamples)
     const slicedData = signalData.slice(-maxSamples)
     console.log('After slice:', slicedData.length, 'samples')
-    
-
+  
 
     const transformedData = slicedData.map((point, index) => {
       const dataPoint: any = { 
-        index: index,  // Add index
-        time: point.time.toFixed(3),  // Keep as string for display
-        element_0: 0,  // Initialize to ensure keys exist
-        element_1: 0,
-        element_2: 0
+        time: point.time,  // Keep as number, not string
       }
       
       if (Array.isArray(point.value)) {
@@ -171,14 +166,12 @@ console.log('Last few data points:', chartData.slice(-5))
             >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis 
-      dataKey="time"
-      type="number"  // Explicitly set type to number
-      domain={['dataMin', 'dataMax']}  // Let Recharts calculate the domain
-      label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }}
-      tick={{ fontSize: 12 }}
-      stroke="#6b7280"
-      tickFormatter={(value) => value.toFixed(2)}  // Format for display
-    />
+              dataKey="time"
+              label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }}
+              tick={{ fontSize: 12 }}
+              stroke="#6b7280"
+              tickFormatter={(value) => value.toFixed(2)}
+            />
             <YAxis 
               domain={yDomain}
               label={{ value: 'Value', angle: -90, position: 'insideLeft' }}
