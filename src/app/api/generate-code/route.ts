@@ -1,4 +1,4 @@
-// app/api/generate-code/route.ts - Add better error logging
+// app/api/generate-code/route.ts - With versioning support
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -35,7 +35,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
   // Validate required fields
   validateRequiredFields(requestBody, ['modelId'])
   
-  const { modelId } = requestBody
+  const { modelId, version } = requestBody
 
   // Validate modelId format (should be UUID)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -50,7 +50,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   console.log('Fetching model:', modelId)
 
-  // Fetch the model from the database using service role key
+  // Fetch the model metadata from the database using service role key
   const { data: model, error: dbError } = await supabaseServer
     .from('models')
     .select('*')
@@ -78,18 +78,49 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   console.log('Model found:', model.name)
 
-  // Validate model structure
-  if (!model.data || !model.data.sheets || !Array.isArray(model.data.sheets)) {
+  // Determine which version to use
+  const versionToUse = version || model.latest_version || 1
+  console.log('Using version:', versionToUse)
+
+  // Fetch the specific version data
+  const { data: versionData, error: versionError } = await supabaseServer
+    .from('model_versions')
+    .select('*')
+    .eq('model_id', modelId)
+    .eq('version', versionToUse)
+    .single()
+
+  if (versionError) {
+    console.error('Version fetch error:', versionError)
+    throw new AppError(
+      `Version ${versionToUse} not found for this model`,
+      404,
+      ErrorTypes.NOT_FOUND,
+      { modelId, requestedVersion: versionToUse, availableVersion: model.latest_version }
+    )
+  }
+
+  if (!versionData) {
+    throw new AppError(
+      `Version ${versionToUse} data not found`,
+      404,
+      ErrorTypes.NOT_FOUND,
+      { modelId, requestedVersion: versionToUse }
+    )
+  }
+
+  // Validate version data structure
+  if (!versionData.data || !versionData.data.sheets || !Array.isArray(versionData.data.sheets)) {
     throw new AppError(
       'Invalid model structure: missing or invalid sheets data',
       400,
       ErrorTypes.VALIDATION_ERROR,
-      { modelId, modelName: model.name }
+      { modelId, modelName: model.name, version: versionToUse }
     )
   }
 
   // Extract the main sheet
-  const sheets = model.data.sheets
+  const sheets = versionData.data.sheets
   const mainSheet = sheets.find((s: any) => s.id === 'main') || sheets[0]
 
   if (!mainSheet) {
@@ -97,7 +128,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
       'No sheets found in model',
       400,
       ErrorTypes.VALIDATION_ERROR,
-      { modelId, modelName: model.name, availableSheets: sheets.length }
+      { modelId, modelName: model.name, availableSheets: sheets.length, version: versionToUse }
     )
   }
 
@@ -108,7 +139,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
       'Cannot generate code: model contains no blocks',
       400,
       ErrorTypes.VALIDATION_ERROR,
-      { modelId, modelName: model.name, sheetName: mainSheet.name }
+      { modelId, modelName: model.name, sheetName: mainSheet.name, version: versionToUse }
     )
   }
 
@@ -142,7 +173,8 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
       { 
         errors: result.errors,
         modelId,
-        modelName: model.name
+        modelName: model.name,
+        version: versionToUse
       }
     )
   }
@@ -153,7 +185,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
       'Code generation produced no files',
       500,
       ErrorTypes.INTERNAL_ERROR,
-      { modelId, modelName: model.name }
+      { modelId, modelName: model.name, version: versionToUse }
     )
   }
 
@@ -180,7 +212,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
     }
 
     // Add a README file
-    const readmeContent = generateReadmeContent(model.name)
+    const readmeContent = generateReadmeContent(model.name, versionToUse)
     zip.file('README.md', readmeContent)
 
     // Generate the ZIP buffer
@@ -194,7 +226,8 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
       { 
         originalError: error instanceof Error ? error.message : 'Unknown error',
         modelId,
-        modelName: model.name
+        modelName: model.name,
+        version: versionToUse
       }
     )
   }
@@ -205,13 +238,13 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
   return new NextResponse(zipBuffer, {
     headers: {
       'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${sanitizeFilename(model.name)}_library.zip"`
+      'Content-Disposition': `attachment; filename="${sanitizeFilename(model.name)}_v${versionToUse}_library.zip"`
     }
   })
 }
 
-function generateReadmeContent(modelName: string): string {
-  return `# ${modelName} - Generated C Library
+function generateReadmeContent(modelName: string, version: number): string {
+  return `# ${modelName} - Generated C Library (Version ${version})
 
 This library was automatically generated from a visual block diagram model.
 
@@ -219,6 +252,11 @@ This library was automatically generated from a visual block diagram model.
 - ${modelName}.h - Header file with data structures and function declarations
 - ${modelName}.c - Implementation file with the model logic
 - library.properties - PlatformIO library configuration
+
+## Version Information:
+- Model: ${modelName}
+- Version: ${version}
+- Generated on: ${new Date().toISOString()}
 
 ## Usage:
 1. Include this library in your PlatformIO project
@@ -250,8 +288,6 @@ void loop() {
   delay(10); // Match the time step
 }
 \`\`\`
-
-Generated on: ${new Date().toISOString()}
 `
 }
 

@@ -1,14 +1,25 @@
 //app/api/automations/[token]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabaseClient'
+import { createClient } from '@supabase/supabase-js'
 import { CodeGenerator } from '@/lib/codeGeneration'
 import { SimulationEngine } from '@/lib/simulationEngine'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
 import JSZip from 'jszip'
 
+// Create a server-side Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+
+const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    persistSession: false
+  }
+})
+
 interface AutomationRequest {
   action: 'generateCode' | 'simulate' | 'validateModel'
   modelId: string
+  version?: number
   parameters?: Record<string, any>
 }
 
@@ -16,6 +27,7 @@ interface AutomationResponse {
   success: boolean
   action: string
   modelId: string
+  version?: number
   timestamp: string
   data?: any
   errors?: string[]
@@ -73,8 +85,8 @@ async function automationHandler(
     )
   }
 
-  // Fetch the model using service role (bypasses RLS for automation)
-  const { data: model, error: dbError } = await supabase
+  // Fetch the model metadata using service role (bypasses RLS for automation)
+  const { data: model, error: dbError } = await supabaseServer
     .from('models')
     .select('*')
     .eq('id', body.modelId)
@@ -93,18 +105,38 @@ async function automationHandler(
     )
   }
 
-  // Validate model structure
-  if (!model.data || !model.data.sheets || !Array.isArray(model.data.sheets)) {
+  // Determine which version to use
+  const versionToUse = body.version || model.latest_version || 1
+
+  // Fetch the specific version data
+  const { data: versionData, error: versionError } = await supabaseServer
+    .from('model_versions')
+    .select('*')
+    .eq('model_id', body.modelId)
+    .eq('version', versionToUse)
+    .single()
+
+  if (versionError || !versionData) {
+    throw new AppError(
+      `Version ${versionToUse} not found for this model`,
+      404,
+      ErrorTypes.NOT_FOUND,
+      { modelId: body.modelId, requestedVersion: versionToUse, latestVersion: model.latest_version }
+    )
+  }
+
+  // Validate version data structure
+  if (!versionData.data || !versionData.data.sheets || !Array.isArray(versionData.data.sheets)) {
     throw new AppError(
       'Invalid model structure: missing or invalid sheets data',
       400,
       ErrorTypes.VALIDATION_ERROR,
-      { modelId: body.modelId, modelName: model.name }
+      { modelId: body.modelId, modelName: model.name, version: versionToUse }
     )
   }
 
   // Execute the requested action
-  const result = await executeAction(body.action, model, body.parameters)
+  const result = await executeAction(body.action, model, versionData, body.parameters)
 
   return NextResponse.json(result)
 }
@@ -126,26 +158,28 @@ function isValidToken(token: string): boolean {
 
 async function executeAction(
   action: string, 
-  model: any, 
+  model: any,
+  versionData: any,
   parameters?: Record<string, any>
 ): Promise<AutomationResponse> {
   const baseResponse: AutomationResponse = {
     success: false,
     action,
     modelId: model.id,
+    version: versionData.version,
     timestamp: new Date().toISOString()
   }
 
   try {
     switch (action) {
       case 'generateCode':
-        return await handleGenerateCode(model, baseResponse)
+        return await handleGenerateCode(model, versionData, baseResponse)
       
       case 'simulate':
-        return await handleSimulate(model, baseResponse, parameters)
+        return await handleSimulate(model, versionData, baseResponse, parameters)
       
       case 'validateModel':
-        return await handleValidateModel(model, baseResponse)
+        return await handleValidateModel(model, versionData, baseResponse)
       
       default:
         throw new AppError(
@@ -164,8 +198,8 @@ async function executeAction(
   }
 }
 
-async function handleGenerateCode(model: any, baseResponse: AutomationResponse): Promise<AutomationResponse> {
-  const sheets = model.data.sheets || []
+async function handleGenerateCode(model: any, versionData: any, baseResponse: AutomationResponse): Promise<AutomationResponse> {
+  const sheets = versionData.data.sheets || []
   const mainSheet = sheets.find((s: any) => s.id === 'main') || sheets[0]
 
   if (!mainSheet) {
@@ -216,7 +250,7 @@ async function handleGenerateCode(model: any, baseResponse: AutomationResponse):
     ...baseResponse,
     success: true,
     data: {
-      filesGenerated: result.files.map(f => f.name),
+      filesGenerated: result.files.map((f: any) => f.name),
       summary: {
         headerFile: `${model.name}.h`,
         sourceFile: `${model.name}.c`,
@@ -229,11 +263,12 @@ async function handleGenerateCode(model: any, baseResponse: AutomationResponse):
 }
 
 async function handleSimulate(
-  model: any, 
+  model: any,
+  versionData: any,
   baseResponse: AutomationResponse, 
   parameters?: Record<string, any>
 ): Promise<AutomationResponse> {
-  const sheets = model.data.sheets || []
+  const sheets = versionData.data.sheets || []
   const mainSheet = sheets.find((s: any) => s.id === 'main') || sheets[0]
 
   if (!mainSheet) {
@@ -283,8 +318,8 @@ async function handleSimulate(
 
   // Use model defaults if no parameters provided
   if (!parameters) {
-    config.timeStep = model.data.globalSettings?.simulationTimeStep || 0.01
-    config.duration = model.data.globalSettings?.simulationDuration || 10.0
+    config.timeStep = versionData.data.globalSettings?.simulationTimeStep || 0.01
+    config.duration = versionData.data.globalSettings?.simulationDuration || 10.0
   }
 
   let engine: SimulationEngine
@@ -302,7 +337,7 @@ async function handleSimulate(
 
   // Collect output port values
   const outputPortValues = engine.getOutputPortValues()
-  const outputSummary: Record<string, number> = {}
+  const outputSummary: Record<string, number | boolean | number[] | boolean[]> = {}
   outputPortValues.forEach((value, portName) => {
     outputSummary[portName] = value
   })
@@ -336,8 +371,8 @@ async function handleSimulate(
   }
 }
 
-async function handleValidateModel(model: any, baseResponse: AutomationResponse): Promise<AutomationResponse> {
-  const sheets = model.data.sheets || []
+async function handleValidateModel(model: any, versionData: any, baseResponse: AutomationResponse): Promise<AutomationResponse> {
+  const sheets = versionData.data.sheets || []
   
   if (sheets.length === 0) {
     return {

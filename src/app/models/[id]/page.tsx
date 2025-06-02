@@ -23,7 +23,7 @@ import { parseType } from '@/lib/typeValidator'
 import { useModelStore } from '@/lib/modelStore'
 import { useAutoSave } from '@/lib/useAutoSave'
 import { use, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
 interface ModelEditorPageProps {
@@ -35,6 +35,7 @@ interface ModelEditorPageProps {
 export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const { user, loading } = useUser()
   const router = useRouter()
+  const searchParams = useSearchParams()
   
   // Zustand store
   const {
@@ -42,7 +43,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     model, sheets, activeSheetId, blocks, wires,
     selectedBlockId, selectedWireId, configBlock,
     simulationResults, isSimulating, simulationEngine, outputPortValues,
-    modelLoading, saving, error,
+    modelLoading, saving, error, currentVersion, isOlderVersion,
     
     // Actions
     setModel, setError, setModelLoading, saveModel,
@@ -55,9 +56,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   
   // Unwrap the params Promise
   const { id } = use(params)
+  const requestedVersion = searchParams.get('version')
 
-  // Enable auto-save
-  useAutoSave()
+  // Enable auto-save only for latest version and when model is fully loaded
+  useAutoSave(!isOlderVersion && !modelLoading && !!model)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -69,7 +71,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     if (user && id) {
       fetchModel()
     }
-  }, [user, id])
+  }, [user, id, requestedVersion])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -101,22 +103,42 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
   const fetchModel = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch model metadata
+      const { data: modelData, error: modelError } = await supabase
         .from('models')
         .select('*')
         .eq('id', id)
         .single()
 
-      if (error) {
-        if (error.code === 'PGRST116') {
+      if (modelError) {
+        if (modelError.code === 'PGRST116') {
           setError('Model not found')
         } else {
-          throw error
+          throw modelError
         }
         return
       }
 
-      initializeFromModel(data)
+      // Determine which version to load
+      const versionToLoad = requestedVersion 
+        ? parseInt(requestedVersion) 
+        : modelData.latest_version || 1
+
+      // Fetch the specific version
+      const { data: versionData, error: versionError } = await supabase
+        .from('model_versions')
+        .select('*')
+        .eq('model_id', id)
+        .eq('version', versionToLoad)
+        .single()
+
+      if (versionError) {
+        console.error('Error fetching version:', versionError)
+        setError(`Version ${versionToLoad} not found`)
+        return
+      }
+
+      initializeFromModel(modelData, versionData)
     } catch (error) {
       console.error('Error fetching model:', error)
       setError('Failed to load model')
@@ -127,11 +149,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
   const handleSave = async () => {
     const success = await saveModel()
-    if (success) {
-      // Optional: Show success message
-      console.log('Model saved successfully')
+    if (success && isOlderVersion) {
+      // If we saved an older version as a new model, we should have navigated away
+      // This is handled in the saveModel function
     }
-    // Error messages are handled by the store
   }
 
   const getDefaultParameters = (blockType: string) => {
@@ -264,6 +285,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
     console.log('Block deleted:', block.name)
   }
+
   const handleWireCreate = (sourcePort: PortInfo, targetPort: PortInfo) => {
     // Get the source and target blocks
     const sourceBlock = blocks.find(b => b.id === sourcePort.blockId)
@@ -315,65 +337,65 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     console.log('Wire deleted:', wireId)
   }
 
-const handleRunSimulation = async () => {
-  if (blocks.length === 0) {
-    alert('No blocks to simulate')
-    return
-  }
-
-  // Validate model before simulation
-  const validationResult = validateModelTypeCompatibility(blocks, wires)
-
-  // Separate errors and warnings
-  const errors = validationResult.errors
-  const warnings = validationResult.warnings
-
-  // Block on errors
-  if (errors.length > 0) {
-    const errorMessages = errors.slice(0, 5).map(e => `• ${e.message}`).join('\n')
-    alert(
-      `Cannot run simulation due to ${errors.length} type compatibility error${errors.length > 1 ? 's' : ''}:\n\n` +
-      `${errorMessages}${errors.length > 5 ? `\n\n...and ${errors.length - 5} more errors` : ''}\n\n` +
-      'Please fix these errors before running the simulation. Use the "Validate Model" button to see all issues.'
-    )
-    return
-  }
-
-  // Allow bypass for warnings
-  if (warnings.length > 0) {
-    const warningMessages = warnings.slice(0, 3).map(w => `• ${w.message}`).join('\n')
-    const proceed = window.confirm(
-      `Found ${warnings.length} warning${warnings.length > 1 ? 's' : ''}:\n\n` +
-      `${warningMessages}${warnings.length > 3 ? `\n\n...and ${warnings.length - 3} more warnings` : ''}\n\n` +
-      'Continue with simulation anyway?'
-    )
-    if (!proceed) return
-  }
-
-  // Continue with existing simulation code...
-  setIsSimulating(true)
-  try {
-    saveCurrentSheetData()
-    
-    const config = {
-      timeStep: model?.data?.globalSettings?.simulationTimeStep || 0.01,
-      duration: model?.data?.globalSettings?.simulationDuration || 10.0
+  const handleRunSimulation = async () => {
+    if (blocks.length === 0) {
+      alert('No blocks to simulate')
+      return
     }
-    
-    const engine = new SimulationEngine(blocks, wires, config, undefined, sheets)
-    const results = engine.run()
-    
-    setSimulationResults(results)
-    setSimulationEngine(engine)
-    setOutputPortValues(engine.getOutputPortValues() as Map<string, number>)
-    console.log('Simulation completed:', results)
-  } catch (error) {
-    console.error('Simulation error:', error)
-    alert('Simulation failed. Check console for details.')
-  } finally {
-    setIsSimulating(false)
+
+    // Validate model before simulation
+    const validationResult = validateModelTypeCompatibility(blocks, wires)
+
+    // Separate errors and warnings
+    const errors = validationResult.errors
+    const warnings = validationResult.warnings
+
+    // Block on errors
+    if (errors.length > 0) {
+      const errorMessages = errors.slice(0, 5).map(e => `• ${e.message}`).join('\n')
+      alert(
+        `Cannot run simulation due to ${errors.length} type compatibility error${errors.length > 1 ? 's' : ''}:\n\n` +
+        `${errorMessages}${errors.length > 5 ? `\n\n...and ${errors.length - 5} more errors` : ''}\n\n` +
+        'Please fix these errors before running the simulation. Use the "Validate Model" button to see all issues.'
+      )
+      return
+    }
+
+    // Allow bypass for warnings
+    if (warnings.length > 0) {
+      const warningMessages = warnings.slice(0, 3).map(w => `• ${w.message}`).join('\n')
+      const proceed = window.confirm(
+        `Found ${warnings.length} warning${warnings.length > 1 ? 's' : ''}:\n\n` +
+        `${warningMessages}${warnings.length > 3 ? `\n\n...and ${warnings.length - 3} more warnings` : ''}\n\n` +
+        'Continue with simulation anyway?'
+      )
+      if (!proceed) return
+    }
+
+    // Continue with existing simulation code...
+    setIsSimulating(true)
+    try {
+      saveCurrentSheetData()
+      
+      const config = {
+        timeStep: 0.01,
+        duration: 10.0
+      }
+      
+      const engine = new SimulationEngine(blocks, wires, config, undefined, sheets)
+      const results = engine.run()
+      
+      setSimulationResults(results)
+      setSimulationEngine(engine)
+      setOutputPortValues(engine.getOutputPortValues() as Map<string, number>)
+      console.log('Simulation completed:', results)
+    } catch (error) {
+      console.error('Simulation error:', error)
+      alert('Simulation failed. Check console for details.')
+    } finally {
+      setIsSimulating(false)
+    }
   }
-}
 
   const handleExportCSV = () => {
     if (!simulationEngine) {
@@ -419,7 +441,8 @@ const handleRunSimulation = async () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          modelId: model.id
+          modelId: model.id,
+          version: currentVersion
         }),
       })
 
@@ -433,7 +456,7 @@ const handleRunSimulation = async () => {
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `${model.name}_library.zip`
+      link.download = `${model.name}_v${currentVersion}_library.zip`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -603,6 +626,11 @@ const handleRunSimulation = async () => {
               </Link>
               <h1 className="text-xl font-semibold text-gray-900">
                 {model.name}
+                {isOlderVersion && (
+                  <span className="ml-2 text-sm text-amber-600 font-normal">
+                    (Version {currentVersion} of {model.latest_version})
+                  </span>
+                )}
                 {error && (
                   <span className="ml-2 text-sm text-red-600 font-normal">
                     ({error})
@@ -620,7 +648,7 @@ const handleRunSimulation = async () => {
                 onClick={handleSave}
                 disabled={saving}
               >
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? 'Saving...' : (isOlderVersion ? 'Save as New Model' : 'Save')}
               </button>
               
               {/* Validation Button */}
@@ -681,7 +709,7 @@ const handleRunSimulation = async () => {
             onBlockMove={handleBlockMove}
             onBlockSelect={setSelectedBlockId}
             onBlockDoubleClick={handleBlockDoubleClick}
-            onBlockDelete={handleBlockDelete}  // Add this
+            onBlockDelete={handleBlockDelete}
             onWireCreate={handleWireCreate}
             onWireSelect={setSelectedWireId}
             onWireDelete={handleWireDelete}
@@ -695,6 +723,11 @@ const handleRunSimulation = async () => {
               <div className="text-sm text-gray-500 mt-1">
                 Active Sheet: {sheets.find(s => s.id === activeSheetId)?.name || 'Unknown'}
               </div>
+              {isOlderVersion && (
+                <div className="text-sm text-amber-600 mt-1">
+                  Viewing older version - changes will create new model
+                </div>
+              )}
             </div>
             <div className="flex-1 overflow-y-auto">
               {simulationResults ? (
@@ -722,7 +755,7 @@ const handleRunSimulation = async () => {
                         <SignalDisplay
                           block={block}
                           signalData={signalData}
-                          isRunning={false}  // Simulation is complete when displaying results
+                          isRunning={false}
                         />
                       </div>
                     )

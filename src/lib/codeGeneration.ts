@@ -907,3 +907,73 @@ function hasVectorTransferFunctions(sheet: Sheet, blockTypes: Map<string, string
   
   return false
 }
+
+export class CodeGenerator {
+  private blocks: BlockData[]
+  private connections: WireData[]
+  private sheets: Sheet[]
+  private modelName: string
+
+  constructor(blocks: BlockData[], connections: WireData[], sheets: Sheet[], modelName: string) {
+    this.blocks = blocks
+    this.connections = connections
+    this.sheets = sheets
+    this.modelName = modelName
+  }
+
+  generateCode(): { success: boolean; files?: { name: string; content: string }[]; errors?: string[] } {
+    try {
+      // Create options for the existing generateCCode function
+      const options: CodeGenerationOptions = {
+        modelName: this.modelName,
+        sheets: this.sheets,
+        globalSettings: {
+          simulationTimeStep: 0.01,
+          simulationDuration: 10.0
+        }
+      }
+
+      // Call the existing function
+      const result = generateCCode(options)
+
+      // Return in the expected format
+      return {
+        success: true,
+        files: [
+          {
+            name: `${result.fileName}.h`,
+            content: result.headerFile
+          },
+          {
+            name: `${result.fileName}.c`,
+            content: result.sourceFile
+          },
+          {
+            name: 'library.properties',
+            content: this.generateLibraryProperties()
+          }
+        ]
+      }
+    } catch (error) {
+      return {
+        success: false,
+        errors: [error instanceof Error ? error.message : 'Unknown error during code generation']
+      }
+    }
+  }
+
+  private generateLibraryProperties(): string {
+    const safeName = this.modelName.replace(/[^a-zA-Z0-9_]/g, '_')
+    return `name=${safeName}
+version=1.0.0
+author=Generated
+maintainer=Generated
+sentence=Generated library from visual model ${this.modelName}
+paragraph=This library was automatically generated from a block diagram model.
+category=Signal Input/Output
+url=
+architectures=*
+includes=${safeName}.h
+`
+  }
+}

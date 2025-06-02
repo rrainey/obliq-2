@@ -3,7 +3,7 @@ import { subscribeWithSelector } from 'zustand/middleware'
 import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
 import { SimulationResults, SimulationEngine } from '@/lib/simulationEngine'
-import { Model } from '@/lib/types'
+import { Model, ModelVersion } from '@/lib/types'
 import { supabase } from '@/lib/supabaseClient'
 
 export interface Sheet {
@@ -20,6 +20,8 @@ export interface Sheet {
 export interface ModelState {
   // Model data
   model: Model | null
+  currentVersion: number
+  isOlderVersion: boolean
   sheets: Sheet[]
   activeSheetId: string
   
@@ -51,10 +53,14 @@ export interface ModelState {
 export interface ModelActions {
   // Model actions
   setModel: (model: Model | null) => void
+  setCurrentVersion: (version: number) => void
+  setIsOlderVersion: (isOlder: boolean) => void
   setError: (error: string | null) => void
   setModelLoading: (loading: boolean) => void
   saveModel: () => Promise<boolean>
+  saveAsNewModel: (newName: string) => Promise<string | null>
   saveAutoSave: () => Promise<boolean>
+  deleteAutoSave: () => Promise<void>
   enableAutoSave: () => void
   disableAutoSave: () => void
   
@@ -89,7 +95,7 @@ export interface ModelActions {
   // Composite actions
   switchToSheet: (sheetId: string) => void
   updateCurrentSheet: (updates: Partial<Sheet>) => void
-  initializeFromModel: (model: Model) => void
+  initializeFromModel: (model: Model, versionData: ModelVersion) => void
   saveCurrentSheetData: () => void
 }
 
@@ -99,6 +105,8 @@ export const useModelStore = create<ModelStore>()(
   subscribeWithSelector((set, get) => ({
     // Initial state
     model: null,
+    currentVersion: 1,
+    isOlderVersion: false,
     sheets: [],
     activeSheetId: 'main',
     blocks: [],
@@ -118,6 +126,8 @@ export const useModelStore = create<ModelStore>()(
 
     // Model actions
     setModel: (model) => set({ model }),
+    setCurrentVersion: (currentVersion) => set({ currentVersion }),
+    setIsOlderVersion: (isOlderVersion) => set({ isOlderVersion }),
     setError: (error) => set({ error }),
     setModelLoading: (modelLoading) => set({ modelLoading }),
     
@@ -129,6 +139,22 @@ export const useModelStore = create<ModelStore>()(
         return false
       }
 
+      // If viewing an older version, prompt for save as new
+      if (state.isOlderVersion) {
+        const newName = window.prompt(
+          `You are viewing version ${state.currentVersion} of "${state.model.name}".\n\n` +
+          'To save changes, please enter a name for the new model:',
+          `${state.model.name} (v${state.currentVersion} modified)`
+        )
+        
+        if (!newName) {
+          return false
+        }
+        
+        const newModelId = await get().saveAsNewModel(newName)
+        return newModelId !== null
+      }
+
       set({ saving: true, error: null })
       
       try {
@@ -138,43 +164,83 @@ export const useModelStore = create<ModelStore>()(
         // Get the updated model with current sheet data
         const updatedState = get()
         
-        // Double-check model still exists after state update
         if (!updatedState.model) {
           set({ error: 'Model was lost during save preparation', saving: false })
           return false
         }
         
         const modelData = {
-          ...updatedState.model.data,
-          sheets: updatedState.sheets
+          version: "1.0",
+          metadata: {
+            created: updatedState.model.created_at,
+            description: `Model ${updatedState.model.name}`
+          },
+          sheets: updatedState.sheets,
+          globalSettings: {
+            simulationTimeStep: 0.01,
+            simulationDuration: 10.0
+          }
         }
 
-        const { error } = await supabase
+        // Get the next version number
+        const { data: nextVersionData, error: versionError } = await supabase
+          .rpc('get_next_version_number', { p_model_id: updatedState.model.id })
+
+        if (versionError) {
+          console.error('Error getting next version:', versionError)
+          set({ error: 'Failed to get next version number', saving: false })
+          return false
+        }
+
+        const nextVersion = nextVersionData || 1
+
+        // Create new version
+        const { error: insertError } = await supabase
+          .from('model_versions')
+          .insert({
+            model_id: updatedState.model.id,
+            version: nextVersion,
+            data: modelData
+          })
+
+        if (insertError) {
+          console.error('Save error:', insertError)
+          set({ error: `Failed to save model: ${insertError.message}`, saving: false })
+          return false
+        }
+
+        // Update model metadata
+        const { error: updateError } = await supabase
           .from('models')
           .update({ 
-            data: modelData,
+            latest_version: nextVersion,
             updated_at: new Date().toISOString()
           })
           .eq('id', updatedState.model.id)
 
-        if (error) {
-          console.error('Save error:', error)
-          set({ error: `Failed to save model: ${error.message}`, saving: false })
+        if (updateError) {
+          console.error('Update error:', updateError)
+          set({ error: `Failed to update model: ${updateError.message}`, saving: false })
           return false
         }
 
-        // Update the model with the new data
+        // Delete auto-save after successful save
+        await get().deleteAutoSave()
+
+        // Update the model with the new version
         set({ 
           model: {
             ...updatedState.model,
-            data: modelData,
+            latest_version: nextVersion,
             updated_at: new Date().toISOString()
           },
+          currentVersion: nextVersion,
+          isOlderVersion: false,
           saving: false,
           error: null
         })
         
-        console.log('Model saved successfully')
+        console.log(`Model saved as version ${nextVersion}`)
         return true
 
       } catch (error) {
@@ -186,6 +252,78 @@ export const useModelStore = create<ModelStore>()(
         return false
       }
     },
+
+    saveAsNewModel: async (newName: string) => {
+      const state = get()
+      
+      if (!state.model) {
+        set({ error: 'No model to save' })
+        return null
+      }
+
+      set({ saving: true, error: null })
+      
+      try {
+        // Ensure current sheet data is saved
+        get().saveCurrentSheetData()
+        
+        const updatedState = get()
+        if (!updatedState.model) {
+          set({ error: 'Model was lost during save preparation', saving: false })
+          return null
+        }
+        
+        const modelData = {
+          version: "1.0",
+          metadata: {
+            created: new Date().toISOString(),
+            description: `Model ${newName}`
+          },
+          sheets: updatedState.sheets,
+          globalSettings: {
+            simulationTimeStep: 0.01,
+            simulationDuration: 10.0
+          }
+        }
+
+        // Create new model metadata
+        const { data: newModel, error: modelError } = await supabase
+          .from('models')
+          .insert({
+            user_id: updatedState.model.user_id,
+            name: newName,
+            latest_version: 1
+          })
+          .select()
+          .single()
+
+        if (modelError) throw modelError
+
+        // Create version 1 for the new model
+        const { error: versionError } = await supabase
+          .from('model_versions')
+          .insert({
+            model_id: newModel.id,
+            version: 1,
+            data: modelData
+          })
+
+        if (versionError) throw versionError
+
+        set({ saving: false, error: null })
+        
+        // Return the new model ID so we can navigate to it
+        return newModel.id
+
+      } catch (error) {
+        console.error('Save as new model error:', error)
+        set({ 
+          error: `Failed to save as new model: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          saving: false 
+        })
+        return null
+      }
+    },
     
     saveAutoSave: async () => {
       const state = get()
@@ -194,11 +332,22 @@ export const useModelStore = create<ModelStore>()(
         return false
       }
 
+      // Don't auto-save if we're still loading or if model doesn't have an ID
+      if (state.modelLoading || !state.model.id) {
+        console.log('Skipping auto-save: model not ready')
+        return false
+      }
+
+      // Don't auto-save if there are no sheets
+      if (state.sheets.length === 0) {
+        console.log('Skipping auto-save: no sheets')
+        return false
+      }
+
       try {
         // Ensure current sheet data is saved
         get().saveCurrentSheetData()
         
-        // Get the updated state and check model still exists
         const updatedState = get()
         if (!updatedState.model) {
           console.error('Model was lost during auto-save preparation')
@@ -206,28 +355,38 @@ export const useModelStore = create<ModelStore>()(
         }
         
         const modelData = {
-          ...updatedState.model.data,
-          sheets: updatedState.sheets
+          version: "1.0",
+          metadata: {
+            created: updatedState.model.created_at,
+            description: `Model ${updatedState.model.name} (auto-save)`
+          },
+          sheets: updatedState.sheets,
+          globalSettings: {
+            simulationTimeStep: 0.01,
+            simulationDuration: 10.0
+          }
         }
-
-        // Create auto-save model name
-        const autoSaveName = `${updatedState.model.name} (auto-save)`
         
-        // Check if auto-save model already exists
-        const { data: existingAutoSave } = await supabase
-          .from('models')
+        // Check if auto-save (version 0) already exists
+        const { data: existingAutoSave, error: checkError } = await supabase
+          .from('model_versions')
           .select('id')
-          .eq('user_id', updatedState.model.user_id)
-          .eq('name', autoSaveName)
-          .single()
+          .eq('model_id', updatedState.model.id)
+          .eq('version', 0)
+          .maybeSingle() // Use maybeSingle instead of single to handle no results gracefully
+
+        if (checkError) {
+          console.error('Error checking for existing auto-save:', checkError)
+          return false
+        }
 
         if (existingAutoSave) {
           // Update existing auto-save
           const { error } = await supabase
-            .from('models')
+            .from('model_versions')
             .update({ 
               data: modelData,
-              updated_at: new Date().toISOString()
+              created_at: new Date().toISOString()
             })
             .eq('id', existingAutoSave.id)
 
@@ -238,13 +397,11 @@ export const useModelStore = create<ModelStore>()(
         } else {
           // Create new auto-save
           const { error } = await supabase
-            .from('models')
+            .from('model_versions')
             .insert({
-              user_id: updatedState.model.user_id,
-              name: autoSaveName,
-              data: modelData,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              model_id: updatedState.model.id,
+              version: 0,
+              data: modelData
             })
 
           if (error) {
@@ -260,6 +417,23 @@ export const useModelStore = create<ModelStore>()(
       } catch (error) {
         console.error('Auto-save error:', error)
         return false
+      }
+    },
+
+    deleteAutoSave: async () => {
+      const state = get()
+      if (!state.model) return
+
+      try {
+        await supabase
+          .from('model_versions')
+          .delete()
+          .eq('model_id', state.model.id)
+          .eq('version', 0)
+        
+        console.log('Auto-save deleted')
+      } catch (error) {
+        console.error('Error deleting auto-save:', error)
       }
     },
     
@@ -377,19 +551,6 @@ export const useModelStore = create<ModelStore>()(
       )
       
       set({ sheets: updatedSheets })
-      
-      // Also update the model data
-      if (state.model) {
-        set({
-          model: {
-            ...state.model,
-            data: {
-              ...state.model.data,
-              sheets: updatedSheets
-            }
-          }
-        })
-      }
     },
     
     saveCurrentSheetData: () => {
@@ -400,9 +561,9 @@ export const useModelStore = create<ModelStore>()(
       })
     },
     
-    initializeFromModel: (model) => {
-      if (model?.data?.sheets) {
-        const sheets = model.data.sheets
+    initializeFromModel: (model, versionData) => {
+      if (versionData?.data?.sheets) {
+        const sheets = versionData.data.sheets
         
         // Data integrity check - model must have at least one sheet
         if (sheets.length === 0) {
@@ -414,10 +575,12 @@ export const useModelStore = create<ModelStore>()(
         }
         
         const firstSheetId = sheets[0].id
-        const firstSheet = sheets[0] // We know sheets[0] exists due to length check above
+        const firstSheet = sheets[0]
         
         set({
           model,
+          currentVersion: versionData.version,
+          isOlderVersion: versionData.version < model.latest_version,
           sheets,
           activeSheetId: firstSheetId,
           blocks: firstSheet?.blocks || [],
