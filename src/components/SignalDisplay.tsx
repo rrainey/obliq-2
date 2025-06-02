@@ -29,40 +29,64 @@ export default function SignalDisplay({ block, signalData = [], isRunning = fals
   const [vectorSize, setVectorSize] = useState(1)
   const [isVector, setIsVector] = useState(false)
   
-  // Get display parameters
   const maxSamples = block.parameters?.maxSamples || 1000
   const displayName = block.name
+
+  console.log('SignalDisplay maxSamples:', maxSamples, 'from block:', block)
+
+useEffect(() => {
+  if (signalData.length === 0) {
+    setChartData([])
+    return
+  }
   
-  useEffect(() => {
-    if (signalData.length === 0) {
-      setChartData([])
-      return
-    }
+  console.log('SignalDisplay useEffect - signalData:', {
+    length: signalData.length,
+    isArray: Array.isArray(signalData),
+    first: signalData[0],
+    last: signalData[signalData.length - 1]
+  })
+  
+  // Determine if we're dealing with vector data
+  const firstValue = signalData[0]?.value
+  const isVectorData = Array.isArray(firstValue)
+  setIsVector(isVectorData)
+  
+  if (isVectorData) {
+    const size = (firstValue as any[]).length
+    setVectorSize(size)
     
-    // Determine if we're dealing with vector data
-    const firstValue = signalData[0]?.value
-    const isVectorData = Array.isArray(firstValue)
-    setIsVector(isVectorData)
+    // Transform vector data for multi-line chart
+    console.log('About to slice with maxSamples:', maxSamples)
+    const slicedData = signalData.slice(-maxSamples)
+    console.log('After slice:', slicedData.length, 'samples')
     
-    if (isVectorData) {
-      const size = (firstValue as any[]).length
-      setVectorSize(size)
+
+
+    const transformedData = slicedData.map((point, index) => {
+      const dataPoint: any = { 
+        index: index,  // Add index
+        time: point.time.toFixed(3),  // Keep as string for display
+        element_0: 0,  // Initialize to ensure keys exist
+        element_1: 0,
+        element_2: 0
+      }
       
-      // Transform vector data for multi-line chart
-      const transformedData = signalData.slice(-maxSamples).map((point, index) => {
-        const dataPoint: any = { time: point.time.toFixed(3) }
-        
-        if (Array.isArray(point.value)) {
-          point.value.forEach((val, i) => {
-            dataPoint[`element_${i}`] = typeof val === 'number' ? val : (val ? 1 : 0)
-          })
-        }
-        
-        return dataPoint
-      })
+      if (Array.isArray(point.value)) {
+        point.value.forEach((val, i) => {
+          dataPoint[`element_${i}`] = typeof val === 'number' ? val : (val ? 1 : 0)
+        })
+      }
       
-      setChartData(transformedData)
-    } else {
+      return dataPoint
+    })
+    
+    console.log('Final transformedData length:', transformedData.length)
+    console.log('Sample of transformed data:', transformedData.slice(0, 3))
+    console.log('Chart data being set with', transformedData.length, 'points')
+    
+    setChartData(transformedData)
+  } else {
       // Transform scalar data
       const transformedData = signalData.slice(-maxSamples).map((point) => ({
         time: point.time.toFixed(3),
@@ -74,36 +98,52 @@ export default function SignalDisplay({ block, signalData = [], isRunning = fals
   }, [signalData, maxSamples])
   
   // Calculate Y-axis domain
-  const getYDomain = () => {
-    if (chartData.length === 0) return [-1, 1]
+const getYDomain = () => {
+  if (chartData.length === 0) return [-1, 1]
+  
+  let min = Infinity
+  let max = -Infinity
+  
+  console.log('getYDomain - checking data, isVector:', isVector, 'vectorSize:', vectorSize)
+  
+  chartData.forEach((point, idx) => {
+    if (idx < 3) console.log('Point sample:', point) // Log first few points
     
-    let min = Infinity
-    let max = -Infinity
-    
-    chartData.forEach(point => {
-      if (isVector) {
-        for (let i = 0; i < vectorSize; i++) {
-          const val = point[`element_${i}`]
-          if (typeof val === 'number') {
-            min = Math.min(min, val)
-            max = Math.max(max, val)
-          }
-        }
-      } else {
-        if (typeof point.value === 'number') {
-          min = Math.min(min, point.value)
-          max = Math.max(max, point.value)
+    if (isVector) {
+      for (let i = 0; i < vectorSize; i++) {
+        const val = point[`element_${i}`]
+        if (typeof val === 'number') {
+          min = Math.min(min, val)
+          max = Math.max(max, val)
         }
       }
-    })
-    
-    // Add some padding
-    const range = max - min
-    const padding = range * 0.1 || 0.1
-    return [min - padding, max + padding]
-  }
+    } else {
+      if (typeof point.value === 'number') {
+        min = Math.min(min, point.value)
+        max = Math.max(max, point.value)
+      }
+    }
+  })
+  
+  console.log('getYDomain result:', { min, max })
+  
+  // Add some padding
+  const range = max - min
+  const padding = range * 0.1 || 0.1
+  return [min - padding, max + padding]
+}
   
   const yDomain = getYDomain()
+
+  console.log('SignalDisplay render - chartData:', {
+  length: chartData.length,
+  sample: chartData.slice(0, 3),
+  hasData: chartData.length > 0
+})
+
+console.log('Y-axis domain:', yDomain)
+console.log('First few data points:', chartData.slice(0, 5))
+console.log('Last few data points:', chartData.slice(-5))
   
   return (
     <div className="bg-white rounded-lg shadow-md p-4">
@@ -123,18 +163,22 @@ export default function SignalDisplay({ block, signalData = [], isRunning = fals
       </div>
       
       <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={256}>
           <LineChart
-            data={chartData}
-            margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
-          >
+              key={`chart-${chartData.length}-${vectorSize}`}  
+              data={chartData}
+              margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
+            >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
             <XAxis 
-              dataKey="time" 
-              label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }}
-              tick={{ fontSize: 12 }}
-              stroke="#6b7280"
-            />
+      dataKey="time"
+      type="number"  // Explicitly set type to number
+      domain={['dataMin', 'dataMax']}  // Let Recharts calculate the domain
+      label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }}
+      tick={{ fontSize: 12 }}
+      stroke="#6b7280"
+      tickFormatter={(value) => value.toFixed(2)}  // Format for display
+    />
             <YAxis 
               domain={yDomain}
               label={{ value: 'Value', angle: -90, position: 'insideLeft' }}
@@ -152,39 +196,36 @@ export default function SignalDisplay({ block, signalData = [], isRunning = fals
               formatter={(value: any) => typeof value === 'number' ? value.toFixed(4) : value}
             />
             
-            {isVector ? (
-              <>
-                <Legend 
-                  wrapperStyle={{ fontSize: '12px' }}
-                  iconType="line"
-                  formatter={(value) => {
-                    const index = parseInt(value.replace('element_', ''))
-                    return `Element ${index}`
-                  }}
+           {isVector ? (
+            // Remove the fragment and render Lines directly
+            [
+              <Legend 
+                key="legend"
+                wrapperStyle={{ fontSize: '12px' }}
+                iconType="line"
+              />,
+              ...Array.from({ length: vectorSize }).map((_, i) => (
+                <Line
+                  key={`element_${i}`}
+                  type="monotone"
+                  dataKey={`element_${i}`}
+                  stroke={LINE_COLORS[i % LINE_COLORS.length]}
+                  strokeWidth={2}
+                  dot={false}
+                  name={`Element ${i}`}
                 />
-                {Array.from({ length: vectorSize }).map((_, i) => (
-                  <Line
-                    key={`element_${i}`}
-                    type="monotone"
-                    dataKey={`element_${i}`}
-                    stroke={LINE_COLORS[i % LINE_COLORS.length]}
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                    name={`element_${i}`}
-                  />
-                ))}
-              </>
-            ) : (
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke={LINE_COLORS[0]}
-                strokeWidth={2}
-                dot={false}
-                isAnimationActive={false}
-              />
-            )}
+              ))
+            ]
+          ) : (
+            <Line
+              type="monotone"
+              dataKey="value"
+              stroke={LINE_COLORS[0]}
+              strokeWidth={2}
+              dot={false}
+              isAnimationActive={false}
+            />
+          )}
           </LineChart>
         </ResponsiveContainer>
       </div>

@@ -143,8 +143,13 @@ export class SimulationEngine {
   private getInitialInternalState(blockType: string, parameters?: Record<string, any>): any {
     switch (blockType) {
       case 'source':
+        // Get the actual value from parameters
+        const sourceBlock = this.blocks.find(b => b.id === blockType)
+        const actualValue = parameters?.value || 0
+        
         return {
-          constantValue: parameters?.value || 0,
+          constantValue: Array.isArray(actualValue) ? actualValue[0] : actualValue, // Store first element for compatibility
+          value: actualValue, // Store the full value (scalar or array)
           signalType: parameters?.signalType || 'constant',
           dataType: parameters?.dataType || 'double',
           // Signal generation parameters
@@ -462,7 +467,7 @@ export class SimulationEngine {
 
   private executeSourceBlock(blockState: BlockState) {
     // Source blocks are the actual signal generators
-    const { constantValue, signalType, dataType } = blockState.internalState
+    const { signalType, dataType } = blockState.internalState
     
     // Parse the data type to check if it's a vector
     let parsedType: ParsedType | null = null
@@ -472,8 +477,19 @@ export class SimulationEngine {
       parsedType = { baseType: 'double', isArray: false }
     }
     
-    // Generate the signal value
+    // For constant signal type with vectors, use the value directly
+    if (signalType === 'constant' && parsedType.isArray) {
+      // Get the block to access its parameters
+      const block = this.blocks.find(b => b.id === blockState.blockId)
+      if (block && Array.isArray(block.parameters?.value)) {
+        blockState.outputs[0] = [...block.parameters.value]
+        return
+      }
+    }
+    
+    // Generate the signal value (for scalars or non-constant vectors)
     let scalarValue = 0
+    const constantValue = blockState.internalState.constantValue
     
     switch (signalType) {
       case 'constant':
@@ -542,7 +558,7 @@ export class SimulationEngine {
         scalarValue = constantValue
     }
     
-    // Apply to vector if needed
+    // Apply to vector if needed (for non-constant signal types)
     if (parsedType.isArray && parsedType.arraySize) {
       // For vector output, apply the same signal to all elements
       blockState.outputs[0] = new Array(parsedType.arraySize).fill(scalarValue)

@@ -47,7 +47,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     // Actions
     setModel, setError, setModelLoading, saveModel,
     switchToSheet, addSheet, renameSheet, deleteSheet,
-    addBlock, updateBlock, addWire, deleteWire,
+    addBlock, updateBlock, deleteBlock, addWire, deleteWire,
     setSelectedBlockId, setSelectedWireId, setConfigBlock,
     setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
     updateCurrentSheet, saveCurrentSheetData, initializeFromModel
@@ -70,6 +70,34 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       fetchModel()
     }
   }, [user, id])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if user is typing in an input field
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || 
+          target.tagName === 'TEXTAREA' || 
+          target.isContentEditable) {
+        return
+      }
+
+      // Handle delete/backspace for selected items
+      if (e.key === 'Delete' || (e.key === 'Backspace' && !e.metaKey && !e.ctrlKey)) {
+        e.preventDefault()
+        
+        if (selectedBlockId) {
+          handleBlockDelete(selectedBlockId)
+        } else if (selectedWireId) {
+          handleWireDelete(selectedWireId)
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedBlockId, selectedWireId, blocks, wires])
 
   const fetchModel = async () => {
     try {
@@ -211,6 +239,31 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     saveCurrentSheetData()
   }
 
+  const handleBlockDelete = (blockId: string) => {
+    // Find the block to get its name for confirmation
+    const block = blocks.find(b => b.id === blockId)
+    if (!block) return
+
+    // Confirm deletion
+    if (!window.confirm(`Delete block "${block.name}" and all its connections?`)) {
+      return
+    }
+
+    // Use the store's deleteBlock action which handles both blocks and connected wires
+    deleteBlock(blockId)
+    
+    // Clear selection if this block was selected
+    if (selectedBlockId === blockId) {
+      setSelectedBlockId(null)
+    }
+    
+    // Clear config if this block was being configured
+    if (configBlock?.id === blockId) {
+      setConfigBlock(null)
+    }
+
+    console.log('Block deleted:', block.name)
+  }
   const handleWireCreate = (sourcePort: PortInfo, targetPort: PortInfo) => {
     // Get the source and target blocks
     const sourceBlock = blocks.find(b => b.id === sourcePort.blockId)
@@ -619,19 +672,20 @@ const handleRunSimulation = async () => {
 
           {/* Canvas Area */}
           <div className="flex-1 relative">
-            <Canvas 
-              blocks={blocks}
-              wires={wires}
-              selectedBlockId={selectedBlockId}
-              selectedWireId={selectedWireId}
-              onDrop={handleCanvasDrop}
-              onBlockMove={handleBlockMove}
-              onBlockSelect={setSelectedBlockId}
-              onBlockDoubleClick={handleBlockDoubleClick}
-              onWireCreate={handleWireCreate}
-              onWireSelect={setSelectedWireId}
-              onWireDelete={handleWireDelete}
-            />
+           <Canvas 
+            blocks={blocks}
+            wires={wires}
+            selectedBlockId={selectedBlockId}
+            selectedWireId={selectedWireId}
+            onDrop={handleCanvasDrop}
+            onBlockMove={handleBlockMove}
+            onBlockSelect={setSelectedBlockId}
+            onBlockDoubleClick={handleBlockDoubleClick}
+            onBlockDelete={handleBlockDelete}  // Add this
+            onWireCreate={handleWireCreate}
+            onWireSelect={setSelectedWireId}
+            onWireDelete={handleWireDelete}
+          />
           </div>
 
           {/* Properties Panel */}

@@ -17,6 +17,7 @@ interface CanvasProps {
   onBlockMove?: (id: string, position: { x: number; y: number }) => void
   onBlockSelect?: (id: string | null) => void
   onBlockDoubleClick?: (id: string) => void
+  onBlockDelete?: (id: string) => void  // Add this
   onWireCreate?: (sourcePort: PortInfo, targetPort: PortInfo) => void
   onWireSelect?: (wireId: string | null) => void
   onWireDelete?: (wireId: string) => void
@@ -33,6 +34,7 @@ export default function Canvas({
   onBlockMove,
   onBlockSelect,
   onBlockDoubleClick,
+  onBlockDelete,  // Add this
   onWireCreate,
   onWireSelect,
   onWireDelete

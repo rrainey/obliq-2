@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { BlockData } from './Block'
-import { isValidType, getTypeValidationError } from '@/lib/typeValidator'
+import { isValidType, getTypeValidationError, parseType } from '@/lib/typeValidator'
 
 interface SourceConfigProps {
   block: BlockData
@@ -14,6 +14,7 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
   const [signalType, setSignalType] = useState(block?.parameters?.signalType || 'constant')
   const [dataType, setDataType] = useState(block?.parameters?.dataType || 'double')
   const [value, setValue] = useState(block?.parameters?.value || 0)
+  const [valueString, setValueString] = useState('')
   const [stepTime, setStepTime] = useState(block?.parameters?.stepTime || 1.0)
   const [stepValue, setStepValue] = useState(block?.parameters?.stepValue || 1.0)
   const [slope, setSlope] = useState(block?.parameters?.slope || 1.0)
@@ -27,12 +28,87 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
   const [duration, setDuration] = useState(block?.parameters?.duration || 10)
   const [mean, setMean] = useState(block?.parameters?.mean || 0)
   const [typeError, setTypeError] = useState<string>('')
+  const [valueError, setValueError] = useState<string>('')
+  const [isVector, setIsVector] = useState(false)
 
-  // Validate type on change
+  // Initialize value string based on existing value
+  useEffect(() => {
+    if (Array.isArray(block?.parameters?.value)) {
+      setValueString(`[${block.parameters.value.join(', ')}]`)
+    } else {
+      setValueString(String(block?.parameters?.value || 0))
+    }
+  }, [])
+
+  // Validate type and determine if it's a vector
   useEffect(() => {
     const error = getTypeValidationError(dataType)
     setTypeError(error)
+    
+    if (!error) {
+      try {
+        const parsedType = parseType(dataType)
+        setIsVector(parsedType.isArray)
+      } catch {
+        setIsVector(false)
+      }
+    }
   }, [dataType])
+
+  // Parse value string based on whether it's a vector or scalar
+  const parseValue = (input: string): { value: number | number[], error: string } => {
+    const trimmed = input.trim()
+    
+    if (isVector) {
+      // Parse vector value: [1.0, 2.0, 3.0] or {1.0, 2.0, 3.0}
+      const vectorMatch = trimmed.match(/^[\[\{]\s*(.+?)\s*[\]\}]$/)
+      if (!vectorMatch) {
+        return { value: 0, error: 'Vector values must be enclosed in brackets: [1.0, 2.0, 3.0]' }
+      }
+      
+      const elementsStr = vectorMatch[1]
+      const elements = elementsStr.split(',').map(s => s.trim())
+      
+      // Parse each element
+      const values: number[] = []
+      for (const element of elements) {
+        const num = parseFloat(element)
+        if (isNaN(num)) {
+          return { value: 0, error: `Invalid number: ${element}` }
+        }
+        values.push(num)
+      }
+      
+      // Check array size if specified
+      try {
+        const parsedType = parseType(dataType)
+        if (parsedType.arraySize && values.length !== parsedType.arraySize) {
+          return { 
+            value: 0, 
+            error: `Expected ${parsedType.arraySize} elements, got ${values.length}` 
+          }
+        }
+      } catch {
+        // Type parsing error already handled elsewhere
+      }
+      
+      return { value: values, error: '' }
+    } else {
+      // Parse scalar value
+      const num = parseFloat(trimmed)
+      if (isNaN(num)) {
+        return { value: 0, error: 'Invalid number' }
+      }
+      return { value: num, error: '' }
+    }
+  }
+
+  // Validate value when it changes
+  useEffect(() => {
+    const result = parseValue(valueString)
+    setValue(result.value)
+    setValueError(result.error)
+  }, [valueString, isVector, dataType])
 
   const handleSave = () => {
     const parameters = {
@@ -66,13 +142,23 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 Value
               </label>
               <input
-                type="number"
-                step="any"
-                value={value}
-                onChange={(e) => setValue(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
+                type="text"
+                value={valueString}
+                onChange={(e) => setValueString(e.target.value)}
+                className={`w-full px-3 py-2 border-2 rounded-md text-sm bg-white text-gray-900 focus:outline-none ${
+                  valueError ? 'border-red-500 focus:border-red-600' : 'border-gray-400 focus:border-blue-600'
+                }`}
+                placeholder={isVector ? "[1.0, 2.0, 3.0]" : "0.0"}
               />
-              <p className="text-xs text-gray-500 mt-1">Constant output value</p>
+              {valueError ? (
+                <p className="text-xs text-red-600 mt-1">{valueError}</p>
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">
+                  {isVector 
+                    ? "Vector constant (e.g., [1.0, 2.0, 3.0])" 
+                    : "Constant output value"}
+                </p>
+              )}
             </div>
           </div>
         )
@@ -104,7 +190,11 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 onChange={(e) => setStepValue(parseFloat(e.target.value) || 0)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
-              <p className="text-xs text-gray-500 mt-1">Value after step time</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {isVector 
+                  ? "Value applied to all vector elements after step time" 
+                  : "Value after step time"}
+              </p>
             </div>
           </div>
         )
@@ -123,7 +213,11 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 onChange={(e) => setSlope(parseFloat(e.target.value) || 0)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
-              <p className="text-xs text-gray-500 mt-1">Rate of change (units/second)</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {isVector 
+                  ? "Rate of change for all elements (units/second)" 
+                  : "Rate of change (units/second)"}
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -167,6 +261,9 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 onChange={(e) => setAmplitude(parseFloat(e.target.value) || 0)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
+              {isVector && (
+                <p className="text-xs text-gray-500 mt-1">Applied to all vector elements</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -224,6 +321,9 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 onChange={(e) => setAmplitude(parseFloat(e.target.value) || 0)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
+              {isVector && (
+                <p className="text-xs text-gray-500 mt-1">Applied to all vector elements</p>
+              )}
             </div>
           </div>
         )
@@ -242,7 +342,11 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 onChange={(e) => setAmplitude(parseFloat(e.target.value) || 0)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
-              <p className="text-xs text-gray-500 mt-1">Noise amplitude (±)</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {isVector 
+                  ? "Noise amplitude (±) for each element" 
+                  : "Noise amplitude (±)"}
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -310,6 +414,9 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 onChange={(e) => setAmplitude(parseFloat(e.target.value) || 0)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
+              {isVector && (
+                <p className="text-xs text-gray-500 mt-1">Applied to all vector elements</p>
+              )}
             </div>
           </div>
         )
@@ -346,7 +453,7 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
               className={`w-full px-3 py-2 border-2 rounded-md text-sm bg-white text-gray-900 focus:outline-none ${
                 typeError ? 'border-red-500 focus:border-red-600' : 'border-gray-400 focus:border-blue-600'
               }`}
-              placeholder="e.g., double, float, int[5]"
+              placeholder="e.g., double, float, double[3]"
             />
             {typeError ? (
               <p className="text-xs text-red-600 mt-1">{typeError}</p>
@@ -382,6 +489,7 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
           <div className="bg-green-50 p-3 rounded-md">
             <p className="text-sm text-green-800">
               <strong>Source Block:</strong> Generates time-varying signals for simulation testing and analysis.
+              {isVector && " For vector types, constant values use C-style array notation: [1.0, 2.0, 3.0]"}
             </p>
           </div>
         </div>
@@ -396,7 +504,7 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
           <button
             onClick={handleSave}
             className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-            disabled={!!typeError}
+            disabled={!!typeError || !!valueError}
           >
             Save
           </button>

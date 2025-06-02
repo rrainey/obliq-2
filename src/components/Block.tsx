@@ -46,7 +46,8 @@ export default function Block({
       case 'multiply':
         return { inputs: 2, outputs: 1 }
       case 'scale':
-      case 'transfer_function':
+      case 'transfer_function':  // Transfer function should have 1 input and 1 output
+        return { inputs: 1, outputs: 1 }
       case 'signal_display':
       case 'signal_logger':
       case 'output_port':
@@ -98,29 +99,35 @@ export default function Block({
     e.preventDefault()
     e.stopPropagation()
 
-    // Get the block element's bounding rect
-    const blockElement = blockRef.current
-    if (!blockElement) return
-
+    // Store the offset from the mouse to the block's top-left corner
+    // We'll use the block's actual position and the mouse position in canvas coordinates
+    const blockElement = e.currentTarget as HTMLElement
     const rect = blockElement.getBoundingClientRect()
-    const parentRect = blockElement.offsetParent?.getBoundingClientRect()
     
-    if (!parentRect) return
-
-    // Calculate offset from mouse to block position
-    const offsetX = e.clientX - rect.left
-    const offsetY = e.clientY - rect.top
-
-    console.log('Block mousedown:', {
-      blockId: block.id,
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-      blockLeft: rect.left,
-      blockTop: rect.top,
-      offsetX,
-      offsetY,
-      currentPosition: block.position
-    })
+    // Get the canvas container
+    const canvas = blockElement.closest('[style*="transform"]')
+    if (!canvas) return
+    
+    const canvasRect = canvas.getBoundingClientRect()
+    
+    // Get the transform scale
+    const transform = window.getComputedStyle(canvas).transform
+    let scale = 1
+    
+    if (transform && transform !== 'none') {
+      const matrix = new DOMMatrix(transform)
+      scale = matrix.a
+    }
+    
+    // Calculate mouse position in canvas coordinates
+    const mouseInCanvas = {
+      x: (e.clientX - canvasRect.left) / scale,
+      y: (e.clientY - canvasRect.top) / scale
+    }
+    
+    // The offset is the difference between mouse position and block position
+    const offsetX = mouseInCanvas.x - block.position.x
+    const offsetY = mouseInCanvas.y - block.position.y
 
     setDragOffset({ x: offsetX, y: offsetY })
     setIsDragging(true)
@@ -136,14 +143,30 @@ export default function Block({
     const handleMouseMove = (e: MouseEvent) => {
       if (!blockRef.current) return
 
-      const parentElement = blockRef.current.offsetParent as HTMLElement
-      if (!parentElement) return
-
-      const parentRect = parentElement.getBoundingClientRect()
+      // Get the canvas container (the one with transform)
+      const canvas = blockRef.current.closest('[style*="transform"]')
+      if (!canvas) return
       
-      // Calculate new position using the stored offset
-      const newX = e.clientX - parentRect.left - dragOffset.x
-      const newY = e.clientY - parentRect.top - dragOffset.y
+      const canvasRect = canvas.getBoundingClientRect()
+      
+      // Get the transform scale
+      const transform = window.getComputedStyle(canvas).transform
+      let scale = 1
+      
+      if (transform && transform !== 'none') {
+        const matrix = new DOMMatrix(transform)
+        scale = matrix.a
+      }
+      
+      // Calculate mouse position in canvas coordinates
+      const mouseInCanvas = {
+        x: (e.clientX - canvasRect.left) / scale,
+        y: (e.clientY - canvasRect.top) / scale
+      }
+      
+      // New position is mouse position minus the original offset
+      const newX = mouseInCanvas.x - dragOffset.x
+      const newY = mouseInCanvas.y - dragOffset.y
 
       if (onMove) {
         onMove(block.id, { x: newX, y: newY })
@@ -151,7 +174,6 @@ export default function Block({
     }
 
     const handleMouseUp = () => {
-      console.log('Block drag end:', block.id)
       setIsDragging(false)
     }
 
