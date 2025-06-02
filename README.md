@@ -119,6 +119,9 @@ CREATE POLICY "Users can manage their own models" ON models
 
 1. Start the development server:
 ```bash
+npx supabase start -x vector
+
+# then,
 npm run dev
 # or
 yarn dev
