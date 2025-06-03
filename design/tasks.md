@@ -416,6 +416,189 @@ Each task below has a clear start and end. They’re designed to be executed one
 - Same signal name can be used on same sheet for wire organization
 - Sources without matching sinks should be caught by validation
 
+## 🟦 MCP Server Implementation
+
+### Task 88: Initialize MCP Server Project Structure
+- **Start:** Create `/mcp-server` directory with basic Node.js/TypeScript setup
+- **End:** `npm install` completes and TypeScript compiles successfully
+
+### Task 89: Create MCP Server Entry Point
+- **Start:** Create `mcp-server/index.ts` with basic MCP server initialization
+- **End:** Server starts and logs "MCP Server running on port 3001"
+
+### Task 90: Add MCP Configuration
+- **Start:** Create `mcp-server/config.ts` with environment variable loading
+- **End:** Config exports PORT, API_BASE_URL, and MCP_API_TOKEN values
+
+### Task 91: Implement MCP Authentication Middleware
+- **Start:** Create `mcp-server/auth.ts` with token validation
+- **End:** Middleware rejects invalid tokens and accepts valid ones
+
+### Task 92: Create HTTP Client Wrapper
+- **Start:** Create `mcp-server/client.ts` with authenticated fetch wrapper
+- **End:** Client can make authenticated requests to the Next.js API
+
+### Task 93: Define MCP Tool Types
+- **Start:** Create `mcp-server/types.ts` with TypeScript interfaces for all tools
+- **End:** All tool input/output types are defined and export successfully
+
+### Task 94: Implement Create Model Tool
+- **Start:** Create `tools/model-management.ts` with `create_model` tool
+- **End:** Tool creates a model via automation API and returns modelId
+
+### Task 95: Implement Get Model Tool
+- **Start:** Add `get_model` tool to retrieve model JSON
+- **End:** Tool fetches and returns complete model data
+
+### Task 96: Implement List Models Tool
+- **Start:** Add `list_models` tool to list user's models
+- **End:** Tool returns array of model metadata
+
+### Task 97: Implement Delete Model Tool
+- **Start:** Add `delete_model` tool to remove a model
+- **End:** Tool deletes model and returns success status
+
+### Task 98: Create Model Construction Tools File
+- **Start:** Create `tools/model-construction.ts` with tool stubs
+- **End:** File exports empty tool definitions
+
+### Task 99: Implement Add Sheet Tool
+- **Start:** Add `add_sheet` tool to create new sheets
+- **End:** Tool adds sheet to model and returns sheetId
+
+### Task 100: Implement Add Block Tool
+- **Start:** Add `add_block` tool to place blocks on sheets
+- **End:** Tool adds block with position/parameters and returns blockId
+
+### Task 101: Implement Update Block Tool
+- **Start:** Add `update_block` tool to modify block properties
+- **End:** Tool updates block parameters/position successfully
+
+### Task 102: Implement Delete Block Tool
+- **Start:** Add `delete_block` tool to remove blocks
+- **End:** Tool removes block and its connections
+
+### Task 103: Implement Add Connection Tool
+- **Start:** Add `add_connection` tool to create wires
+- **End:** Tool creates wire between specified ports and returns wireId
+
+### Task 104: Implement Delete Connection Tool
+- **Start:** Add `delete_connection` tool to remove wires
+- **End:** Tool removes specified wire successfully
+
+### Task 105: Create Simulation Tools File
+- **Start:** Create `tools/simulation.ts` with simulation tool stubs
+- **End:** File exports empty tool definitions
+
+### Task 106: Implement Run Simulation Tool
+- **Start:** Add `run_simulation` tool to execute simulations
+- **End:** Tool runs simulation and returns basic success/failure
+
+### Task 107: Implement Get Simulation Results Tool
+- **Start:** Add `get_simulation_results` tool to retrieve detailed data
+- **End:** Tool returns time series data and signal values
+
+### Task 108: Create Validation Tools File
+- **Start:** Create `tools/validation.ts` with validation tool stubs
+- **End:** File exports empty tool definitions
+
+### Task 109: Implement Validate Model Tool
+- **Start:** Add `validate_model` tool for type/connection validation
+- **End:** Tool returns errors and warnings arrays
+
+### Task 110: Implement List Sheet Labels Tool
+- **Start:** Add `list_sheet_labels` tool to find all sheet labels
+- **End:** Tool returns sinks and sources with their signal names
+
+### Task 111: Implement Validate Sheet Labels Tool
+- **Start:** Add `validate_sheet_labels` tool for sheet label validation
+- **End:** Tool returns sheet label specific errors/warnings
+
+### Task 112: Create Code Generation Tools File
+- **Start:** Create `tools/code-generation.ts` with codegen tool stubs
+- **End:** File exports empty tool definitions
+
+### Task 113: Implement Generate Code Tool
+- **Start:** Add `generate_code` tool to trigger C code generation
+- **End:** Tool initiates generation and returns job status
+
+### Task 114: Implement Get Generated Files Tool
+- **Start:** Add `get_generated_files` tool to retrieve code
+- **End:** Tool returns array of generated file contents
+
+### Task 115: Register All Tools with MCP Server
+- **Start:** Update `index.ts` to import and register all tools
+- **End:** Server starts with all tools available
+
+### Task 116: Add Error Handling to MCP Server
+- **Start:** Wrap all tool executions in try/catch blocks
+- **End:** Errors return proper MCP error responses
+
+### Task 117: Add Request Logging to MCP Server
+- **Start:** Add middleware to log all MCP requests
+- **End:** Server logs tool name, params, and execution time
+
+### Task 118: Create MCP Server README
+- **Start:** Document setup, configuration, and tool usage
+- **End:** README includes examples for each tool
+
+### Task 119: Add MCP Server Start Script
+- **Start:** Add `mcp-server:dev` script to root package.json
+- **End:** `npm run mcp-server:dev` starts the MCP server
+
+### Task 120: Create Basic MCP Client Test Script
+- **Start:** Create `mcp-server/test-client.ts` to test basic connectivity
+- **End:** Script connects and lists available tools
+
+### Task 121: Test Create and Get Model Flow
+- **Start:** Use test client to create model and retrieve it
+- **End:** Model creation and retrieval work via MCP
+
+### Task 122: Test Block Addition Flow
+- **Start:** Use test client to add various block types
+- **End:** All block types can be added with proper parameters
+
+### Task 123: Test Connection Creation Flow
+- **Start:** Use test client to create valid connections
+- **End:** Wires created between compatible ports
+
+### Task 124: Test Simulation Execution Flow
+- **Start:** Use test client to run simulation on created model
+- **End:** Simulation completes and returns results
+
+### Task 125: Test Validation Flow
+- **Start:** Use test client to validate model with errors
+- **End:** Validation returns expected errors/warnings
+
+### Task 126: Test Code Generation Flow
+- **Start:** Use test client to generate C code
+- **End:** Code generation completes and files retrievable
+
+### Task 127: Add MCP Batch Operations Support
+- **Start:** Add support for multiple operations in single request
+- **End:** Client can send array of operations efficiently
+
+### Task 128: Add MCP Transaction Support
+- **Start:** Add rollback capability for failed operations
+- **End:** Failed batch operations don't leave partial changes
+
+### Task 129: Create Example Model Builder Script
+- **Start:** Create script that builds complete example model
+- **End:** Script creates multi-sheet model with sheet labels
+
+### Task 130: Full Integration Test of MCP Server
+- **Start:** Run complete workflow: create → build → validate → simulate → generate
+- **End:** All MCP operations work seamlessly together
+
+---
+
+💡 **MCP Implementation Notes:**
+- Each tool should validate inputs before calling APIs
+- Tools should return consistent error formats
+- Authentication token must be included in all API calls
+- Model state should remain consistent across operations
+- Tools should be idempotent where possible
+
 ---
 
 💡 **Notes:**

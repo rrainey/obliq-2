@@ -2,12 +2,14 @@
 
 ## Overview and Technology Stack
 
-This application is a web-based visual modeling and simulation tool, similar in spirit to Simulink. It enables users to **construct, test, and simulate block diagram models** in the browser, then generate C code for embedded deployment. The solution is built with **Next.js** as the frontend framework (leveraging its full-stack capabilities) and **Supabase** as the backend-as-a-service (handling database storage and user authentication). The primary data model (the user-created diagrams) is stored as JSON in a Postgres database (via Supabase). Using Supabase simplifies backend infrastructure since it provides authentication and a Postgres database with built-in JSON support (using JSONB columns) and row-level security for multi-user data separation. The architecture prioritizes clarity, simplicity, and performance, avoiding complex collaborative features and focusing on single-user editing sessions.
+This application is a web-based visual modeling and simulation tool, similar in spirit to Simulink. It enables users to **construct, test, and simulate block diagram models** in the browser, then generate C code for embedded deployment. The solution is built with **Next.js** as the frontend framework (leveraging its full-stack capabilities) and **Supabase** as the backend-as-a-service (handling database storage and user authentication). The primary data model (the user-created diagrams) is stored as JSON in a Postgres database (via Supabase). Using Supabase simplifies backend infrastructure since it provides authentication and a Postgres database with built-in JSON support (using JSONB columns) and row-level security for multi-user data separation. The system includes both a traditional web interface and a **Model Context Protocol (MCP) server** for programmatic access, enabling efficient testing and automation workflows. The architecture prioritizes clarity, simplicity, and performance, avoiding complex collaborative features and focusing on single-user editing sessions.
 
 ## High-Level System Architecture
 
 
 *High-level architecture of the visual modeling application.* The system consists of a **Next.js frontend** (the user interface and client-side logic) and **Next.js API routes** (serverless functions) that together form the application, with **Supabase** providing authentication and database services. The **user's browser** runs the Next.js frontend, including the **visual modeling canvas** and an in-browser **simulation engine**. The browser communicates directly with Supabase (via Supabase's JavaScript client) for most CRUD operations and authentication flows, and it communicates with Next.js API routes for specialized tasks like code generation or automated external triggers. Supabase's database stores persistent data (model documents, user profiles, etc.), and Supabase Auth manages user sign-up/sign-in and session tokens. The **Next.js API backend** (part of the same Next application) handles operations that are better done server-side (e.g. preparing a downloadable code bundle or responding to external API calls), and it can securely interact with the Supabase database (using service role credentials or Supabase client on the server) when needed. In summary, the browser is responsible for interactive modeling and simulation, Supabase handles data persistence and auth, and Next.js API routes provide auxiliary services (code export, automation hooks) and integrate all pieces.
+
+Additionally, the system includes an **MCP Server** that provides programmatic access to model manipulation capabilities. The MCP server runs as a separate Node.js process and communicates with the Next.js backend through the existing Automation API. This allows MCP clients (such as AI assistants or automated testing tools) to create, modify, simulate, and validate models without using the web UI. The MCP server maintains no state and acts as a protocol adapter, translating MCP tool calls into appropriate HTTP requests to the backend.
 
 ## Project Structure and Folder Organization
 
@@ -51,14 +53,31 @@ The project follows a clean, modular folder structure to organize different conc
   * We might include an **embedded block icon library** here. For example, icons or SVGs for each block type (Sum, Multiply, etc.) that the Block components use to visually represent themselves.
   * If we provide any documentation or offline assets (like a PDF manual, or a default example model JSON), they could reside here as well.
 
+* **`/mcp-server`**: MCP server implementation for programmatic model access
+
+  * **`mcp-server/index.ts`** – Main MCP server entry point that initializes the server and registers all available tools. It handles authentication, request routing, and error handling.
+  * **`mcp-server/tools/`** – Individual tool implementations
+    * **`tools/model-management.ts`** – Tools for creating, listing, and deleting models
+    * **`tools/model-construction.ts`** – Tools for adding blocks, connections, and sheets
+    * **`tools/simulation.ts`** – Tools for running simulations and retrieving results
+    * **`tools/validation.ts`** – Tools for model validation and error analysis
+    * **`tools/code-generation.ts`** – Tools for generating and retrieving C code
+  * **`mcp-server/client.ts`** – HTTP client wrapper for calling the Automation API endpoints
+  * **`mcp-server/types.ts`** – TypeScript types for MCP tool inputs and outputs
+  * **`mcp-server/auth.ts`** – Authentication handling for MCP requests
+  * **`mcp-server/config.ts`** – Configuration for MCP server (port, API endpoints, etc.)
+
 * **Configuration & Misc**:
 
   * **`next.config.js`** – Next.js configuration (if needed for custom webpack config or to set environment variables for Supabase, etc.). Usually minimal for our case.
   * **`.env.local`** – Environment variables including:
-    - `NEXT_PUBLIC_SUPABASE_URL`: The Supabase project URL (safe for client-side)
-    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: The anonymous key for client-side Supabase access
-    - `SUPABASE_SERVICE_ROLE_KEY`: Service role key for server-side API routes (bypasses RLS)
-    - `AUTOMATION_API_TOKEN`: Secret token for external automation API access
+  - `NEXT_PUBLIC_SUPABASE_URL`: The Supabase project URL (safe for client-side)
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: The anonymous key for client-side Supabase access
+  - `SUPABASE_SERVICE_ROLE_KEY`: Service role key for server-side API routes (bypasses RLS)
+  - `AUTOMATION_API_TOKEN`: Secret token for external automation API access
+  - `MCP_SERVER_PORT`: Port for the MCP server (default: 3001)
+  - `MCP_API_TOKEN`: Authentication token for MCP server access
+  - `MCP_API_BASE_URL`: Base URL for the Next.js API routes (default: http://localhost:3000)
     
     For local Supabase development, default keys are provided by the Supabase CLI and are consistent across all local instances.
   * **`middleware.ts`** – (Optional) Next.js middleware to protect routes. We might use middleware to redirect unauthenticated users trying to access the `/models/...` pages back to `/login`. Alternatively, we handle this in the pages themselves by checking Supabase auth state.
@@ -231,6 +250,47 @@ The Automation API responses are designed to be machine-readable (JSON responses
 
 By having this API, we maintain a **single source of truth** for simulation and code generation logic (the functions in `lib/`), and simply expose different ways to invoke them (UI vs API). This adheres to DRY principles and ensures consistency: whether a user clicks "Simulate" in the browser or a CI calls the simulate API, the underlying computation is the same.
 
+### Relationship to MCP Server
+
+While the Automation API provides HTTP endpoints for external systems, the MCP server builds upon these same endpoints to offer a more interactive, tool-based interface. The key differences are:
+
+- **Protocol**: Automation API uses HTTP REST, while MCP uses the Model Context Protocol
+- **Granularity**: Automation API offers high-level operations (generate code, run simulation), while MCP provides fine-grained tools (add individual blocks, create specific connections)
+- **Use Cases**: Automation API is ideal for CI/CD pipelines and webhooks, while MCP excels at interactive development, testing, and model construction
+- **State Management**: Both are stateless, but MCP tools can be composed into complex workflows by the client
+
+The MCP server internally uses the Automation API for operations that require server-side processing (like simulation and code generation), while directly interfacing with Supabase for CRUD operations on models. This layered approach ensures consistency while providing flexibility for different use cases.
+
+## MCP Integration Layer
+
+To enhance the testing and development workflow, the application includes a Model Context Protocol (MCP) server that provides programmatic access to model creation, manipulation, and validation. This layer builds upon the existing Automation API to offer a more interactive and efficient interface for automated testing and model generation.
+
+### Rationale for MCP Integration
+
+While the HTTP-based Automation API serves external CI/CD systems well, developing and testing complex models requires a more interactive approach. The MCP integration addresses several needs:
+
+1. **Rapid Test Model Generation**: Creating test models through the UI is time-consuming. MCP allows instantaneous creation of complex test scenarios.
+
+2. **Systematic Testing**: MCP enables systematic testing of edge cases, type propagation scenarios, and multi-sheet configurations that would be tedious to create manually.
+
+3. **Regression Testing**: Automated model creation through MCP facilitates comprehensive regression test suites.
+
+4. **Development Efficiency**: Developers and AI assistants can quickly prototype and test new features by programmatically creating models.
+
+5. **Validation Testing**: Complex validation scenarios (like Sheet Label scoping across multiple sheets) can be tested systematically.
+
+### MCP Server Architecture
+
+The MCP server is implemented as a Node.js application that interfaces with the existing Next.js backend through the Automation API. It exposes model manipulation capabilities as MCP tools, allowing MCP clients to:
+
+- Create and modify models programmatically
+- Execute simulations and retrieve results
+- Validate models and analyze errors
+- Generate C code from models
+- Test complex multi-sheet scenarios
+
+The MCP server maintains no state of its own, instead delegating all operations to the existing backend services. This ensures consistency between MCP operations and UI operations.
+
 ## State Management and Data Flow
 
 Throughout the system, careful consideration is given to **where state lives** to maintain performance and simplicity:
@@ -267,6 +327,31 @@ We also consider **performance** in the architecture:
 * We ensure that each service is used appropriately: the database is not doing computation, the client is not doing secure data storage, etc. This clear separation means each part can be optimized or replaced if needed (for instance, if we needed to support extremely heavy simulations, we could introduce a dedicated simulation microservice or WebAssembly module without restructuring the whole app).
 * **Version Performance:** The versioning system uses a two-table design to optimize common operations. Model listings only query the lightweight models table, while version data is fetched on-demand. The unique index on (model_id, version) ensures fast version lookups.
 * **Auto-save Efficiency:** Auto-save operations use version 0 with upsert semantics, preventing version table bloat. The system validates model state before auto-saving to prevent errors during the save cycle.
+
+### MCP Integration Benefits
+
+The MCP server enhances both extensibility and performance in several ways:
+
+**Extensibility**:
+- New MCP tools can be added without modifying the core application
+- Complex model construction workflows can be scripted and shared
+- Testing scenarios can be versioned and automated
+- Integration with AI assistants and development tools becomes straightforward
+
+**Performance**:
+- Batch operations can be performed without UI overhead
+- Model creation and testing can be parallelized
+- Rapid iteration on model designs without manual clicking
+- Automated performance testing of simulation engine with various model complexities
+
+**Testing Efficiency**:
+- Systematic testing of edge cases (e.g., maximum block counts, complex wire routing)
+- Automated validation of type propagation across multiple sheets
+- Regression test suites can be generated and run programmatically
+- Sheet Label scoping and multi-sheet interactions can be tested comprehensively
+
+The MCP server maintains the same performance characteristics as the Automation API since it uses the same underlying services. The primary performance gain comes from eliminating manual UI interactions and enabling batch operations.
+
 ## Conclusion
 
 This architecture leverages **Next.js** for a unified frontend and backend codebase, keeping the project structure organized by feature. **Supabase** provides a convenient and secure data layer with minimal overhead in developing our own backend. The design outlined above emphasizes clean separation of concerns: the *UI components* manage interactivity and visualization, the *client-side state* enables responsive editing and simulation, the *server-side API* handles heavy lifting like code export and external automation, and the *database* safely persists user models. By focusing on simplicity (a single-user editing model, on-demand persistence, no unnecessary complexity), the application remains performant and easier to maintain. The folder structure and service interactions described ensure that as the application grows (more block types, larger models, more features), the codebase remains well-organized and extensible, providing a solid foundation for a visual modeling and simulation platform.
