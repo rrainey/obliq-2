@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
 import { validateModelTypeCompatibility, TypeCompatibilityError } from '@/lib/typeCompatibilityValidator'
+import { validateSheetLabels } from '@/lib/sheetLabelUtils'
 
 interface UseWireValidationResult {
   typeErrors: Map<string, TypeCompatibilityError>
@@ -31,6 +32,24 @@ export function useWireValidation(
         // Run type compatibility validation
         const result = validateModelTypeCompatibility(blocks, wires)
         
+        // Run sheet label validation
+        const sheetLabelIssues = validateSheetLabels(blocks)
+        
+        // Convert sheet label issues to TypeCompatibilityError format
+        const sheetLabelErrors: TypeCompatibilityError[] = sheetLabelIssues.map(issue => ({
+          type: issue.type === 'empty_signal_name' ? 'warning' : 'error',
+          message: issue.message,
+          location: issue.blockName,
+          blockId: issue.blockId,
+          severity: issue.type === 'empty_signal_name' ? 'warning' : 'error',
+          details: issue.signalName ? {
+            sourceBlock: issue.blockName,
+            targetBlock: issue.blockName, // For consistency with existing interface
+            expectedType: 'Signal Name',
+            actualType: issue.type === 'duplicate_sink' ? 'Duplicate' : 'Missing'
+          } : undefined
+        }))
+        
         // Create a map of wire IDs to errors for quick lookup
         const errorMap = new Map<string, TypeCompatibilityError>()
         
@@ -40,11 +59,22 @@ export function useWireValidation(
           }
         }
         
+        // Combine all errors and warnings
+        const combinedErrors = [
+          ...result.errors,
+          ...sheetLabelErrors.filter(e => e.severity === 'error')
+        ]
+        
+        const combinedWarnings = [
+          ...result.warnings,
+          ...sheetLabelErrors.filter(e => e.severity === 'warning')
+        ]
+        
         setTypeErrors(errorMap)
-        setAllErrors(result.errors)
-        setAllWarnings(result.warnings)
+        setAllErrors(combinedErrors)
+        setAllWarnings(combinedWarnings)
       } catch (error) {
-        console.error('Error during type validation:', error)
+        console.error('Error during validation:', error)
         setTypeErrors(new Map())
         setAllErrors([])
         setAllWarnings([])
@@ -109,6 +139,17 @@ export function useWireConnectionValidation() {
         sourceBlock.type === 'signal_display' || 
         sourceBlock.type === 'signal_logger') {
       setValidationError(`Cannot connect from ${sourceBlock.type} blocks (no outputs)`)
+      return false
+    }
+
+    // Add sheet label validation
+    if (targetBlock.type === 'sheet_label_source') {
+      setValidationError('Cannot connect to Sheet Label Source blocks (no inputs)')
+      return false
+    }
+
+    if (sourceBlock.type === 'sheet_label_sink') {
+      setValidationError('Cannot connect from Sheet Label Sink blocks (no outputs)')
       return false
     }
 

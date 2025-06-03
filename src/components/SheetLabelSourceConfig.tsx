@@ -7,7 +7,8 @@ import { getSheetLabelSinkInfo } from '@/lib/sheetLabelUtils'
 
 interface SheetLabelSourceConfigProps {
   block: BlockData
-  blocks: BlockData[]  // All blocks in current sheet
+  blocks: BlockData[]  // Current sheet blocks
+  allSheetsBlocks?: BlockData[]  // All blocks across all sheets in the subsystem
   onUpdate: (parameters: Record<string, any>) => void
   onClose: () => void
 }
@@ -15,6 +16,7 @@ interface SheetLabelSourceConfigProps {
 export default function SheetLabelSourceConfig({ 
   block, 
   blocks,
+  allSheetsBlocks,
   onUpdate, 
   onClose 
 }: SheetLabelSourceConfigProps) {
@@ -22,8 +24,11 @@ export default function SheetLabelSourceConfig({
     block.parameters?.signalName || ''
   )
 
-  // Get all available sink signal names
-  const availableSinks = getSheetLabelSinkInfo(blocks)
+  // Use all sheets blocks if provided, otherwise fall back to current sheet
+  const blocksToSearch = allSheetsBlocks || blocks
+  
+  // Get all available sink signal names across all sheets in the subsystem
+  const availableSinks = getSheetLabelSinkInfo(blocksToSearch)
   
   const handleSave = () => {
     const parameters = {

@@ -426,6 +426,13 @@ export default function Block({
       {/* Block Name - with increased contrast */}
       <div className="absolute -bottom-5 left-0 right-0 text-xs text-center text-gray-800 font-medium pointer-events-none">
         {block.name}
+        {/* Add signal name indicator for sheet labels */}
+        {(block.type === 'sheet_label_sink' || block.type === 'sheet_label_source') && 
+        block.parameters?.signalName && (
+          <div className="text-xs text-purple-600 mt-0.5">
+            "{block.parameters.signalName}"
+          </div>
+        )}
       </div>
     </div>
   )

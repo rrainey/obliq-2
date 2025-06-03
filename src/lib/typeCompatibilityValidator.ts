@@ -4,6 +4,7 @@ import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
 import { parseType, ParsedType, areTypesCompatible } from './typeValidator'
 import { propagateSignalTypes, TypePropagationResult } from './signalTypePropagation'
+import { validateSheetLabels } from './sheetLabelUtils'
 
 /**
  * Type compatibility validation error
@@ -30,6 +31,41 @@ export interface TypeCompatibilityResult {
   isValid: boolean
   errors: TypeCompatibilityError[]
   warnings: TypeCompatibilityError[]
+}
+
+/**
+ * Performs complete model validation including type compatibility and sheet labels
+ */
+export function validateModel(
+  blocks: BlockData[],
+  wires: WireData[]
+): ModelValidationResult {
+  // Run type compatibility validation
+  const typeResult = validateModelTypeCompatibility(blocks, wires)
+  
+  // Run sheet label validation
+  const sheetLabelIssues = validateSheetLabels(blocks)
+  
+  // Convert sheet label issues to type compatibility format
+  const sheetLabelErrors: TypeCompatibilityError[] = sheetLabelIssues.map(issue => ({
+    type: issue.type === 'empty_signal_name' ? 'warning' : 'error',
+    message: issue.message,
+    location: issue.blockName,
+    blockId: issue.blockId,
+    wireId: undefined,
+    severity: issue.type === 'empty_signal_name' ? 'warning' : 'error',
+    details: issue.signalName ? {
+      sourceBlock: issue.blockName,
+      signalName: issue.signalName
+    } : undefined
+  }))
+  
+  // Combine results
+  return {
+    errors: [...typeResult.errors, ...sheetLabelErrors.filter(e => e.severity === 'error')],
+    warnings: [...typeResult.warnings, ...sheetLabelErrors.filter(e => e.severity === 'warning')],
+    valid: typeResult.errors.length === 0 && sheetLabelErrors.filter(e => e.severity === 'error').length === 0
+  }
 }
 
 /**

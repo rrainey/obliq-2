@@ -17,6 +17,8 @@ import SubsystemConfig from '@/components/SubsystemConfig'
 import TransferFunctionConfig from '@/components/TransferFunctionConfig'
 import Lookup1DConfig from '@/components/Lookup1DConfig'
 import Lookup2DConfig from '@/components/Lookup2DConfig'
+import SheetLabelSinkConfig from '@/components/SheetLabelSinkConfig'
+import SheetLabelSourceConfig from '@/components/SheetLabelSourceConfig'
 import ModelValidationButton from '@/components/ModelValidationButton'
 import { validateModelTypeCompatibility } from '@/lib/typeCompatibilityValidator'
 import { parseType } from '@/lib/typeValidator'
@@ -539,7 +541,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'transfer_function' ||
       block.type === 'subsystem' ||
       block.type === 'lookup_1d' ||
-      block.type === 'lookup_2d'
+      block.type === 'lookup_2d' ||
+      block.type === 'sheet_label_sink' || 
+      block.type === 'sheet_label_source'
     )) {
       setConfigBlock(block)
     }
@@ -916,6 +920,24 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onClose={() => setConfigBlock(null)}
             />
           )}
+          {configBlock.type === 'sheet_label_sink' && (
+            <SheetLabelSinkConfig
+              block={configBlock}
+              blocks={blocks}
+              allSheetsBlocks={sheets.flatMap(sheet => sheet.blocks)}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'sheet_label_source' && (
+          <SheetLabelSourceConfig
+            block={configBlock}
+            blocks={blocks}
+            allSheetsBlocks={sheets.flatMap(sheet => sheet.blocks)}  // Pass all blocks from all sheets
+            onUpdate={handleBlockConfigUpdate}
+            onClose={() => setConfigBlock(null)}
+          />
+        )}
         </>
       )}
     </div>

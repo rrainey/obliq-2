@@ -7,7 +7,8 @@ import { collectAvailableSignalNames } from '@/lib/sheetLabelUtils'
 
 interface SheetLabelSinkConfigProps {
   block: BlockData
-  blocks: BlockData[]  // Add this to get all blocks in current sheet
+  blocks: BlockData[]  // Current sheet blocks
+  allSheetsBlocks?: BlockData[]  // All blocks across all sheets in the subsystem
   onUpdate: (parameters: Record<string, any>) => void
   onClose: () => void
 }
@@ -15,6 +16,7 @@ interface SheetLabelSinkConfigProps {
 export default function SheetLabelSinkConfig({ 
   block, 
   blocks,
+  allSheetsBlocks,
   onUpdate, 
   onClose 
 }: SheetLabelSinkConfigProps) {
@@ -25,9 +27,12 @@ export default function SheetLabelSinkConfig({
   const inputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
 
+  // Use all sheets blocks if provided, otherwise fall back to current sheet
+  const blocksToSearch = allSheetsBlocks || blocks
+  
   // Get existing signal names (excluding current block's signal)
   const existingSignalNames = collectAvailableSignalNames(
-    blocks.filter(b => b.id !== block.id), 
+    blocksToSearch.filter((b: BlockData) => b.id !== block.id), 
     []
   )
   

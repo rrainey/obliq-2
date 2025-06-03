@@ -20,6 +20,7 @@ export interface SimulationState {
   duration: number
   blockStates: Map<string, BlockState>
   signalValues: Map<string, number | number[] | boolean | boolean[]>
+  sheetLabelValues: Map<string, number | number[] | boolean | boolean[]>
   isRunning: boolean
 }
 
@@ -62,6 +63,7 @@ export class SimulationEngine {
       duration: config.duration,
       blockStates: new Map(),
       signalValues: new Map(),
+      sheetLabelValues: new Map(),
       isRunning: false
     }
     this.initializeBlocks()
@@ -135,6 +137,10 @@ export class SimulationEngine {
       case 'subsystem':
         const outputPorts = parameters?.outputPorts || ['output']
         return new Array(outputPorts.length).fill(0)
+      case 'sheet_label_sink':
+      return [] // No outputs
+    case 'sheet_label_source':
+      return [0] // Single output, type will be determined by sink
       default:
         return []
     }
@@ -229,6 +235,15 @@ export class SimulationEngine {
           // For now, subsystem outputs pass through from inputs as placeholders
           currentOutputs: new Array(parameters?.outputPorts?.length || 1).fill(0)
         }
+      case 'sheet_label_sink':
+        return {
+          signalName: parameters?.signalName || '',
+          currentValue: 0
+        }
+      case 'sheet_label_source':
+        return {
+          signalName: parameters?.signalName || ''
+        }
       default:
         return {}
     }
@@ -277,6 +292,35 @@ export class SimulationEngine {
     }
 
     this.executionOrder = order
+  }
+
+  private executeSheetLabelSinkBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+    const signalName = blockState.internalState?.signalName
+    if (!signalName) return
+    
+    // Store the input value indexed by signal name
+    const input = inputs[0] !== undefined ? inputs[0] : 0
+    this.state.sheetLabelValues.set(signalName, input)
+    
+    // Also store in internal state for debugging
+    blockState.internalState.currentValue = input
+  }
+
+  private executeSheetLabelSourceBlock(blockState: BlockState) {
+    const signalName = blockState.internalState?.signalName
+    if (!signalName) {
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    // Retrieve the value from sheet label storage
+    const value = this.state.sheetLabelValues.get(signalName)
+    if (value !== undefined) {
+      blockState.outputs[0] = value
+    } else {
+      // No sink found or not yet executed
+      blockState.outputs[0] = 0
+    }
   }
 
   private isSourceBlock(blockType: string): boolean {
@@ -347,6 +391,12 @@ export class SimulationEngine {
         break
       case 'subsystem':
         this.executeSubsystemBlock(blockState, inputs)
+        break
+      case 'sheet_label_sink':
+        this.executeSheetLabelSinkBlock(blockState, inputs)
+        break
+      case 'sheet_label_source':
+        this.executeSheetLabelSourceBlock(blockState)
         break
     }
 

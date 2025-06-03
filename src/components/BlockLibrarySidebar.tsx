@@ -119,12 +119,11 @@ const blockTypes: BlockType[] = [
     icon: '📦',
     vectorSupport: 'full'
   },
-
   { 
     id: 'sheet_label_sink', 
     name: 'Sheet Label Sink', 
     category: 'Sheet Labels', 
-    description: 'Connect signal to label', 
+    description: 'Capture a signal and make it available by name across sheets', 
     icon: '↓L',
     vectorSupport: 'full'
   },
@@ -132,7 +131,7 @@ const blockTypes: BlockType[] = [
     id: 'sheet_label_source', 
     name: 'Sheet Label Source', 
     category: 'Sheet Labels', 
-    description: 'Get signal from label', 
+    description: 'Output a signal captured by a Sheet Label Sink with matching name', 
     icon: '↑L',
     vectorSupport: 'full'
   },

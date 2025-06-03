@@ -5,6 +5,7 @@ import { WireData } from '@/components/Wire'
 import { Sheet } from '@/lib/simulationEngine'
 import { propagateSignalTypes } from '@/lib/signalTypePropagation'
 import { parseType, ParsedType } from '@/lib/typeValidator'
+import { resolveSheetLabelConnections } from './sheetLabelUtils'
 
 interface CodeGenerationOptions {
   modelName: string
@@ -266,7 +267,8 @@ function generateStepFunction(safeName: string, sheet: Sheet, blockTypes: Map<st
   // Collect all internal signals (not input/output ports)
   for (const block of sheet.blocks) {
     if (block.type !== 'input_port' && block.type !== 'output_port' && 
-        block.type !== 'signal_display' && block.type !== 'signal_logger') {
+        block.type !== 'signal_display' && block.type !== 'signal_logger' &&
+        block.type !== 'sheet_label_sink' && block.type !== 'sheet_label_source') {  // Exclude sheet labels
       const outputKey = `${block.id}:0`
       const signalType = blockTypes.get(outputKey)
       if (signalType) {
@@ -277,6 +279,28 @@ function generateStepFunction(safeName: string, sheet: Sheet, blockTypes: Map<st
       }
     }
   }
+  
+  // Add sheet label signal variables
+  const sheetLabelConnections = resolveSheetLabelConnections(sheet.blocks)
+  const processedLabels = new Set<string>()
+  
+  for (const connection of sheetLabelConnections) {
+    if (!processedLabels.has(connection.signalName)) {
+      // Find the type from the sink's input
+      const sinkInputWire = sheet.connections.find(w => w.targetBlockId === connection.sinkBlock.id)
+      if (sinkInputWire) {
+        const sourceKey = `${sinkInputWire.sourceBlockId}:${sinkInputWire.sourcePortIndex}`
+        const signalType = blockTypes.get(sourceKey)
+        if (signalType) {
+          const cType = getCType(signalType)
+          const labelVarName = `label_${sanitizeIdentifier(connection.signalName)}`
+          code += `    ${cType} ${labelVarName};\n`
+          processedLabels.add(connection.signalName)
+        }
+      }
+    }
+  }
+  
   code += `\n`
 
   // Generate block computations in execution order
@@ -287,7 +311,50 @@ function generateStepFunction(safeName: string, sheet: Sheet, blockTypes: Map<st
     const block = sheet.blocks.find(b => b.id === blockId)
     if (!block) continue
     
+    // Skip sheet label blocks in main computation
+    if (block.type === 'sheet_label_sink' || block.type === 'sheet_label_source') {
+      continue
+    }
+    
     code += generateBlockComputation(block, sheet, blockTypes, internalSignals)
+  }
+  
+  // Handle sheet label assignments
+  if (sheetLabelConnections.length > 0) {
+    code += `\n    // Sheet label connections\n`
+    
+    // First, assign values to sheet label variables from sinks
+    for (const connection of sheetLabelConnections) {
+      const sinkInputWire = sheet.connections.find(w => w.targetBlockId === connection.sinkBlock.id)
+      if (sinkInputWire) {
+        const sourceKey = `${sinkInputWire.sourceBlockId}:${sinkInputWire.sourcePortIndex}`
+        const sourceSignal = internalSignals.get(sourceKey)
+        if (sourceSignal) {
+          const labelVarName = `label_${sanitizeIdentifier(connection.signalName)}`
+          const signalType = blockTypes.get(sourceKey)
+          const parsed = signalType ? tryParseType(signalType) : null
+          
+          if (parsed?.isArray && parsed.arraySize) {
+            code += `    memcpy(${labelVarName}, ${sourceSignal.name}, sizeof(${labelVarName}));\n`
+          } else {
+            code += `    ${labelVarName} = ${sourceSignal.name};\n`
+          }
+        }
+      }
+    }
+    
+    // Then, handle any blocks connected to sheet label sources
+    for (const connection of sheetLabelConnections) {
+      // Find wires connected to this source
+      const sourceWires = sheet.connections.filter(w => w.sourceBlockId === connection.sourceBlock.id)
+      for (const wire of sourceWires) {
+        const targetBlock = sheet.blocks.find(b => b.id === wire.targetBlockId)
+        if (targetBlock) {
+          // This is handled by the normal block computation using the label variable
+          // The generateBlockComputation function needs to be aware of sheet label sources
+        }
+      }
+    }
   }
 
   // Update time
@@ -319,44 +386,87 @@ function generateBlockComputation(
   // Get input connections
   const inputWires = sheet.connections.filter(w => w.targetBlockId === block.id)
   
-  switch (block.type) {
-    case 'input_port':
-      const portName = block.parameters?.portName || block.name
-      code += `    // Input port: ${block.name}\n`
-      const dataType = block.parameters?.dataType || 'double'
-      const parsed = tryParseType(dataType)
-      if (parsed?.isArray && parsed.arraySize) {
-        // Copy array
-        code += `    memcpy(${outputName}, model->inputs.${sanitizeIdentifier(portName)}, sizeof(${outputName}));\n`
-      } else {
-        // Copy scalar
-        code += `    ${outputName} = model->inputs.${sanitizeIdentifier(portName)};\n`
+  // Check if any inputs come from sheet label sources
+  const modifiedInputWires = inputWires.map(wire => {
+    const sourceBlock = sheet.blocks.find(b => b.id === wire.sourceBlockId)
+    if (sourceBlock && sourceBlock.type === 'sheet_label_source') {
+      // Replace with the sheet label variable
+      const signalName = sourceBlock.parameters?.signalName
+      if (signalName) {
+        return {
+          ...wire,
+          isSheetLabel: true,
+          labelVarName: `label_${sanitizeIdentifier(signalName)}`
+        }
       }
-      break
-      
-    case 'source':
-      code += generateSourceBlock(block, outputName, blockTypes.get(outputKey))
-      break
-      
+    }
+    return wire
+  })
+  
+  // Modify the block computation functions to accept sheet label info
+  switch (block.type) {
     case 'sum':
-      code += generateSumBlock(block, outputName, inputWires, internalSignals, blockTypes.get(outputKey))
+      code += generateSumBlockWithLabels(block, outputName, modifiedInputWires, internalSignals, blockTypes.get(outputKey))
       break
+    // ... update other block types similarly
+    default:
+      code += generateBlockComputation(block, sheet, blockTypes, internalSignals)
+  }
+  
+  return code
+}
+
+function generateSumBlockWithLabels(
+  block: BlockData,
+  outputName: string,
+  inputWires: any[],
+  signals: Map<string, { type: string, name: string }>,
+  outputType?: string
+): string {
+  let code = `    // Sum block: ${block.name}\n`
+  const parsed = outputType ? tryParseType(outputType) : null
+  
+  if (parsed?.isArray && parsed.arraySize) {
+    // Vector sum
+    code += `    for (int i = 0; i < ${parsed.arraySize}; i++) {\n`
+    code += `        ${outputName}[i] = `
+    
+    for (let i = 0; i < inputWires.length; i++) {
+      const wire = inputWires[i]
+      if (i > 0) code += ` + `
       
-    case 'multiply':
-      code += generateMultiplyBlock(block, outputName, inputWires, internalSignals, blockTypes.get(outputKey))
-      break
+      if (wire.isSheetLabel) {
+        code += `${wire.labelVarName}[i]`
+      } else {
+        const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+        const inputSignal = signals.get(sourceKey)
+        if (inputSignal) {
+          code += `${inputSignal.name}[i]`
+        }
+      }
+    }
+    
+    code += `;\n    }\n`
+  } else {
+    // Scalar sum
+    code += `    ${outputName} = `
+    
+    for (let i = 0; i < inputWires.length; i++) {
+      const wire = inputWires[i]
+      if (i > 0) code += ` + `
       
-    case 'scale':
-      code += generateScaleBlock(block, outputName, inputWires, internalSignals, blockTypes.get(outputKey))
-      break
-      
-    case 'transfer_function':
-      code += generateTransferFunctionBlock(block, outputName, inputWires, internalSignals, blockTypes.get(outputKey))
-      break
-      
-    case 'output_port':
-      code += generateOutputPortBlock(block, inputWires, internalSignals)
-      break
+      if (wire.isSheetLabel) {
+        code += wire.labelVarName
+      } else {
+        const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+        const inputSignal = signals.get(sourceKey)
+        if (inputSignal) {
+          code += inputSignal.name
+        }
+      }
+    }
+    
+    code += `;\n`
   }
   
   return code

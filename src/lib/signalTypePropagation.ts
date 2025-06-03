@@ -46,6 +46,8 @@ export interface TypePropagationError {
   severity: 'error' | 'warning'
 }
 
+type SheetLabelSinkTypes = Map<string, string> // key: signalName, value: type
+
 /**
  * Gets the output type for a block based on its type and parameters
  */
@@ -161,6 +163,7 @@ export function propagateSignalTypes(
   const signalTypes: SignalTypeMap = new Map()
   const blockOutputTypes: BlockOutputTypes = new Map()
   const errors: TypePropagationError[] = []
+  const sheetLabelSinkTypes: SheetLabelSinkTypes = new Map() 
   
   // Create maps for quick lookup
   const blockMap = new Map(blocks.map(b => [b.id, b]))
@@ -220,6 +223,69 @@ export function propagateSignalTypes(
     const currentBlockId = processingQueue.shift()!
     const currentBlock = blockMap.get(currentBlockId)
     if (!currentBlock) continue
+
+    // Special handling for Sheet Label Sink blocks
+    if (currentBlock.type === 'sheet_label_sink') {
+      const signalName = currentBlock.parameters?.signalName
+      if (signalName) {
+        // Get the input type from connected wire
+        const inputTypes = getBlockInputTypes(currentBlock, wiresByTarget, blockOutputTypes)
+        if (inputTypes.length > 0) {
+          // Store the sink's input type indexed by signal name
+          sheetLabelSinkTypes.set(signalName, inputTypes[0])
+        }
+      }
+      continue // Sinks don't have outputs
+    }
+    
+    // Special handling for Sheet Label Source blocks
+    if (currentBlock.type === 'sheet_label_source') {
+      const signalName = currentBlock.parameters?.signalName
+      if (signalName && sheetLabelSinkTypes.has(signalName)) {
+        // Get type from associated sink
+        const sinkType = sheetLabelSinkTypes.get(signalName)!
+        const outputKey = `${currentBlockId}:0`
+        blockOutputTypes.set(outputKey, sinkType)
+        
+        // Continue processing connected blocks
+        const connectedWires = wiresBySource.get(outputKey) || []
+        for (const wire of connectedWires) {
+          try {
+            const parsedType = parseType(sinkType)
+            signalTypes.set(wire.id, {
+              wireId: wire.id,
+              sourceBlockId: wire.sourceBlockId,
+              sourcePortIndex: wire.sourcePortIndex,
+              targetBlockId: wire.targetBlockId,
+              targetPortIndex: wire.targetPortIndex,
+              type: sinkType,
+              parsedType
+            })
+            
+            // Add target block to processing queue
+            const targetBlock = blockMap.get(wire.targetBlockId)
+            if (targetBlock && !processedBlocks.has(wire.targetBlockId)) {
+              processingQueue.push(wire.targetBlockId)
+              processedBlocks.add(wire.targetBlockId)
+            }
+          } catch (error) {
+            errors.push({
+              wireId: wire.id,
+              message: `Invalid signal type from sheet label: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              severity: 'error'
+            })
+          }
+        }
+      } else if (signalName) {
+        // Source references non-existent sink
+        errors.push({
+          blockId: currentBlock.id,
+          message: `Sheet Label Source "${currentBlock.name}" references non-existent signal "${signalName}"`,
+          severity: 'error'
+        })
+      }
+      continue
+    }
     
     // Process all output ports of the current block
     const outputPortCount = getBlockOutputPortCount(currentBlock)
