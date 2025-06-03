@@ -195,6 +195,10 @@ function getInputPortCount(blockType: string): number {
       return 0 // No inputs
     case 'subsystem':
       return 1 // Can be configured
+    case 'sheet_label_sink':
+      return 1
+    case 'sheet_label_source':
+      return 0
     default:
       return 0
   }
@@ -217,6 +221,10 @@ function getOutputPortCount(blockType: string): number {
       return 0 // No outputs
     case 'subsystem':
       return 1 // Can be configured
+    case 'sheet_label_sink':
+      return 0
+    case 'sheet_label_source':
+      return 1
     default:
       return 0
   }

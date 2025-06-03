@@ -119,6 +119,23 @@ const blockTypes: BlockType[] = [
     icon: '📦',
     vectorSupport: 'full'
   },
+
+  { 
+    id: 'sheet_label_sink', 
+    name: 'Sheet Label Sink', 
+    category: 'Sheet Labels', 
+    description: 'Connect signal to label', 
+    icon: '↓L',
+    vectorSupport: 'full'
+  },
+  { 
+    id: 'sheet_label_source', 
+    name: 'Sheet Label Source', 
+    category: 'Sheet Labels', 
+    description: 'Get signal from label', 
+    icon: '↑L',
+    vectorSupport: 'full'
+  },
 ]
 
 const categories = Array.from(new Set(blockTypes.map(block => block.category)))

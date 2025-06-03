@@ -211,6 +211,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           inputPorts: ['Input1'],
           outputPorts: ['Output1']
         }
+      case 'sheet_label_sink':
+        return {
+          signalName: ''  // Empty string, user must specify
+        }
+      case 'sheet_label_source':
+        return {
+          signalName: ''  // Will be populated from available sinks
+        }
       default:
         return {}
     }

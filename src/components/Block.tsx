@@ -63,6 +63,10 @@ export default function Block({
         const inputPorts = block.parameters?.inputPorts || ['Input1']
         const outputPorts = block.parameters?.outputPorts || ['Output1']
         return { inputs: inputPorts.length, outputs: outputPorts.length }
+      case 'sheet_label_sink':
+        return { inputs: 1, outputs: 0 }  // Sink has 1 input, no outputs
+      case 'sheet_label_source':
+        return { inputs: 0, outputs: 1 }  // Source has no inputs, 1 output
       default:
         return { inputs: 1, outputs: 1 }
     }
@@ -281,6 +285,24 @@ export default function Block({
     if (block.type === 'transfer_function') {
       return renderTransferFunction()
     }
+
+    // Special handling for sheet label blocks to show signal name
+    if (block.type === 'sheet_label_sink' || block.type === 'sheet_label_source') {
+      const signalName = block.parameters?.signalName || ''
+      if (signalName) {
+        // Show the signal name if available
+        return (
+          <div className="flex flex-col items-center justify-center">
+            <div className="text-lg font-bold">
+              {block.type === 'sheet_label_sink' ? '↓' : '↑'}
+            </div>
+            <div className="text-xs text-gray-600 mt-0.5">
+              {signalName.length > 8 ? signalName.substring(0, 8) + '...' : signalName}
+            </div>
+          </div>
+        )
+      }
+    }
     
     // Regular symbols for other blocks
     switch (block.type) {
@@ -306,6 +328,10 @@ export default function Block({
         return '2D'
       case 'subsystem':
         return '□'
+      case 'sheet_label_sink':
+        return '↓'  // Down arrow indicating signal going "into" the label
+      case 'sheet_label_source':
+        return '↑'  // Up arrow indicating signal coming "from" the label
       default:
         return '?'
     }
@@ -321,6 +347,15 @@ export default function Block({
       // Base width of 80px (w-20) plus extra for complex polynomials
       return Math.max(80, 60 + maxLength * 15)
     }
+
+    // Sheet labels might need more width for signal names
+    if (block.type === 'sheet_label_sink' || block.type === 'sheet_label_source') {
+      const signalName = block.parameters?.signalName || ''
+      if (signalName.length > 5) {
+        return Math.min(120, 80 + signalName.length * 4)
+      }
+    }
+    
     return 80 // Default width (w-20)
   }
 

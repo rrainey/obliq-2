@@ -76,6 +76,15 @@ function getBlockOutputType(block: BlockData): string | null {
       // Subsystem outputs depend on internal implementation
       // For now, we'll need to analyze the subsystem sheet
       return null
+
+    case 'sheet_label_sink':
+      // Sheet label sinks don't have outputs
+      return null
+    
+    case 'sheet_label_source':
+      // Sheet label sources will get their type from the associated sink
+      // This will be determined during propagation
+      return null
     
     default:
       return null
@@ -345,6 +354,10 @@ function getBlockOutputPortCount(block: BlockData): number {
       return 0
     case 'subsystem':
       return block.parameters?.outputPorts?.length || 1
+    case 'sheet_label_sink':
+      return 0
+    case 'sheet_label_source':
+      return 1
     default:
       return 0
   }
@@ -372,6 +385,10 @@ function getBlockInputPortCount(block: BlockData): number {
       return 0
     case 'subsystem':
       return block.parameters?.inputPorts?.length || 1
+     case 'sheet_label_sink':
+      return 1
+    case 'sheet_label_source':
+      return 0
     default:
       return 1
   }

@@ -33,7 +33,8 @@ const BlockSchema = z.object({
   id: z.string().min(1, 'Block ID cannot be empty'),
   type: z.enum([
     'sum', 'multiply', 'transfer_function', 'signal_display', 'signal_logger',
-    'input_port', 'output_port', 'source', 'scale', 'lookup_1d', 'lookup_2d', 'subsystem'
+    'input_port', 'output_port', 'source', 'scale', 'lookup_1d', 'lookup_2d', 'subsystem',
+    'sheet_label_sink', 'sheet_label_source'
   ]),
   name: z.string().min(1, 'Block name cannot be empty'),
   position: PositionSchema,
