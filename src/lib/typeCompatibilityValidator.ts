@@ -3,7 +3,7 @@
 import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
 import { parseType, ParsedType, areTypesCompatible } from './typeValidator'
-import { propagateSignalTypes, TypePropagationResult } from './signalTypePropagation'
+import { propagateSignalTypes, TypePropagationResult, propagateSignalTypesMultiSheet } from './signalTypePropagation'
 import { validateSheetLabels } from './sheetLabelUtils'
 
 /**
@@ -33,6 +33,12 @@ export interface TypeCompatibilityResult {
   warnings: TypeCompatibilityError[]
 }
 
+export interface ModelValidationResult {
+  errors: TypeCompatibilityError[]
+  warnings: TypeCompatibilityError[]
+  valid: boolean
+}
+
 /**
  * Performs complete model validation including type compatibility and sheet labels
  */
@@ -53,10 +59,12 @@ export function validateModel(
     location: issue.blockName,
     blockId: issue.blockId,
     wireId: undefined,
-    severity: issue.type === 'empty_signal_name' ? 'warning' : 'error',
+    severity: (issue.type === 'empty_signal_name' ? 'warning' : 'error') as 'error' | 'warning',
     details: issue.signalName ? {
-      sourceBlock: issue.blockName,
-      signalName: issue.signalName
+      expectedType: issue.type === 'unmatched_source' ? 'Existing Sheet Label Sink' : 'Unique Signal Name',
+      actualType: issue.type === 'duplicate_sink' ? 'Duplicate' : issue.type === 'unmatched_source' ? 'None' : 'Empty',
+      sourceType: undefined,
+      targetType: undefined
     } : undefined
   }))
   
@@ -158,6 +166,79 @@ export function validateModelTypeCompatibility(
     isValid: errors.length === 0,
     errors,
     warnings
+  }
+}
+
+// lib/typeCompatibilityValidator.ts
+// Fix the error objects by removing the 'type' property
+
+export function validateModelTypeCompatibilityMultiSheet(
+  sheets: Array<{ blocks: BlockData[], connections: WireData[] }>
+): ModelValidationResult {
+  const allErrors: TypeCompatibilityError[] = []
+  const allWarnings: TypeCompatibilityError[] = []
+  
+  // Use multi-sheet type propagation
+  const typeResult = propagateSignalTypesMultiSheet(sheets)
+  
+  // Process type propagation errors
+  for (const error of typeResult.errors) {
+    allErrors.push({
+      message: error.message,
+      blockId: error.blockId,
+      wireId: error.wireId,
+      severity: 'error'
+    })
+  }
+  
+  // Check each sheet's connections for type compatibility
+  for (const sheet of sheets) {
+    for (const wire of sheet.connections) {
+      const signalType = typeResult.signalTypes.get(wire.id)
+      
+      if (!signalType) {
+        // Unable to determine type
+        const sourceBlock = sheet.blocks.find(b => b.id === wire.sourceBlockId)
+        const targetBlock = sheet.blocks.find(b => b.id === wire.targetBlockId)
+        
+        if (sourceBlock && targetBlock) {
+          allWarnings.push({
+            message: `Unable to determine signal type for connection from ${sourceBlock.name} to ${targetBlock.name}`,
+            wireId: wire.id,
+            severity: 'warning'
+          })
+        }
+      }
+    }
+  }
+  
+  // Validate sheet labels across all sheets
+  const allBlocks = sheets.flatMap(s => s.blocks)
+  const sheetLabelIssues = validateSheetLabels(allBlocks)
+  
+  // Convert sheet label issues to TypeCompatibilityError format
+  const sheetLabelErrors: TypeCompatibilityError[] = sheetLabelIssues.map(issue => ({
+    message: issue.message,
+    location: issue.blockName,
+    blockId: issue.blockId,
+    wireId: undefined,
+    severity: (issue.type === 'empty_signal_name' ? 'warning' : 'error') as 'error' | 'warning',
+    details: issue.signalName ? {
+      expectedType: issue.type === 'unmatched_source' ? 'Existing Sheet Label Sink' : 'Unique Signal Name',
+      actualType: issue.type === 'duplicate_sink' ? 'Duplicate' : issue.type === 'unmatched_source' ? 'None' : 'Empty',
+      sourceType: undefined,
+      targetType: undefined
+    } : undefined
+  }))
+  
+  // Separate errors and warnings
+  allErrors.push(...sheetLabelErrors.filter(e => e.severity === 'error'))
+  allWarnings.push(...sheetLabelErrors.filter(e => e.severity === 'warning'))
+  
+  return {
+    errors: allErrors,
+    warnings: allWarnings,
+    valid: allErrors.length === 0
   }
 }
 

@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
-import { validateModelTypeCompatibility, TypeCompatibilityError } from '@/lib/typeCompatibilityValidator'
+import { validateModelTypeCompatibility, TypeCompatibilityError, validateModelTypeCompatibilityMultiSheet } from '@/lib/typeCompatibilityValidator'
 import { validateSheetLabels } from '@/lib/sheetLabelUtils'
+import { useModelStore } from '@/lib/modelStore'
 
 interface UseWireValidationResult {
   typeErrors: Map<string, TypeCompatibilityError>
@@ -22,67 +23,76 @@ export function useWireValidation(
   const [allErrors, setAllErrors] = useState<TypeCompatibilityError[]>([])
   const [allWarnings, setAllWarnings] = useState<TypeCompatibilityError[]>([])
   const [isValidating, setIsValidating] = useState(false)
+  const sheets = useModelStore(state => state.sheets)
 
   // Memoize the validation function
-  const validate = useMemo(() => {
-    return () => {
-      setIsValidating(true)
+const validate = useMemo(() => {
+  return () => {
+    setIsValidating(true)
+    
+    try {
+      // Check if we should do multi-sheet validation
+      const shouldValidateMultiSheet = sheets && sheets.length > 1
       
-      try {
-        // Run type compatibility validation
+      let combinedErrors: TypeCompatibilityError[] = []
+      let combinedWarnings: TypeCompatibilityError[] = []
+      
+      if (shouldValidateMultiSheet) {
+        // Multi-sheet validation for top-level
+        const multiSheetResult = validateModelTypeCompatibilityMultiSheet(sheets)
+        combinedErrors = multiSheetResult.errors
+        combinedWarnings = multiSheetResult.warnings
+      } else {
+        // Single sheet validation
         const result = validateModelTypeCompatibility(blocks, wires)
         
-        // Run sheet label validation
+        // Run sheet label validation for current sheet only
         const sheetLabelIssues = validateSheetLabels(blocks)
-        
-        // Convert sheet label issues to TypeCompatibilityError format
         const sheetLabelErrors: TypeCompatibilityError[] = sheetLabelIssues.map(issue => ({
           type: issue.type === 'empty_signal_name' ? 'warning' : 'error',
           message: issue.message,
           location: issue.blockName,
           blockId: issue.blockId,
-          severity: issue.type === 'empty_signal_name' ? 'warning' : 'error',
+          severity: (issue.type === 'empty_signal_name' ? 'warning' : 'error') as 'error' | 'warning',
           details: issue.signalName ? {
-            sourceBlock: issue.blockName,
-            targetBlock: issue.blockName, // For consistency with existing interface
-            expectedType: 'Signal Name',
-            actualType: issue.type === 'duplicate_sink' ? 'Duplicate' : 'Missing'
+            expectedType: issue.type === 'unmatched_source' ? 'Existing Sheet Label Sink' : 'Unique Signal Name',
+            actualType: issue.type === 'duplicate_sink' ? 'Duplicate' : issue.type === 'unmatched_source' ? 'None' : 'Empty'
           } : undefined
         }))
         
-        // Create a map of wire IDs to errors for quick lookup
-        const errorMap = new Map<string, TypeCompatibilityError>()
-        
-        for (const error of result.errors) {
-          if (error.wireId) {
-            errorMap.set(error.wireId, error)
-          }
-        }
-        
-        // Combine all errors and warnings
-        const combinedErrors = [
+        combinedErrors = [
           ...result.errors,
           ...sheetLabelErrors.filter(e => e.severity === 'error')
         ]
         
-        const combinedWarnings = [
+        combinedWarnings = [
           ...result.warnings,
           ...sheetLabelErrors.filter(e => e.severity === 'warning')
         ]
-        
-        setTypeErrors(errorMap)
-        setAllErrors(combinedErrors)
-        setAllWarnings(combinedWarnings)
-      } catch (error) {
-        console.error('Error during validation:', error)
-        setTypeErrors(new Map())
-        setAllErrors([])
-        setAllWarnings([])
-      } finally {
-        setIsValidating(false)
       }
+      
+      // Create a map of wire IDs to errors for quick lookup
+      const errorMap = new Map<string, TypeCompatibilityError>()
+      
+      for (const error of combinedErrors) {
+        if (error.wireId) {
+          errorMap.set(error.wireId, error)
+        }
+      }
+      
+      setTypeErrors(errorMap)
+      setAllErrors(combinedErrors)
+      setAllWarnings(combinedWarnings)
+    } catch (error) {
+      console.error('Error during validation:', error)
+      setTypeErrors(new Map())
+      setAllErrors([])
+      setAllWarnings([])
+    } finally {
+      setIsValidating(false)
     }
-  }, [blocks, wires])
+  }
+}, [blocks, wires, sheets])
 
   // Run validation when blocks or wires change
   useEffect(() => {

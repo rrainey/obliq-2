@@ -400,6 +400,103 @@ export function propagateSignalTypes(
   }
 }
 
+export function propagateSignalTypesMultiSheet(
+  sheets: Array<{ blocks: BlockData[], connections: WireData[] }>
+): TypePropagationResult {
+  const allErrors: TypePropagationError[] = []
+  const signalTypes: SignalTypeMap = new Map()
+  const blockOutputTypes: BlockOutputTypes = new Map()
+  
+  // First pass: propagate types within each sheet and collect sheet label sink types
+  const sheetLabelSinkTypes: Map<string, string> = new Map()
+  
+  for (const sheet of sheets) {
+    // Run type propagation on each sheet
+    const sheetResult = propagateSignalTypes(sheet.blocks, sheet.connections)
+    
+    // Merge results
+    for (const [key, value] of sheetResult.blockOutputTypes) {
+      blockOutputTypes.set(key, value)
+    }
+    for (const [key, value] of sheetResult.signalTypes) {
+      signalTypes.set(key, value)
+    }
+    allErrors.push(...sheetResult.errors)
+    
+    // Collect sheet label sink types
+    for (const block of sheet.blocks) {
+      if (block.type === 'sheet_label_sink' && block.parameters?.signalName) {
+        // Find the input wire to this sink
+        const inputWire = sheet.connections.find(w => w.targetBlockId === block.id)
+        if (inputWire) {
+          const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
+          const sourceType = blockOutputTypes.get(sourceKey)
+          if (sourceType) {
+            sheetLabelSinkTypes.set(block.parameters.signalName, sourceType)
+          }
+        }
+      }
+    }
+  }
+  
+  // Second pass: propagate sheet label source types and re-propagate affected blocks
+  let changed = true
+  while (changed) {
+    changed = false
+    
+    for (const sheet of sheets) {
+      for (const block of sheet.blocks) {
+        if (block.type === 'sheet_label_source' && block.parameters?.signalName) {
+          const sinkType = sheetLabelSinkTypes.get(block.parameters.signalName)
+          if (sinkType) {
+            const outputKey = `${block.id}:0`
+            const currentType = blockOutputTypes.get(outputKey)
+            
+            if (currentType !== sinkType) {
+              changed = true
+              blockOutputTypes.set(outputKey, sinkType)
+              
+              // Update any wires from this source
+              const outputWires = sheet.connections.filter(w => w.sourceBlockId === block.id)
+              for (const wire of outputWires) {
+                try {
+                  const parsedType = parseType(sinkType)
+                  signalTypes.set(wire.id, {
+                    wireId: wire.id,
+                    sourceBlockId: wire.sourceBlockId,
+                    sourcePortIndex: wire.sourcePortIndex,
+                    targetBlockId: wire.targetBlockId,
+                    targetPortIndex: wire.targetPortIndex,
+                    type: sinkType,
+                    parsedType
+                  })
+                  
+                  // Re-propagate to connected blocks
+                  const targetBlock = sheet.blocks.find(b => b.id === wire.targetBlockId)
+                  if (targetBlock) {
+                    // This will be handled in the next iteration
+                  }
+                } catch (error) {
+                  allErrors.push({
+                    wireId: wire.id,
+                    message: `Invalid signal type from sheet label: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    severity: 'error'
+                  })
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return {
+    signalTypes,
+    blockOutputTypes,
+    errors: allErrors
+  }
+}
 /**
  * Gets the number of output ports for a block
  */
@@ -506,3 +603,4 @@ export function validateSignalTypes(result: TypePropagationResult): TypePropagat
   
   return [...result.errors, ...additionalErrors]
 }
+

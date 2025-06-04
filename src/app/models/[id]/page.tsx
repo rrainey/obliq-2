@@ -923,21 +923,22 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           {configBlock.type === 'sheet_label_sink' && (
             <SheetLabelSinkConfig
               block={configBlock}
-              blocks={blocks}
-              allSheetsBlocks={sheets.flatMap(sheet => sheet.blocks)}
+              blocks={blocks}  // Current sheet blocks
+              allSheetsBlocks={sheets.flatMap(sheet => sheet.blocks)}  // All top-level sheet blocks
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}
             />
           )}
+
           {configBlock.type === 'sheet_label_source' && (
-          <SheetLabelSourceConfig
-            block={configBlock}
-            blocks={blocks}
-            allSheetsBlocks={sheets.flatMap(sheet => sheet.blocks)}  // Pass all blocks from all sheets
-            onUpdate={handleBlockConfigUpdate}
-            onClose={() => setConfigBlock(null)}
-          />
-        )}
+            <SheetLabelSourceConfig
+              block={configBlock}
+              blocks={blocks}  // Current sheet blocks  
+              allSheetsBlocks={sheets.flatMap(sheet => sheet.blocks)}  // All top-level sheet blocks
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
         </>
       )}
     </div>

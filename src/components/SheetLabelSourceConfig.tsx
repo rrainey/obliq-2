@@ -27,7 +27,7 @@ export default function SheetLabelSourceConfig({
   // Use all sheets blocks if provided, otherwise fall back to current sheet
   const blocksToSearch = allSheetsBlocks || blocks
   
-  // Get all available sink signal names across all sheets in the subsystem
+  // Get all available sink signal names across all sheets
   const availableSinks = getSheetLabelSinkInfo(blocksToSearch)
   
   const handleSave = () => {
