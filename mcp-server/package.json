@@ -6,7 +6,11 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "mcp-server:dev": "npm run dev",
+    "mcp-server:build": "npm run build",
+    "mcp-server:start": "npm start",
+    "test": "tsx src/test-client.ts"
   },
   "keywords": ["mcp", "model-context-protocol", "obliq2"],
   "author": "",

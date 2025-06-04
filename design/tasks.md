@@ -599,6 +599,258 @@ Each task below has a clear start and end. They’re designed to be executed one
 - Model state should remain consistent across operations
 - Tools should be idempotent where possible
 
+## 🟦 Model Builder API Implementation
+
+### Task 131: Create Model Builder API Route Structure
+- **Start:** Create `/app/api/model-builder/[token]/route.ts` file
+- **End:** Empty route handler exists that exports GET, POST, PUT, DELETE methods
+
+### Task 132: Add Model Builder API Token to Environment
+- **Start:** Add `MODEL_BUILDER_API_TOKEN` to `.env.local` and type definitions
+- **End:** Environment variable is accessible in the application
+
+### Task 133: Implement Model Builder Token Validation
+- **Start:** Add token validation logic to check against MODEL_BUILDER_API_TOKEN
+- **End:** Invalid tokens return 401, valid tokens proceed to handler
+
+### Task 134: Create Model Builder API Response Helper
+- **Start:** Create `lib/modelBuilderApiHelpers.ts` with standardized response format functions
+- **End:** Helper functions for success/error responses with consistent structure exist
+
+### Task 135: Implement GET Model Endpoint
+- **Start:** Add GET handler to retrieve full model JSON by modelId query parameter
+- **End:** `GET /api/model-builder/[token]?modelId=xxx` returns complete model data
+
+### Task 136: Implement Create Model Endpoint
+- **Start:** Add POST handler with action "createModel" to create new empty model
+- **End:** Returns new model with ID, empty sheets array, and default metadata
+
+### Task 137: Implement Delete Model Endpoint
+- **Start:** Add DELETE handler to remove model by modelId
+- **End:** `DELETE /api/model-builder/[token]?modelId=xxx` removes model from database
+
+### Task 138: Implement List Sheets Endpoint
+- **Start:** Add GET handler with action "listSheets" to return all sheets in a model
+- **End:** Returns array of sheets with id, name, and block/connection counts
+
+### Task 139: Implement Create Sheet Endpoint
+- **Start:** Add POST handler with action "createSheet" to add new sheet to model
+- **End:** Creates sheet with auto-generated name and returns sheet details
+
+### Task 140: Implement Rename Sheet Endpoint
+- **Start:** Add PUT handler with action "renameSheet" to update sheet name
+- **End:** Updates sheet name given modelId, sheetId, and newName
+
+### Task 141: Implement Delete Sheet Endpoint
+- **Start:** Add DELETE handler with action "deleteSheet" to remove sheet
+- **End:** Removes sheet and all its blocks/connections from model
+
+### Task 142: Implement List Blocks Endpoint
+- **Start:** Add GET handler with action "listBlocks" to return all blocks in a sheet
+- **End:** Returns array of blocks with all properties for given modelId and sheetId
+
+### Task 143: Implement Get Block Details Endpoint
+- **Start:** Add GET handler with action "getBlock" to return single block details
+- **End:** Returns complete block data including type, position, parameters, ports
+
+### Task 144: Create Block Type Registry
+- **Start:** Create `lib/blockTypeRegistry.ts` with all block type definitions
+- **End:** Registry exports block types with default parameters and port configurations
+
+### Task 145: Implement Add Block Endpoint
+- **Start:** Add POST handler with action "addBlock" to create new block
+- **End:** Creates block with type, position, and default parameters on specified sheet
+
+### Task 146: Implement Update Block Position Endpoint
+- **Start:** Add PUT handler with action "updateBlockPosition" to move block
+- **End:** Updates block x,y coordinates given blockId
+
+### Task 147: Implement Update Block Name Endpoint
+- **Start:** Add PUT handler with action "updateBlockName" to rename block
+- **End:** Updates block name (validates C-style identifier rules)
+
+### Task 148: Implement Update Block Parameters Helper
+- **Start:** Create function to validate parameters based on block type
+- **End:** Function validates parameter types and ranges for each block type
+
+### Task 149: Implement Update Sum Block Parameters Endpoint
+- **Start:** Add PUT handler logic for updating Sum block number of inputs
+- **End:** Sum block inputs can be modified via API
+
+### Task 150: Implement Update Multiply Block Parameters Endpoint
+- **Start:** Add PUT handler logic for updating Multiply block number of inputs
+- **End:** Multiply block inputs can be modified via API
+
+### Task 151: Implement Update Transfer Function Parameters Endpoint
+- **Start:** Add PUT handler logic for updating Transfer Function numerator/denominator
+- **End:** Transfer function coefficients can be modified via API
+
+### Task 152: Implement Update Signal Display Parameters Endpoint
+- **Start:** Add PUT handler logic for updating Signal Display sample count
+- **End:** Signal Display maxSamples parameter can be modified via API
+
+### Task 153: Implement Update Source Block Parameters Endpoint
+- **Start:** Add PUT handler logic for updating Source block value and dataType
+- **End:** Source block constant value and type can be modified via API
+
+### Task 154: Implement Update Input Port Parameters Endpoint
+- **Start:** Add PUT handler logic for updating Input Port name and dataType
+- **End:** Input Port signal name and type can be modified via API
+
+### Task 155: Implement Update Output Port Parameters Endpoint
+- **Start:** Add PUT handler logic for updating Output Port name
+- **End:** Output Port signal name can be modified via API
+
+### Task 156: Implement Update Scale Block Parameters Endpoint
+- **Start:** Add PUT handler logic for updating Scale block factor
+- **End:** Scale block multiplication factor can be modified via API
+
+### Task 157: Implement Update 1D Lookup Parameters Endpoint
+- **Start:** Add PUT handler logic for updating 1D Lookup tables and extrapolation
+- **End:** 1D Lookup input/output arrays and settings can be modified via API
+
+### Task 158: Implement Update 2D Lookup Parameters Endpoint
+- **Start:** Add PUT handler logic for updating 2D Lookup tables and extrapolation
+- **End:** 2D Lookup input arrays, output table, and settings can be modified via API
+
+### Task 159: Implement Update Sheet Label Sink Parameters Endpoint
+- **Start:** Add PUT handler logic for updating Sheet Label Sink signal name
+- **End:** Sheet Label Sink signalName can be modified via API
+
+### Task 160: Implement Update Sheet Label Source Parameters Endpoint
+- **Start:** Add PUT handler logic for updating Sheet Label Source signal reference
+- **End:** Sheet Label Source signalName can be modified via API
+
+### Task 161: Implement Update Subsystem Parameters Endpoint
+- **Start:** Add PUT handler logic for updating Subsystem sheet reference
+- **End:** Subsystem linkedSheetId can be modified via API
+
+### Task 162: Implement Generic Update Block Parameters Endpoint
+- **Start:** Consolidate all parameter update logic into single endpoint
+- **End:** `PUT action="updateBlockParameters"` handles all block types
+
+### Task 163: Implement Delete Block Endpoint
+- **Start:** Add DELETE handler with action "deleteBlock" to remove block
+- **End:** Removes block and all connected wires from model
+
+### Task 164: Implement List Connections Endpoint
+- **Start:** Add GET handler with action "listConnections" to return wires in sheet
+- **End:** Returns array of connections with source/target block and port info
+
+### Task 165: Implement Get Connection Details Endpoint
+- **Start:** Add GET handler with action "getConnection" to return single wire
+- **End:** Returns complete connection data including wire ID and endpoints
+
+### Task 166: Implement Add Connection Validation Helper
+- **Start:** Create function to validate connection compatibility
+- **End:** Function checks port availability, type compatibility, and connection rules
+
+### Task 167: Implement Add Connection Endpoint
+- **Start:** Add POST handler with action "addConnection" to create wire
+- **End:** Creates wire between specified blocks and ports with validation
+
+### Task 168: Implement Delete Connection Endpoint
+- **Start:** Add DELETE handler with action "deleteConnection" to remove wire
+- **End:** Removes specified connection from model
+
+### Task 169: Implement Get Block Ports Endpoint
+- **Start:** Add GET handler with action "getBlockPorts" to list block's ports
+- **End:** Returns input/output ports with names, types, and connection status
+
+### Task 170: Implement Model Validation via API
+- **Start:** Add POST handler with action "validateModel" using existing validation
+- **End:** Returns validation errors and warnings through Model Builder API
+
+### Task 171: Implement Batch Operations Support
+- **Start:** Add POST handler logic to process array of operations
+- **End:** Multiple operations can be executed in single API call
+
+### Task 172: Implement Transaction Rollback for Batch
+- **Start:** Add rollback logic to revert changes if any batch operation fails
+- **End:** Failed batch operations don't leave partial changes in model
+
+### Task 173: Create Model Builder API Error Codes
+- **Start:** Define standardized error codes for all failure scenarios
+- **End:** Error responses include specific codes like "BLOCK_NOT_FOUND", "INVALID_CONNECTION"
+
+### Task 174: Add Request Logging for Model Builder API
+- **Start:** Add logging middleware to track all Model Builder API requests
+- **End:** Logs show timestamp, action, parameters, and response status
+
+### Task 175: Create Model Builder API Types
+- **Start:** Create `lib/modelBuilderApiTypes.ts` with TypeScript interfaces
+- **End:** All request/response types are defined and exported
+
+### Task 176: Implement Get Model Metadata Endpoint
+- **Start:** Add GET handler with action "getModelMetadata" for basic info
+- **End:** Returns model name, creation date, last modified without full JSON
+
+### Task 177: Implement Update Model Name Endpoint
+- **Start:** Add PUT handler with action "updateModelName" to rename model
+- **End:** Model name can be updated via API
+
+### Task 178: Implement Clone Sheet Endpoint
+- **Start:** Add POST handler with action "cloneSheet" to duplicate sheet
+- **End:** Creates copy of sheet with all blocks and connections
+
+### Task 179: Implement Clear Sheet Endpoint
+- **Start:** Add DELETE handler with action "clearSheet" to remove all content
+- **End:** Removes all blocks and connections from sheet but keeps sheet
+
+### Task 180: Implement Import Sheet JSON Endpoint
+- **Start:** Add POST handler with action "importSheet" to add sheet from JSON
+- **End:** Complete sheet structure can be imported into model
+
+### Task 181: Implement Export Sheet JSON Endpoint
+- **Start:** Add GET handler with action "exportSheet" to get sheet JSON
+- **End:** Returns standalone JSON representation of single sheet
+
+### Task 182: Add Model Builder API Rate Limiting
+- **Start:** Implement basic rate limiting by token (e.g., 100 requests/minute)
+- **End:** Excess requests return 429 with retry-after header
+
+### Task 183: Create Model Builder API Documentation
+- **Start:** Create `model-builder-api.md` with all endpoints documented
+- **End:** Complete API reference with examples for each endpoint
+
+### Task 184: Create Model Builder API Test Suite
+- **Start:** Create `__tests__/model-builder-api.test.ts` with basic structure
+- **End:** Test file runs with placeholder tests for each endpoint
+
+### Task 185: Implement Model Builder API Integration Tests
+- **Start:** Write tests for complete workflows (create model → add blocks → connect)
+- **End:** Integration tests verify multi-step operations work correctly
+
+### Task 186: Create Model Builder API Client Library
+- **Start:** Create `lib/modelBuilderApiClient.ts` with typed methods
+- **End:** Client library provides easy programmatic access to all endpoints
+
+### Task 187: Add Model Builder API to MCP Server
+- **Start:** Create MCP tools that use Model Builder API instead of direct manipulation
+- **End:** MCP server can leverage Model Builder API for operations
+
+### Task 188: Create Model Builder API Examples
+- **Start:** Create `examples/model-builder-api/` with sample scripts
+- **End:** Working examples show common use cases like building control systems
+
+### Task 189: Add Model Builder API Metrics
+- **Start:** Track usage metrics (calls per endpoint, response times)
+- **End:** Metrics available for monitoring API performance
+
+### Task 190: Full Integration Test of Model Builder API
+- **Start:** Test complete model building workflow via API only
+- **End:** Complex model can be built entirely through Model Builder API calls
+
+---
+
+💡 **Model Builder API Notes:**
+- Each endpoint should validate model ownership before allowing modifications
+- All block parameter updates should validate against block type constraints
+- Connection operations should enforce single-input-per-port rule
+- API should support both individual operations and efficient batch operations
+- Error messages should be specific enough for programmatic handling
+- Consider versioning strategy for future API evolution
+
 ---
 
 💡 **Notes:**

@@ -22,6 +22,19 @@ import {
   runSimulationTool,
   getSimulationResultsTool
 } from './tools/simulation.js';
+import {
+  validateModelTool,
+  listSheetLabelsTool,
+  validateSheetLabelsTool
+} from './tools/validation.js';
+import {
+  generateCodeTool,
+  getGeneratedFilesTool
+} from './tools/code-generation.js';
+
+import {
+  batchExecuteTool
+} from './tools/batch-operations.js';
 
 // Collect all tools
 const tools: Tool[] = [
@@ -39,8 +52,20 @@ const tools: Tool[] = [
   deleteConnectionTool,
   // Simulation
   runSimulationTool,
-  getSimulationResultsTool
+  getSimulationResultsTool,
+  // Validation
+  validateModelTool,
+  listSheetLabelsTool,
+  validateSheetLabelsTool,
+  // Code generation
+  generateCodeTool,
+  getGeneratedFilesTool,
+  // Batch operations
+  batchExecuteTool
 ];
+
+// Export tools for batch operations
+export { tools };
 
 // Initialize MCP server
 const server = new Server(
@@ -51,6 +76,8 @@ const server = new Server(
   {
     capabilities: {
       tools: {},
+      // Note: MCP SDK doesn't have built-in batch support
+      // Batch operations would need to be implemented as a special tool
     },
   }
 );
@@ -60,54 +87,119 @@ server.onerror = (error) => {
   console.error('[MCP Server Error]', error);
 };
 
+// Request logging middleware
+function logRequest(toolName: string, args: any, startTime: number, result: any, error?: any) {
+  const duration = Date.now() - startTime;
+  const timestamp = new Date().toISOString();
+  
+  const logEntry = {
+    timestamp,
+    tool: toolName,
+    duration: `${duration}ms`,
+    success: !error && result?.success !== false,
+    ...(config.debug && { args }),
+    ...(error && { error: error instanceof Error ? error.message : String(error) })
+  };
+  
+  console.error(`[MCP Request] ${JSON.stringify(logEntry)}`);
+}
+
 // Handle list tools request
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: tools.map(tool => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema
-    }))
-  };
+  const startTime = Date.now();
+  
+  try {
+    const response = {
+      tools: tools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema
+      }))
+    };
+    
+    if (config.debug) {
+      console.error(`[MCP Request] list_tools completed in ${Date.now() - startTime}ms`);
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('[MCP Request] list_tools failed:', error);
+    throw error;
+  }
 });
 
 // Handle tool execution
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name: toolName, arguments: args } = request.params;
-  
-  // Authenticate the request
-  const authResult = authenticateRequest(toolName, args, request.params);
-  
-  if (!authResult.authenticated) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Authentication failed: ${authResult.error || 'Invalid token'}`
-        }
-      ],
-      isError: true
-    };
-  }
-  
-  // Find the tool
-  const tool = tools.find(t => t.name === toolName);
-  if (!tool) {
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Tool ${toolName} not found`
-        }
-      ],
-      isError: true
-    };
-  }
+  const startTime = Date.now();
+  let result: any;
+  let error: any;
   
   try {
-    // Execute the tool
+    // Log incoming request
+    if (config.debug) {
+      console.error(`[MCP Request] Starting ${toolName}`, { args });
+    }
+    
+    // Authenticate the request
+    const authResult = authenticateRequest(toolName, args, request.params);
+    
+    if (!authResult.authenticated) {
+      error = authResult.error || 'Invalid token';
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Authentication failed: ${error}`
+          }
+        ],
+        isError: true
+      };
+    }
+    
+    // Find the tool
+    const tool = tools.find(t => t.name === toolName);
+    if (!tool) {
+      error = `Tool not found: ${toolName}`;
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `${error}. Available tools: ${tools.map(t => t.name).join(', ')}`
+          }
+        ],
+        isError: true
+      };
+    }
+    
+    // Validate tool arguments against schema
+    if (tool.inputSchema && tool.inputSchema.required) {
+      const required = tool.inputSchema.required as string[];
+      const missing = required.filter(field => !(args && typeof args === 'object' && field in args));
+      
+      if (missing.length > 0) {
+        error = `Missing required parameters: ${missing.join(', ')}`;
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Missing required parameters for ${toolName}: ${missing.join(', ')}`
+            }
+          ],
+          isError: true
+        };
+      }
+    }
+    
+    // Execute the tool with timeout
+    const TOOL_TIMEOUT = 30000; // 30 seconds
     const handler = tool.handler as (args: unknown) => Promise<any>;
-    const result = await handler(args);
+    const toolPromise = handler(args);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Tool execution timeout')), TOOL_TIMEOUT)
+    );
+    
+    result = await Promise.race([toolPromise, timeoutPromise]);
     
     // Format the response
     if (result.success === false && result.error) {
@@ -130,17 +222,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       ]
     };
-  } catch (error) {
-    console.error(`[MCP Server] Error executing tool ${toolName}:`, error);
+    
+  } catch (err) {
+    error = err;
+    console.error(`[MCP Server] Error executing tool ${toolName}:`, err);
+    
+    // Determine error type and message
+    let errorMessage = 'Unknown error occurred';
+    let errorDetails = '';
+    
+    if (err instanceof Error) {
+      errorMessage = err.message;
+      if (err.stack && config.debug) {
+        errorDetails = `\n\nStack trace:\n${err.stack}`;
+      }
+    } else if (typeof err === 'string') {
+      errorMessage = err;
+    }
+    
     return {
       content: [
         {
           type: 'text',
-          text: `Error executing tool: ${error instanceof Error ? error.message : 'Unknown error'}`
+          text: `Error executing tool ${toolName}: ${errorMessage}${errorDetails}`
         }
       ],
       isError: true
     };
+  } finally {
+    // Log request completion
+    logRequest(toolName, args, startTime, result, error);
   }
 });
 

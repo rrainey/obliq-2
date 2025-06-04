@@ -7,9 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "mcp-server:dev": "cd mcp-server && npm run dev",
+    "mcp-server:build": "cd mcp-server && npm run build",
+    "mcp-server:start": "cd mcp-server && npm start"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.10.0",
