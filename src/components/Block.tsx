@@ -286,6 +286,14 @@ export default function Block({
       return renderTransferFunction()
     }
 
+    if (block.type === 'source' && block.parameters?.value) {
+      if (Array.isArray(block?.parameters?.value)) {
+        return '[' + block.parameters?.value.join(', ') + ']';
+      } else {
+        return String(block?.parameters?.value || 0);
+      }
+    }
+
     // Special handling for sheet label blocks to show signal name
     if (block.type === 'sheet_label_sink' || block.type === 'sheet_label_source') {
       const signalName = block.parameters?.signalName || ''
@@ -353,6 +361,18 @@ export default function Block({
       const signalName = block.parameters?.signalName || ''
       if (signalName.length > 5) {
         return Math.min(120, 80 + signalName.length * 4)
+      }
+    }
+
+    if (block.type === 'source' && block.parameters?.value) {
+      let v = '';
+      if (Array.isArray(block?.parameters?.value)) {
+        v = '[' + block.parameters?.value.join(', ') + ']';
+      } else {
+        v = String(block?.parameters?.value || 0);
+      }
+      if (v.length > 5) {
+        return Math.min(120, 75 + v.length * 4)
       }
     }
     
