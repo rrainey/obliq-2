@@ -5,7 +5,8 @@ import { useUser } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
 import { BlockData, PortInfo } from '@/components/Block'
 import { WireData } from '@/components/Wire'
-import { SimulationEngine } from '@/lib/simulationEngine'
+import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
+import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
 import Canvas from '@/components/Canvas'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SignalDisplay from '@/components/SignalDisplay'
@@ -20,7 +21,6 @@ import Lookup2DConfig from '@/components/Lookup2DConfig'
 import SheetLabelSinkConfig from '@/components/SheetLabelSinkConfig'
 import SheetLabelSourceConfig from '@/components/SheetLabelSourceConfig'
 import ModelValidationButton from '@/components/ModelValidationButton'
-import { validateModelTypeCompatibility } from '@/lib/typeCompatibilityValidator'
 import { parseType } from '@/lib/typeValidator'
 import { useModelStore } from '@/lib/modelStore'
 import { useAutoSave } from '@/lib/useAutoSave'
@@ -41,19 +41,21 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   
   // Zustand store
   const {
-    // State
-    model, sheets, activeSheetId, blocks, wires,
-    selectedBlockId, selectedWireId, configBlock,
-    simulationResults, isSimulating, simulationEngine, outputPortValues,
-    modelLoading, saving, error, currentVersion, isOlderVersion,
-    
-    // Actions
-    setModel, setError, setModelLoading, saveModel,
-    switchToSheet, addSheet, renameSheet, deleteSheet,
-    addBlock, updateBlock, deleteBlock, addWire, deleteWire,
-    setSelectedBlockId, setSelectedWireId, setConfigBlock,
-    setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
-    updateCurrentSheet, saveCurrentSheetData, initializeFromModel
+ // State
+  model, sheets, activeSheetId, blocks, wires,
+  selectedBlockId, selectedWireId, configBlock,
+  simulationResults, isSimulating, simulationEngine, outputPortValues,
+  modelLoading, saving, error, currentVersion, isOlderVersion,
+  globalSimulationResults, 
+  
+  // Actions
+  setModel, setError, setModelLoading, saveModel,
+  switchToSheet, addSheet, renameSheet, deleteSheet,
+  addBlock, updateBlock, deleteBlock, addWire, deleteWire,
+  setSelectedBlockId, setSelectedWireId, setConfigBlock,
+  setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
+  setGlobalSimulationResults, clearGlobalSimulationResults, 
+  updateCurrentSheet, saveCurrentSheetData, initializeFromModel
   } = useModelStore()
   
   // Unwrap the params Promise
@@ -348,21 +350,33 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleRunSimulation = async () => {
-    if (blocks.length === 0) {
+    // Check if any sheet has blocks
+    const totalBlocks = sheets.reduce((sum, sheet) => sum + sheet.blocks.length, 0)
+    if (totalBlocks === 0) {
       alert('No blocks to simulate')
       return
     }
 
-    // Validate model before simulation
-    const validationResult = validateModelTypeCompatibility(blocks, wires)
+    // Save current sheet data first
+    saveCurrentSheetData()
 
-    // Separate errors and warnings
+    // Validate ALL sheets together using multi-sheet validator
+    const validationResult = validateMultiSheetTypeCompatibility(sheets.map(sheet => ({
+      id: sheet.id,
+      blocks: sheet.blocks,
+      connections: sheet.connections
+    })))
+
     const errors = validationResult.errors
     const warnings = validationResult.warnings
 
     // Block on errors
     if (errors.length > 0) {
-      const errorMessages = errors.slice(0, 5).map(e => `• ${e.message}`).join('\n')
+      const errorMessages = errors.slice(0, 5).map(e => {
+        const sheetName = sheets.find(s => s.id === e.sheetId)?.name || 'Unknown Sheet'
+        return `• [${sheetName}] ${e.message}`
+      }).join('\n')
+      
       alert(
         `Cannot run simulation due to ${errors.length} type compatibility error${errors.length > 1 ? 's' : ''}:\n\n` +
         `${errorMessages}${errors.length > 5 ? `\n\n...and ${errors.length - 5} more errors` : ''}\n\n` +
@@ -373,7 +387,11 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
     // Allow bypass for warnings
     if (warnings.length > 0) {
-      const warningMessages = warnings.slice(0, 3).map(w => `• ${w.message}`).join('\n')
+      const warningMessages = warnings.slice(0, 3).map(w => {
+        const sheetName = sheets.find(s => s.id === w.sheetId)?.name || 'Unknown Sheet'
+        return `• [${sheetName}] ${w.message}`
+      }).join('\n')
+      
       const proceed = window.confirm(
         `Found ${warnings.length} warning${warnings.length > 1 ? 's' : ''}:\n\n` +
         `${warningMessages}${warnings.length > 3 ? `\n\n...and ${warnings.length - 3} more warnings` : ''}\n\n` +
@@ -382,23 +400,43 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       if (!proceed) return
     }
 
-    // Continue with existing simulation code...
     setIsSimulating(true)
     try {
-      saveCurrentSheetData()
-      
       const config = {
         timeStep: 0.01,
         duration: 10.0
       }
       
-      const engine = new SimulationEngine(blocks, wires, config, undefined, sheets)
-      const results = engine.run()
+      // Create multi-sheet simulation engine
+      const multiEngine = new MultiSheetSimulationEngine(sheets, config)
       
-      setSimulationResults(results)
-      setSimulationEngine(engine)
-      setOutputPortValues(engine.getOutputPortValues() as Map<string, number>)
-      console.log('Simulation completed:', results)
+      // Run simulation across ALL sheets - this returns results for all sheets
+      const allResults = multiEngine.run()
+      
+      // Store ALL results globally
+      setGlobalSimulationResults(allResults)
+      
+      // Also set the current sheet's engine for CSV export and other operations
+      const currentSheetEngine = multiEngine.getSheetEngine(activeSheetId)
+      if (currentSheetEngine) {
+        setSimulationEngine(currentSheetEngine)
+        setOutputPortValues(multiEngine.getOutputPortValues(activeSheetId) || new Map())
+      }
+      
+      console.log('Simulation completed for all sheets:', {
+        totalSheets: allResults.size,
+        sheetsWithData: Array.from(allResults.keys())
+      })
+      
+      // Log summary of results for debugging
+      for (const [sheetId, results] of allResults) {
+        const sheet = sheets.find(s => s.id === sheetId)
+        console.log(`Sheet "${sheet?.name || sheetId}":`, {
+          displays: results.signalData.size,
+          timePoints: results.timePoints.length
+        })
+      }
+      
     } catch (error) {
       console.error('Simulation error:', error)
       alert('Simulation failed. Check console for details.')
@@ -749,15 +787,18 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                     <div>Duration: {simulationResults.finalTime.toFixed(2)}s</div>
                     <div>Time Points: {simulationResults.timePoints.length}</div>
                     <div>Display Blocks: {simulationResults.signalData.size}</div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Sheet: {sheets.find(s => s.id === activeSheetId)?.name}
+                    </div>
                   </div>
                   
                   {/* Display Signal Charts */}
-                  {Array.from(simulationResults.signalData.entries()).map(([blockId, data]) => {
+                  {Array.from(simulationResults.signalData.entries()).map(([blockId, data]: [string, any[]]) => {
                     const block = blocks.find(b => b.id === blockId && b.type === 'signal_display')
                     if (!block) return null
                     
                     // Transform the data to match SignalDisplay's expected format
-                    const signalData = simulationResults.timePoints.map((time, index) => ({
+                    const signalData = simulationResults.timePoints.map((time: number, index: number) => ({
                       time,
                       value: data[index]
                     }))
@@ -774,7 +815,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                   })}
                   
                   {/* Logger Block Data Summary */}
-                  {Array.from(simulationResults.signalData.entries()).map(([blockId, data]) => {
+                  {Array.from(simulationResults.signalData.entries()).map(([blockId, data]: [string, any[]]) => {
                     const block = blocks.find(b => b.id === blockId && b.type === 'signal_logger')
                     if (!block) return null
                     
@@ -786,7 +827,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                       } else if (typeof lastValue === 'boolean') {
                         return lastValue.toString()
                       } else if (Array.isArray(lastValue)) {
-                        return `[${lastValue.map(v => 
+                        return `[${lastValue.map((v: any) => 
                           typeof v === 'number' ? v.toFixed(3) : v
                         ).join(', ')}]`
                       }
@@ -794,7 +835,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                     })()
                     
                     // Calculate min/max only for numeric data
-                    const numericData = data.filter(d => typeof d === 'number') as number[]
+                    const numericData = data.filter((d: any) => typeof d === 'number') as number[]
                     const minValue = numericData.length > 0 ? Math.min(...numericData).toFixed(3) : 'N/A'
                     const maxValue = numericData.length > 0 ? Math.max(...numericData).toFixed(3) : 'N/A'
                     
@@ -824,7 +865,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                           } else if (typeof value === 'boolean') {
                             return value.toString()
                           } else if (Array.isArray(value)) {
-                            return `[${value.map(v => 
+                            return `[${value.map((v: any) => 
                               typeof v === 'number' ? v.toFixed(3) : v
                             ).join(', ')}]`
                           }
@@ -842,7 +883,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                   )}
 
                   {/* CSV Export Button */}
-                  {Array.from(simulationResults.signalData.entries()).some(([blockId]) => 
+                  {Array.from(simulationResults.signalData.entries()).some(([blockId]: [string, any]) => 
                     blocks.find(b => b.id === blockId && b.type === 'signal_logger')
                   ) && (
                     <div className="mt-4">
@@ -852,6 +893,16 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                       >
                         Export Logger Data as CSV
                       </button>
+                    </div>
+                  )}
+                  
+                  {/* Show note if other sheets have results */}
+                  {globalSimulationResults && globalSimulationResults.size > 1 && (
+                    <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                      <p className="text-sm text-blue-700">
+                        Simulation data available for {globalSimulationResults.size} sheets. 
+                        Switch sheets to view their results.
+                      </p>
                     </div>
                   )}
                 </div>

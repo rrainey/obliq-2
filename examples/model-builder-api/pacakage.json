@@ -1,0 +1,23 @@
+{
+  "name": "model-builder-api-examples",
+  "version": "1.0.0",
+  "description": "Example scripts for the obliq-2 Model Builder API",
+  "scripts": {
+    "example:basic": "tsx basic-model.ts",
+    "example:control": "tsx control-system.ts",
+    "example:multisheet": "tsx multi-sheet.ts",
+    "example:signal": "tsx signal-processing.ts",
+    "example:batch": "tsx batch-operations.ts",
+    "example:validate": "tsx validation-example.ts",
+    "test:integration": "tsx full-integration-test.ts",
+    "examples:all": "npm run example:basic && npm run example:control && npm run example:multisheet && npm run example:signal && npm run example:batch && npm run example:validate"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}

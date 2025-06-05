@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "jest",
+    "test:watch": "jest --watch",
     "mcp-server:dev": "cd mcp-server && npm run dev",
     "mcp-server:build": "cd mcp-server && npm run build",
     "mcp-server:start": "cd mcp-server && npm start"
@@ -17,6 +19,7 @@
     "@supabase/auth-ui-shared": "^0.1.8",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.8",
+    "dotenv": "^16.5.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.511.0",
     "next": "15.3.2",

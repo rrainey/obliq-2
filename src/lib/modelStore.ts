@@ -35,6 +35,8 @@ export interface ModelState {
   configBlock: BlockData | null
   
   // Simulation state
+  globalSimulationResults: Map<string, SimulationResults> | null
+  currentSheetSimulationResults: SimulationResults | null 
   simulationResults: SimulationResults | null
   isSimulating: boolean
   simulationEngine: SimulationEngine | null
@@ -91,6 +93,8 @@ export interface ModelActions {
   setIsSimulating: (simulating: boolean) => void
   setSimulationEngine: (engine: SimulationEngine | null) => void
   setOutputPortValues: (values: Map<string, number> | null) => void
+  setGlobalSimulationResults: (results: Map<string, SimulationResults>) => void
+  clearGlobalSimulationResults: () => void
   
   // Composite actions
   switchToSheet: (sheetId: string) => void
@@ -123,6 +127,8 @@ export const useModelStore = create<ModelStore>()(
     error: null,
     autoSaveEnabled: true,
     lastAutoSave: null,
+    globalSimulationResults: null,
+    currentSheetSimulationResults: null,
 
     // Model actions
     setModel: (model) => set({ model }),
@@ -520,26 +526,52 @@ export const useModelStore = create<ModelStore>()(
     setOutputPortValues: (outputPortValues) => set({ outputPortValues }),
 
     // Composite actions
-    switchToSheet: (sheetId) => {
-      const state = get()
+    switchToSheet: (sheetId: string) => {
+      const { saveCurrentSheetData, sheets, globalSimulationResults } = get()
       
-      // Save current sheet data before switching
-      if (state.activeSheetId && (state.blocks.length > 0 || state.wires.length > 0)) {
-        get().updateCurrentSheet({ blocks: state.blocks, connections: state.wires })
-      }
-      
-      // Find the target sheet and load its data
-      const targetSheet = state.sheets.find(s => s.id === sheetId)
-      if (targetSheet) {
+      // Save current sheet data first
+      saveCurrentSheetData()
+    
+      const sheet = sheets.find(s => s.id === sheetId)
+      if (sheet) {
+        // Update current sheet simulation results if available
+        const sheetResults = globalSimulationResults?.get(sheetId) || null
+        
         set({
           activeSheetId: sheetId,
-          blocks: targetSheet.blocks || [],
-          wires: targetSheet.connections || [],
+          blocks: sheet.blocks,
+          wires: sheet.connections,
           selectedBlockId: null,
           selectedWireId: null,
-          simulationResults: null
+          currentSheetSimulationResults: sheetResults
         })
       }
+    },
+
+    setGlobalSimulationResults: (results: Map<string, SimulationResults>) => {
+      const { activeSheetId } = get()
+      const currentSheetResults = results.get(activeSheetId) || null
+      
+      set({
+        globalSimulationResults: results,
+        currentSheetSimulationResults: currentSheetResults,
+        simulationResults: currentSheetResults  // Keep for backward compatibility
+      })
+    },
+
+    clearGlobalSimulationResults: () => {
+      set({
+        globalSimulationResults: null,
+        simulationResults: null
+      })
+    },
+    
+    clearSimulationResults: () => {
+      set({
+        globalSimulationResults: null,
+        currentSheetSimulationResults: null,
+        simulationResults: null
+      })
     },
     
     updateCurrentSheet: (updates) => {
