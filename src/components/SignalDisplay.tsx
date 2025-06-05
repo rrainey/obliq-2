@@ -84,7 +84,7 @@ useEffect(() => {
   } else {
       // Transform scalar data
       const transformedData = signalData.slice(-maxSamples).map((point) => ({
-        time: point.time.toFixed(3),
+        time: point.time,
         value: typeof point.value === 'number' ? point.value : (point.value ? 1 : 0)
       }))
       

@@ -145,8 +145,25 @@ interface DraggableBlockProps {
 
 function DraggableBlock({ blockType }: DraggableBlockProps) {
   const handleDragStart = (e: React.DragEvent) => {
+    // Set the block type data for ReactFlow
     e.dataTransfer.setData('text/plain', blockType.id)
+    e.dataTransfer.setData('application/reactflow', blockType.id)
     e.dataTransfer.effectAllowed = 'copy'
+    
+    // Create a custom drag image
+    const dragImage = document.createElement('div')
+    dragImage.className = 'p-2 bg-blue-500 text-white rounded shadow-lg'
+    dragImage.textContent = blockType.name
+    dragImage.style.position = 'absolute'
+    dragImage.style.top = '-1000px'
+    document.body.appendChild(dragImage)
+    
+    e.dataTransfer.setDragImage(dragImage, 0, 0)
+    
+    // Clean up the drag image after a short delay
+    setTimeout(() => {
+      document.body.removeChild(dragImage)
+    }, 0)
   }
 
   // Get vector support badge
@@ -196,11 +213,11 @@ function DraggableBlock({ blockType }: DraggableBlockProps) {
     <div
       draggable
       onDragStart={handleDragStart}
-      className="p-3 bg-white border border-gray-200 rounded-lg cursor-grab hover:bg-gray-50 hover:border-blue-300 transition-colors group"
+      className="p-3 bg-white border border-gray-200 rounded-lg cursor-move hover:bg-gray-50 hover:border-blue-300 hover:shadow-md transition-all group active:cursor-grabbing"
       title={getTooltip()}
     >
-      <div className="flex items-center space-x-3">
-        <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center text-blue-700 font-mono text-sm group-hover:bg-blue-200">
+      <div className="flex items-center space-x-3 pointer-events-none">
+        <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center text-blue-700 font-mono text-sm group-hover:bg-blue-200 transition-colors">
           {blockType.icon}
         </div>
         <div className="flex-1 min-w-0">
@@ -291,10 +308,11 @@ export default function BlockLibrarySidebar() {
         </div>
       </div>
 
-      {/* Footer with Legend */}
+      {/* Footer with Legend and Instructions */}
       <div className="p-4 border-t border-gray-200 bg-gray-50">
-        <div className="text-xs text-gray-500 text-center mb-2">
-          Drag blocks onto the canvas
+        <div className="text-xs text-gray-600 text-center mb-3">
+          <div className="font-medium mb-1">Drag blocks onto the canvas</div>
+          <div className="text-gray-500">Click and hold to drag • Release over canvas to place</div>
         </div>
         <div className="flex justify-center gap-3 text-xs">
           <div className="flex items-center gap-1">

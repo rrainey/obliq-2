@@ -7,7 +7,7 @@ import { BlockData, PortInfo } from '@/components/Block'
 import { WireData } from '@/components/Wire'
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
-import Canvas from '@/components/Canvas'
+import CanvasReactFlow from '@/components/CanvasReactFlow'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SignalDisplay from '@/components/SignalDisplay'
 import SheetTabs, { Sheet } from '@/components/SheetTabs'
@@ -750,7 +750,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
           {/* Canvas Area */}
           <div className="flex-1 relative">
-           <Canvas 
+          <CanvasReactFlow
             blocks={blocks}
             wires={wires}
             selectedBlockId={selectedBlockId}
