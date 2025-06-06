@@ -292,6 +292,17 @@ export class SimulationEngine {
     }
 
     this.executionOrder = order
+
+    // Debug: log execution order with Sheet Label blocks highlighted
+    /*
+    console.log('DEBUG: Execution order:', this.executionOrder.map(id => {
+      const block = this.blocks.find(b => b.id === id)
+      if (block?.type === 'sheet_label_sink' || block?.type === 'sheet_label_source') {
+        return `${block.type}(${block.name})`
+      }
+      return block?.type || id
+    }))
+    */
   }
 
   private executeSheetLabelSinkBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
@@ -300,6 +311,14 @@ export class SimulationEngine {
     
     // Store the input value indexed by signal name
     const input = inputs[0] !== undefined ? inputs[0] : 0
+    
+    console.log(`DEBUG: Sheet Label Sink '${signalName}' storing value:`, {
+      signalName,
+      input,
+      isArray: Array.isArray(input),
+      value: input
+    })
+    
     this.state.sheetLabelValues.set(signalName, input)
     
     // Also store in internal state for debugging
@@ -315,10 +334,22 @@ export class SimulationEngine {
     
     // Retrieve the value from sheet label storage
     const value = this.state.sheetLabelValues.get(signalName)
+    
+    /*
+    console.log(`DEBUG: Sheet Label Source '${signalName}' retrieving:`, {
+      signalName,
+      hasValue: value !== undefined,
+      value,
+      isArray: Array.isArray(value),
+      sheetLabelValues: Array.from(this.state.sheetLabelValues.entries())
+    })
+    */
+    
     if (value !== undefined) {
       blockState.outputs[0] = value
     } else {
       // No sink found or not yet executed
+      //console.log(`DEBUG: Sheet Label Source '${signalName}' - no value found, defaulting to 0`)
       blockState.outputs[0] = 0
     }
   }

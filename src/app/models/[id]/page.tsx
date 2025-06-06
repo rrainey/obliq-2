@@ -44,7 +44,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
  // State
   model, sheets, activeSheetId, blocks, wires,
   selectedBlockId, selectedWireId, configBlock,
-  simulationResults, isSimulating, simulationEngine, outputPortValues,
+  simulationResults, currentSheetSimulationResults, isSimulating, simulationEngine, outputPortValues,
   modelLoading, saving, error, currentVersion, isOlderVersion,
   globalSimulationResults, 
   
@@ -780,25 +780,25 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               )}
             </div>
             <div className="flex-1 overflow-y-auto">
-              {simulationResults ? (
+              {currentSheetSimulationResults ? (
                 <div className="p-4">
                   <h3 className="font-medium mb-3">Simulation Results</h3>
                   <div className="text-sm text-gray-600 space-y-1 mb-4">
-                    <div>Duration: {simulationResults.finalTime.toFixed(2)}s</div>
-                    <div>Time Points: {simulationResults.timePoints.length}</div>
-                    <div>Display Blocks: {simulationResults.signalData.size}</div>
+                    <div>Duration: {currentSheetSimulationResults.finalTime.toFixed(2)}s</div>
+                    <div>Time Points: {currentSheetSimulationResults.timePoints.length}</div>
+                    <div>Display Blocks: {currentSheetSimulationResults.signalData.size}</div>
                     <div className="text-xs text-gray-500 mt-1">
                       Sheet: {sheets.find(s => s.id === activeSheetId)?.name}
                     </div>
                   </div>
                   
                   {/* Display Signal Charts */}
-                  {Array.from(simulationResults.signalData.entries()).map(([blockId, data]: [string, any[]]) => {
+                  {Array.from(currentSheetSimulationResults.signalData.entries()).map(([blockId, data]: [string, any[]]) => {
                     const block = blocks.find(b => b.id === blockId && b.type === 'signal_display')
                     if (!block) return null
                     
                     // Transform the data to match SignalDisplay's expected format
-                    const signalData = simulationResults.timePoints.map((time: number, index: number) => ({
+                    const signalData = currentSheetSimulationResults.timePoints.map((time: number, index: number) => ({
                       time,
                       value: data[index]
                     }))
@@ -815,7 +815,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                   })}
                   
                   {/* Logger Block Data Summary */}
-                  {Array.from(simulationResults.signalData.entries()).map(([blockId, data]: [string, any[]]) => {
+                  {Array.from(currentSheetSimulationResults.signalData.entries()).map(([blockId, data]: [string, any[]]) => {
                     const block = blocks.find(b => b.id === blockId && b.type === 'signal_logger')
                     if (!block) return null
                     
@@ -883,7 +883,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                   )}
 
                   {/* CSV Export Button */}
-                  {Array.from(simulationResults.signalData.entries()).some(([blockId]: [string, any]) => 
+                  {Array.from(currentSheetSimulationResults.signalData.entries()).some(([blockId]: [string, any]) => 
                     blocks.find(b => b.id === blockId && b.type === 'signal_logger')
                   ) && (
                     <div className="mt-4">

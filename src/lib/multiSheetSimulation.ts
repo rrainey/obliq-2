@@ -38,34 +38,12 @@ export class MultiSheetSimulationEngine {
     }
     
     // Run a single step on all sheets to establish initial values
+    // This ensures ALL blocks execute, not just sources
     for (const [sheetId, engine] of this.engines) {
-      // Execute just the source blocks and sheet label sinks
-      const sheet = this.sheets.find(s => s.id === sheetId)
-      if (!sheet) continue
-      
-      const engineState = engine.getState()
-      
-      // Execute source blocks first
-      for (const block of sheet.blocks) {
-        if (block.type === 'source' || block.type === 'input_port') {
-          const blockState = engineState.blockStates.get(block.id)
-          if (blockState) {
-            // Execute the block to get its initial output
-            if (block.type === 'source') {
-              // Get the initial value
-              const value = block.parameters?.value
-              if (value !== undefined) {
-                blockState.outputs[0] = Array.isArray(value) ? [...value] : value
-                // Store in signal values
-                engineState.signalValues.set(`${block.id}_output_0`, blockState.outputs[0])
-              }
-            }
-          }
-        }
-      }
+      engine.step()
     }
     
-    // Now collect initial sheet label sink values
+    // Now collect sheet label sink values after all blocks have executed
     for (const [sheetId, engine] of this.engines) {
       const sheet = this.sheets.find(s => s.id === sheetId)
       if (!sheet) continue
@@ -74,14 +52,12 @@ export class MultiSheetSimulationEngine {
       
       for (const block of sheet.blocks) {
         if (block.type === 'sheet_label_sink' && block.parameters?.signalName) {
-          // Find connected source
-          const inputWire = sheet.connections.find(w => w.targetBlockId === block.id)
-          if (inputWire) {
-            const signalKey = `${inputWire.sourceBlockId}_output_${inputWire.sourcePortIndex}`
-            const signalValue = engineState.signalValues.get(signalKey)
-            if (signalValue !== undefined) {
-              this.globalSheetLabelValues.set(block.parameters.signalName, signalValue)
-            }
+          const blockState = engineState.blockStates.get(block.id)
+          if (blockState?.internalState?.currentValue !== undefined) {
+            this.globalSheetLabelValues.set(
+              block.parameters.signalName,
+              blockState.internalState.currentValue
+            )
           }
         }
       }
