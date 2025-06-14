@@ -145,6 +145,16 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   console.log('Generating code for', blocks.length, 'blocks')
 
+  // In the route.ts, before instantiating CodeGenerator:
+  console.log('Sheets structure:', sheets.map((s: any) => ({
+    id: s.id,
+    name: s.name,
+    hasBlocks: !!s.blocks,
+    blocksCount: s.blocks?.length || 0,
+    hasConnections: !!s.connections,
+    connectionsCount: s.connections?.length || 0
+  })))
+
   // Generate the code
   let codeGenerator: CodeGenerator
   try {
@@ -163,7 +173,11 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
     )
   }
 
+  console.log('CodeGenerator instantiated successfully')
+
   const result = codeGenerator.generateCode()
+
+  console.log('generateCode result:', result)
 
   if (!result.success) {
     throw new AppError(

@@ -380,6 +380,8 @@ function CanvasReactFlowInner({
           gap={20} 
           size={1}
           color="#e5e7eb"
+          className="bg-gray-100 dark:!bg-gray-900"
+  
         />
         
         <Controls 
@@ -389,20 +391,20 @@ function CanvasReactFlowInner({
 
         {/* Connection Error Display */}
         {connectionError && (
-          <Panel position="top-center" className="bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg">
+          <Panel position="top-center" className="bg-red-500 dark:bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg">
             {connectionError}
           </Panel>
         )}
 
         {/* Custom Controls Panel */}
-        <Panel position="bottom-right" className="bg-white rounded-md shadow-md px-2 py-1 text-xs text-gray-600">
+        <Panel position="bottom-right" className="bg-white dark:bg-gray-800 rounded-md shadow-md px-2 py-1 text-xs text-gray-600 dark:text-gray-300">
           <div className="flex items-center gap-2">
             <span>Zoom: {Math.round(viewport.zoom * 100)}%</span>
           </div>
         </Panel>
 
         {/* Instructions Panel */}
-        <Panel position="bottom-left" className="bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+        <Panel position="bottom-left" className="bg-blue-500 dark:bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
           Drag blocks from the library • Click and drag to pan • Scroll to zoom • Delete key removes selection
         </Panel>
       </ReactFlow>

@@ -1,8 +1,7 @@
 @import "tailwindcss";
 
-
 :root {
-  /* CSS HEX */
+  /* Light mode colors */
   --pine-green: #206a5dff;
   --apple-green: #81b214ff;
   --beige: #d0d6b5ff;
@@ -10,24 +9,80 @@
   --orange-wheel: #f58634ff;
   --background: #ffffff;
   --foreground: #171717;
+  
+  /* ReactFlow colors */
+  --rf-background: #fafafa;
+  --rf-grid: #e5e7eb;
+  --rf-node-bg: #ffffff;
+  --rf-node-border: #d1d5db;
+  --rf-edge: #6b7280;
+  --rf-edge-error: #ef4444;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  
+  /* ReactFlow dark colors */
+  --rf-background: #1a1a1a;
+  --rf-grid: #374151;
+  --rf-node-bg: #1f2937;
+  --rf-node-border: #4b5563;
+  --rf-edge: #9ca3af;
+  --rf-edge-error: #dc2626;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ReactFlow dark mode overrides */
+.dark .react-flow {
+  background-color: var(--rf-background);
+}
+
+.dark .react-flow__node {
+  background-color: var(--rf-node-bg);
+  border-color: var(--rf-node-border);
+  color: var(--foreground);
+}
+
+.dark .react-flow__edge-path {
+  stroke: var(--rf-edge);
+}
+
+.dark .react-flow__controls {
+  background-color: var(--rf-node-bg);
+  border-color: var(--rf-node-border);
+}
+
+.dark .react-flow__controls button {
+  background-color: var(--rf-node-bg);
+  border-color: var(--rf-node-border);
+  color: var(--foreground);
+}
+
+.dark .react-flow__controls button:hover {
+  background-color: #374151;
+}
+
+/* Recharts dark mode */
+.dark .recharts-cartesian-grid-horizontal line,
+.dark .recharts-cartesian-grid-vertical line {
+  stroke: #374151;
+}
+
+.dark .recharts-text {
+  fill: var(--foreground);
+}
+
+.dark .recharts-legend-item-text {
+  color: var(--foreground) !important;
 }

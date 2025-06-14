@@ -1,0 +1,123 @@
+
+{
+    "sheets": [
+        {
+            "id": "main",
+            "name": "Main",
+            "blocks": [
+                {
+                    "id": "input1",
+                    "name": "Input1",
+                    "type": "input_port",
+                    "position": {
+                        "x": 50,
+                        "y": 100
+                    },
+                    "parameters": {
+                        "portName": "Input1",
+                        "dataType": "double",
+                        "defaultValue": 0
+                    }
+                },
+                {
+                    "id": "input2",
+                    "name": "Input2",
+                    "type": "input_port",
+                    "position": {
+                        "x": 50,
+                        "y": 200
+                    },
+                    "parameters": {
+                        "portName": "Input2",
+                        "dataType": "double",
+                        "defaultValue": 0
+                    }
+                },
+                {
+                    "id": "multiply1",
+                    "name": "Multiply1",
+                    "type": "multiply",
+                    "position": {
+                        "x": 200,
+                        "y": 150
+                    },
+                    "parameters": {}
+                },
+                {
+                    "id": "scale1",
+                    "name": "Scale1",
+                    "type": "scale",
+                    "position": {
+                        "x": 350,
+                        "y": 150
+                    },
+                    "parameters": {
+                        "gain": 2.5
+                    }
+                },
+                {
+                    "id": "output1",
+                    "name": "Output1",
+                    "type": "output_port",
+                    "position": {
+                        "x": 500,
+                        "y": 150
+                    },
+                    "parameters": {
+                        "portName": "Result",
+                        "dataType": "double"
+                    }
+                }
+            ],
+            "connections": [
+                {
+                    "id": "wire1",
+                    "sourceBlockId": "input1",
+                    "targetBlockId": "multiply1",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire2",
+                    "sourceBlockId": "input2",
+                    "targetBlockId": "multiply1",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 1
+                },
+                {
+                    "id": "wire3",
+                    "sourceBlockId": "multiply1",
+                    "targetBlockId": "scale1",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire4",
+                    "sourceBlockId": "scale1",
+                    "targetBlockId": "output1",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                }
+            ],
+            "extents": {
+                "width": 600,
+                "height": 300
+            }
+        }
+    ],
+    "version": "1.0",
+    "metadata": {
+        "created": "2025-06-13T16:00:00.000Z",
+        "description": "Multiply and Scale Test",
+        "testInputs": {
+            "Input1": 3.0,
+            "Input2": 4.0
+        },
+        "expectedOutput": 30.0,
+        "comment": "3 * 4 * 2.5 = 30"
+    },
+    "globalSettings": {
+        "simulationDuration": 10,
+        "simulationTimeStep": 0.01
+    }
+}

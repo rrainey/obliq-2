@@ -65,7 +65,7 @@ export default function SheetTabs({
   }
 
   return (
-    <div className="flex items-center bg-gray-50 border-b border-gray-200 px-4 py-2">
+    <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-700 flex items-center px-4">
       {/* Sheet Tabs */}
       <div className="flex items-center space-x-1 flex-1">
         {sheets.map(sheet => (
@@ -118,8 +118,7 @@ export default function SheetTabs({
         {/* Add Sheet Button */}
         <button
           onClick={onAddSheet}
-          className="ml-2 px-3 py-1 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-md"
-          title="Add new sheet"
+          className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
         >
           + Add Sheet
         </button>

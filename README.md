@@ -175,6 +175,64 @@ obliq-2/
 └── public/                # Static assets
 ```
 
+## Testing
+
+PlatformIO is used for integration testing if C-code generation.  See the [PlatformIO site](https://docs.platformio.org/en/latest/core/installation/methods/installer-script.html) for install instructions.  You must install Platform IO to successfully run these integration tests.
+
+```console
+$ python3 get-platformio.py
+Installer version: 1.2.2
+Platform: Linux-6.6.87.1-microsoft-standard-WSL2-x86_64-with-glibc2.35
+Python version: 3.10.12 (main, Feb  4 2025, 14:57:36) [GCC 11.4.0]
+Python path: /usr/bin/python3
+Creating a virtual environment at /home/riley/.platformio/penv
+Updating Python package manager (PIP) in the virtual environment
+Looking in indexes: https://pypi.org/simple, https://pypi.ngc.nvidia.com
+Requirement already satisfied: pip in ./.platformio/penv/lib/python3.10/site-packages (22.0.2)
+Collecting pip
+  Downloading pip-25.1.1-py3-none-any.whl (1.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 10.8 MB/s eta 0:00:00
+Installing collected packages: pip
+  Attempting uninstall: pip
+    Found existing installation: pip 22.0.2
+    Uninstalling pip-22.0.2:
+      Successfully uninstalled pip-22.0.2
+
+***
+*** Lots removed for brevity
+***
+
+Successfully installed pip-25.1.1
+PIP has been successfully updated!
+Virtual environment has been successfully created!
+Installing PlatformIO Core
+
+PlatformIO Core has been successfully installed into an isolated environment `/home/riley/.platformio/penv`!
+
+The full path to `platformio.exe` is `/home/riley/.platformio/penv/bin/platformio`
+
+If you need an access to `platformio.exe` from other applications, please install Shell Commands
+(add PlatformIO Core binary directory `/home/riley/.platformio/penv/bin` to the system environment PATH variable):
+
+See https://docs.platformio.org/page/installation.html#install-shell-commands
+```
+
+You will also need to install PlatformIO's Shell Commands:  https://docs.platformio.org/en/latest/core/installation/shell-commands.html#piocore-install-shell-commands
+
+You can then run:
+
+```console
+$ npm run test:codegen
+```
+
+Or:
+
+```console
+$ npm run test:codegen:arduino
+```
+
+
+
 ## Usage
 
 1. **Create a Model**: Click "New Model" from the dashboard

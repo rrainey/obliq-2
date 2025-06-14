@@ -1,6 +1,4 @@
 // lib/sheetLabelUtils.ts
-'use client'
-
 import { BlockData } from '@/components/Block'
 import { WireData } from '@/components/Wire'
 

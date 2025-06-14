@@ -1,0 +1,218 @@
+{
+    "sheets": [
+        {
+            "id": "main",
+            "name": "Main",
+            "blocks": [
+                {
+                    "id": "source_1749829477676",
+                    "name": "Source1",
+                    "type": "source",
+                    "position": {
+                        "x": 21,
+                        "y": 304
+                    },
+                    "parameters": {
+                        "f0": 0.1,
+                        "f1": 10,
+                        "mean": 0,
+                        "phase": 0,
+                        "slope": 1,
+                        "value": [
+                            0,
+                            1,
+                            2
+                        ],
+                        "offset": 0,
+                        "dataType": "double[3]",
+                        "duration": 10,
+                        "stepTime": 1,
+                        "amplitude": 1,
+                        "frequency": 1,
+                        "startTime": 0,
+                        "stepValue": 1,
+                        "signalType": "constant"
+                    }
+                },
+                {
+                    "id": "transfer_function_1749829520584",
+                    "name": "Transfer function2",
+                    "type": "transfer_function",
+                    "position": {
+                        "x": 150,
+                        "y": 305.25
+                    },
+                    "parameters": {
+                        "numerator": [
+                            1
+                        ],
+                        "denominator": [
+                            1,
+                            0
+                        ]
+                    }
+                },
+                {
+                    "id": "output_port_1749829529644",
+                    "name": "Output port3",
+                    "type": "output_port",
+                    "position": {
+                        "x": 288.5,
+                        "y": 304.75
+                    },
+                    "parameters": {
+                        "dataType": "double",
+                        "portName": "out2",
+                        "defaultValue": 0
+                    }
+                },
+                {
+                    "id": "source_1749829586819",
+                    "name": "Source4",
+                    "type": "source",
+                    "position": {
+                        "x": 76.5,
+                        "y": 138.75
+                    },
+                    "parameters": {
+                        "f0": 0.1,
+                        "f1": 10,
+                        "mean": 0,
+                        "phase": 0,
+                        "slope": 1,
+                        "value": 1,
+                        "offset": 0,
+                        "duration": 10,
+                        "stepTime": 1,
+                        "amplitude": 1,
+                        "frequency": 1,
+                        "startTime": 0,
+                        "stepValue": 1,
+                        "signalType": "constant"
+                    }
+                },
+                {
+                    "id": "output_port_1749829590648",
+                    "name": "Output port5",
+                    "type": "output_port",
+                    "position": {
+                        "x": 228,
+                        "y": 138.75
+                    },
+                    "parameters": {
+                        "dataType": "double",
+                        "portName": "out0",
+                        "defaultValue": 0
+                    }
+                },
+                {
+                    "id": "source_1749829612636",
+                    "name": "Source6",
+                    "type": "source",
+                    "position": {
+                        "x": 20.5,
+                        "y": 228.25
+                    },
+                    "parameters": {
+                        "f0": 0.1,
+                        "f1": 10,
+                        "mean": 0,
+                        "phase": 0,
+                        "slope": 1,
+                        "value": 1,
+                        "offset": 0,
+                        "duration": 10,
+                        "stepTime": 1,
+                        "amplitude": 1,
+                        "frequency": 1,
+                        "startTime": 0,
+                        "stepValue": 1,
+                        "signalType": "constant"
+                    }
+                },
+                {
+                    "id": "transfer_function_1749829618226",
+                    "name": "Transfer function7",
+                    "type": "transfer_function",
+                    "position": {
+                        "x": 150,
+                        "y": 227.75
+                    },
+                    "parameters": {
+                        "numerator": [
+                            1
+                        ],
+                        "denominator": [
+                            1,
+                            0
+                        ]
+                    }
+                },
+                {
+                    "id": "output_port_1749829624898",
+                    "name": "Output port8",
+                    "type": "output_port",
+                    "position": {
+                        "x": 284.5,
+                        "y": 227.25
+                    },
+                    "parameters": {
+                        "dataType": "double",
+                        "portName": "out1",
+                        "defaultValue": 0
+                    }
+                }
+            ],
+            "extents": {
+                "width": 1000,
+                "height": 800
+            },
+            "connections": [
+                {
+                    "id": "wire_1749829524636",
+                    "sourceBlockId": "source_1749829477676",
+                    "targetBlockId": "transfer_function_1749829520584",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1749829531526",
+                    "sourceBlockId": "transfer_function_1749829520584",
+                    "targetBlockId": "output_port_1749829529644",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1749829592427",
+                    "sourceBlockId": "source_1749829586819",
+                    "targetBlockId": "output_port_1749829590648",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1749829621011",
+                    "sourceBlockId": "source_1749829612636",
+                    "targetBlockId": "transfer_function_1749829618226",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1749829626696",
+                    "sourceBlockId": "transfer_function_1749829618226",
+                    "targetBlockId": "output_port_1749829624898",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                }
+            ]
+        }
+    ],
+    "version": "1.0",
+    "metadata": {
+        "created": "2025-06-13T15:44:16.173583+00:00",
+        "description": "Model itest-01"
+    },
+    "globalSettings": {
+        "simulationDuration": 10,
+        "simulationTimeStep": 0.01
+    }
+}

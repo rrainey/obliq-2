@@ -1,0 +1,32 @@
+# __tests__/integration/code-generation/docker/Dockerfile.platformio
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PlatformIO
+RUN pip install platformio
+
+# Create working directory
+WORKDIR /workspace
+
+# Set up PlatformIO native platform
+RUN pio platform install native
+
+# Create a script to compile and run the program
+RUN echo '#!/bin/bash\n\
+set -e\n\
+echo "Building project..."\n\
+find .. -print\n\
+pio run -e native\n\
+echo "Running program..."\n\
+.pio/build/native/program\n\
+' > /usr/local/bin/build-and-run.sh && \
+chmod +x /usr/local/bin/build-and-run.sh
+
+CMD ["/bin/bash"]

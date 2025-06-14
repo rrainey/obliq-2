@@ -1,0 +1,201 @@
+{
+    "sheets": [
+        {
+            "id": "main",
+            "name": "Main",
+            "blocks": [
+                {
+                    "id": "source_1748896756365",
+                    "name": "Source1",
+                    "type": "source",
+                    "position": {
+                        "x": 205,
+                        "y": 407
+                    },
+                    "parameters": {
+                        "f0": 0.1,
+                        "f1": 10,
+                        "mean": 0,
+                        "phase": 0,
+                        "slope": 1,
+                        "value": [
+                            0,
+                            1,
+                            2
+                        ],
+                        "offset": 0,
+                        "dataType": "double[3]",
+                        "duration": 10,
+                        "stepTime": 1,
+                        "amplitude": 1,
+                        "frequency": 1,
+                        "startTime": 0,
+                        "stepValue": 1,
+                        "signalType": "constant"
+                    }
+                },
+                {
+                    "id": "transfer_function_1748896762333",
+                    "name": "Transfer function2",
+                    "type": "transfer_function",
+                    "position": {
+                        "x": 372.83950617283944,
+                        "y": 407.4074074074074
+                    },
+                    "parameters": {
+                        "numerator": [
+                            1
+                        ],
+                        "denominator": [
+                            1,
+                            0
+                        ]
+                    }
+                },
+                {
+                    "id": "signal_display_1748896824191",
+                    "name": "Signal display3",
+                    "type": "signal_display",
+                    "position": {
+                        "x": 575.3086419753085,
+                        "y": 337.03703703703707
+                    },
+                    "parameters": {
+                        "maxSamples": 1000
+                    }
+                },
+                {
+                    "id": "signal_logger_1748896830941",
+                    "name": "Signal logger4",
+                    "type": "signal_logger",
+                    "position": {
+                        "x": 583.9506172839506,
+                        "y": 451.8518518518518
+                    },
+                    "parameters": {
+                        "maxSamples": 1000
+                    }
+                },
+                {
+                    "id": "output_port_1748899937451",
+                    "name": "Output port5",
+                    "type": "output_port",
+                    "position": {
+                        "x": 582,
+                        "y": 556
+                    },
+                    "parameters": {
+                        "dataType": "double",
+                        "portName": "Zinc",
+                        "defaultValue": 0
+                    }
+                },
+                {
+                    "id": "sheet_label_sink_1748918284114",
+                    "name": "Sheet label_sink6",
+                    "type": "sheet_label_sink",
+                    "position": {
+                        "x": 579,
+                        "y": 655.8888888888888
+                    },
+                    "parameters": {
+                        "signalName": "Zinc"
+                    }
+                }
+            ],
+            "extents": {
+                "width": 1000,
+                "height": 800
+            },
+            "connections": [
+                {
+                    "id": "wire_1748896769825",
+                    "sourceBlockId": "source_1748896756365",
+                    "targetBlockId": "transfer_function_1748896762333",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1748896827286",
+                    "sourceBlockId": "transfer_function_1748896762333",
+                    "targetBlockId": "signal_display_1748896824191",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1748896835489",
+                    "sourceBlockId": "transfer_function_1748896762333",
+                    "targetBlockId": "signal_logger_1748896830941",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1748899942318",
+                    "sourceBlockId": "transfer_function_1748896762333",
+                    "targetBlockId": "output_port_1748899937451",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1748918288486",
+                    "sourceBlockId": "transfer_function_1748896762333",
+                    "targetBlockId": "sheet_label_sink_1748918284114",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                }
+            ]
+        },
+        {
+            "id": "sheet_1748913033737",
+            "name": "Sheet 2",
+            "blocks": [
+                {
+                    "id": "sheet_label_source_1748913038126",
+                    "name": "Sheet label_source1",
+                    "type": "sheet_label_source",
+                    "position": {
+                        "x": 213,
+                        "y": 553
+                    },
+                    "parameters": {
+                        "signalName": "Zinc"
+                    }
+                },
+                {
+                    "id": "signal_display_1748960785071",
+                    "name": "Signal display2",
+                    "type": "signal_display",
+                    "position": {
+                        "x": 413,
+                        "y": 557
+                    },
+                    "parameters": {
+                        "maxSamples": 1000
+                    }
+                }
+            ],
+            "extents": {
+                "width": 1000,
+                "height": 800
+            },
+            "connections": [
+                {
+                    "id": "wire_1748960792245",
+                    "sourceBlockId": "sheet_label_source_1748913038126",
+                    "targetBlockId": "signal_display_1748960785071",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                }
+            ]
+        }
+    ],
+    "version": "1.0",
+    "metadata": {
+        "created": "2025-06-02T20:32:00.242123+00:00",
+        "description": "Model Test 01"
+    },
+    "globalSettings": {
+        "simulationDuration": 10,
+        "simulationTimeStep": 0.01
+    }
+}

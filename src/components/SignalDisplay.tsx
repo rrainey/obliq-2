@@ -141,17 +141,17 @@ console.log('First few data points:', chartData.slice(0, 5))
 console.log('Last few data points:', chartData.slice(-5))
   
   return (
-    <div className="bg-white rounded-lg shadow-md p-4">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-gray-900 p-4">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-medium text-gray-700">{displayName}</h3>
+        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">{displayName}</h3>
         <div className="flex items-center gap-2">
           {isRunning && (
-            <span className="flex items-center gap-1 text-xs text-green-600">
-              <span className="w-2 h-2 bg-green-600 rounded-full animate-pulse" />
+            <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+              <span className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full animate-pulse" />
               Recording
             </span>
           )}
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-500 dark:text-gray-400">
             {chartData.length} / {maxSamples} samples
           </span>
         </div>
