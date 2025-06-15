@@ -571,8 +571,8 @@ function generateDerivativesFunction(
     const inputWire = sheet.connections.find(w => w.targetBlockId === tf.id)
     if (!inputWire) continue
     
-    // Determine how to access the input
-    const inputExpression = generateInputExpression(inputWire, sheet, safeName)
+    // Determine how to access the input - IMPORTANT: use 'model' not safeName
+    const inputExpression = generateInputExpression(inputWire, sheet, 'model')
     
     code += `    // Transfer function: ${tf.name}\n`
     
@@ -633,6 +633,63 @@ function generateDerivativesFunction(
   
   code += `}\n\n`
   return code
+}
+
+// Helper function that should be used
+function generateInputExpression(
+  inputWire: WireData,
+  sheet: Sheet,
+  modelVar: string
+): string {
+  const sourceBlock = sheet.blocks.find(b => b.id === inputWire.sourceBlockId)
+  if (!sourceBlock) return "0.0"
+  
+  if (sourceBlock.type === 'input_port') {
+    const portName = sourceBlock.parameters?.portName || sourceBlock.name
+    return `${modelVar}->inputs.${sanitizeIdentifier(portName)}`
+  } else {
+    // For internal signals
+    return `${modelVar}->signals.${sanitizeIdentifier(sourceBlock.name)}`
+  }
+}
+
+// Helper to check if a transfer function processes vectors
+function checkIfVectorTransferFunction(
+  tf: BlockData,
+  sheet: Sheet,
+  blockTypes: Map<string, string>
+): { size: number } | null {
+  const inputWire = sheet.connections.find(w => w.targetBlockId === tf.id)
+  if (!inputWire) return null
+  
+  const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
+  const inputType = blockTypes.get(sourceKey)
+  if (!inputType) return null
+  
+  const parsed = tryParseType(inputType)
+  if (parsed?.isArray && parsed.arraySize) {
+    return { size: parsed.arraySize }
+  }
+  
+  return null
+}
+
+// Helper to sanitize identifiers
+function sanitizeIdentifier(name: string): string {
+  // Replace non-alphanumeric characters with underscores
+  let safe = name.replace(/[^a-zA-Z0-9_]/g, '_')
+  
+  // Ensure it doesn't start with a number
+  if (/^\d/.test(safe)) {
+    safe = '_' + safe
+  }
+  
+  // Ensure it's not empty
+  if (!safe) {
+    safe = 'signal'
+  }
+  
+  return safe
 }
 
 function generateBlockComputation(
@@ -1026,10 +1083,44 @@ function generateOutputPortBlock(
   if (inputWires.length > 0) {
     const wire = inputWires[0]
     const inputExpr = getInputExpression(wire, sheet, 'model')
-    const isVector = checkIfVectorOperation(wire, sheet)
+    
+    // Determine if this is a vector output by checking the source block
+    const sourceBlock = sheet.blocks.find(b => b.id === wire.sourceBlockId)
+    let isVector = false
+    
+    if (sourceBlock) {
+      // Check if source is a vector type
+      if (sourceBlock.type === 'source' || sourceBlock.type === 'input_port') {
+        const dataType = sourceBlock.parameters?.dataType
+        if (dataType && dataType.includes('[')) {
+          isVector = true
+        }
+      }
+      // Check if source is a transfer function with vector input
+      else if (sourceBlock.type === 'transfer_function') {
+        const tfInputWire = sheet.connections.find(w => w.targetBlockId === sourceBlock.id)
+        if (tfInputWire) {
+          const tfSourceBlock = sheet.blocks.find(b => b.id === tfInputWire.sourceBlockId)
+          if (tfSourceBlock?.parameters?.dataType && tfSourceBlock.parameters.dataType.includes('[')) {
+            isVector = true
+          }
+        }
+      }
+      // Check other blocks that might output vectors
+      else if (['sum', 'multiply', 'scale'].includes(sourceBlock.type)) {
+        // These blocks output vectors if their inputs are vectors
+        const blockInputWire = sheet.connections.find(w => w.targetBlockId === sourceBlock.id)
+        if (blockInputWire) {
+          const inputSourceBlock = sheet.blocks.find(b => b.id === blockInputWire.sourceBlockId)
+          if (inputSourceBlock?.parameters?.dataType && inputSourceBlock.parameters.dataType.includes('[')) {
+            isVector = true
+          }
+        }
+      }
+    }
     
     if (isVector) {
-      // Copy array
+      // Copy array using memcpy
       code += `    memcpy(model->outputs.${sanitizeIdentifier(portName)}, ${inputExpr}, sizeof(model->outputs.${sanitizeIdentifier(portName)}));\n`
     } else {
       // Copy scalar
@@ -1040,23 +1131,6 @@ function generateOutputPortBlock(
   return code
 }
 
-// Helper function to generate the expression to access an input signal
-function generateInputExpression(
-  inputWire: WireData,
-  sheet: Sheet,
-  modelVar: string
-): string {
-  const sourceBlock = sheet.blocks.find(b => b.id === inputWire.sourceBlockId)
-  if (!sourceBlock) return "0.0"
-  
-  if (sourceBlock.type === 'input_port') {
-    const portName = sourceBlock.parameters?.portName || sourceBlock.name
-    return `${modelVar}->inputs.${sanitizeIdentifier(portName)}`
-  } else {
-    // For internal signals
-    return `${modelVar}->signals.${sanitizeIdentifier(sourceBlock.name)}`
-  }
-}
 
 // Get input expression without model variable prefix (for simpler cases)
 function getInputExpression(
@@ -1086,26 +1160,6 @@ function checkIfVectorOperation(
   return null
 }
 
-// Helper to check if a transfer function processes vectors
-function checkIfVectorTransferFunction(
-  tf: BlockData,
-  sheet: Sheet,
-  blockTypes: Map<string, string>
-): { size: number } | null {
-  const inputWire = sheet.connections.find(w => w.targetBlockId === tf.id)
-  if (!inputWire) return null
-  
-  const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
-  const inputType = blockTypes.get(sourceKey)
-  if (!inputType) return null
-  
-  const parsed = tryParseType(inputType)
-  if (parsed?.isArray && parsed.arraySize) {
-    return { size: parsed.arraySize }
-  }
-  
-  return null
-}
 
 // Helper functions
 
@@ -1115,23 +1169,6 @@ function tryParseType(typeString: string): ParsedType | null {
   } catch {
     return null
   }
-}
-
-function sanitizeIdentifier(name: string): string {
-  // Replace non-alphanumeric characters with underscores
-  let safe = name.replace(/[^a-zA-Z0-9_]/g, '_')
-  
-  // Ensure it doesn't start with a number
-  if (/^\d/.test(safe)) {
-    safe = '_' + safe
-  }
-  
-  // Ensure it's not empty
-  if (!safe) {
-    safe = 'signal'
-  }
-  
-  return safe
 }
 
 function calculateExecutionOrder(blocks: BlockData[], wires: WireData[]): string[] {

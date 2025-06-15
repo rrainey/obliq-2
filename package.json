@@ -12,7 +12,7 @@
     "mcp-server:dev": "cd mcp-server && npm run dev",
     "mcp-server:build": "cd mcp-server && npm run build",
     "mcp-server:start": "cd mcp-server && npm start",
-    "test:codegen": "jest __tests__/integration/code-generation --verbose --runInBand",
+    "test:codegen": "jest __tests__/integration/code-generation --runInBand",
     "test:codegen:arduino": "TEST_ARDUINO_COMPILE=true jest __tests__/integration/code-generation",
     "test:codegen:watch": "jest --watch __tests__/integration/code-generation"
   },

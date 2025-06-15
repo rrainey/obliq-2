@@ -140,9 +140,6 @@ CMD ["/bin/bash"]
   }
 
   // Run compilation in Docker
-// Complete fix for runInDocker function in code-compilation.test.ts
-
-  // Run compilation in Docker
   function runInDocker(testName: string, modelName: string): { success: boolean; output?: string; binaryPath?: string } {
     console.log(`\nRunning compilation in Docker for ${testName}...`)
 
@@ -232,19 +229,15 @@ lib_deps =
         '-w', '/workspace',
         'platformio-test',
         'bash', '-c',
-        '"find -print && cat platformio.ini && pio run -e native -v && .pio/build/native/program"'
+        '"pio run -e native -v && .pio/build/native/program"'
       ].join(' ')
 
       const result = executeWithFullOutput(dockerCommand, { cwd: process.cwd() })
 
       if (result.success) {
-        // Extract output from the program execution
-        const output = result.output || ''
-        const outputMatch = output.match(/Output:\s*([\d.-]+)/);
-        
         return {
           success: true,
-          output: outputMatch ? outputMatch[1] : output,
+          output: result.output || '',
           binaryPath: path.join(tempDir, '.pio', 'build', 'native', 'program')
         }
       } else {
@@ -362,7 +355,11 @@ lib_deps =
             }
           ],
           extents: { width: 1000, height: 800 }
-        }]
+        }],
+        globalSettings: {
+          simulationDuration: 1.0,
+          simulationTimeStep: 0.01
+        }
       }
     }
   ]
@@ -425,128 +422,209 @@ lib_deps =
     }
     
     console.log('\n✅ Compilation and execution successful!')
-    console.log(`Output: ${compileResult.output}`)
+    console.log(`Output:\n${compileResult.output}`)
     
-    // Validate output if expected values are defined in the model
-    if (model.metadata?.expectedOutput !== undefined) {
-      const actualOutput = parseFloat(compileResult.output || '0')
-      const expectedOutput = parseFloat(model.metadata.expectedOutput)
-      expect(actualOutput).toBeCloseTo(expectedOutput, 5)
+    // Parse and validate results if expected values are defined
+    if (model.metadata?.expectedOutputs || model.metadata?.expectedOutput !== undefined) {
+      validateSimulationResults(compileResult.output || '', model)
     }
     
   }, 120000) // 120 second timeout for Docker operations
 
-  // Helper function to generate test program based on model
-// Helper function to generate test program based on model
+  // Helper function to generate test program that runs full simulation
   function generateTestProgram(model: any, modelName: string): string {
     const inputs = model.sheets[0].blocks.filter((b: any) => b.type === 'input_port')
     const outputs = model.sheets[0].blocks.filter((b: any) => b.type === 'output_port')
     
+    // Get simulation parameters from model or use defaults
+    const simulationDuration = model.globalSettings?.simulationDuration || 10.0
+    const simulationTimeStep = model.globalSettings?.simulationTimeStep || 0.01
+    
     let program = `#include <${modelName}.h>\n`
-    program += `#include <stdio.h>\n\n`
+    program += `#include <stdio.h>\n`
+    program += `#include <math.h>\n\n`
     
     program += `int main() {\n`
     program += `    ${modelName}_t model;\n`
-    program += `    ${modelName}_init(&model, 0.01);\n`
+    program += `    \n`
+    program += `    // Initialize model with time step\n`
+    program += `    ${modelName}_init(&model, ${simulationTimeStep});\n`
     program += `    \n`
     
     // Set test inputs based on model metadata or defaults
+    program += `    // Set input values\n`
     if (model.metadata?.testInputs) {
       for (const [portName, value] of Object.entries(model.metadata.testInputs)) {
-        program += `    model.inputs.${portName} = ${value};\n`
+        const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
+        if (Array.isArray(value)) {
+          // Vector input
+          value.forEach((v, i) => {
+            program += `    model.inputs.${sanitizedPortName}[${i}] = ${v};\n`
+          })
+        } else {
+          // Scalar input
+          program += `    model.inputs.${sanitizedPortName} = ${value};\n`
+        }
       }
     } else {
       // Default test values
       inputs.forEach((input: any, index: number) => {
         const portName = input.parameters?.portName || input.name
-        program += `    model.inputs.${portName} = ${index + 1}.0;\n`
+        const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
+        program += `    model.inputs.${sanitizedPortName} = ${index + 1}.0;\n`
       })
     }
     
     program += `    \n`
-    program += `    // Run one step\n`
-    program += `    ${modelName}_step(&model);\n`
+    program += `    // Simulation parameters\n`
+    program += `    double duration = ${simulationDuration};\n`
+    program += `    double dt = ${simulationTimeStep};\n`
+    program += `    int steps = (int)(duration / dt);\n`
     program += `    \n`
     
-    // Print all outputs - need to determine if they are vectors or scalars
+    // Variables to track outputs over time
+    program += `    // Variables to track final outputs\n`
     outputs.forEach((output: any) => {
       const portName = output.parameters?.portName || output.name
       const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
       
-      // Check if this output is connected to a vector signal by examining the connected source
+      // Check if this is a vector output
       const outputWire = model.sheets[0].connections.find((w: any) => w.targetBlockId === output.id)
-      let isVector = false
-      let vectorSize = 0
+      const isVector = checkIfVectorOutput(output, outputWire, model.sheets[0])
       
-      if (outputWire) {
-        const sourceBlock = model.sheets[0].blocks.find((b: any) => b.id === outputWire.sourceBlockId)
-        
-        // Check if source block has a vector data type
-        if (sourceBlock?.parameters?.dataType) {
-          const typeMatch = sourceBlock.parameters.dataType.match(/^(float|double|long|bool)\[(\d+)\]$/)
-          if (typeMatch) {
-            isVector = true
-            vectorSize = parseInt(typeMatch[2])
-          }
-        }
-        
-        // Also check if the source block has a vector value parameter
-        if (!isVector && sourceBlock?.parameters?.value && Array.isArray(sourceBlock.parameters.value)) {
-          isVector = true
-          vectorSize = sourceBlock.parameters.value.length
-        }
-        
-        // Check for transfer function with vector input (propagates vector output)
-        if (!isVector && sourceBlock?.type === 'transfer_function') {
-          // Look for its input
-          const tfInputWire = model.sheets[0].connections.find((w: any) => w.targetBlockId === sourceBlock.id)
-          if (tfInputWire) {
-            const tfSourceBlock = model.sheets[0].blocks.find((b: any) => b.id === tfInputWire.sourceBlockId)
-            if (tfSourceBlock?.parameters?.dataType) {
-              const tfTypeMatch = tfSourceBlock.parameters.dataType.match(/^(float|double|long|bool)\[(\d+)\]$/)
-              if (tfTypeMatch) {
-                isVector = true
-                vectorSize = parseInt(tfTypeMatch[2])
-              }
-            }
-          }
-        }
-      }
-      
-      if (isVector && vectorSize > 0) {
-        // Vector output - print each element
-        program += `    printf("${sanitizedPortName}:\\n");\n`
-        for (let i = 0; i < vectorSize; i++) {
-          program += `    printf("  [${i}]: %f\\n", model.outputs.${sanitizedPortName}[${i}]);\n`
-        }
+      if (isVector) {
+        program += `    double final_${sanitizedPortName}[${isVector.size}] = {0};\n`
       } else {
-        // Scalar output
-        program += `    printf("${sanitizedPortName}: %f\\n", model.outputs.${sanitizedPortName});\n`
+        program += `    double final_${sanitizedPortName} = 0.0;\n`
       }
     })
     
-    // If expected output is specified and is simple, validate it
-    if (model.metadata?.expectedOutput !== undefined) {
-      program += `    \n`
-      program += `    // Validate expected output\n`
-      const expectedOutput = parseFloat(model.metadata.expectedOutput)
+    program += `    \n`
+    program += `    // Run simulation\n`
+    program += `    printf("Running simulation for %.2f seconds with time step %.4f\\n", duration, dt);\n`
+    program += `    printf("Total steps: %d\\n\\n", steps);\n`
+    program += `    \n`
+    program += `    for (int i = 0; i < steps; i++) {\n`
+    program += `        // Use the time_step function which handles integration and algebraic computations\n`
+    program += `        ${modelName}_time_step(&model, dt);\n`
+    program += `        \n`
+    
+    // Store final values (from last time step)
+    program += `        // Store final values\n`
+    outputs.forEach((output: any) => {
+      const portName = output.parameters?.portName || output.name
+      const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
       
-      // Find the first output port for validation
-      if (outputs.length > 0) {
+      const outputWire = model.sheets[0].connections.find((w: any) => w.targetBlockId === output.id)
+      const isVector = checkIfVectorOutput(output, outputWire, model.sheets[0])
+      
+      if (isVector) {
+        for (let i = 0; i < isVector.size; i++) {
+          program += `        final_${sanitizedPortName}[${i}] = model.outputs.${sanitizedPortName}[${i}];\n`
+        }
+      } else {
+        program += `        final_${sanitizedPortName} = model.outputs.${sanitizedPortName};\n`
+      }
+    })
+    
+    // Optional: Print progress every 10% of simulation
+    program += `        \n`
+    program += `        // Print progress\n`
+    program += `        if (i % (steps / 10) == 0 && i > 0) {\n`
+    program += `            printf("Progress: %d%%\\n", (i * 100) / steps);\n`
+    program += `        }\n`
+    
+    program += `    }\n`
+    program += `    \n`
+    program += `    printf("\\nSimulation complete!\\n\\n");\n`
+    program += `    \n`
+    
+    // Print final outputs
+    program += `    // Print final outputs\n`
+    program += `    printf("Final outputs at t=%.2f:\\n", duration);\n`
+    outputs.forEach((output: any) => {
+      const portName = output.parameters?.portName || output.name
+      const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
+      
+      const outputWire = model.sheets[0].connections.find((w: any) => w.targetBlockId === output.id)
+      const isVector = checkIfVectorOutput(output, outputWire, model.sheets[0])
+      
+      if (isVector) {
+        program += `    printf("${sanitizedPortName}:\\n");\n`
+        for (let i = 0; i < isVector.size; i++) {
+          program += `    printf("  [${i}]: %.6f\\n", final_${sanitizedPortName}[${i}]);\n`
+        }
+      } else {
+        program += `    printf("${sanitizedPortName}: %.6f\\n", final_${sanitizedPortName});\n`
+      }
+    })
+    
+    // Validate against expected outputs if specified
+    if (model.metadata?.expectedOutputs || model.metadata?.expectedOutput !== undefined) {
+      program += `    \n`
+      program += `    // Validate expected outputs\n`
+      program += `    double tolerance = 0.00001;\n`
+      program += `    int all_passed = 1;\n`
+      
+      // Handle legacy single expectedOutput
+      if (model.metadata?.expectedOutput !== undefined && outputs.length > 0) {
         const firstOutput = outputs[0]
         const portName = firstOutput.parameters?.portName || firstOutput.name
         const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
         
-        program += `    double expected = ${expectedOutput};\n`
-        program += `    double actual = model.outputs.${sanitizedPortName};\n`
-        program += `    double tolerance = 0.00001;\n`
-        program += `    if (actual >= expected - tolerance && actual <= expected + tolerance) {\n`
-        program += `        printf("✓ Test passed! Output: %f\\n", actual);\n`
-        program += `    } else {\n`
-        program += `        printf("✗ Test failed! Expected: %f, Got: %f\\n", expected, actual);\n`
-        program += `        return 1;\n`
+        program += `    {\n`
+        program += `        double expected = ${model.metadata.expectedOutput};\n`
+        program += `        double actual = final_${sanitizedPortName};\n`
+        program += `        if (fabs(actual - expected) > tolerance) {\n`
+        program += `            printf("\\n✗ Test failed for ${sanitizedPortName}! Expected: %.6f, Got: %.6f\\n", expected, actual);\n`
+        program += `            all_passed = 0;\n`
+        program += `        } else {\n`
+        program += `            printf("\\n✓ ${sanitizedPortName} test passed! Output: %.6f\\n", actual);\n`
+        program += `        }\n`
         program += `    }\n`
       }
+      
+      // Handle multiple expectedOutputs
+      if (model.metadata?.expectedOutputs) {
+        for (const [outputPortName, expectedValue] of Object.entries(model.metadata.expectedOutputs)) {
+          const sanitizedPortName = outputPortName.replace(/[^a-zA-Z0-9_]/g, '_')
+          
+          if (Array.isArray(expectedValue)) {
+            // Vector expected output
+            expectedValue.forEach((expected, i) => {
+              program += `    {\n`
+              program += `        double expected = ${expected};\n`
+              program += `        double actual = final_${sanitizedPortName}[${i}];\n`
+              program += `        if (fabs(actual - expected) > tolerance) {\n`
+              program += `            printf("\\n✗ Test failed for ${sanitizedPortName}[${i}]! Expected: %.6f, Got: %.6f\\n", expected, actual);\n`
+              program += `            all_passed = 0;\n`
+              program += `        }\n`
+              program += `    }\n`
+            })
+          } else {
+            // Scalar expected output
+            program += `    {\n`
+            program += `        double expected = ${expectedValue};\n`
+            program += `        double actual = final_${sanitizedPortName};\n`
+            program += `        if (fabs(actual - expected) > tolerance) {\n`
+            program += `            printf("\\n✗ Test failed for ${sanitizedPortName}! Expected: %.6f, Got: %.6f\\n", expected, actual);\n`
+            program += `            all_passed = 0;\n`
+            program += `        } else {\n`
+            program += `            printf("\\n✓ ${sanitizedPortName} test passed! Output: %.6f\\n", actual);\n`
+            program += `        }\n`
+            program += `    }\n`
+          }
+        }
+      }
+      
+      program += `    \n`
+      program += `    if (all_passed) {\n`
+      program += `        printf("\\n✅ All tests passed!\\n");\n`
+      program += `        return 0;\n`
+      program += `    } else {\n`
+      program += `        printf("\\n❌ Some tests failed!\\n");\n`
+      program += `        return 1;\n`
+      program += `    }\n`
     }
     
     program += `    \n`
@@ -554,5 +632,127 @@ lib_deps =
     program += `}\n`
     
     return program
+  }
+
+  // Helper function to check if an output is a vector
+  function checkIfVectorOutput(output: any, outputWire: any, sheet: any): { size: number } | null {
+    if (!outputWire) return null
+    
+    const sourceBlock = sheet.blocks.find((b: any) => b.id === outputWire.sourceBlockId)
+    if (!sourceBlock) return null
+    
+    // Check if source block has a vector data type
+    if (sourceBlock.parameters?.dataType) {
+      const typeMatch = sourceBlock.parameters.dataType.match(/^(float|double|long|bool)\[(\d+)\]$/)
+      if (typeMatch) {
+        return { size: parseInt(typeMatch[2]) }
+      }
+    }
+    
+    // Check if the source block has a vector value parameter
+    if (sourceBlock.parameters?.value && Array.isArray(sourceBlock.parameters.value)) {
+      return { size: sourceBlock.parameters.value.length }
+    }
+    
+    // Check for transfer function with vector input (propagates vector output)
+    if (sourceBlock.type === 'transfer_function') {
+      const tfInputWire = sheet.connections.find((w: any) => w.targetBlockId === sourceBlock.id)
+      if (tfInputWire) {
+        const tfSourceBlock = sheet.blocks.find((b: any) => b.id === tfInputWire.sourceBlockId)
+        if (tfSourceBlock?.parameters?.dataType) {
+          const tfTypeMatch = tfSourceBlock.parameters.dataType.match(/^(float|double|long|bool)\[(\d+)\]$/)
+          if (tfTypeMatch) {
+            return { size: parseInt(tfTypeMatch[2]) }
+          }
+        }
+      }
+    }
+    
+    return null
+  }
+
+  // Helper function to validate simulation results
+  function validateSimulationResults(output: string, model: any) {
+    console.log('\n--- Validating Simulation Results ---')
+    
+    // Parse output values from the program output
+    const outputValues: { [key: string]: number | number[] } = {}
+    
+    // Match scalar outputs
+    const scalarMatches = output.matchAll(/(\w+):\s*([-\d.]+)/g)
+    for (const match of scalarMatches) {
+      const [_, name, value] = match
+      if (!name.includes('[')) {
+        outputValues[name] = parseFloat(value)
+      }
+    }
+    
+    // Match vector outputs
+    const vectorPattern = /(\w+):\s*\n((?:\s*\[\d+\]:\s*[-\d.]+\s*\n)+)/g
+    const vectorMatches = output.matchAll(vectorPattern)
+    for (const match of vectorMatches) {
+      const [_, name, vectorData] = match
+      const elementMatches = vectorData.matchAll(/\[(\d+)\]:\s*([-\d.]+)/g)
+      const vector: number[] = []
+      for (const elementMatch of elementMatches) {
+        const [__, index, value] = elementMatch
+        vector[parseInt(index)] = parseFloat(value)
+      }
+      outputValues[name] = vector
+    }
+    
+    console.log('Parsed output values:', outputValues)
+    
+    // Validate against expected values
+    let allPassed = true
+    
+    // Check legacy single expected output
+    if (model.metadata?.expectedOutput !== undefined) {
+      const outputs = model.sheets[0].blocks.filter((b: any) => b.type === 'output_port')
+      if (outputs.length > 0) {
+        const firstOutput = outputs[0]
+        const portName = firstOutput.parameters?.portName || firstOutput.name
+        const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
+        
+        const actual = outputValues[sanitizedPortName]
+        const expected = parseFloat(model.metadata.expectedOutput)
+        
+        if (typeof actual === 'number') {
+          expect(actual).toBeCloseTo(expected, 5)
+          console.log(`✓ ${sanitizedPortName}: ${actual} ≈ ${expected}`)
+        } else {
+          allPassed = false
+          console.log(`✗ ${sanitizedPortName}: Could not find output value`)
+        }
+      }
+    }
+    
+    // Check multiple expected outputs
+    if (model.metadata?.expectedOutputs) {
+      for (const [outputPortName, expectedValue] of Object.entries(model.metadata.expectedOutputs)) {
+        const sanitizedPortName = outputPortName.replace(/[^a-zA-Z0-9_]/g, '_')
+        const actual = outputValues[sanitizedPortName]
+        
+        if (Array.isArray(expectedValue)) {
+          // Vector comparison
+          expect(actual).toBeInstanceOf(Array)
+          if (Array.isArray(actual)) {
+            expect(actual.length).toBe(expectedValue.length)
+            expectedValue.forEach((expected, i) => {
+              expect(actual[i]).toBeCloseTo(expected as number, 5)
+              console.log(`✓ ${sanitizedPortName}[${i}]: ${actual[i]} ≈ ${expected}`)
+            })
+          }
+        } else {
+          // Scalar comparison
+          expect(actual).toBeCloseTo(expectedValue as number, 5)
+          console.log(`✓ ${sanitizedPortName}: ${actual} ≈ ${expectedValue}`)
+        }
+      }
+    }
+    
+    if (allPassed) {
+      console.log('\n✅ All validation checks passed!')
+    }
   }
 })
