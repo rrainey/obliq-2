@@ -354,6 +354,85 @@ The MCP server enhances both extensibility and performance in several ways:
 
 The MCP server maintains the same performance characteristics as the Automation API since it uses the same underlying services. The primary performance gain comes from eliminating manual UI interactions and enabling batch operations.
 
+## Testing Infrastructure
+
+The application includes a comprehensive testing infrastructure that validates both the simulation engine and the generated C code.
+
+### Unit Testing
+Standard unit tests are implemented using Jest and cover the core functionality of the simulation engine, type propagation system, and model validation logic. These tests run directly in Node.js without external dependencies.
+
+### Integration Testing for Code Generation
+The code generation testing infrastructure uses Docker to ensure consistent and reproducible compilation environments across different development platforms. This approach eliminates the need for developers to install PlatformIO or other embedded toolchains locally.
+
+#### Docker-Based Compilation Pipeline
+The test suite automatically:
+1. Builds a Docker image containing PlatformIO and necessary compilation tools
+2. Generates C code from test models (stored as JSON files)
+3. Creates proper PlatformIO library structures with appropriate configuration
+4. Compiles the generated code in isolated Docker containers
+5. Executes the compiled binaries to verify correctness
+6. Validates outputs against expected results defined in model metadata
+
+#### PlatformIO Library Structure
+Generated libraries follow PlatformIO conventions:
+- C source files are placed in the library root (not in a `src` subdirectory)
+- Header files are placed in the library root for includes
+- A `library.properties` file provides Arduino-compatible metadata
+- A `library.json` file provides PlatformIO-specific configuration
+- The `platformio.ini` configuration includes:
+  - `lib_deps` with the library name for proper dependency resolution
+  - `lib_compat_mode = off` to allow pure C libraries without Arduino dependencies
+
+### Test Model Structure
+Test models are stored in `__tests__/integration/code-generation/models/` as JSON files with optional metadata:
+- `metadata.testInputs`: Object defining input port values for testing
+- `metadata.expectedOutput`: Expected output value for validation
+- `metadata.description`: Human-readable test case description
+
+## Code Generation Service Updates
+
+### C Code Structure
+The generated C code follows a clean, modular structure:
+- **Header files** define structs for inputs, outputs, and internal states
+- **Source files** implement initialization and step functions
+- **RK4 Integration**: Transfer functions use inline Runge-Kutta 4th order integration within the step function
+- **Vector Support**: Proper handling of array types with element-wise operations
+
+### Library Compatibility
+Generated libraries are compatible with:
+- PlatformIO projects (primary target)
+- Arduino IDE (via library.properties)
+- Generic C99 compilers (no platform-specific dependencies)
+
+## Project Structure Updates
+
+### Test Infrastructure Files
+Additional files supporting the Docker-based testing:
+- `__tests__/integration/code-generation/docker/Dockerfile.platformio` - Docker image definition
+- `__tests__/integration/code-generation/models/*.json` - Test model definitions
+- `__tests__/integration/code-generation/code-compilation.test.ts` - Integration test suite
+
+## Development Workflow Enhancements
+
+### Continuous Integration
+The Docker-based approach enables:
+- Consistent test execution across different platforms (Windows, macOS, Linux)
+- No local toolchain installation requirements
+- Parallel test execution in CI/CD pipelines
+- Reproducible builds with specific PlatformIO versions
+
+### Test Execution
+Developers can run code generation tests with a simple command:
+```bash
+npm run test:codegen
+```
+
+This command will:
+- Build the Docker image if not present
+- Run all code generation tests
+- Report compilation errors with full diagnostics
+- Validate program outputs against expected values
+
 ## Conclusion
 
 This architecture leverages **Next.js** for a unified frontend and backend codebase, keeping the project structure organized by feature. **Supabase** provides a convenient and secure data layer with minimal overhead in developing our own backend. The design outlined above emphasizes clean separation of concerns: the *UI components* manage interactivity and visualization, the *client-side state* enables responsive editing and simulation, the *server-side API* handles heavy lifting like code export and external automation, and the *database* safely persists user models. By focusing on simplicity (a single-user editing model, on-demand persistence, no unnecessary complexity), the application remains performant and easier to maintain. The folder structure and service interactions described ensure that as the application grows (more block types, larger models, more features), the codebase remains well-organized and extensible, providing a solid foundation for a visual modeling and simulation platform.

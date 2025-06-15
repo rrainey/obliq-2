@@ -177,60 +177,67 @@ obliq-2/
 
 ## Testing
 
-PlatformIO is used for integration testing if C-code generation.  See the [PlatformIO site](https://docs.platformio.org/en/latest/core/installation/methods/installer-script.html) for install instructions.  You must install Platform IO to successfully run these integration tests.
+The project includes comprehensive test suites for both the simulation engine and C code generation.
 
-```console
-$ python3 get-platformio.py
-Installer version: 1.2.2
-Platform: Linux-6.6.87.1-microsoft-standard-WSL2-x86_64-with-glibc2.35
-Python version: 3.10.12 (main, Feb  4 2025, 14:57:36) [GCC 11.4.0]
-Python path: /usr/bin/python3
-Creating a virtual environment at /home/riley/.platformio/penv
-Updating Python package manager (PIP) in the virtual environment
-Looking in indexes: https://pypi.org/simple, https://pypi.ngc.nvidia.com
-Requirement already satisfied: pip in ./.platformio/penv/lib/python3.10/site-packages (22.0.2)
-Collecting pip
-  Downloading pip-25.1.1-py3-none-any.whl (1.8 MB)
-     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 10.8 MB/s eta 0:00:00
-Installing collected packages: pip
-  Attempting uninstall: pip
-    Found existing installation: pip 22.0.2
-    Uninstalling pip-22.0.2:
-      Successfully uninstalled pip-22.0.2
+### Unit Tests
 
-***
-*** Lots removed for brevity
-***
+Run the standard test suite:
+```bash
+# Run all tests
+npm test
 
-Successfully installed pip-25.1.1
-PIP has been successfully updated!
-Virtual environment has been successfully created!
-Installing PlatformIO Core
+# Run tests in watch mode
+npm run test:watch
 
-PlatformIO Core has been successfully installed into an isolated environment `/home/riley/.platformio/penv`!
-
-The full path to `platformio.exe` is `/home/riley/.platformio/penv/bin/platformio`
-
-If you need an access to `platformio.exe` from other applications, please install Shell Commands
-(add PlatformIO Core binary directory `/home/riley/.platformio/penv/bin` to the system environment PATH variable):
-
-See https://docs.platformio.org/page/installation.html#install-shell-commands
+# Run tests with coverage
+npm run test:coverage
 ```
 
-You will also need to install PlatformIO's Shell Commands:  https://docs.platformio.org/en/latest/core/installation/shell-commands.html#piocore-install-shell-commands
+### C Code Generation Tests
 
-You can then run:
+The C code generation tests use Docker to ensure consistent compilation environments. These tests:
+- Generate C code from test models
+- Compile the generated code using PlatformIO in a Docker container
+- Execute the compiled binaries to verify correctness
 
-```console
-$ npm run test:codegen
+#### Prerequisites
+
+1. **Docker**: Ensure Docker is installed and running on your system
+   - [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows/Mac
+   - [Docker Engine](https://docs.docker.com/engine/install/) for Linux
+
+2. **Initial Setup**: The test suite will automatically build the required Docker image on first run
+
+#### Running Code Generation Tests
+
+```bash
+# Run C code generation and compilation tests
+npm run test:codegen
+
+# Run with verbose output
+npm run test:codegen -- --verbose
 ```
 
-Or:
+The tests will:
+1. Build a Docker image with PlatformIO if not already present
+2. Generate C code for various test models
+3. Create proper PlatformIO library structures
+4. Compile the generated code in isolated Docker containers
+5. Execute the compiled programs and verify outputs
 
-```console
-$ npm run test:codegen:arduino
-```
+#### Test Models
 
+Test models are stored in `__tests__/integration/code-generation/models/` as JSON files. Each model can include:
+- `metadata.testInputs`: Input values for testing
+- `metadata.expectedOutput`: Expected output for validation
+- `metadata.description`: Test case description
+
+#### Troubleshooting
+
+If tests fail:
+1. Check Docker is running: `docker --version`
+2. Verify the Docker image exists: `docker images | grep platformio-test`
+3. Check test output for compilation errors
 
 
 ## Usage
