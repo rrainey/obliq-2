@@ -11,6 +11,16 @@ const PositionSchema = z.object({
 const SignalTypeSchema = z.enum(['float', 'double', 'long', 'bool'])
   .or(z.string().regex(/^(float|double|long|bool)\[\d+\]$/, 'Invalid array type syntax'))
 
+// Forward declaration for recursive schema
+const SheetSchema: z.ZodType<any> = z.lazy(() => SheetSchemaDefinition)
+
+// Subsystem-specific parameters schema
+const SubsystemParametersSchema = z.object({
+  inputPorts: z.array(z.string()).min(1, 'Subsystem must have at least one input port'),
+  outputPorts: z.array(z.string()).min(1, 'Subsystem must have at least one output port'),
+  sheets: z.array(SheetSchema).min(1, 'Subsystem must have at least one sheet')
+})
+
 // Block parameters schema with type validation for specific block types
 const BlockParametersSchema = z.record(z.any()).optional().superRefine((params, ctx) => {
   if (!params) return
@@ -29,17 +39,28 @@ const BlockParametersSchema = z.record(z.any()).optional().superRefine((params, 
 })
 
 // Block schema
-const BlockSchema = z.object({
-  id: z.string().min(1, 'Block ID cannot be empty'),
-  type: z.enum([
-    'sum', 'multiply', 'transfer_function', 'signal_display', 'signal_logger',
-    'input_port', 'output_port', 'source', 'scale', 'lookup_1d', 'lookup_2d', 'subsystem',
-    'sheet_label_sink', 'sheet_label_source'
-  ]),
-  name: z.string().min(1, 'Block name cannot be empty'),
-  position: PositionSchema,
-  parameters: BlockParametersSchema
-})
+const BlockSchema = z.discriminatedUnion('type', [
+  // Regular blocks
+  z.object({
+    id: z.string().min(1, 'Block ID cannot be empty'),
+    type: z.enum([
+      'sum', 'multiply', 'transfer_function', 'signal_display', 'signal_logger',
+      'input_port', 'output_port', 'source', 'scale', 'lookup_1d', 'lookup_2d',
+      'sheet_label_sink', 'sheet_label_source'
+    ]),
+    name: z.string().min(1, 'Block name cannot be empty'),
+    position: PositionSchema,
+    parameters: BlockParametersSchema
+  }),
+  // Subsystem block with special structure
+  z.object({
+    id: z.string().min(1, 'Block ID cannot be empty'),
+    type: z.literal('subsystem'),
+    name: z.string().min(1, 'Block name cannot be empty'),
+    position: PositionSchema,
+    parameters: SubsystemParametersSchema
+  })
+])
 
 // Wire/Connection schema
 const WireSchema = z.object({
@@ -71,8 +92,8 @@ const ExtentsSchema = z.object({
   height: z.number().positive('Height must be positive')
 })
 
-// Sheet schema with type information
-const SheetSchema = z.object({
+// Sheet schema definition (recursive to support subsystems)
+const SheetSchemaDefinition = z.object({
   id: z.string().min(1, 'Sheet ID cannot be empty'),
   name: z.string().min(1, 'Sheet name cannot be empty'),
   blocks: z.array(BlockSchema),
@@ -94,9 +115,9 @@ const MetadataSchema = z.object({
   description: z.string().optional()
 })
 
-// Main model data schema
+// Main model data schema - only contains root-level sheets
 export const ModelDataSchema = z.object({
-  version: z.string().min(1, 'Version cannot be empty'),
+  version: z.enum(['1.0', '2.0']).default('1.0'), // Support both versions
   metadata: MetadataSchema,
   sheets: z.array(SheetSchema).min(1, 'Model must have at least one sheet'),
   globalSettings: GlobalSettingsSchema
@@ -116,13 +137,17 @@ export const ModelSchema = z.object({
 export type ModelData = z.infer<typeof ModelDataSchema>
 export type Block = z.infer<typeof BlockSchema>
 export type Wire = z.infer<typeof WireSchema>
-export type Sheet = z.infer<typeof SheetSchema>
+export type Sheet = z.infer<typeof SheetSchemaDefinition>
 export type Position = z.infer<typeof PositionSchema>
 export type Extents = z.infer<typeof ExtentsSchema>
 export type GlobalSettings = z.infer<typeof GlobalSettingsSchema>
 export type Metadata = z.infer<typeof MetadataSchema>
 export type SignalType = z.infer<typeof SignalTypeSchema>
 export type SignalTypeInfo = z.infer<typeof SignalTypeInfoSchema>
+export type SubsystemParameters = z.infer<typeof SubsystemParametersSchema>
+
+// Helper type to extract subsystem blocks
+export type SubsystemBlock = Extract<Block, { type: 'subsystem' }>
 
 // Validation functions
 export function validateModelData(data: unknown): ModelData {
@@ -172,24 +197,75 @@ export function isValidSignalType(type: unknown): type is SignalType {
 export function extractTypeInformation(modelData: ModelData): Map<string, string> {
   const typeInfo = new Map<string, string>()
   
-  for (const sheet of modelData.sheets) {
-    for (const block of sheet.blocks) {
-      // Extract explicit types from source blocks
-      if ((block.type === 'source' || block.type === 'input_port') && 
-          block.parameters?.dataType) {
-        typeInfo.set(`${block.id}:0`, block.parameters.dataType)
+  function extractFromSheets(sheets: Sheet[]) {
+    for (const sheet of sheets) {
+      for (const block of sheet.blocks) {
+        // Extract explicit types from source blocks
+        if ((block.type === 'source' || block.type === 'input_port') && 
+            block.parameters?.dataType) {
+          typeInfo.set(`${block.id}:0`, block.parameters.dataType)
+        }
+        
+        // Recursively extract from subsystem sheets
+        if (block.type === 'subsystem' && block.parameters.sheets) {
+          extractFromSheets(block.parameters.sheets)
+        }
       }
-    }
-    
-    // Include stored signal types if available
-    if (sheet.signalTypes) {
-      for (const [key, info] of Object.entries(sheet.signalTypes)) {
-        if (info?.type) {
-          typeInfo.set(key, info.type)
+      
+      // Include stored signal types if available
+      if (sheet.signalTypes) {
+        for (const [key, info] of Object.entries(sheet.signalTypes)) {
+          if (info?.type) {
+            typeInfo.set(key, info.type)
+          }
         }
       }
     }
   }
   
+  extractFromSheets(modelData.sheets)
   return typeInfo
+}
+
+// Helper to find all sheets in a model (including nested ones)
+export function getAllSheets(modelData: ModelData): Sheet[] {
+  const allSheets: Sheet[] = []
+  
+  function collectSheets(sheets: Sheet[]) {
+    for (const sheet of sheets) {
+      allSheets.push(sheet)
+      
+      // Collect sheets from subsystems
+      for (const block of sheet.blocks) {
+        if (block.type === 'subsystem' && block.parameters.sheets) {
+          collectSheets(block.parameters.sheets)
+        }
+      }
+    }
+  }
+  
+  collectSheets(modelData.sheets)
+  return allSheets
+}
+
+// Helper to find a sheet by ID anywhere in the model hierarchy
+export function findSheetById(modelData: ModelData, sheetId: string): Sheet | null {
+  function searchSheets(sheets: Sheet[]): Sheet | null {
+    for (const sheet of sheets) {
+      if (sheet.id === sheetId) {
+        return sheet
+      }
+      
+      // Search in subsystem sheets
+      for (const block of sheet.blocks) {
+        if (block.type === 'subsystem' && block.parameters.sheets) {
+          const found = searchSheets(block.parameters.sheets)
+          if (found) return found
+        }
+      }
+    }
+    return null
+  }
+  
+  return searchSheets(modelData.sheets)
 }

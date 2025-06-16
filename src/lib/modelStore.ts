@@ -73,6 +73,7 @@ export interface ModelActions {
   updateSheet: (sheetId: string, updates: Partial<Sheet>) => void
   deleteSheet: (sheetId: string) => void
   renameSheet: (sheetId: string, newName: string) => void
+  getParentSheetId: (sheetId: string) => string | null
   
   // Block and wire actions
   setBlocks: (blocks: BlockData[]) => void
@@ -101,6 +102,7 @@ export interface ModelActions {
   updateCurrentSheet: (updates: Partial<Sheet>) => void
   initializeFromModel: (model: Model, versionData: ModelVersion) => void
   saveCurrentSheetData: () => void
+  updateSubsystemSheets: (subsystemId: string, sheets: Sheet[]) => void
 }
 
 export type ModelStore = ModelState & ModelActions
@@ -139,7 +141,7 @@ export const useModelStore = create<ModelStore>()(
     
     saveModel: async () => {
       const state = get()
-      
+  
       if (!state.model) {
         set({ error: 'No model to save' })
         return false
@@ -175,13 +177,14 @@ export const useModelStore = create<ModelStore>()(
           return false
         }
         
+        // Collect all sheets hierarchically - sheets are already stored in subsystem blocks
         const modelData = {
-          version: "1.0",
+          version: "2.0", // New version to indicate hierarchical structure
           metadata: {
             created: updatedState.model.created_at,
             description: `Model ${updatedState.model.name}`
           },
-          sheets: updatedState.sheets,
+          sheets: updatedState.sheets, // Sheets already contain hierarchical structure
           globalSettings: {
             simulationTimeStep: 0.01,
             simulationDuration: 10.0
@@ -484,6 +487,12 @@ export const useModelStore = create<ModelStore>()(
       )
     })),
 
+    getParentSheetId: (sheetId: string) => {
+      const state = get()
+      const parentSheet = getParentSheet(state.sheets, sheetId)
+      return parentSheet?.id || null
+    },
+
     // Block and wire actions
     setBlocks: (blocks) => set({ blocks }),
     setWires: (wires) => set({ wires }),
@@ -531,10 +540,16 @@ export const useModelStore = create<ModelStore>()(
       
       // Save current sheet data first
       saveCurrentSheetData()
-    
-      const sheet = sheets.find(s => s.id === sheetId)
+
+      // Find sheet at any level
+      let sheet = sheets.find(s => s.id === sheetId)
+      
+      if (!sheet) {
+        sheet = findSheetInSubsystems(sheets, sheetId) || undefined
+      }
+      
       if (sheet) {
-        // Update current sheet simulation results if available
+        // Get simulation results if available
         const sheetResults = globalSimulationResults?.get(sheetId) || null
         
         set({
@@ -592,10 +607,51 @@ export const useModelStore = create<ModelStore>()(
         connections: state.wires 
       })
     },
+
+    updateSubsystemSheets: (subsystemId: string, sheets: Sheet[]) => set((state) => {
+      // Helper function to recursively update subsystem sheets
+      function updateSheetsInHierarchy(currentSheets: Sheet[]): Sheet[] {
+        return currentSheets.map(sheet => {
+          const updatedBlocks = sheet.blocks.map(block => {
+            // Found the target subsystem
+            if (block.id === subsystemId && block.type === 'subsystem') {
+              return {
+                ...block,
+                parameters: {
+                  ...block.parameters,
+                  sheets: sheets
+                }
+              }
+            }
+            
+            // Recursively check nested subsystems
+            if (block.type === 'subsystem' && block.parameters?.sheets) {
+              return {
+                ...block,
+                parameters: {
+                  ...block.parameters,
+                  sheets: updateSheetsInHierarchy(block.parameters.sheets)
+                }
+              }
+            }
+            
+            return block
+          })
+          
+          return { ...sheet, blocks: updatedBlocks }
+        })
+      }
+      
+      return {
+        sheets: updateSheetsInHierarchy(state.sheets)
+      }
+    }),
     
     initializeFromModel: (model, versionData) => {
       if (versionData?.data?.sheets) {
-        const sheets = versionData.data.sheets
+        // Convert flat sheet structure to hierarchical structure
+        const hierarchicalData = migrateToHierarchicalSheets(versionData.data)
+        const sheets = hierarchicalData.sheets
         
         // Data integrity check - model must have at least one sheet
         if (sheets.length === 0) {
@@ -633,10 +689,107 @@ export const useModelStore = create<ModelStore>()(
   }))
 )
 
+function getParentSheet(sheets: Sheet[], targetSheetId: string): Sheet | null {
+    for (const sheet of sheets) {
+      // Check if any subsystem in this sheet contains the target sheet
+      for (const block of sheet.blocks) {
+        if (block.type === 'subsystem' && block.parameters?.sheets) {
+          // Check if target sheet is directly in this subsystem
+          const hasTargetSheet = block.parameters.sheets.some((s: Sheet) => s.id === targetSheetId)
+          if (hasTargetSheet) {
+            return sheet
+          }
+          
+          // Recursively check nested subsystems
+          const parentInNested = getParentSheet(block.parameters.sheets, targetSheetId)
+          if (parentInNested) {
+            return parentInNested
+          }
+        }
+      }
+    }
+    return null
+  }
+
+function findSheetInSubsystems(sheets: Sheet[], sheetId: string): Sheet | null {
+  for (const sheet of sheets) {
+    for (const block of sheet.blocks) {
+      if (block.type === 'subsystem' && block.parameters?.sheets) {
+        const found = block.parameters.sheets.find((s: Sheet) => s.id === sheetId)  // Added type annotation
+        if (found) return found
+        
+        // Recursive search in nested subsystems
+        const nested = findSheetInSubsystems(block.parameters.sheets, sheetId)
+        if (nested) return nested
+      }
+    }
+  }
+  return null
+}
+
+// Migration function to convert old format to new
+export function migrateToHierarchicalSheets(modelData: any) {
+  // If already hierarchical, return as-is
+  if (modelData.version === "2.0") return modelData
+  
+  const rootSheets: Sheet[] = []
+  const subsystemSheets = new Map<string, Sheet[]>()
+  
+  // First pass: collect all sheets
+  for (const sheet of modelData.sheets) {
+    // Check if this sheet belongs to a subsystem (by naming convention)
+    const subsystemMatch = sheet.id.match(/^(.+)_main$/)
+    if (subsystemMatch) {
+      const subsystemId = subsystemMatch[1]
+      if (!subsystemSheets.has(subsystemId)) {
+        subsystemSheets.set(subsystemId, [])
+      }
+      subsystemSheets.get(subsystemId)!.push(sheet)
+    } else if (!sheet.id.includes('subsystem_')) {
+      // Root level sheet
+      rootSheets.push(sheet)
+    }
+  }
+
+  function attachSubsystemSheets(sheets: Sheet[]) {
+    for (const sheet of sheets) {
+      for (const block of sheet.blocks) {
+        if (block.type === 'subsystem') {
+          const subsystemId = block.id
+          const subsystemOwnSheets = subsystemSheets.get(subsystemId) || []
+          
+          // Update subsystem block parameters
+          block.parameters = {
+            ...block.parameters,
+            sheets: subsystemOwnSheets,
+            // Remove old properties
+            sheetId: undefined,
+            sheetName: undefined
+          }
+          
+          // Recursively process nested subsystems
+          if (subsystemOwnSheets.length > 0) {
+            attachSubsystemSheets(subsystemOwnSheets)
+          }
+        }
+      }
+    }
+  }
+
+  attachSubsystemSheets(rootSheets)
+  
+  return {
+    ...modelData,
+    version: "2.0",
+    sheets: rootSheets
+  }
+}
+
+
 // Selector hooks for commonly used derived state
 export const useCurrentSheet = () => useModelStore((state: ModelStore) => {
   if (state.sheets.length === 0) return undefined
-  return state.sheets.find((sheet: Sheet) => sheet.id === state.activeSheetId)
+  return state.sheets.find((sheet: Sheet) => sheet.id === state.activeSheetId) || undefined
 })
 
 export const useHasUnsavedChanges = () => useModelStore((state: ModelStore) => {

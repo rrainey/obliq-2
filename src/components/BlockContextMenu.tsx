@@ -4,6 +4,7 @@
 
 import { useEffect, useRef } from 'react'
 import { BlockData } from './Block'
+import { Sheet } from '@/lib/modelStore'
 
 interface BlockContextMenuProps {
   nodeId: string
@@ -57,9 +58,12 @@ export default function BlockContextMenu({
 
   // Check if this is a subsystem block with sheets
   const isSubsystem = block.type === 'subsystem'
-  const subsystemSheets = isSubsystem && block.parameters?.sheetId 
-    ? availableSheets.filter(sheet => sheet.id === block.parameters?.sheetId)
+  const subsystemSheets = isSubsystem && block.parameters?.sheets 
+    ? block.parameters.sheets
     : []
+
+  // Only show the Open Sheet option if there are sheets
+  const hasSheets = subsystemSheets.length > 0
 
   return (
     <div
@@ -76,19 +80,21 @@ export default function BlockContextMenu({
         Properties...
       </button>
 
-      {/* Subsystem sheet navigation */}
-      {isSubsystem && subsystemSheets.length > 0 && (
+      {/* Subsystem sheet navigation - only show if subsystem has sheets */}
+      {isSubsystem && hasSheets && (
         <>
           <div className="border-t border-gray-200 dark:border-gray-700 my-1" />
           <div className="relative group">
             <div className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between cursor-pointer">
               <span>Open Sheet</span>
-              <span className="ml-2">▶</span>
+              <span className="ml-2 text-xs text-gray-500">
+                ({subsystemSheets.length} sheet{subsystemSheets.length !== 1 ? 's' : ''}) ▶
+              </span>
             </div>
             
             {/* Submenu */}
             <div className="absolute left-full top-0 ml-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg py-1 min-w-[150px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-              {subsystemSheets.map(sheet => (
+              {subsystemSheets.map((sheet: Sheet) => (
                 <button
                   key={sheet.id}
                   className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"

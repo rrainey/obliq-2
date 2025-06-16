@@ -22,8 +22,11 @@ import Lookup2DConfig from '@/components/Lookup2DConfig'
 import SheetLabelSinkConfig from '@/components/SheetLabelSinkConfig'
 import SheetLabelSourceConfig from '@/components/SheetLabelSourceConfig'
 import ModelValidationButton from '@/components/ModelValidationButton'
+import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
+import { getSheetPath } from '@/lib/navigationUtils'
 import { parseType } from '@/lib/typeValidator'
 import { useModelStore } from '@/lib/modelStore'
+
 import { useAutoSave } from '@/lib/useAutoSave'
 import { use, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -229,6 +232,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }
 
+
   const handleCanvasDrop = (x: number, y: number, blockType: string) => {
     const newBlock: BlockData = {
       id: `${blockType}_${Date.now()}`,
@@ -276,15 +280,17 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         }
       }
       
-      // Update the subsystem parameters to reference its main sheet
+      // Update the subsystem parameters to embed the sheet
       newBlock.parameters = {
         ...newBlock.parameters,
-        sheetId: subsystemMainSheetId,
-        sheetName: `${newBlock.name} Main`
+        sheets: [subsystemMainSheet], // Embed sheet in parameters
+        inputPorts: ['Input1'],
+        outputPorts: ['Output1']
+        // Remove sheetId and sheetName - no longer needed
       }
       
-      // Add the subsystem's main sheet
-      addSheet(subsystemMainSheet)
+      // Don't add sheet to root level - it's embedded in the subsystem
+      // Remove: addSheet(subsystemMainSheet)
     }
     
     addBlock(newBlock)
@@ -723,6 +729,12 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           onAddSheet={handleAddSheet}
           onRenameSheet={renameSheet}
           onDeleteSheet={deleteSheet}
+        />
+
+        {/* Breadcrumbs - Add this section */}
+        <SheetBreadcrumbs
+          breadcrumbs={getSheetPath(sheets, activeSheetId)}
+          onNavigate={switchToSheet}
         />
 
         {/* Canvas and Sidebar Container */}

@@ -29,3 +29,19 @@ export interface ModelWithVersion extends Model {
 export interface LegacyModel extends Model {
   data?: any
 }
+
+export interface Breadcrumb {
+  sheetId: string
+  sheetName: string
+  path: string[]
+}
+
+export interface SheetPath {
+  breadcrumbs: Breadcrumb[]
+  currentSheet: {
+    id: string
+    name: string
+    isRoot: boolean
+    parentId: string | null
+  }
+}

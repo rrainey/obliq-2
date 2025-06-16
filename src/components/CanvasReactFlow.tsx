@@ -384,13 +384,9 @@ function CanvasReactFlowInner({
       return []
     }
     
-    // For subsystems, show all sheets that belong to this subsystem
-    // They should start with the subsystem's ID
-    return sheets.filter(sheet => 
-      sheet.id.startsWith(block.id) || 
-      sheet.id === block.parameters?.sheetId
-    )
-  }, [sheets])
+    // Get sheets from the subsystem's parameters instead of searching all sheets
+    return block.parameters?.sheets || []
+  }, [])
 
   return (
     <div className="w-full h-full" ref={reactFlowWrapper}>

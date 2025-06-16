@@ -1,18 +1,9 @@
+// components/SubsystemConfig.tsx
 'use client'
 
 import { useState } from 'react'
 import { BlockData } from './Block'
-
-export interface Sheet {
-  id: string
-  name: string
-  blocks: any[]
-  connections: any[]
-  extents: {
-    width: number
-    height: number
-  }
-}
+import { Sheet } from '@/lib/modelStore'
 
 interface SubsystemConfigProps {
   block: BlockData
@@ -22,14 +13,17 @@ interface SubsystemConfigProps {
 }
 
 export default function SubsystemConfig({ block, availableSheets = [], onUpdate, onClose }: SubsystemConfigProps) {
-  const [sheetId, setSheetId] = useState(block.parameters?.sheetId || '')
+  // Initialize sheets from block parameters
+  const [sheets, setSheets] = useState<Sheet[]>(block.parameters?.sheets || [])
   const [sheetName, setSheetName] = useState(block.parameters?.sheetName || 'Subsystem')
   const [inputPorts, setInputPorts] = useState(block.parameters?.inputPorts || ['Input1'])
   const [outputPorts, setOutputPorts] = useState(block.parameters?.outputPorts || ['Output1'])
+  const [editingSheetId, setEditingSheetId] = useState<string | null>(null)
+  const [editingSheetName, setEditingSheetName] = useState('')
 
   const handleSave = () => {
     const parameters = {
-      sheetId,
+      sheets, // Include sheets in parameters
       sheetName,
       inputPorts: inputPorts.filter((port: string) => port.trim() !== ''),
       outputPorts: outputPorts.filter((port: string) => port.trim() !== '')
@@ -70,6 +64,43 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
     setOutputPorts(updated)
   }
 
+  // Add sheet to subsystem
+  const addSubsystemSheet = () => {
+    const newSheet: Sheet = {
+      id: `${block.id}_sheet_${Date.now()}`,
+      name: `${block.name} Sheet ${sheets.length + 1}`,
+      blocks: [],
+      connections: [],
+      extents: {
+        width: 1000,
+        height: 800
+      }
+    }
+    setSheets([...sheets, newSheet])
+  }
+
+  const startEditingSheet = (sheet: Sheet) => {
+    setEditingSheetId(sheet.id)
+    setEditingSheetName(sheet.name)
+  }
+
+  const saveSheetName = () => {
+    if (editingSheetId && editingSheetName.trim()) {
+      setSheets(sheets.map(sheet => 
+        sheet.id === editingSheetId 
+          ? { ...sheet, name: editingSheetName.trim() }
+          : sheet
+      ))
+    }
+    setEditingSheetId(null)
+    setEditingSheetName('')
+  }
+
+  const cancelEditingSheet = () => {
+    setEditingSheetId(null)
+    setEditingSheetName('')
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl p-6 w-96 max-h-96 overflow-y-auto">
@@ -99,29 +130,90 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
             />
           </div>
 
-          {availableSheets.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Reference Sheet
-              </label>
-              <select
-                value={sheetId}
-                onChange={(e) => setSheetId(e.target.value)}
-                className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
+          {/* Sheet Management Section */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Sheets
+            </label>
+            <div className="space-y-2">
+              {/* Sheet list table */}
+              {sheets.length > 0 && (
+                <div className="border border-gray-200 rounded-md overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {sheets.map((sheet, index) => (
+                        <tr key={sheet.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 text-sm text-gray-900">
+                            {editingSheetId === sheet.id ? (
+                              <input
+                                type="text"
+                                value={editingSheetName}
+                                onChange={(e) => setEditingSheetName(e.target.value)}
+                                onBlur={saveSheetName}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') saveSheetName()
+                                  if (e.key === 'Escape') cancelEditingSheet()
+                                }}
+                                className="w-full px-1 py-0 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                autoFocus
+                              />
+                            ) : (
+                              sheet.name
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex justify-end space-x-1">
+                              {/* Edit button */}
+                              <button
+                                type="button"
+                                onClick={() => startEditingSheet(sheet)}
+                                className="p-1 text-gray-400 hover:text-gray-600"
+                                title="Rename sheet"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                              {/* Delete button placeholder */}
+                              <button
+                                type="button"
+                                className="p-1 text-gray-400 hover:text-red-600"
+                                title="Delete sheet"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                              {/* Navigate button placeholder */}
+                              <button
+                                type="button"
+                                className="p-1 text-gray-400 hover:text-blue-600"
+                                title="Navigate to sheet"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              
+              {/* Add Sheet button */}
+              <button
+                type="button"
+                onClick={addSubsystemSheet}
+                className="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded-md text-sm text-gray-600 hover:border-gray-400 hover:text-gray-700 transition-colors"
               >
-                <option value="">Create New Sheet</option>
-                {availableSheets.map(sheet => (
-                  <option key={sheet.id} value={sheet.id}>
-                    {sheet.name}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Select existing sheet or leave empty to create new
-              </p>
+                + Add Sheet
+              </button>
             </div>
-          )}
-
+          </div>
+  
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Input Ports
