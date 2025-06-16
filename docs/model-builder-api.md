@@ -556,7 +556,7 @@ const validation = await fetch('/api/model-builder/TOKEN', {
 | `INVALID_BLOCK_TYPE` | Unknown block type | 400 |
 | `DUPLICATE_NAME` | Name already exists | 400 |
 | `INVALID_CONNECTION` | Connection rule violation | 400 |
-| `PORT_ALREADY_CONNECTED` | Input port has connection | 400 |
+| `PORT_ALREADY_CONNECTED` | Input port can only have one incoming connection | 400 |
 | `VALIDATION_FAILED` | Parameter validation error | 400 |
 | `SERVER_ERROR` | Internal server error | 500 |
 

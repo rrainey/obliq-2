@@ -274,9 +274,18 @@ describe('Model Builder API Integration Tests', () => {
     };
   };
 
-  beforeEach(() => {
-    mockDatabase.reset();
-    jest.clearAllMocks();
+  // Mock console methods to suppress expected error logs during tests
+  const originalConsoleError = console.error;
+  const originalConsoleLog = console.log;
+  
+  beforeAll(() => {
+    console.error = jest.fn();
+    console.log = jest.fn();
+  });
+  
+  afterAll(() => {
+    console.error = originalConsoleError;
+    console.log = originalConsoleLog;
   });
 
   describe('Complete Model Creation Workflow', () => {
@@ -619,6 +628,7 @@ describe('Model Builder API Integration Tests', () => {
         const createSheetReq = createMockRequest('POST', `${baseUrl}/${validToken}`, createSheetBody);
         const createSheetRes = await POST(createSheetReq as any, { params: { token: validToken } });
         const createSheetData = await createSheetRes.json();
+        expect(createSheetRes.status).toBe(201);
         sheet2Id = createSheetData.data.sheet.id;
       }
       
@@ -730,7 +740,7 @@ describe('Model Builder API Integration Tests', () => {
       
       expect(connRes2.status).toBe(400);
       // The API actually checks for the same exact connection first
-      expect(connData2.code).toBe('DUPLICATE_CONNECTION');
+      expect(connData2.code).toBe('PORT_ALREADY_CONNECTED');
     });
 
     it('should prevent self-connections', async () => {

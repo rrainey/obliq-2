@@ -1,4 +1,4 @@
-// components/BlockNode.tsx - ReactFlow custom node implementation
+// components/BlockNode.tsx - Simplified without custom context menu handling
 
 'use client'
 

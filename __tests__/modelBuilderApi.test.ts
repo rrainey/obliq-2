@@ -69,6 +69,20 @@ describe('Model Builder API', () => {
   const invalidToken = 'invalid-token';
   const baseUrl = 'http://localhost:3000/api/model-builder';
 
+  // Mock console methods to suppress expected error logs during tests
+  const originalConsoleError = console.error;
+  const originalConsoleLog = console.log;
+  
+  beforeAll(() => {
+    console.error = jest.fn();
+    console.log = jest.fn();
+  });
+  
+  afterAll(() => {
+    console.error = originalConsoleError;
+    console.log = originalConsoleLog;
+  });
+
   // Helper to create mock request
   const createMockRequest = (method: string, url: string, body?: any) => {
     const urlObj = new URL(url);

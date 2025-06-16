@@ -1787,7 +1787,7 @@ export async function POST(
       if (duplicateConnection) {
         return errorResponse(
           'This connection already exists',
-          'DUPLICATE_CONNECTION',
+          'PORT_ALREADY_CONNECTED',
           400
         );
       }

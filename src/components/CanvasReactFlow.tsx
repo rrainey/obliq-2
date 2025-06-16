@@ -1,4 +1,4 @@
-// components/CanvasReactFlow.tsx - ReactFlow-based Canvas implementation
+// components/CanvasReactFlow.tsx - Updated to follow ReactFlow's context menu pattern
 
 'use client'
 
@@ -25,6 +25,7 @@ import ReactFlow, {
   MarkerType,
   useViewport,
 } from 'reactflow'
+import  type ColorMode  from 'reactflow'
 import 'reactflow/dist/style.css'
 
 import BlockNode, { nodeTypes, blockDataToNode, wireDataToEdge, BlockNodeData } from './BlockNode'
@@ -34,12 +35,14 @@ import { WireData } from './Wire'
 import { validateConnection, detectAlgebraicLoop } from '@/lib/connectionValidation'
 import { propagateSignalTypes, SignalType } from '@/lib/signalTypePropagation'
 import { validateWireConnection, TypeCompatibilityError } from '@/lib/typeCompatibilityValidator'
+import BlockContextMenu from './BlockContextMenu'
 
 interface CanvasReactFlowProps {
   blocks?: BlockData[]
   wires?: WireData[]
   selectedBlockId?: string | null
   selectedWireId?: string | null
+  sheets?: Array<{ id: string; name: string }>
   onDrop?: (x: number, y: number, blockType: string) => void
   onBlockMove?: (id: string, position: { x: number; y: number }) => void
   onBlockSelect?: (id: string | null) => void
@@ -48,6 +51,16 @@ interface CanvasReactFlowProps {
   onWireCreate?: (sourcePort: PortInfo, targetPort: PortInfo) => void
   onWireSelect?: (wireId: string | null) => void
   onWireDelete?: (wireId: string) => void
+  onSheetNavigate?: (sheetId: string) => void
+}
+
+// Context menu state type
+type ContextMenu = {
+  nodeId: string
+  top?: number
+  left?: number
+  right?: number
+  bottom?: number
 }
 
 // Inner component that has access to ReactFlow instance
@@ -56,6 +69,7 @@ function CanvasReactFlowInner({
   wires = [],
   selectedBlockId = null,
   selectedWireId = null,
+  sheets = [],
   onDrop,
   onBlockMove,
   onBlockSelect,
@@ -64,15 +78,19 @@ function CanvasReactFlowInner({
   onWireCreate,
   onWireSelect,
   onWireDelete,
+  onSheetNavigate,
 }: CanvasReactFlowProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const { project, getNode } = useReactFlow()
   const store = useStoreApi()
   const viewport = useViewport()
   const [connectionError, setConnectionError] = useState<string | null>(null)
+  
+  // Context menu state - following ReactFlow pattern
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
 
   // Convert blocks and wires to ReactFlow format with enhanced edge data
-  const initialNodes = blocks.map(blockDataToNode)
+  const initialNodes = blocks.map((block) => blockDataToNode(block))
   const initialEdges = wires.map(wire => {
     // Run type propagation to get signal types
     const propagationResult = propagateSignalTypes(blocks, wires)
@@ -239,9 +257,39 @@ function CanvasReactFlowInner({
     }
   }, [onWireCreate])
 
+  // Handle node context menu - following ReactFlow example pattern
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault()
+      
+      if (!reactFlowWrapper.current) return
+      
+      const pane = reactFlowWrapper.current.getBoundingClientRect()
+      
+      setContextMenu({
+        nodeId: node.id,
+        top: event.clientY - pane.top,
+        left: event.clientX - pane.left,
+      })
+    },
+    [setContextMenu]
+  )
+
+  // Close context menu when clicking on the pane
+  const onPaneClick = useCallback(() => {
+    setContextMenu(null)
+    if (onBlockSelect) {
+      onBlockSelect(null)
+    }
+    if (onWireSelect) {
+      onWireSelect(null)
+    }
+  }, [onBlockSelect, onWireSelect])
+
   // Handle node drag
   const onNodeDrag: NodeDragHandler = useCallback((event, node) => {
-    // Real-time position update during drag if needed
+    // Close context menu when dragging starts
+    setContextMenu(null)
   }, [])
 
   // Handle node drag stop
@@ -275,7 +323,7 @@ function CanvasReactFlowInner({
   // Handle drag over
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
-    event.dataTransfer.dropEffect = 'copy' // Change from 'move' to 'copy'
+    event.dataTransfer.dropEffect = 'copy'
   }, [])
 
   // Handle drop
@@ -285,14 +333,10 @@ function CanvasReactFlowInner({
 
       if (!reactFlowWrapper.current) return
 
-      // Try both data types for compatibility
       const blockType = event.dataTransfer.getData('application/reactflow') || 
                        event.dataTransfer.getData('text/plain')
       
-      console.log('Dropped block type:', blockType) // Debug log
-      
       if (!blockType) {
-        console.log('No block type found in drag data')
         return
       }
 
@@ -301,8 +345,6 @@ function CanvasReactFlowInner({
         x: event.clientX - bounds.left,
         y: event.clientY - bounds.top,
       })
-
-      console.log('Drop position:', position) // Debug log
 
       if (onDrop) {
         onDrop(position.x, position.y, blockType)
@@ -316,7 +358,6 @@ function CanvasReactFlowInner({
     const handleKeyDown = (event: KeyboardEvent) => {
       // Delete selected nodes/edges
       if (event.key === 'Delete' || event.key === 'Backspace') {
-        // Use the nodes and edges from component state
         const selectedNodes = nodes.filter((n: Node) => n.selected)
         const selectedEdges = edges.filter((e: Edge) => e.selected)
 
@@ -334,7 +375,23 @@ function CanvasReactFlowInner({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [nodes, edges, onBlockDelete, onWireDelete])
 
-  // Remove old edge styling code since we're using custom edges
+  // Get the block data for context menu
+  const contextMenuBlock = contextMenu ? blocks.find(b => b.id === contextMenu.nodeId) : null
+
+  // Get available sheets for the current block
+  const getAvailableSheets = useCallback((block: BlockData) => {
+    if (block.type !== 'subsystem') {
+      return []
+    }
+    
+    // For subsystems, show all sheets that belong to this subsystem
+    // They should start with the subsystem's ID
+    return sheets.filter(sheet => 
+      sheet.id.startsWith(block.id) || 
+      sheet.id === block.parameters?.sheetId
+    )
+  }, [sheets])
+
   return (
     <div className="w-full h-full" ref={reactFlowWrapper}>
       <CustomEdgeWrapper />
@@ -348,8 +405,10 @@ function CanvasReactFlowInner({
         onNodeDragStop={onNodeDragStop}
         onSelectionChange={onSelectionChange}
         onNodeDoubleClick={onNodeDoubleClick}
+        onNodeContextMenu={onNodeContextMenu}
         onDragOver={onDragOver}
         onDrop={onDropHandler}
+        onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
@@ -366,22 +425,11 @@ function CanvasReactFlowInner({
             onBlockSelect(node.id)
           }
         }}
-        onPaneClick={() => {
-          if (onBlockSelect) {
-            onBlockSelect(null)
-          }
-          if (onWireSelect) {
-            onWireSelect(null)
-          }
-        }}
       >
         <Background 
           variant={BackgroundVariant.Dots} 
           gap={20} 
           size={1}
-          color="#e5e7eb"
-          className="bg-gray-100 dark:!bg-gray-900"
-  
         />
         
         <Controls 
@@ -397,7 +445,7 @@ function CanvasReactFlowInner({
         )}
 
         {/* Custom Controls Panel */}
-        <Panel position="bottom-right" className="bg-white dark:bg-gray-800 rounded-md shadow-md px-2 py-1 text-xs text-gray-600 dark:text-gray-300">
+        <Panel position="bottom-right" className="bg-white dark:bg-gray-800 rounded-md shadow-md px-2 py-1 text-xs text-gray-600">
           <div className="flex items-center gap-2">
             <span>Zoom: {Math.round(viewport.zoom * 100)}%</span>
           </div>
@@ -408,6 +456,33 @@ function CanvasReactFlowInner({
           Drag blocks from the library • Click and drag to pan • Scroll to zoom • Delete key removes selection
         </Panel>
       </ReactFlow>
+
+      {/* Render context menu as sibling to ReactFlow */}
+      {contextMenu && contextMenuBlock && (
+        <BlockContextMenu
+          nodeId={contextMenu.nodeId}
+          top={contextMenu.top}
+          left={contextMenu.left}
+          right={contextMenu.right}
+          bottom={contextMenu.bottom}
+          block={contextMenuBlock}
+          availableSheets={getAvailableSheets(contextMenuBlock)}
+          onClose={() => setContextMenu(null)}
+          onPropertiesClick={(blockId) => {
+            console.log('Properties clicked for:', blockId)
+            if (onBlockDoubleClick) {
+              onBlockDoubleClick(blockId)
+            }
+            setContextMenu(null)
+          }}
+          onSheetNavigate={(sheetId) => {
+            if (onSheetNavigate) {
+              onSheetNavigate(sheetId)
+            }
+            setContextMenu(null)
+          }}
+        />
+      )}
     </div>
   )
 }

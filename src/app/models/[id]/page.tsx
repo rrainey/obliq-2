@@ -241,10 +241,34 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     // Special handling for subsystem blocks - automatically create their main sheet
     if (blockType === 'subsystem') {
       const subsystemMainSheetId = `${newBlock.id}_main`
+      
+      // Create default input and output ports for the subsystem's main sheet
+      const defaultInputPort: BlockData = {
+        id: `${subsystemMainSheetId}_input1`,
+        type: 'input_port',
+        name: 'Input1',
+        position: { x: 100, y: 200 },
+        parameters: {
+          portName: 'Input1',
+          dataType: 'double',
+          defaultValue: 0
+        }
+      }
+      
+      const defaultOutputPort: BlockData = {
+        id: `${subsystemMainSheetId}_output1`,
+        type: 'output_port',
+        name: 'Output1',
+        position: { x: 400, y: 200 },
+        parameters: {
+          portName: 'Output1'
+        }
+      }
+      
       const subsystemMainSheet: Sheet = {
         id: subsystemMainSheetId,
         name: `${newBlock.name} Main`,
-        blocks: [],
+        blocks: [defaultInputPort, defaultOutputPort],
         connections: [],
         extents: {
           width: 1000,
@@ -519,59 +543,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleBlockDoubleClick = (blockId: string) => {
+    console.log('handleBlockDoubleClick called with:', blockId)
     const block = blocks.find(b => b.id === blockId)
+    console.log('Block found:', block)
+    
     if (!block) return
     
-    if (block.type === 'subsystem') {
-      const sheetId = block.parameters?.sheetId
-      let hasInternalSheet = null
-      
-      if (sheetId) {
-        hasInternalSheet = sheets.find(s => s.id === sheetId)
-      }
-      
-      if (hasInternalSheet) {
-        const choice = window.confirm(
-          `Navigate to subsystem "${block.parameters?.sheetName || block.name}" internal sheet?\n\n` +
-          'Click "OK" to navigate to the internal sheet, or "Cancel" to configure the subsystem block.'
-        )
-        if (choice) {
-          switchToSheet(sheetId)
-          return
-        }
-      } else {
-        const choice = window.confirm(
-          `Create internal sheet for subsystem "${block.name}"?\n\n` +
-          'Click "OK" to create and navigate to a new internal sheet, or "Cancel" to configure the subsystem block.'
-        )
-        if (choice) {
-          const newSheetId = `${block.id}_main`
-          const newSheet: Sheet = {
-            id: newSheetId,
-            name: `${block.name} Main`,
-            blocks: [],
-            connections: [],
-            extents: {
-              width: 1000,
-              height: 800
-            }
-          }
-          
-          addSheet(newSheet)
-          updateBlock(blockId, { 
-            parameters: { 
-              ...block.parameters, 
-              sheetId: newSheetId, 
-              sheetName: newSheet.name 
-            } 
-          })
-          saveCurrentSheetData()
-          switchToSheet(newSheetId)
-          return
-        }
-      }
-    }
-    
+    // Open properties dialog for all block types that have configuration
     if (block && (
       block.type === 'input_port' || 
       block.type === 'output_port' || 
@@ -584,6 +562,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'sheet_label_sink' || 
       block.type === 'sheet_label_source'
     )) {
+      console.log('Setting config block:', block)
       setConfigBlock(block)
     }
   }
@@ -766,6 +745,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             onWireCreate={handleWireCreate}
             onWireSelect={setSelectedWireId}
             onWireDelete={handleWireDelete}
+            onSheetNavigate={switchToSheet}
           />
           </div>
 

@@ -104,7 +104,7 @@ export function validateBlockParameters(
     case BlockTypes.TRANSFER_FUNCTION:
       // Validate numerator array
       if (parameters.numerator !== undefined) {
-        if (!Array.isArray(parameters.numerator) || parameters.numerator.length === 0) {
+        if (!Array.isArray(parameters.numerator) || parameters.numerator.length == 0) {
           errors.push('numerator must be a non-empty array of numbers');
         } else if (!parameters.numerator.every((n: any) => typeof n === 'number')) {
           errors.push('numerator must contain only numbers');
@@ -112,12 +112,12 @@ export function validateBlockParameters(
           sanitized.numerator = parameters.numerator;
         }
       } else {
-        sanitized.numerator = defaults.numerator;
+        errors.push('a numerator coefficient array must be defined');
       }
       
       // Validate denominator array
       if (parameters.denominator !== undefined) {
-        if (!Array.isArray(parameters.denominator) || parameters.denominator.length === 0) {
+        if (!Array.isArray(parameters.denominator) || parameters.denominator.length == 0) {
           errors.push('denominator must be a non-empty array of numbers');
         } else if (!parameters.denominator.every((n: any) => typeof n === 'number')) {
           errors.push('denominator must contain only numbers');
@@ -127,7 +127,7 @@ export function validateBlockParameters(
           sanitized.denominator = parameters.denominator;
         }
       } else {
-        sanitized.denominator = defaults.denominator;
+        errors.push('a denominator coefficient array must be defined');
       }
       break;
       
