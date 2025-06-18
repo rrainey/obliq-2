@@ -84,6 +84,11 @@ export class SimulationEngine {
     }
   }
 
+  public advanceTime(timeStep: number): void {
+    // Advance the simulation time without executing any blocks
+    this.state.time += timeStep
+  }
+
   private getBlockOutputTypes(block: BlockData): ParsedType[] {
     // For blocks with explicit data types
     if (block.type === 'source' || block.type === 'input_port') {
@@ -312,12 +317,13 @@ export class SimulationEngine {
     // Store the input value indexed by signal name
     const input = inputs[0] !== undefined ? inputs[0] : 0
     
-    console.log(`DEBUG: Sheet Label Sink '${signalName}' storing value:`, {
-      signalName,
-      input,
-      isArray: Array.isArray(input),
-      value: input
-    })
+    // Comment out or remove this debug log
+    // console.log(`DEBUG: Sheet Label Sink '${signalName}' storing value:`, {
+    //   signalName,
+    //   input,
+    //   isArray: Array.isArray(input),
+    //   value: input
+    // })
     
     this.state.sheetLabelValues.set(signalName, input)
     
@@ -335,21 +341,20 @@ export class SimulationEngine {
     // Retrieve the value from sheet label storage
     const value = this.state.sheetLabelValues.get(signalName)
     
-    /*
-    console.log(`DEBUG: Sheet Label Source '${signalName}' retrieving:`, {
-      signalName,
-      hasValue: value !== undefined,
-      value,
-      isArray: Array.isArray(value),
-      sheetLabelValues: Array.from(this.state.sheetLabelValues.entries())
-    })
-    */
+    // Remove or comment out this debug log
+    // console.log(`DEBUG: Sheet Label Source '${signalName}' retrieving:`, {
+    //   signalName,
+    //   hasValue: value !== undefined,
+    //   value,
+    //   isArray: Array.isArray(value),
+    //   sheetLabelValues: Array.from(this.state.sheetLabelValues.entries())
+    // })
     
     if (value !== undefined) {
       blockState.outputs[0] = value
     } else {
       // No sink found or not yet executed
-      //console.log(`DEBUG: Sheet Label Source '${signalName}' - no value found, defaulting to 0`)
+      // console.log(`DEBUG: Sheet Label Source '${signalName}' - no value found, defaulting to 0`)
       blockState.outputs[0] = 0
     }
   }
@@ -376,7 +381,7 @@ export class SimulationEngine {
     return true
   }
 
-  private executeBlock(blockId: string) {
+  public executeBlock(blockId: string) {
     const block = this.blocks.find(b => b.id === blockId)
     const blockState = this.state.blockStates.get(blockId)
     
@@ -436,6 +441,18 @@ export class SimulationEngine {
       const signalKey = `${blockId}_output_${i}`
       this.state.signalValues.set(signalKey, blockState.outputs[i])
     }
+  }
+
+  public executeBlockById(blockId: string): void {
+    // Find the block by ID
+    const block = this.blocks.find(b => b.id === blockId)
+    if (!block) {
+      console.warn(`Block with ID ${blockId} not found`)
+      return
+    }
+    
+    // Execute the block using the existing private method
+    this.executeBlock(blockId)
   }
 
   private getBlockInputs(blockId: string): (number | number[] | boolean | boolean[])[] {
@@ -1076,86 +1093,16 @@ export class SimulationEngine {
   }
 
   private executeSubsystemBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
-    const { sheetId, inputPorts, outputPorts } = blockState.internalState
+    // In the hybrid approach, subsystem blocks are just containers and don't execute
+    // They're handled by the MultiSheetSimulationEngine
+    // This method is kept for compatibility but does nothing
     
-    // If no sheet is referenced, fall back to pass-through behavior
-    if (!sheetId || !this.allSheets.length) {
-      // Simple pass-through: map inputs to outputs
-      for (let i = 0; i < outputPorts.length; i++) {
-        blockState.outputs[i] = inputs[i] || 0
-      }
-      blockState.internalState.currentOutputs = [...blockState.outputs]
-      return
-    }
+    const { outputPorts } = blockState.internalState
     
-    // Find the referenced sheet
-    const referencedSheet = this.allSheets.find(sheet => sheet.id === sheetId)
-    if (!referencedSheet) {
-      console.warn(`Subsystem references non-existent sheet: ${sheetId}`)
-      // Fall back to pass-through
-      for (let i = 0; i < outputPorts.length; i++) {
-        blockState.outputs[i] = inputs[i] || 0
-      }
-      blockState.internalState.currentOutputs = [...blockState.outputs]
-      return
-    }
-    
-    // Get or create subsystem simulation engine
-    let subsystemEngine = this.subsystemEngines.get(blockState.blockId)
-    if (!subsystemEngine) {
-      // Create external input provider for subsystem
-      const subsystemInputProvider = (portName: string) => {
-        // Map subsystem input port names to actual input values
-        const portIndex = inputPorts.findIndex((port: string) => port === portName)
-        return portIndex >= 0 ? inputs[portIndex] : 0
-      }
-      
-      // Create simulation config matching parent
-      const subsystemConfig = {
-        timeStep: this.state.timeStep,
-        duration: this.state.duration
-      }
-      
-      // Create subsystem engine with the referenced sheet's blocks and connections
-      subsystemEngine = new SimulationEngine(
-        referencedSheet.blocks,
-        referencedSheet.connections,
-        subsystemConfig,
-        subsystemInputProvider,
-        this.allSheets // Pass sheets for nested subsystems
-      )
-      
-      // Cache the engine
-      this.subsystemEngines.set(blockState.blockId, subsystemEngine)
-    }
-    
-    // Update subsystem's external inputs (input ports in the subsystem)
-    const subsystemInputProvider = (portName: string) => {
-      const portIndex = inputPorts.findIndex((port: string) => port === portName)
-      return portIndex >= 0 ? inputs[portIndex] : 0
-    }
-    
-    // Update the subsystem engine's external input provider
-    subsystemEngine.updateExternalInputs(subsystemInputProvider)
-    
-    // Synchronize subsystem time with parent
-    subsystemEngine.syncTime(this.state.time)
-    
-    // Execute one step of the subsystem
-    subsystemEngine.step()
-    
-    // Get output port values from the subsystem
-    const subsystemOutputs = subsystemEngine.getOutputPortValues()
-    
-    // Map subsystem outputs to this block's outputs
+    // Initialize outputs to zero
     for (let i = 0; i < outputPorts.length; i++) {
-      const outputPortName = outputPorts[i]
-      const outputValue = subsystemOutputs.get(outputPortName) || 0
-      blockState.outputs[i] = outputValue
+      blockState.outputs[i] = 0
     }
-    
-    // Store current outputs for debugging/inspection
-    blockState.internalState.currentOutputs = [...blockState.outputs]
   }
 
   // Helper method to update external inputs (for subsystem simulation)

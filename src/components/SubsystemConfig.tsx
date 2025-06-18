@@ -10,9 +10,10 @@ interface SubsystemConfigProps {
   availableSheets?: Sheet[]
   onUpdate: (parameters: Record<string, any>) => void
   onClose: () => void
+  onSheetNavigate?: (sheetId: string) => void
 }
 
-export default function SubsystemConfig({ block, availableSheets = [], onUpdate, onClose }: SubsystemConfigProps) {
+export default function SubsystemConfig({ block, availableSheets = [], onUpdate, onClose, onSheetNavigate }: SubsystemConfigProps) {
   // Initialize sheets from block parameters
   const [sheets, setSheets] = useState<Sheet[]>(block.parameters?.sheets || [])
   const [sheetName, setSheetName] = useState(block.parameters?.sheetName || 'Subsystem')
@@ -23,7 +24,7 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
 
   const handleSave = () => {
     const parameters = {
-      sheets, // Include sheets in parameters
+      sheets, 
       sheetName,
       inputPorts: inputPorts.filter((port: string) => port.trim() !== ''),
       outputPorts: outputPorts.filter((port: string) => port.trim() !== '')
@@ -101,6 +102,37 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
     setEditingSheetName('')
   }
 
+  const deleteSheet = (sheetId: string) => {
+    const sheet = sheets.find(s => s.id === sheetId)
+    if (!sheet) return
+
+    // Prevent deletion if it's the last sheet
+    if (sheets.length <= 1) {
+      alert('Cannot delete the last sheet. Subsystems must have at least one sheet.')
+      return
+    }
+
+    // Confirmation dialog
+    const hasContent = sheet.blocks.length > 0 || sheet.connections.length > 0
+    const confirmMessage = hasContent
+      ? `Are you sure you want to delete "${sheet.name}"? This sheet contains ${sheet.blocks.length} blocks and ${sheet.connections.length} connections. This action cannot be undone.`
+      : `Are you sure you want to delete "${sheet.name}"?`
+
+    if (window.confirm(confirmMessage)) {
+      setSheets(sheets.filter(s => s.id !== sheetId))
+    }
+  }
+
+  const navigateToSheet = (sheetId: string) => {
+    // Save current changes before navigating
+    handleSave()
+    
+    // Navigate to the sheet
+    if (onSheetNavigate) {
+      onSheetNavigate(sheetId)
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl p-6 w-96 max-h-96 overflow-y-auto">
@@ -174,19 +206,22 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                 </svg>
                               </button>
-                              {/* Delete button placeholder */}
+                              {/* Delete button */}
                               <button
                                 type="button"
-                                className="p-1 text-gray-400 hover:text-red-600"
-                                title="Delete sheet"
+                                onClick={() => deleteSheet(sheet.id)}
+                                className="p-1 text-gray-400 hover:text-red-600 disabled:text-gray-300"
+                                disabled={sheets.length <= 1}
+                                title={sheets.length <= 1 ? "Cannot delete the last sheet" : "Delete sheet"}
                               >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                               </button>
-                              {/* Navigate button placeholder */}
+                              {/* Navigate button */}
                               <button
                                 type="button"
+                                onClick={() => navigateToSheet(sheet.id)}
                                 className="p-1 text-gray-400 hover:text-blue-600"
                                 title="Navigate to sheet"
                               >

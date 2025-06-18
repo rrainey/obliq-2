@@ -41,6 +41,9 @@ The project follows a clean, modular folder structure to organize different conc
 
   * **`lib/supabaseClient.ts`** – A module to initialize and export the Supabase client (with the project URL and anon API key). This is used on the client side to interact with Supabase. It might also handle setting up Supabase authentication state listener and refreshing the JWT as needed.
   * **`lib/auth.tsx`** – (Optional) Utilities for authentication, possibly a React context provider that wraps the Supabase auth functions. This could provide React hooks like `useUser()` or `useSession()` throughout the app. It might also implement route guarding (for example, redirecting to login if no user session).
+  * **`lib/multiSheetSimulation.ts`** – Implementation of the `MultiSheetSimulationEngine` class that coordinates simulation across multiple sheets with proper subsystem handling and sheet label scoping.
+
+  * **`lib/sheetLabelUtils.ts`** – Utilities for handling sheet label connections, validation, and scoping within subsystems.
   * **`lib/simulationEngine.ts`** – The **simulation logic** implementation. This module contains functions to execute a model step-by-step. For simplicity and performance, the simulation can run in the browser (no network latency). The simulation engine would take the model JSON (or an in-memory representation of the block graph) and iteratively compute outputs of blocks over time steps. It likely supports both continuous (differential equation) blocks like transfer functions and discrete logic for algebraic blocks. For interactive use, this could be run in a Web Worker to keep the UI responsive if needed. The simulation engine updates the values of Signal Display blocks and logs data for Signal Logger blocks as the simulation progresses. Because our app is focusing on simplicity and not real-time collaboration, the simulation state lives purely on the client during a session – the results are not persisted in the database, they are just visualized or available for download if the user explicitly exports them.
   * **`lib/codeGeneration.ts`** – The **C Code generation service**. This module includes functions that transform a model JSON into C code files. It likely iterates through the blocks and connections to produce C structures and functions. For example, it may generate a `init()` function to initialize all blocks, an `update(step_time)` function to update the simulation each tick, and data structures for each block's state. It uses the preserved signal names from the model for variable and function names to ensure the generated code is understandable. The code generation could use templates for PlatformIO (e.g., generating a library with a `library.properties` if targeting Arduino, or a PlatformIO `src/` folder with code). This module can be used both on the server (for the API route that delivers a file) and potentially on the client (if we wanted to preview code). However, generating a downloadable library (especially if it involves bundling multiple files into a zip) is better done server-side. The output of code generation is not stored in the database; it's generated on-demand and provided to the user (or external caller) for download.
   * **`lib/modelSchema.ts`** – Definition of the **Model JSON schema** or TypeScript types for the model. This defines how a model is structured as JSON: e.g., a model object containing metadata and an array of **Sheets**, each Sheet containing a list of **Blocks** (with properties like id, type, position, parameters, etc.) and **Connections** (wires linking block outputs to inputs). It also defines how Subsystems are represented (possibly as a special block type that contains a reference to another list of blocks internally or a child sheet). Defining a clear schema (and perhaps using a validation library like Zod for it) helps maintain consistency between the front-end, simulation, and code generation logic so all interpret the model the same way.
@@ -134,11 +137,18 @@ The application implements lightweight versioning to track the evolution of mode
 
 **Performance Considerations:** The two-table design keeps the models table lightweight for fast listing operations while storing the potentially large JSON data in the versions table. Version queries use the indexed (model_id, version) pair for efficient lookups.
 
+* **Multi-Sheet Performance**: 
+  - Simulation uses separate engines per sheet to avoid unnecessary global state updates
+  - Code generation flattens only during generation, not during editing
+  - Block execution order is calculated once and reused throughout simulation
+  - Sheet label resolution is O(1) using hash maps for both simulation and code generation
+
 ## Basics of the Simulation Model Document
 
 A simulation **Model** is logically composed of one or more **Sheets**. Each Sheet will contain a collection of **Blocks**. We will define multiple block types from which to compose a simulation model.  Blocks have input and output **Ports**. Ports are interconnected by **Signal** wires.  As we'll see, Output Ports will have an associated data type assigned based on the nature of the block type or configuration by the user.  Signals inherit the data type of the source Output Port which they are connected to. We'll enumerate the data types supported by the application in a later section. These closly correspond to C-language data types to make for effective translation to a C-language implementation.
 
 The simulation model is conceived with modularity and component reuse as important consideration.  Based on that idea, a model can be decomposed into **Subsystems** by the user.  As we will see, a Subsystem will have its own unique scope of blocks, names, inputs, outputs, and interconnections. In fact, the main model can be thought of as the root Subsystem to an overall model.  Subsystems may be nested inside a parent Subsystem.  There is no limit to this Subsystem nesting depth.
+
 
 ## Visual Modeling Canvas and Block Editor
 
@@ -178,10 +188,16 @@ Under the hood, when a new connection (wire) is made, the application updates th
 
 We introduce the concept of **Sheet Labels** to provide connections across sheets of a Subsystem (as with name scoping, we treat the top level model as the root Subsystem for Sheet Labeling). **Sheet Labels** referencing the same Signal name may also appear on the same sheet. Two extra Block types support the concept of **Sheet Labels**:
 
-* **Sheet Label Sink** - a Sheet Label Sink has one input which connects it to a source Signal. Source signal names can be specified in the UI using something combining both an input text box for freeform input combined with a dropdown showing all currently defind Signal names in the current scope (an example of such a UI control is the Material UI "Autocomplete with Free Solo" control). The block name can be assigned a name by the user and it is distinct from the Signal name. The block's asssociated Symbol inherits the type of the connected input Signal.
-* **Sheet Label Source** - a Sheet Label Source block has a single output Port.  The Signal associated with the output Port can be assigned a name from a dropdown list of the names of all Sheet Label Sink blocks present in the top level model or Subsystem associated with the current Sheet being rendered on the Canvas.  The block's output Signal inherits its type from the input Signal of the associated Sheet Label Sink.
+* **Sheet Label Sink** - A block with one input that captures a signal and makes it available by name within the current subsystem scope. The signal name is distinct from the block name and can be selected via autocomplete showing available signals.
 
-The Signal name associated with any Sheet Label block is distinct from the (unique) name assigned to the block.  This is true for both Sheet Label Sink and Sheet Label Source blocks.
+* **Sheet Label Source** - A block with one output that retrieves a signal by name from a Sheet Label Sink within the same subsystem scope. A dropdown shows all available sink signal names in the current scope.
+
+**Sheet Label Implementation Details**:
+- Sheet labels are scoped to their containing subsystem (or root model)
+- The Signal name associated with any Sheet Label block is distinct from the (unique) name assigned to the block.  This is true for both Sheet Label Sink and Sheet Label Source blocks.
+- During simulation, values are stored in a scoped map within each SimulationEngine
+- During code generation, sheet label connections are replaced with direct wire connections
+- The `sheetLabelUtils.ts` module provides validation to ensure unique sink names and matched source/sink pairs
 
 Because each block (and subsystem) can have a user-defined name (especially signals going into output ports or coming from input ports), we preserve these names. Names must comply with C-style identifier naming conventions. They will be important when generating code, as they become identifier names or part of function names to make the generated code more traceable to the source model.
 
@@ -202,6 +218,24 @@ execution order of blocks and also for passing Signal data types and calculated 
 7. Once the simulation is done, the user can see all output plots. If needed, an "Export CSV" for logged signals could be offered (which would just take the logged arrays and create a CSV file for download in the browser).
 
 If we later needed server-side simulation (for example, to offload work or allow long-running simulations to run without keeping the browser open), the architecture can accommodate it. We would implement the `app/api/simulate` route such that it loads the model JSON from the database, runs a simulation using perhaps a Node.js library or a headless version of our simulation engine, and returns the results (likely not as detailed interactive data, but maybe summary or logs). However, for now, the client-side approach is sufficient and simpler.
+
+### Multi-Sheet Simulation Architecture
+
+The simulation engine uses a hybrid approach that combines the benefits of separate sheet engines with global execution order:
+
+1. **Per-Sheet Engines**: Each sheet (including those nested in subsystems) has its own `SimulationEngine` instance, maintaining local state and signal values.
+
+2. **Global Execution Order**: A `MultiSheetSimulationEngine` coordinates all sheet engines, calculating a global execution order that respects dependencies across sheet boundaries.
+
+3. **Subsystem Transparency**: Subsystem blocks are treated as containers. Values flow directly from subsystem inputs to internal input ports and from internal output ports to subsystem outputs.
+
+4. **Sheet Label Scoping**: Each subsystem maintains its own sheet label namespace, preventing signal name conflicts between different subsystems.
+
+Key implementation details:
+- `SimulationEngine` provides `executeBlockById()` and `advanceTime()` methods for fine-grained control
+- `MultiSheetSimulationEngine` maintains `blockEngines`, `executionOrder`, and `blockToSheet` mappings
+- Sheet label values are scoped to their containing subsystem
+- No redundant subsystem simulation - blocks execute exactly once per time step
 
 ## C Code Generation Service
 
@@ -310,6 +344,64 @@ The separation of concerns in state ensures that each part of the app deals with
 1. **UI Components** – operate on in-memory state for speed.
 2. **Persistent Model Storage** – only updated occasionally, which also minimizes conflict potential (since no concurrent edits).
 3. **Computation (Simulation/Codegen)** – operates on a snapshot of the model state (we might pass a copy of the model JSON to the simulation engine or code generator to avoid any mutations affecting the UI state). They produce results that are either displayed or downloaded, not directly modifying the model (except maybe adding some meta info like simulation results if we choose).
+
+## Hybrid Simulation and Code Generation Architecture
+
+The application uses a unified approach for handling multi-sheet models in both simulation and code generation:
+
+### Shared Concepts
+
+1. **Sheet Hierarchy**: Both systems traverse the complete sheet hierarchy, including sheets nested within subsystem blocks.
+
+2. **Block Identification**: Blocks maintain their original IDs throughout flattening and simulation, enabling consistent tracking.
+
+3. **Signal Flow**: Both systems handle:
+   - Direct connections within sheets
+   - Subsystem port mappings (input/output port blocks)
+   - Sheet label connections within subsystem scopes
+
+### Key Differences
+
+**Simulation (Runtime)**:
+- Maintains separate engine instances per sheet
+- Executes blocks in-place with value passing between engines
+- Preserves sheet label scoping dynamically
+- Real-time state management
+
+**Code Generation (Compile-time)**:
+- Flattens entire model into single structure
+- Generates prefixed variable names
+- Replaces sheet labels with direct assignments
+- Static code output
+
+### Multi-Sheet Code Generation
+
+The code generator handles hierarchical multi-sheet models through a flattening process:
+
+1. **Model Flattening**: The `flattenModelStructure()` function converts the hierarchical sheet structure into a single flat representation:
+   - All blocks from all sheets are collected with prefixed names (e.g., `Subsystem1_Scale1`)
+   - Subsystem boundaries are removed, with connections remapped to flow directly
+   - Sheet labels are replaced with direct wire connections
+
+2. **Context Preservation**: A `BlockContextMap` tracks each block's original location:
+   - Original sheet path for comments (e.g., "from Subsystem1 > Controller")
+   - Prefixed names to ensure uniqueness across the flattened model
+   - Proper scoping for signal names and variables
+
+3. **Execution Order**: The flattened model uses `calculateExecutionOrderMultiSheet()` to determine a global execution order respecting all dependencies.
+
+4. **Generated Code Structure**:
+   - All signals use prefixed names to avoid conflicts
+   - Comments indicate the original subsystem location
+   - Sheet label connections become direct assignments
+   - States for transfer functions are properly scoped
+
+### Benefits of This Architecture
+
+1. **Consistency**: Same signal flow logic ensures simulation matches generated code behavior
+2. **Performance**: Simulation avoids unnecessary flattening overhead
+3. **Debugging**: Generated code comments preserve original structure
+4. **Extensibility**: New block types need minimal changes to both systems
 
 ## Extensibility and Performance Considerations
 

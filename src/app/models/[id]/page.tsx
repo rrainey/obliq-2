@@ -598,6 +598,28 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     switchToSheet(newSheetId)
   }
 
+  const isCurrentSheetInSubsystem = () => {
+    // Check if the active sheet is a root sheet
+    const isRootSheet = sheets.some(sheet => sheet.id === activeSheetId)
+    return !isRootSheet
+  }
+
+  const getParentSheetIdForCurrent = () => {
+    if (isCurrentSheetInSubsystem()) {
+      const { getParentSheetId } = useModelStore.getState()
+      return getParentSheetId(activeSheetId)
+    }
+    return null
+  }
+
+  const handleNavigateToParent = () => {
+    const parentId = getParentSheetIdForCurrent()
+    if (parentId) {
+      switchToSheet(parentId)
+    }
+  }
+
+
   if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -729,6 +751,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           onAddSheet={handleAddSheet}
           onRenameSheet={renameSheet}
           onDeleteSheet={deleteSheet}
+          isInSubsystem={isCurrentSheetInSubsystem()}
+          parentSheetId={getParentSheetIdForCurrent()}
+          onNavigateToParent={handleNavigateToParent}
         />
 
         {/* Breadcrumbs - Add this section */}
@@ -950,6 +975,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               availableSheets={sheets.filter(s => s.id !== activeSheetId)}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}
+              onSheetNavigate={(sheetId) => {
+                switchToSheet(sheetId)
+                setConfigBlock(null)
+              }}
             />
           )}
           {configBlock.type === 'lookup_1d' && (

@@ -93,7 +93,7 @@ export interface ModelActions {
   setSimulationResults: (results: SimulationResults | null) => void
   setIsSimulating: (simulating: boolean) => void
   setSimulationEngine: (engine: SimulationEngine | null) => void
-  setOutputPortValues: (values: Map<string, number> | null) => void
+  setOutputPortValues: (values: Map<string, number | number[] | boolean | boolean[]> | null) => void
   setGlobalSimulationResults: (results: Map<string, SimulationResults>) => void
   clearGlobalSimulationResults: () => void
   

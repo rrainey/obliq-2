@@ -1,3 +1,4 @@
+// components/SheetTabs.tsx
 'use client'
 
 import { useState } from 'react'
@@ -20,6 +21,9 @@ interface SheetTabsProps {
   onAddSheet: () => void
   onRenameSheet: (sheetId: string, newName: string) => void
   onDeleteSheet: (sheetId: string) => void
+  isInSubsystem?: boolean
+  parentSheetId?: string | null
+  onNavigateToParent?: () => void
 }
 
 // Helper function to determine if a sheet is a main sheet (cannot be deleted)
@@ -33,7 +37,10 @@ export default function SheetTabs({
   onSheetChange, 
   onAddSheet, 
   onRenameSheet, 
-  onDeleteSheet 
+  onDeleteSheet,
+  isInSubsystem = false,
+  parentSheetId = null,
+  onNavigateToParent
 }: SheetTabsProps) {
   const [editingSheetId, setEditingSheetId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
@@ -65,7 +72,32 @@ export default function SheetTabs({
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-700 flex items-center px-4">
+    <div className={`border-b flex items-center px-4 ${
+      isInSubsystem 
+        ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700' 
+        : 'bg-white dark:bg-gray-900 dark:border-gray-700'
+    }`}>
+      {/* Parent navigation button */}
+      {isInSubsystem && parentSheetId && onNavigateToParent && (
+        <button
+          onClick={onNavigateToParent}
+          className="mr-2 px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded flex items-center space-x-1"
+          title="Navigate to parent sheet"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+          </svg>
+          <span>Parent</span>
+        </button>
+      )}
+      
+      {/* Subsystem indicator */}
+      {isInSubsystem && (
+        <div className="mr-2 px-2 py-1 bg-purple-600 text-white text-xs font-medium rounded">
+          Subsystem
+        </div>
+      )}
+      
       {/* Sheet Tabs */}
       <div className="flex items-center space-x-1 flex-1">
         {sheets.map(sheet => (
@@ -87,8 +119,12 @@ export default function SheetTabs({
                 className={`
                   px-3 py-1 text-sm font-medium rounded-t-md border-t border-l border-r
                   ${activeSheetId === sheet.id
-                    ? 'bg-white text-gray-900 border-gray-300'
-                    : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+                    ? isInSubsystem 
+                      ? 'bg-purple-100 text-purple-900 border-purple-300'
+                      : 'bg-white text-gray-900 border-gray-300'
+                    : isInSubsystem
+                      ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                      : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
                   }
                 `}
                 title="Double-click to rename"
@@ -118,14 +154,20 @@ export default function SheetTabs({
         {/* Add Sheet Button */}
         <button
           onClick={onAddSheet}
-          className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+          className={`px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 ${
+            isInSubsystem
+              ? 'text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
         >
           + Add Sheet
         </button>
       </div>
 
       {/* Sheet Info */}
-      <div className="text-xs text-gray-500">
+      <div className={`text-xs ${
+        isInSubsystem ? 'text-purple-600' : 'text-gray-500'
+      }`}>
         {sheets.find(s => s.id === activeSheetId)?.blocks?.length || 0} blocks
       </div>
     </div>

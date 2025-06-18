@@ -3,7 +3,8 @@
 import { execSync, ExecSyncOptions } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import { CodeGenerator } from '@/lib/codeGeneration'
+import { generateCCode } from '@/lib/codeGeneration'
+import { Sheet } from '@/lib/simulationEngine'
 
 describe('Code Generation Compilation Tests', () => {
   const testDir = path.join(__dirname, 'platformio-test')
@@ -292,12 +293,17 @@ lib_deps =
   // Load test models from files
   const testModels = loadModelFiles()
 
-  // Also include any hardcoded test models
-  const hardcodedModels = [
+  // Test models with the new hierarchical structure
+  const hierarchicalTestModels = [
     {
       name: 'Simple Sum Block',
-      filename: 'hardcoded',
+      filename: 'simple_sum',
       model: {
+        version: "2.0",
+        metadata: {
+          created: new Date().toISOString(),
+          description: 'Simple Sum Block Test'
+        },
         sheets: [{
           id: 'main',
           name: 'Main',
@@ -361,11 +367,246 @@ lib_deps =
           simulationTimeStep: 0.01
         }
       }
+    },
+    {
+      name: 'Multi-Sheet with Subsystem',
+      filename: 'multi_sheet_subsystem',
+      model: {
+        version: "2.0",
+        metadata: {
+          created: new Date().toISOString(),
+          description: 'Multi-Sheet Subsystem Test',
+          testInputs: {
+            MainInput: 5.0
+          },
+          expectedOutputs: {
+            MainOutput: 10.0  // 5.0 * 2.0 (scale factor)
+          }
+        },
+        sheets: [{
+          id: 'main',
+          name: 'Main',
+          blocks: [
+            {
+              id: 'main_input',
+              type: 'input_port',
+              name: 'MainInput',
+              position: { x: 100, y: 100 },
+              parameters: { portName: 'MainInput', dataType: 'double' }
+            },
+            {
+              id: 'subsystem1',
+              type: 'subsystem',
+              name: 'DoubleSubsystem',
+              position: { x: 300, y: 100 },
+              parameters: {
+                inputPorts: ['in'],
+                outputPorts: ['out'],
+                sheets: [
+                  {
+                    id: 'sub_main',
+                    name: 'SubMain',
+                    blocks: [
+                      {
+                        id: 'sub_input',
+                        type: 'input_port',
+                        name: 'in',
+                        position: { x: 100, y: 100 },
+                        parameters: { portName: 'in', dataType: 'double' }
+                      },
+                      {
+                        id: 'scale_block',
+                        type: 'scale',
+                        name: 'Scale1',
+                        position: { x: 300, y: 100 },
+                        parameters: { gain: 2.0 }
+                      },
+                      {
+                        id: 'sub_output',
+                        type: 'output_port',
+                        name: 'out',
+                        position: { x: 500, y: 100 },
+                        parameters: { portName: 'out' }
+                      }
+                    ],
+                    connections: [
+                      {
+                        id: 'sub_wire1',
+                        sourceBlockId: 'sub_input',
+                        sourcePortIndex: 0,
+                        targetBlockId: 'scale_block',
+                        targetPortIndex: 0
+                      },
+                      {
+                        id: 'sub_wire2',
+                        sourceBlockId: 'scale_block',
+                        sourcePortIndex: 0,
+                        targetBlockId: 'sub_output',
+                        targetPortIndex: 0
+                      }
+                    ],
+                    extents: { width: 800, height: 600 }
+                  }
+                ]
+              }
+            },
+            {
+              id: 'main_output',
+              type: 'output_port',
+              name: 'MainOutput',
+              position: { x: 500, y: 100 },
+              parameters: { portName: 'MainOutput' }
+            }
+          ],
+          connections: [
+            {
+              id: 'main_wire1',
+              sourceBlockId: 'main_input',
+              sourcePortIndex: 0,
+              targetBlockId: 'subsystem1',
+              targetPortIndex: 0
+            },
+            {
+              id: 'main_wire2',
+              sourceBlockId: 'subsystem1',
+              sourcePortIndex: 0,
+              targetBlockId: 'main_output',
+              targetPortIndex: 0
+            }
+          ],
+          extents: { width: 1000, height: 800 }
+        }],
+        globalSettings: {
+          simulationDuration: 1.0,
+          simulationTimeStep: 0.01
+        }
+      }
+    },
+    {
+      name: 'Sheet Labels Across Multiple Sheets',
+      filename: 'sheet_labels',
+      model: {
+        version: "2.0",
+        metadata: {
+          created: new Date().toISOString(),
+          description: 'Sheet Label Test',
+          testInputs: {
+            Input1: 3.0
+          },
+          expectedOutputs: {
+            Output1: 6.0  // 3.0 * 2.0
+          }
+        },
+        sheets: [{
+          id: 'main',
+          name: 'Main',
+          blocks: [
+            {
+              id: 'input1',
+              type: 'input_port',
+              name: 'Input1',
+              position: { x: 100, y: 100 },
+              parameters: { portName: 'Input1', dataType: 'double' }
+            },
+            {
+              id: 'sheet_sink1',
+              type: 'sheet_label_sink',
+              name: 'SignalA_Sink',
+              position: { x: 300, y: 100 },
+              parameters: { signalName: 'SignalA' }
+            },
+            {
+              id: 'subsystem_with_labels',
+              type: 'subsystem',
+              name: 'ProcessingSubsystem',
+              position: { x: 400, y: 200 },
+              parameters: {
+                inputPorts: [],
+                outputPorts: ['result'],
+                sheets: [
+                  {
+                    id: 'processing_sheet',
+                    name: 'Processing',
+                    blocks: [
+                      {
+                        id: 'sheet_source1',
+                        type: 'sheet_label_source',
+                        name: 'SignalA_Source',
+                        position: { x: 100, y: 100 },
+                        parameters: { signalName: 'SignalA' }
+                      },
+                      {
+                        id: 'scale2',
+                        type: 'scale',
+                        name: 'Scale2',
+                        position: { x: 300, y: 100 },
+                        parameters: { gain: 2.0 }
+                      },
+                      {
+                        id: 'proc_output',
+                        type: 'output_port',
+                        name: 'result',
+                        position: { x: 500, y: 100 },
+                        parameters: { portName: 'result' }
+                      }
+                    ],
+                    connections: [
+                      {
+                        id: 'proc_wire1',
+                        sourceBlockId: 'sheet_source1',
+                        sourcePortIndex: 0,
+                        targetBlockId: 'scale2',
+                        targetPortIndex: 0
+                      },
+                      {
+                        id: 'proc_wire2',
+                        sourceBlockId: 'scale2',
+                        sourcePortIndex: 0,
+                        targetBlockId: 'proc_output',
+                        targetPortIndex: 0
+                      }
+                    ],
+                    extents: { width: 800, height: 600 }
+                  }
+                ]
+              }
+            },
+            {
+              id: 'output1',
+              type: 'output_port',
+              name: 'Output1',
+              position: { x: 600, y: 200 },
+              parameters: { portName: 'Output1' }
+            }
+          ],
+          connections: [
+            {
+              id: 'wire1',
+              sourceBlockId: 'input1',
+              sourcePortIndex: 0,
+              targetBlockId: 'sheet_sink1',
+              targetPortIndex: 0
+            },
+            {
+              id: 'wire2',
+              sourceBlockId: 'subsystem_with_labels',
+              sourcePortIndex: 0,
+              targetBlockId: 'output1',
+              targetPortIndex: 0
+            }
+          ],
+          extents: { width: 1000, height: 800 }
+        }],
+        globalSettings: {
+          simulationDuration: 1.0,
+          simulationTimeStep: 0.01
+        }
+      }
     }
   ]
 
   // Combine all test models
-  const allTestModels = [...testModels, ...hardcodedModels]
+  const allTestModels = [...testModels, ...hierarchicalTestModels]
   
   test.each(allTestModels)('should compile $name (from $filename)', async ({ name, model, filename }) => {
     console.log(`\n${'#'.repeat(80)}`)
@@ -376,20 +617,21 @@ lib_deps =
     // Generate model name from the test name
     const modelName = name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
     
-    // Generate code
-    const generator = new CodeGenerator(
-      model.sheets[0].blocks,
-      model.sheets[0].connections,
-      model.sheets,
-      modelName
-    )
+    // Generate code using the new API
+    const result = generateCCode({
+      modelName,
+      sheets: model.sheets,
+      globalSettings: model.globalSettings
+    })
     
-    const result = generator.generateCode()
-    expect(result.success).toBe(true)
-    expect(result.files).toBeDefined()
+    // Write generated files
+    const files = [
+      { name: `${result.fileName}.h`, content: result.headerFile },
+      { name: `${result.fileName}.c`, content: result.sourceFile },
+      { name: 'library.properties', content: generateLibraryProperties(modelName) }
+    ]
     
-    // Write generated files to PlatformIO library directory
-    result.files!.forEach(file => {
+    files.forEach(file => {
       const filePath = path.join(libDir, file.name)
       fs.writeFileSync(filePath, file.content)
       console.log(`\nGenerated file: ${file.name} (${file.content.length} bytes)`)
@@ -398,7 +640,7 @@ lib_deps =
       console.log('-'.repeat(40))
     })
     
-    // Generate test program based on model structure
+    // Generate test program
     const testProgram = generateTestProgram(model, modelName)
     
     const srcDir = path.join(testDir, 'src')
@@ -431,18 +673,73 @@ lib_deps =
     
   }, 120000) // 120 second timeout for Docker operations
 
-  // Helper function to generate test program that runs full simulation
-  function generateTestProgram(model: any, modelName: string): string {
-    const inputs = model.sheets[0].blocks.filter((b: any) => b.type === 'input_port')
-    const outputs = model.sheets[0].blocks.filter((b: any) => b.type === 'output_port')
+  // Helper function to generate library properties
+  function generateLibraryProperties(modelName: string): string {
+    const safeName = modelName.replace(/[^a-zA-Z0-9_]/g, '_')
+    return `name=${safeName}
+version=1.0.0
+author=Generated
+maintainer=Generated
+sentence=Generated library from visual model ${modelName}
+paragraph=This library was automatically generated from a block diagram model.
+category=Signal Input/Output
+url=
+architectures=*
+includes=${safeName}.h
+`
+  }
+
+  function checkIfVectorOutput(output: any, mainSheet: any): { isVector: boolean, size: number } {
+    const outputWire = mainSheet.connections.find((w: any) => w.targetBlockId === output.id)
+    if (!outputWire) return { isVector: false, size: 0 }
     
-    // Get simulation parameters from model or use defaults
+    const sourceBlock = mainSheet.blocks.find((b: any) => b.id === outputWire.sourceBlockId)
+    if (!sourceBlock) return { isVector: false, size: 0 }
+    
+    // Check source block type
+    if (sourceBlock.type === 'source' || sourceBlock.type === 'input_port') {
+      const dataType = sourceBlock.parameters?.dataType
+      if (dataType && dataType.includes('[')) {
+        const match = dataType.match(/\[(\d+)\]/)
+        if (match) {
+          return { isVector: true, size: parseInt(match[1]) }
+        }
+      }
+    } else if (sourceBlock.type === 'transfer_function') {
+      // Check TF input
+      const tfInputWire = mainSheet.connections.find((w: any) => w.targetBlockId === sourceBlock.id)
+      if (tfInputWire) {
+        const tfSourceBlock = mainSheet.blocks.find((b: any) => b.id === tfInputWire.sourceBlockId)
+        if (tfSourceBlock && (tfSourceBlock.type === 'source' || tfSourceBlock.type === 'input_port')) {
+          const dataType = tfSourceBlock.parameters?.dataType
+          if (dataType && dataType.includes('[')) {
+            const match = dataType.match(/\[(\d+)\]/)
+            if (match) {
+              return { isVector: true, size: parseInt(match[1]) }
+            }
+          }
+        }
+      }
+    }
+    
+    return { isVector: false, size: 0 }
+  }
+
+  // Helper function to generate test program
+  function generateTestProgram(model: any, modelName: string): string {
+    // Only consider top-level input/output ports
+    const mainSheet = model.sheets[0]
+    const inputs = mainSheet.blocks.filter((b: any) => b.type === 'input_port')
+    const outputs = mainSheet.blocks.filter((b: any) => b.type === 'output_port')
+    
+    // Get simulation parameters
     const simulationDuration = model.globalSettings?.simulationDuration || 10.0
     const simulationTimeStep = model.globalSettings?.simulationTimeStep || 0.01
     
     let program = `#include <${modelName}.h>\n`
     program += `#include <stdio.h>\n`
     program += `#include <math.h>\n\n`
+    program += `#include <string.h>\n\n`
     
     program += `int main() {\n`
     program += `    ${modelName}_t model;\n`
@@ -451,23 +748,20 @@ lib_deps =
     program += `    ${modelName}_init(&model, ${simulationTimeStep});\n`
     program += `    \n`
     
-    // Set test inputs based on model metadata or defaults
+    // Set test inputs
     program += `    // Set input values\n`
     if (model.metadata?.testInputs) {
       for (const [portName, value] of Object.entries(model.metadata.testInputs)) {
         const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
         if (Array.isArray(value)) {
-          // Vector input
           value.forEach((v, i) => {
             program += `    model.inputs.${sanitizedPortName}[${i}] = ${v};\n`
           })
         } else {
-          // Scalar input
           program += `    model.inputs.${sanitizedPortName} = ${value};\n`
         }
       }
     } else {
-      // Default test values
       inputs.forEach((input: any, index: number) => {
         const portName = input.parameters?.portName || input.name
         const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
@@ -488,12 +782,10 @@ lib_deps =
       const portName = output.parameters?.portName || output.name
       const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
       
-      // Check if this is a vector output
-      const outputWire = model.sheets[0].connections.find((w: any) => w.targetBlockId === output.id)
-      const isVector = checkIfVectorOutput(output, outputWire, model.sheets[0])
+      const vectorInfo = checkIfVectorOutput(output, mainSheet)
       
-      if (isVector) {
-        program += `    double final_${sanitizedPortName}[${isVector.size}] = {0};\n`
+      if (vectorInfo.isVector) {
+        program += `    double final_${sanitizedPortName}[${vectorInfo.size}] = {0};\n`
       } else {
         program += `    double final_${sanitizedPortName} = 0.0;\n`
       }
@@ -509,25 +801,21 @@ lib_deps =
     program += `        ${modelName}_time_step(&model, dt);\n`
     program += `        \n`
     
-    // Store final values (from last time step)
+    // Store final values
     program += `        // Store final values\n`
     outputs.forEach((output: any) => {
       const portName = output.parameters?.portName || output.name
       const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
       
-      const outputWire = model.sheets[0].connections.find((w: any) => w.targetBlockId === output.id)
-      const isVector = checkIfVectorOutput(output, outputWire, model.sheets[0])
+      const vectorInfo = checkIfVectorOutput(output, mainSheet)
       
-      if (isVector) {
-        for (let i = 0; i < isVector.size; i++) {
-          program += `        final_${sanitizedPortName}[${i}] = model.outputs.${sanitizedPortName}[${i}];\n`
-        }
+      if (vectorInfo.isVector) {
+        program += `        memcpy(final_${sanitizedPortName}, model.outputs.${sanitizedPortName}, sizeof(final_${sanitizedPortName}));\n`
       } else {
         program += `        final_${sanitizedPortName} = model.outputs.${sanitizedPortName};\n`
       }
     })
     
-    // Optional: Print progress every 10% of simulation
     program += `        \n`
     program += `        // Print progress\n`
     program += `        if (i % (steps / 10) == 0 && i > 0) {\n`
@@ -546,12 +834,11 @@ lib_deps =
       const portName = output.parameters?.portName || output.name
       const sanitizedPortName = portName.replace(/[^a-zA-Z0-9_]/g, '_')
       
-      const outputWire = model.sheets[0].connections.find((w: any) => w.targetBlockId === output.id)
-      const isVector = checkIfVectorOutput(output, outputWire, model.sheets[0])
+      const vectorInfo = checkIfVectorOutput(output, mainSheet)
       
-      if (isVector) {
+      if (vectorInfo.isVector) {
         program += `    printf("${sanitizedPortName}:\\n");\n`
-        for (let i = 0; i < isVector.size; i++) {
+        for (let i = 0; i < vectorInfo.size; i++) {
           program += `    printf("  [${i}]: %.6f\\n", final_${sanitizedPortName}[${i}]);\n`
         }
       } else {
@@ -559,14 +846,13 @@ lib_deps =
       }
     })
     
-    // Validate against expected outputs if specified
+    // Validate against expected outputs
     if (model.metadata?.expectedOutputs || model.metadata?.expectedOutput !== undefined) {
       program += `    \n`
       program += `    // Validate expected outputs\n`
       program += `    double tolerance = 0.00001;\n`
       program += `    int all_passed = 1;\n`
       
-      // Handle legacy single expectedOutput
       if (model.metadata?.expectedOutput !== undefined && outputs.length > 0) {
         const firstOutput = outputs[0]
         const portName = firstOutput.parameters?.portName || firstOutput.name
@@ -584,36 +870,20 @@ lib_deps =
         program += `    }\n`
       }
       
-      // Handle multiple expectedOutputs
       if (model.metadata?.expectedOutputs) {
         for (const [outputPortName, expectedValue] of Object.entries(model.metadata.expectedOutputs)) {
           const sanitizedPortName = outputPortName.replace(/[^a-zA-Z0-9_]/g, '_')
           
-          if (Array.isArray(expectedValue)) {
-            // Vector expected output
-            expectedValue.forEach((expected, i) => {
-              program += `    {\n`
-              program += `        double expected = ${expected};\n`
-              program += `        double actual = final_${sanitizedPortName}[${i}];\n`
-              program += `        if (fabs(actual - expected) > tolerance) {\n`
-              program += `            printf("\\n✗ Test failed for ${sanitizedPortName}[${i}]! Expected: %.6f, Got: %.6f\\n", expected, actual);\n`
-              program += `            all_passed = 0;\n`
-              program += `        }\n`
-              program += `    }\n`
-            })
-          } else {
-            // Scalar expected output
-            program += `    {\n`
-            program += `        double expected = ${expectedValue};\n`
-            program += `        double actual = final_${sanitizedPortName};\n`
-            program += `        if (fabs(actual - expected) > tolerance) {\n`
-            program += `            printf("\\n✗ Test failed for ${sanitizedPortName}! Expected: %.6f, Got: %.6f\\n", expected, actual);\n`
-            program += `            all_passed = 0;\n`
-            program += `        } else {\n`
-            program += `            printf("\\n✓ ${sanitizedPortName} test passed! Output: %.6f\\n", actual);\n`
-            program += `        }\n`
-            program += `    }\n`
-          }
+          program += `    {\n`
+          program += `        double expected = ${expectedValue};\n`
+          program += `        double actual = final_${sanitizedPortName};\n`
+          program += `        if (fabs(actual - expected) > tolerance) {\n`
+          program += `            printf("\\n✗ Test failed for ${sanitizedPortName}! Expected: %.6f, Got: %.6f\\n", expected, actual);\n`
+          program += `            all_passed = 0;\n`
+          program += `        } else {\n`
+          program += `            printf("\\n✓ ${sanitizedPortName} test passed! Output: %.6f\\n", actual);\n`
+          program += `        }\n`
+          program += `    }\n`
         }
       }
       
@@ -634,71 +904,17 @@ lib_deps =
     return program
   }
 
-  // Helper function to check if an output is a vector
-  function checkIfVectorOutput(output: any, outputWire: any, sheet: any): { size: number } | null {
-    if (!outputWire) return null
-    
-    const sourceBlock = sheet.blocks.find((b: any) => b.id === outputWire.sourceBlockId)
-    if (!sourceBlock) return null
-    
-    // Check if source block has a vector data type
-    if (sourceBlock.parameters?.dataType) {
-      const typeMatch = sourceBlock.parameters.dataType.match(/^(float|double|long|bool)\[(\d+)\]$/)
-      if (typeMatch) {
-        return { size: parseInt(typeMatch[2]) }
-      }
-    }
-    
-    // Check if the source block has a vector value parameter
-    if (sourceBlock.parameters?.value && Array.isArray(sourceBlock.parameters.value)) {
-      return { size: sourceBlock.parameters.value.length }
-    }
-    
-    // Check for transfer function with vector input (propagates vector output)
-    if (sourceBlock.type === 'transfer_function') {
-      const tfInputWire = sheet.connections.find((w: any) => w.targetBlockId === sourceBlock.id)
-      if (tfInputWire) {
-        const tfSourceBlock = sheet.blocks.find((b: any) => b.id === tfInputWire.sourceBlockId)
-        if (tfSourceBlock?.parameters?.dataType) {
-          const tfTypeMatch = tfSourceBlock.parameters.dataType.match(/^(float|double|long|bool)\[(\d+)\]$/)
-          if (tfTypeMatch) {
-            return { size: parseInt(tfTypeMatch[2]) }
-          }
-        }
-      }
-    }
-    
-    return null
-  }
-
   // Helper function to validate simulation results
   function validateSimulationResults(output: string, model: any) {
     console.log('\n--- Validating Simulation Results ---')
     
     // Parse output values from the program output
-    const outputValues: { [key: string]: number | number[] } = {}
+    const outputValues: { [key: string]: number } = {}
     
-    // Match scalar outputs
-    const scalarMatches = output.matchAll(/(\w+):\s*([-\d.]+)/g)
-    for (const match of scalarMatches) {
+    const matches = output.matchAll(/(\w+):\s*([-\d.]+)/g)
+    for (const match of matches) {
       const [_, name, value] = match
-      if (!name.includes('[')) {
-        outputValues[name] = parseFloat(value)
-      }
-    }
-    
-    // Match vector outputs
-    const vectorPattern = /(\w+):\s*\n((?:\s*\[\d+\]:\s*[-\d.]+\s*\n)+)/g
-    const vectorMatches = output.matchAll(vectorPattern)
-    for (const match of vectorMatches) {
-      const [_, name, vectorData] = match
-      const elementMatches = vectorData.matchAll(/\[(\d+)\]:\s*([-\d.]+)/g)
-      const vector: number[] = []
-      for (const elementMatch of elementMatches) {
-        const [__, index, value] = elementMatch
-        vector[parseInt(index)] = parseFloat(value)
-      }
-      outputValues[name] = vector
+      outputValues[name] = parseFloat(value)
     }
     
     console.log('Parsed output values:', outputValues)
@@ -706,9 +922,9 @@ lib_deps =
     // Validate against expected values
     let allPassed = true
     
-    // Check legacy single expected output
     if (model.metadata?.expectedOutput !== undefined) {
-      const outputs = model.sheets[0].blocks.filter((b: any) => b.type === 'output_port')
+      const mainSheet = model.sheets[0]
+      const outputs = mainSheet.blocks.filter((b: any) => b.type === 'output_port')
       if (outputs.length > 0) {
         const firstOutput = outputs[0]
         const portName = firstOutput.parameters?.portName || firstOutput.name
@@ -727,27 +943,13 @@ lib_deps =
       }
     }
     
-    // Check multiple expected outputs
     if (model.metadata?.expectedOutputs) {
       for (const [outputPortName, expectedValue] of Object.entries(model.metadata.expectedOutputs)) {
         const sanitizedPortName = outputPortName.replace(/[^a-zA-Z0-9_]/g, '_')
         const actual = outputValues[sanitizedPortName]
         
-        if (Array.isArray(expectedValue)) {
-          // Vector comparison
-          expect(actual).toBeInstanceOf(Array)
-          if (Array.isArray(actual)) {
-            expect(actual.length).toBe(expectedValue.length)
-            expectedValue.forEach((expected, i) => {
-              expect(actual[i]).toBeCloseTo(expected as number, 5)
-              console.log(`✓ ${sanitizedPortName}[${i}]: ${actual[i]} ≈ ${expected}`)
-            })
-          }
-        } else {
-          // Scalar comparison
-          expect(actual).toBeCloseTo(expectedValue as number, 5)
-          console.log(`✓ ${sanitizedPortName}: ${actual} ≈ ${expectedValue}`)
-        }
+        expect(actual).toBeCloseTo(expectedValue as number, 5)
+        console.log(`✓ ${sanitizedPortName}: ${actual} ≈ ${expectedValue}`)
       }
     }
     
@@ -755,4 +957,272 @@ lib_deps =
       console.log('\n✅ All validation checks passed!')
     }
   }
+})
+
+describe('Multi-sheet and Subsystem Code Generation', () => {
+  it('should generate correct C code for models with subsystems', () => {
+    // Create a hierarchical test model
+    const modelData = {
+      version: "2.0",
+      metadata: {
+        created: new Date().toISOString(),
+        description: "Multi-sheet subsystem test"
+      },
+      sheets: [{
+        id: 'main',
+        name: 'Main',
+        blocks: [
+          {
+            id: 'input1',
+            type: 'input_port' as const,
+            name: 'input1',
+            position: { x: 100, y: 100 },
+            parameters: { portName: 'input1', dataType: 'double' }
+          },
+          {
+            id: 'outer_subsystem',
+            type: 'subsystem' as const,
+            name: 'DoubleSubsystem',
+            position: { x: 300, y: 100 },
+            parameters: {
+              inputPorts: ['in'],
+              outputPorts: ['out'],
+              sheets: [{
+                id: 'double_main',
+                name: 'DoubleMain',
+                blocks: [
+                  {
+                    id: 'double_input',
+                    type: 'input_port' as const,
+                    name: 'in',
+                    position: { x: 100, y: 100 },
+                    parameters: { portName: 'in', dataType: 'double' }
+                  },
+                  {
+                    id: 'scale1',
+                    type: 'scale' as const,
+                    name: 'Scale1',
+                    position: { x: 300, y: 100 },
+                    parameters: { gain: 2.0 }
+                  },
+                  {
+                    id: 'double_output',
+                    type: 'output_port' as const,
+                    name: 'out',
+                    position: { x: 500, y: 100 },
+                    parameters: { portName: 'out' }
+                  }
+                ],
+                connections: [
+                  {
+                    id: 'double_w1',
+                    sourceBlockId: 'double_input',
+                    sourcePortIndex: 0,
+                    targetBlockId: 'scale1',
+                    targetPortIndex: 0
+                  },
+                  {
+                    id: 'double_w2',
+                    sourceBlockId: 'scale1',
+                    sourcePortIndex: 0,
+                    targetBlockId: 'double_output',
+                    targetPortIndex: 0
+                  }
+                ],
+                extents: { width: 800, height: 600 }
+              }]
+            }
+          },
+          {
+            id: 'output1',
+            type: 'output_port' as const,
+            name: 'output1',
+            position: { x: 500, y: 100 },
+            parameters: { portName: 'output1' }
+          }
+        ],
+        connections: [
+          {
+            id: 'main_w1',
+            sourceBlockId: 'input1',
+            sourcePortIndex: 0,
+            targetBlockId: 'outer_subsystem',
+            targetPortIndex: 0
+          },
+          {
+            id: 'main_w2',
+            sourceBlockId: 'outer_subsystem',
+            sourcePortIndex: 0,
+            targetBlockId: 'output1',
+            targetPortIndex: 0
+          }
+        ],
+        extents: { width: 800, height: 600 }
+      }],
+      globalSettings: {
+        simulationTimeStep: 0.01,
+        simulationDuration: 1.0
+      }
+    }
+    
+    // Generate C code
+    const result = generateCCode({
+      modelName: 'subsystem_test',
+      sheets: modelData.sheets as Sheet[],
+      globalSettings: modelData.globalSettings
+    })
+    
+    // Verify the generated code structure
+    expect(result.headerFile).toBeDefined()
+    expect(result.sourceFile).toBeDefined()
+    
+    // Check that subsystem blocks are properly prefixed
+    expect(result.sourceFile).toContain('DoubleSubsystem_Scale1')
+    
+    // Check that sheet labels are removed
+    expect(result.sourceFile).not.toContain('sheet_label_sink')
+    expect(result.sourceFile).not.toContain('sheet_label_source')
+    
+    // Check that the scale operation is included
+    expect(result.sourceFile).toContain('* 2.0') // gain of 2.0
+    
+    // Check that signals flow correctly through the flattened structure
+    expect(result.headerFile).toContain('subsystem_test_inputs_t')
+    expect(result.headerFile).toContain('subsystem_test_outputs_t')
+    expect(result.headerFile).toContain('subsystem_test_signals_t')
+    
+    // Verify comments indicate subsystem origin
+    expect(result.sourceFile).toContain('(from DoubleSubsystem)')
+  })
+  
+  it('should handle nested subsystems with sheet labels', () => {
+    // Create a model with nested subsystems and sheet labels
+    const nestedModel = {
+      version: "2.0",
+      metadata: {
+        created: new Date().toISOString(),
+        description: "Nested subsystem with sheet labels test"
+      },
+      sheets: [
+        {
+          id: "main",
+          name: "Main",
+          blocks: [
+            {
+              id: "input1",
+              type: "input_port" as const,
+              name: "input1",
+              position: { x: 100, y: 100 },
+              parameters: { portName: "input1", dataType: "double" }
+            },
+            {
+              id: "main_sink",
+              type: "sheet_label_sink" as const,
+              name: "MainSignal_Sink",
+              position: { x: 300, y: 100 },
+              parameters: { signalName: "MainSignal" }
+            },
+            {
+              id: "outer_subsystem",
+              type: "subsystem" as const,
+              name: "OuterSub",
+              position: { x: 400, y: 200 },
+              parameters: {
+                inputPorts: [],
+                outputPorts: ["out"],
+                sheets: [
+                  {
+                    id: "outer_main",
+                    name: "OuterMain",
+                    blocks: [
+                      {
+                        id: "outer_source",
+                        type: "sheet_label_source" as const,
+                        name: "MainSignal_Source",
+                        position: { x: 100, y: 100 },
+                        parameters: { signalName: "MainSignal" }
+                      },
+                      {
+                        id: "outer_scale",
+                        type: "scale" as const,
+                        name: "OuterScale",
+                        position: { x: 300, y: 100 },
+                        parameters: { gain: 3.0 }
+                      },
+                      {
+                        id: "outer_output",
+                        type: "output_port" as const,
+                        name: "out",
+                        position: { x: 500, y: 100 },
+                        parameters: { portName: "out" }
+                      }
+                    ],
+                    connections: [
+                      {
+                        id: "outer_w1",
+                        sourceBlockId: "outer_source",
+                        sourcePortIndex: 0,
+                        targetBlockId: "outer_scale",
+                        targetPortIndex: 0
+                      },
+                      {
+                        id: "outer_w2",
+                        sourceBlockId: "outer_scale",
+                        sourcePortIndex: 0,
+                        targetBlockId: "outer_output",
+                        targetPortIndex: 0
+                      }
+                    ],
+                    extents: { width: 800, height: 600 }
+                  }
+                ]
+              }
+            },
+            {
+              id: "output1",
+              type: "output_port" as const,
+              name: "output1",
+              position: { x: 600, y: 200 },
+              parameters: { portName: "output1" }
+            }
+          ],
+          connections: [
+            {
+              id: "main_w1",
+              sourceBlockId: "input1",
+              sourcePortIndex: 0,
+              targetBlockId: "main_sink",
+              targetPortIndex: 0
+            },
+            {
+              id: "main_w2",
+              sourceBlockId: "outer_subsystem",
+              sourcePortIndex: 0,
+              targetBlockId: "output1",
+              targetPortIndex: 0
+            }
+          ],
+          extents: { width: 800, height: 600 }
+        }
+      ],
+      globalSettings: {
+        simulationTimeStep: 0.01,
+        simulationDuration: 1.0
+      }
+    }
+    
+    const result = generateCCode({
+      modelName: 'nested_test',
+      sheets: nestedModel.sheets as Sheet[],
+      globalSettings: nestedModel.globalSettings
+    })
+    
+    // Check that sheet labels are replaced with direct connections
+    expect(result.sourceFile).not.toContain('sheet_label_sink')
+    expect(result.sourceFile).not.toContain('sheet_label_source')
+    
+    // Check that the signal flows through properly
+    expect(result.sourceFile).toContain('OuterSub_OuterScale')
+    expect(result.sourceFile).toContain('* 3.0') // Scale factor
+  })
 })
