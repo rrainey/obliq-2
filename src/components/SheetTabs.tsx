@@ -74,8 +74,8 @@ export default function SheetTabs({
   return (
     <div className={`border-b flex items-center px-4 ${
       isInSubsystem 
-        ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700' 
-        : 'bg-white dark:bg-gray-900 dark:border-gray-700'
+        ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-300 ' 
+        : 'bg-white '
     }`}>
       {/* Parent navigation button */}
       {isInSubsystem && parentSheetId && onNavigateToParent && (

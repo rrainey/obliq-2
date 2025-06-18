@@ -141,7 +141,7 @@ export const useModelStore = create<ModelStore>()(
     
     saveModel: async () => {
       const state = get()
-  
+
       if (!state.model) {
         set({ error: 'No model to save' })
         return false
@@ -169,7 +169,7 @@ export const useModelStore = create<ModelStore>()(
         // Ensure current sheet data is saved before persisting to database
         get().saveCurrentSheetData()
         
-        // Get the updated model with current sheet data
+        // Get the updated state after saving current sheet
         const updatedState = get()
         
         if (!updatedState.model) {
@@ -179,12 +179,12 @@ export const useModelStore = create<ModelStore>()(
         
         // Collect all sheets hierarchically - sheets are already stored in subsystem blocks
         const modelData = {
-          version: "2.0", // New version to indicate hierarchical structure
+          version: "2.0",
           metadata: {
             created: updatedState.model.created_at,
             description: `Model ${updatedState.model.name}`
           },
-          sheets: updatedState.sheets, // Sheets already contain hierarchical structure
+          sheets: updatedState.sheets, // This now includes all subsystem sheets embedded in their blocks
           globalSettings: {
             simulationTimeStep: 0.01,
             simulationDuration: 10.0
@@ -535,33 +535,46 @@ export const useModelStore = create<ModelStore>()(
     setOutputPortValues: (outputPortValues) => set({ outputPortValues }),
 
     // Composite actions
-    switchToSheet: (sheetId: string) => {
-      const { saveCurrentSheetData, sheets, globalSimulationResults } = get()
-      
-      // Save current sheet data first
-      saveCurrentSheetData()
+    // In modelStore.ts, update the switchToSheet function:
 
-      // Find sheet at any level
-      let sheet = sheets.find(s => s.id === sheetId)
-      
-      if (!sheet) {
-        sheet = findSheetInSubsystems(sheets, sheetId) || undefined
-      }
-      
-      if (sheet) {
-        // Get simulation results if available
-        const sheetResults = globalSimulationResults?.get(sheetId) || null
+  switchToSheet: (sheetId: string) => {
+    const { saveCurrentSheetData, sheets, globalSimulationResults } = get()
+    
+    // Save current sheet data first
+    saveCurrentSheetData()
+
+    // Find sheet at any level (including in subsystems)
+    const findSheetRecursively = (searchSheets: Sheet[]): Sheet | null => {
+      for (const sheet of searchSheets) {
+        if (sheet.id === sheetId) return sheet
         
-        set({
-          activeSheetId: sheetId,
-          blocks: sheet.blocks,
-          wires: sheet.connections,
-          selectedBlockId: null,
-          selectedWireId: null,
-          currentSheetSimulationResults: sheetResults
-        })
+        // Search in subsystem blocks
+        for (const block of sheet.blocks) {
+          if (block.type === 'subsystem' && block.parameters?.sheets) {
+            const found = findSheetRecursively(block.parameters.sheets)
+            if (found) return found
+          }
+        }
       }
-    },
+      return null
+    }
+    
+    const sheet = findSheetRecursively(sheets)
+    
+    if (sheet) {
+      // Get simulation results if available
+      const sheetResults = globalSimulationResults?.get(sheetId) || null
+      
+      set({
+        activeSheetId: sheetId,
+        blocks: sheet.blocks || [],
+        wires: sheet.connections || [],
+        selectedBlockId: null,
+        selectedWireId: null,
+        currentSheetSimulationResults: sheetResults
+      })
+    }
+  },
 
     setGlobalSimulationResults: (results: Map<string, SimulationResults>) => {
       const { activeSheetId } = get()
@@ -600,12 +613,52 @@ export const useModelStore = create<ModelStore>()(
       set({ sheets: updatedSheets })
     },
     
+
     saveCurrentSheetData: () => {
       const state = get()
-      get().updateCurrentSheet({ 
-        blocks: state.blocks, 
-        connections: state.wires 
-      })
+      
+      // Helper to recursively update a specific sheet
+      const updateSheetRecursively = (sheets: Sheet[]): Sheet[] => {
+        return sheets.map(sheet => {
+          if (sheet.id === state.activeSheetId) {
+            // This is the sheet we're updating
+            return {
+              ...sheet,
+              blocks: state.blocks,
+              connections: state.wires
+            }
+          }
+          
+          // Check subsystem blocks
+          const updatedBlocks = sheet.blocks.map(block => {
+            if (block.type === 'subsystem' && block.parameters?.sheets) {
+              // Recursively update sheets in subsystem
+              const updatedSubsheets = updateSheetRecursively(block.parameters.sheets)
+              
+              // Check if any sheet was actually updated
+              const wasUpdated = updatedSubsheets !== block.parameters.sheets
+              
+              if (wasUpdated) {
+                return {
+                  ...block,
+                  parameters: {
+                    ...block.parameters,
+                    sheets: updatedSubsheets
+                  }
+                }
+              }
+            }
+            return block
+          })
+          
+          // Return sheet with potentially updated blocks
+          const blocksChanged = updatedBlocks !== sheet.blocks
+          return blocksChanged ? { ...sheet, blocks: updatedBlocks } : sheet
+        })
+      }
+      
+      const updatedSheets = updateSheetRecursively(state.sheets)
+      set({ sheets: updatedSheets })
     },
 
     updateSubsystemSheets: (subsystemId: string, sheets: Sheet[]) => set((state) => {
@@ -690,26 +743,99 @@ export const useModelStore = create<ModelStore>()(
 )
 
 function getParentSheet(sheets: Sheet[], targetSheetId: string): Sheet | null {
-    for (const sheet of sheets) {
-      // Check if any subsystem in this sheet contains the target sheet
-      for (const block of sheet.blocks) {
-        if (block.type === 'subsystem' && block.parameters?.sheets) {
-          // Check if target sheet is directly in this subsystem
-          const hasTargetSheet = block.parameters.sheets.some((s: Sheet) => s.id === targetSheetId)
-          if (hasTargetSheet) {
-            return sheet
-          }
-          
-          // Recursively check nested subsystems
-          const parentInNested = getParentSheet(block.parameters.sheets, targetSheetId)
-          if (parentInNested) {
-            return parentInNested
-          }
+  for (const sheet of sheets) {
+    // Check if any subsystem in this sheet contains the target sheet
+    for (const block of sheet.blocks) {
+      if (block.type === 'subsystem' && block.parameters?.sheets) {
+        // Check if target sheet is directly in this subsystem
+        const hasTargetSheet = block.parameters.sheets.some((s: Sheet) => s.id === targetSheetId)
+        if (hasTargetSheet) {
+          return sheet
+        }
+        
+        // Recursively check nested subsystems
+        const parentInNested = getParentSheet(block.parameters.sheets, targetSheetId)
+        if (parentInNested) {
+          return parentInNested
         }
       }
     }
-    return null
   }
+  return null
+}
+
+// Helper function to recursively update a sheet within subsystems
+function updateSubsystemSheetData(
+  sheets: Sheet[],
+  targetSheetId: string,
+  updates: { blocks: BlockData[], connections: WireData[] }
+): Sheet[] | null {
+  for (const sheet of sheets) {
+    for (const block of sheet.blocks) {
+      if (block.type === 'subsystem' && block.parameters?.sheets) {
+        const subsystemSheets = block.parameters.sheets as Sheet[]
+        
+        // Check if the target sheet is directly in this subsystem
+        const targetIndex = subsystemSheets.findIndex(s => s.id === targetSheetId)
+        if (targetIndex !== -1) {
+          // Found it! Update the sheet
+          const updatedSubsystemSheets = [...subsystemSheets]
+          updatedSubsystemSheets[targetIndex] = {
+            ...updatedSubsystemSheets[targetIndex],
+            blocks: updates.blocks,
+            connections: updates.connections
+          }
+          
+          // Update the subsystem block
+          const updatedBlock = {
+            ...block,
+            parameters: {
+              ...block.parameters,
+              sheets: updatedSubsystemSheets
+            }
+          }
+          
+          // Update the parent sheet
+          const updatedBlocks = sheet.blocks.map(b => 
+            b.id === block.id ? updatedBlock : b
+          )
+          
+          // Return updated sheets
+          return sheets.map(s => 
+            s.id === sheet.id 
+              ? { ...s, blocks: updatedBlocks }
+              : s
+          )
+        }
+        
+        // Try recursive search in nested subsystems
+        const nestedResult = updateSubsystemSheetData(subsystemSheets, targetSheetId, updates)
+        if (nestedResult) {
+          // Update this subsystem with the nested changes
+          const updatedBlock = {
+            ...block,
+            parameters: {
+              ...block.parameters,
+              sheets: nestedResult
+            }
+          }
+          
+          const updatedBlocks = sheet.blocks.map(b => 
+            b.id === block.id ? updatedBlock : b
+          )
+          
+          return sheets.map(s => 
+            s.id === sheet.id 
+              ? { ...s, blocks: updatedBlocks }
+              : s
+          )
+        }
+      }
+    }
+  }
+  
+  return null
+}
 
 function findSheetInSubsystems(sheets: Sheet[], sheetId: string): Sheet | null {
   for (const sheet of sheets) {

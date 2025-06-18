@@ -29,7 +29,7 @@ export default function SheetBreadcrumbs({
   }
 
   return (
-    <div className={`flex items-center space-x-1 px-4 py-2 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-sm ${className}`}>
+    <div className={`flex items-center space-x-1 px-4 py-2 bg-gray-50 border-b border-gray-200 text-sm ${className}`}>
       {breadcrumbs.map((breadcrumb, index) => (
         <React.Fragment key={breadcrumb.sheetId}>
           {index > 0 && (
@@ -38,8 +38,8 @@ export default function SheetBreadcrumbs({
           <span
             className={`
               ${index === breadcrumbs.length - 1 
-                ? 'text-gray-900 dark:text-gray-100 font-medium' 
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                ? 'text-gray-900 font-medium' 
+                : 'text-gray-600 hover:text-gray-900'
               }
               ${index < breadcrumbs.length - 1 ? 'cursor-pointer hover:underline' : ''}
             `}

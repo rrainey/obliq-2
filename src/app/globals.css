@@ -1,37 +1,29 @@
 @import "tailwindcss";
 
+
 :root {
-  /* Light mode colors */
+  /* CSS HEX */
   --pine-green: #206a5dff;
   --apple-green: #81b214ff;
   --beige: #d0d6b5ff;
   --sunglow: #ffcc29ff;
   --orange-wheel: #f58634ff;
-
-  --background: #ededed;
+  --background: #ffffff;
   --foreground: #171717;
-  
-  /* ReactFlow colors */
-  --rf-background: #fafafa;
-  --rf-background: #1a1a1a;
-  --rf-grid: #e5e7eb;
-  --rf-node-bg: #ffffff;
-  --rf-node-border: #d1d5db;
-  --rf-edge: #6b7280;
-  --rf-edge-error: #ef4444;
 }
 
-.dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  
-  /* ReactFlow dark colors */
-  --rf-background: #1a1a1a;
-  --rf-grid: #374151;
-  --rf-node-bg: #1f2937;
-  --rf-node-border: #4b5563;
-  --rf-edge: #9ca3af;
-  --rf-edge-error: #dc2626;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
 }
 
 body {

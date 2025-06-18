@@ -1,7 +1,6 @@
 // app/models/[id]/page.tsx
 'use client'
 
-import ThemeToggle from '@/components/ThemeToggle'
 import { useUser } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
 import { BlockData, PortInfo } from '@/components/Block'
@@ -670,7 +669,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-950">
+    <div className="min-h-screen bg-gray-100">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -735,7 +734,6 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                 Generate Code
               </button>
 
-              <ThemeToggle /> 
             </div>
           </div>
         </div>

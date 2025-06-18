@@ -173,6 +173,93 @@ Each primitive block type is defined with specific behavior:
 
 The **CanvasReactFlow** and related components manage user interactions: Users can drag blocks from the library sidebar onto the canvas (creating a new instance of that block type in the model state), drag blocks around to reposition them, and drag from an output port to an input port to create a connection (wire). The UI provides visual feedback (highlighting compatible ports, etc.) and prevents invalid connections (for example, the app should stop the user from connecting two outputs directly or connecting an output to multiple inputs on the same port). These rules of connectivity are enforced in the Canvas component logic or the underlying diagram library, reflecting the single-source per input constraint of signal flow models.
 
+### Visual Elements of the Block Diagram Canvas
+
+The visual design of blocks on the canvas follows established conventions from flowcharting and control system diagrams while incorporating modern UI patterns for clarity and usability.
+
+#### Block Visual Representations
+
+Each block type has a distinct visual appearance designed to convey its function at a glance:
+
+**Basic Mathematical Blocks:**
+- **Sum Block** – Rectangular block displaying the "∑" (sigma) symbol. Standard 80px width with white background and gray border.
+- **Multiply Block** – Rectangular block displaying the "×" (multiplication) symbol. Same dimensions as Sum block.
+- **Scale Block** – Rectangular block displaying the gain value (default "K"). Updates dynamically to show the actual scaling factor.
+
+**Dynamic System Blocks:**
+- **Transfer Function Block** – Rectangular block displaying the transfer function as a fraction with numerator and denominator polynomials. Width adjusts dynamically based on polynomial length. Polynomials are formatted with proper superscripts for powers of s (e.g., s², s³).
+
+**Data Lookup Blocks:**
+- **1-D Lookup Block** – Rectangular block containing a 60x40px SVG diagram showing the actual lookup curve. The diagram displays:
+  - Light gray axes (#9ca3af)
+  - Medium gray curve (#6b7280) 
+  - Automatic scaling to fit the defined data points
+  - Linear interpolation visualization between points
+- **2-D Lookup Block** – Similar to 1-D but displays multiple curves (one for each second input value) with slight transparency (0.7 opacity) to show overlapping curves clearly.
+
+**Input/Output Interface Blocks:**
+- **Input Port Block** – Terminator shape (stadium/pill shape with semicircular ends) displaying the port name centered within. Height is 45px (30% flatter than standard blocks) with dynamic width based on port name length (100-200px range).
+- **Output Port Block** – Identical terminator shape to Input Port, visually indicating interface boundaries.
+- **Source Block** – Rectangular block displaying either:
+  - "~" symbol for signal generators
+  - The actual constant value in monospace font (e.g., "3.14", "[1.0, 0.0, 0.0]")
+  - Width adjusts to accommodate longer constant expressions
+
+**Signal Monitoring Blocks:**
+- **Signal Display Block** – Rectangular block with "📊" (chart) emoji indicating graphical display capability.
+- **Signal Logger Block** – Rectangular block with "📝" (memo) emoji indicating data logging function.
+
+**Structural Blocks:**
+- **Subsystem Block** – Rectangular block with "□" (square) symbol. Contains multiple input/output ports based on subsystem definition.
+
+**Sheet Connection Blocks:**
+- **Sheet Label Sink** – Rectangular block with downward arrow "↓" and the signal name displayed below in smaller text (truncated to 8 characters if needed).
+- **Sheet Label Source** – Rectangular block with upward arrow "↑" and matching signal name display format.
+
+#### Visual Design Principles
+
+**Color Scheme:**
+- All blocks use a consistent monochrome gray color palette
+- White backgrounds with #9ca3af (gray-400) borders
+- Selected blocks show a blue ring (#3b82f6) with 2px offset
+- Text uses #374151 (gray-900) for maximum contrast
+
+**Block Dimensions:**
+- Minimum height: 64px (45px for terminator shapes)
+- Default width: 80px
+- Dynamic width adjustment for:
+  - Transfer functions (based on polynomial length)
+  - Source blocks (based on constant value length)
+  - Input/Output ports (based on port name length)
+  - Sheet labels (based on signal name length)
+
+**Port Indicators:**
+- Circular handles (12px diameter) on block edges
+- Dark gray (#374151) with white border in default state
+- Blue (#3b82f6) with shadow effect on hover
+- Minimum 20px vertical spacing between multiple ports
+- Positioned 6px outside the block boundary
+
+**Block Names:**
+- Displayed above each block in small gray text (0.5rem)
+- Automatically generated following pattern: BlockType + Number (e.g., "Sum1", "TransferFunction2")
+- Sheet label blocks show signal name in purple below the block name
+
+**Connection Wires:**
+- Rendered as paths between output and input ports
+- Single connection allowed per input port
+- Multiple connections allowed from output ports
+- Visual feedback during connection dragging
+
+#### Responsive Behavior
+
+- Blocks maintain relative cursor position during dragging to prevent visual "jumping"
+- Port highlights provide immediate feedback for valid connection targets
+- Dynamic resizing ensures content is never clipped or overlapped
+- Consistent hover states across all interactive elements
+
+This visual design system ensures that block diagrams are both functional and aesthetically consistent, making it easy for users to understand signal flow and system structure at a glance.
+
 **Scope of names** - The scope of a named signal or block name is the Subsystem in which the parent block appears. Outside this region, we cannot access the named signal or block and it is treated as undefined or undeclared.  For our purposes, the model document can be considered the root Subsystem. When a new block is instantiated, it shall be automatically assigned a unique name.  This name should follow the form <block-type-name><integer-id-number>. The expected next <integer-id-number> to be assigned should be tracked at the parent Subsystem level (e.g., at either the main model or a parent Subsystem). So, for example, the first new Sum block created in a Sunsystem would be assigned the name "Sum1", the next, "Sum2", and so on.
 
 **Block Naming Implementation:** The automatic naming system shall maintain a per-sheet counter for each block type. When a block is created, it receives a name in the format `<BlockType><Number>` where BlockType is the capitalized, space-removed version of the block type (e.g., "Sum", "TransferFunction", "SignalDisplay") and Number starts at 1 for each type on each sheet. This counter is maintained at the sheet level, not globally, allowing "Sum1" to exist on multiple sheets.
