@@ -154,7 +154,7 @@ The simulation model is conceived with modularity and component reuse as importa
 
 One of the most critical parts of the app is the **visual modeling canvas** where users build diagrams. This is implemented in the frontend (React) and must be efficient and intuitive. We use a combination of HTML5 Canvas or SVG for drawing connections and perhaps a library for the diagramming foundation. For example, we could leverage an existing JS diagramming library (such as **JointJS, mxGraph, GoJS, or Draw2D**) to handle low-level drag-and-drop and rendering, but we will likely customize it heavily to enforce our specific rules (e.g., **only one wire per input port, multiple wires per output port**, and naming of signals). 
 
-Blocks are interconnected by wires called **Signals**.  Every Signal has an an associated C-style data type.  This data type is inherited from the characteristics of the source block. Valid data types supported in the MVP will be float, double, long, bool, and one-dimensional arrays of these types. Where they appear in the user interface or internally in the model JSON document, data types specification will be text strings conforming to C-language syntax; any array dimension must be explictly specified (for example, "int", "double[3]", "bool").
+Blocks are interconnected by wires called **Signals**.  Every Signal has an an associated C-style data type.  This data type is inherited from the characteristics of the source block. Valid data types supported will be float, double, long, bool, one-dimensional arrays of these types, and two-dimensional matrices. Where they appear in the user interface or internally in the model JSON document, data types specification will be text strings conforming to C-language syntax; array and matrix dimensions must be explicitly specified (for example, "int", "double[3]", "bool", "double[3][4]" for a 3×4 matrix).
 
 Each primitive block type is defined with specific behavior:
 
@@ -170,6 +170,31 @@ Each primitive block type is defined with specific behavior:
 * **1-D Lookup Block** - a block which estimates the value of a 1-D function from an array of samples and their associated output values. The input must be a scalar int, float, or double. The output will be the same type as the input. Lookup is performed using linear interpolation. Values for inputs outside of the range of the lookup table can be either clamped to the smallest or largest lookup value or extrapolated.  Lookup is driven by similarly sized vectors: the input values (supplied in order sorted from smalled to largest value) and the corresponding output value for each. 
 * **2-D Lookup Block** - this block is almost identical in function to a **1-D Lookup Block** excepts that it takes two inputs. The types of the two inputs must match and the output will be that same type. Lookup is performed using linear interpolation. Values for inputs outside of the range of the lookup table can be either clamped to the smallest or largest lookup value or extrapolated.  Lookup is driven by two vectors, an N-sized input1, an M-sized input 2, and a N by M table of corresponding output values.
 * **Scale Block** - this block multiplies the input signal by a sclalar constant. It has one input port and one output port.
+
+### Matrix Operation Blocks
+
+* **Matrix Multiply Block** – performs matrix multiplication following standard linear algebra rules. It has two inputs and one output. The block supports:
+  - Scalar × Matrix (element-wise scaling)
+  - Vector × Matrix (1×n × n×m = 1×m)
+  - Matrix × Vector (m×n × n×1 = m×1)  
+  - Matrix × Matrix (m×n × n×p = m×p)
+  The block validates dimension compatibility at connection time and displays the operation symbol ⊗.
+
+* **Mux Block** – multiplexer that combines multiple scalar inputs into a vector or matrix output. The block configuration specifies the output dimensions (rows × columns), which determines the number of input ports dynamically. Inputs are arranged in row-major order. For example, a 2×3 mux creates 6 input ports and produces a double[2][3] output.
+
+* **Demux Block** – demultiplexer that splits a vector or matrix input into multiple scalar outputs. The number of output ports is determined dynamically based on the connected input signal's dimensions. Outputs are extracted in row-major order. Port labels indicate position (e.g., "row1_col2" for matrices).
+
+### Matrix Support in Other Blocks
+
+Several existing blocks have been enhanced to support matrix operations:
+
+* **Sum, Multiply, and Scale Blocks** – perform element-wise operations on matrices. All matrix inputs must have matching dimensions. For example, multiplying two 3×4 matrices produces a 3×4 matrix where each element is the product of corresponding elements.
+
+* **Transfer Function Block** – applies the transfer function independently to each element of a matrix input, maintaining separate state variables for each element. A 2×3 matrix input results in 6 parallel transfer function computations.
+
+* **Source Block** – can generate constant matrix values using C-style syntax (e.g., "[[1.0, 2.0], [3.0, 4.0]]" for a 2×2 matrix). The block configuration UI includes validation to ensure the entered values match the declared matrix dimensions.
+
+* **Signal Display and Logger Blocks** – do not accept matrix inputs. Attempting to connect a matrix signal results in a clear validation error.
 
 The **CanvasReactFlow** and related components manage user interactions: Users can drag blocks from the library sidebar onto the canvas (creating a new instance of that block type in the model state), drag blocks around to reposition them, and drag from an output port to an input port to create a connection (wire). The UI provides visual feedback (highlighting compatible ports, etc.) and prevents invalid connections (for example, the app should stop the user from connecting two outputs directly or connecting an output to multiple inputs on the same port). These rules of connectivity are enforced in the Canvas component logic or the underlying diagram library, reflecting the single-source per input constraint of signal flow models.
 
@@ -215,6 +240,16 @@ Each block type has a distinct visual appearance designed to convey its function
 **Sheet Connection Blocks:**
 - **Sheet Label Sink** – Rectangular block with downward arrow "↓" and the signal name displayed below in smaller text (truncated to 8 characters if needed).
 - **Sheet Label Source** – Rectangular block with upward arrow "↑" and matching signal name display format.
+
+**Matrix Operation Blocks:**
+- **Matrix Multiply Block** – Rectangular block displaying the "⊗" symbol. Width adjusts to accommodate dimension preview.
+- **Mux Block** – Rectangular block with a grid icon indicating the multiplexing function. Shows configured dimensions (e.g., "2×3").
+- **Demux Block** – Rectangular block with an inverse grid icon. Dynamically shows output configuration based on input.
+
+**Matrix Signal Visualization:**
+- Matrix connections display dimension information (e.g., "double[3][4]") on hover
+- Type mismatches show specific dimension errors (e.g., "3×4 → 2×3 ✗")
+- Matrix-capable blocks show a small matrix indicator icon
 
 #### Visual Design Principles
 
@@ -288,6 +323,17 @@ We introduce the concept of **Sheet Labels** to provide connections across sheet
 
 Because each block (and subsystem) can have a user-defined name (especially signals going into output ports or coming from input ports), we preserve these names. Names must comply with C-style identifier naming conventions. They will be important when generating code, as they become identifier names or part of function names to make the generated code more traceable to the source model.
 
+### Type System and Matrix Support
+
+The type validation system (`lib/typeValidator.ts`) has been extended to support two-dimensional matrices:
+
+* **Type Syntax**: Matrix types follow C array syntax: `baseType[rows][cols]` (e.g., `double[3][4]`)
+* **Type Propagation**: The signal type propagation system tracks matrix dimensions through the model
+* **Compatibility Rules**: Matrix operations enforce strict dimension compatibility:
+  - Element-wise operations require exact dimension matches
+  - Matrix multiplication requires inner dimension agreement (m×n × n×p)
+  - Connections validate dimension compatibility at design time
+
 ## Simulation Engine Design
 
 The simulation capability allows users to run their model and see how signals change over time. Simulations will be executed on the **server** (via an API route) and return the results to the UI via APIs.
@@ -305,6 +351,15 @@ execution order of blocks and also for passing Signal data types and calculated 
 7. Once the simulation is done, the user can see all output plots. If needed, an "Export CSV" for logged signals could be offered (which would just take the logged arrays and create a CSV file for download in the browser).
 
 If we later needed server-side simulation (for example, to offload work or allow long-running simulations to run without keeping the browser open), the architecture can accommodate it. We would implement the `app/api/simulate` route such that it loads the model JSON from the database, runs a simulation using perhaps a Node.js library or a headless version of our simulation engine, and returns the results (likely not as detailed interactive data, but maybe summary or logs). However, for now, the client-side approach is sufficient and simpler.
+
+### Matrix Simulation Support
+
+The simulation engine efficiently handles matrix operations:
+
+* **Memory Management**: Matrix values are stored as nested JavaScript arrays (number[][])
+* **Block Execution**: Matrix operations are computed element-wise or using optimized algorithms (e.g., matrix multiplication)
+* **Performance**: Large matrices (up to 100×100) are supported with acceptable performance
+* **State Management**: Transfer functions maintain separate state arrays for each matrix element
 
 ### Multi-Sheet Simulation Architecture
 
@@ -356,6 +411,18 @@ When the user triggers code generation for a model:
 The code generation service is stateless (it generates code on the fly from the model data) and does not store anything in the database. This ensures that if the model changes, the next code generation will reflect the latest model. It also keeps the database size in check (we're not saving potentially large code text, which can be regenerated as needed).
 
 From an extensibility perspective, the code generation is designed to be easily **extendable for new block types**: when new blocks are introduced, we update the codeGeneration module to handle their code translation. Because the model JSON includes all the needed information (block type and parameters), the code generator can use a factory or lookup pattern to handle each block type. For instance, it might have a mapping like `{ "Sum": generateSumBlockCode, "TransferFunc": generateTFBlockCode, ... }`. This modular approach allows adding new block types without rewriting the entire generator.
+
+### Matrix Code Generation
+
+The code generator produces efficient C code for matrix operations:
+
+* **Type Declarations**: Matrices are declared as 2D C arrays (e.g., `double matrix[3][4]`)
+* **Memory Layout**: Row-major order matching C conventions
+* **Operations**: Generated functions include:
+  - Element-wise operations with nested loops
+  - Optimized matrix multiplication
+  - Mux/demux functions for matrix construction/deconstruction
+* **Initialization**: Matrices are initialized using nested loops or memset for efficiency
 
 ## Automation API and External Integrations
 
@@ -506,6 +573,7 @@ We also consider **performance** in the architecture:
 * The serverless functions (API routes) should perform heavy tasks like code generation within reasonable time. If a model is extremely large, code generation could be slow, but typically it's string processing which is fast in Node. PlatformIO code is text, so even a few thousand lines is fine to handle.
 * We avoid using websockets or real-time subscriptions (since no collab or real-time multi-user updates). This simplifies the architecture and removes a class of issues around synchronization and race conditions.
 * We ensure that each service is used appropriately: the database is not doing computation, the client is not doing secure data storage, etc. This clear separation means each part can be optimized or replaced if needed (for instance, if we needed to support extremely heavy simulations, we could introduce a dedicated simulation microservice or WebAssembly module without restructuring the whole app).
+* **Matrix Performance**: Matrix operations are optimized for reasonable sizes (up to 100×100). Larger matrices may impact simulation performance. The UI provides warnings for matrices exceeding 1000×1000 elements. Memory usage scales with the square of matrix dimensions, so appropriate limits are enforced.
 * **Version Performance:** The versioning system uses a two-table design to optimize common operations. Model listings only query the lightweight models table, while version data is fetched on-demand. The unique index on (model_id, version) ensures fast version lookups.
 * **Auto-save Efficiency:** Auto-save operations use version 0 with upsert semantics, preventing version table bloat. The system validates model state before auto-saving to prevent errors during the save cycle.
 
@@ -531,6 +599,15 @@ The MCP server enhances both extensibility and performance in several ways:
 - Regression test suites can be generated and run programmatically
 - Sheet Label scoping and multi-sheet interactions can be tested comprehensively
 
+### Matrix Support in MCP
+
+The MCP server tools support matrix operations for testing:
+
+* **Matrix Creation**: Tools can create blocks with matrix types and set matrix constant values
+* **Type Validation**: MCP tools validate matrix dimensions during model construction
+* **Testing Scenarios**: Complex matrix signal flows can be created programmatically for comprehensive testing
+* **Performance Testing**: Large matrix models can be generated to test system limits
+
 The MCP server maintains the same performance characteristics as the Automation API since it uses the same underlying services. The primary performance gain comes from eliminating manual UI interactions and enabling batch operations.
 
 ## Testing Infrastructure
@@ -542,6 +619,16 @@ Standard unit tests are implemented using Jest and cover the core functionality 
 
 ### Integration Testing for Code Generation
 The code generation testing infrastructure uses Docker to ensure consistent and reproducible compilation environments across different development platforms. This approach eliminates the need for developers to install PlatformIO or other embedded toolchains locally.
+
+### Matrix Operation Testing
+
+The testing infrastructure includes comprehensive matrix support:
+
+* **Type Validation Tests**: Verify correct parsing and validation of matrix type strings
+* **Simulation Tests**: Validate matrix operations produce correct numerical results
+* **Code Generation Tests**: Ensure generated C code compiles and executes correctly
+* **Performance Tests**: Benchmark large matrix operations to ensure acceptable performance
+* **Integration Tests**: Test complex signal flows involving multiple matrix operations
 
 #### Docker-Based Compilation Pipeline
 The test suite automatically:

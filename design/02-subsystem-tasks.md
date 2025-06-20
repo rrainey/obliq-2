@@ -234,6 +234,9 @@ These tasks were identified as a follow-on to the original system implementation
 - **Start:** No test for hierarchical validation
 - **End:** Validation catches errors in nested sheets
 
+
+## Note: task 53 to the end of this document remain unimplemented by choice
+
 ## Phase 11: Import/Export Updates
 
 ### Task 53: Update model JSON export to maintain hierarchy

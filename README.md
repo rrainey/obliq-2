@@ -159,20 +159,131 @@ npm run lint
 ## Project Structure
 
 ```
-obliq-2/
-├── app/                    # Next.js App Router pages
-│   ├── api/               # API routes for automation and code generation
-│   ├── login/             # Authentication pages
-│   └── models/            # Model dashboard and editor
-├── components/            # React components
-│   ├── Canvas.tsx         # Visual modeling canvas
-│   ├── Block.tsx          # Block component
-│   └── ...                # Other UI components
-├── lib/                   # Core business logic
-│   ├── simulationEngine.ts # Simulation execution
-│   ├── codeGeneration.ts  # C code generator
-│   └── modelSchema.ts     # Model data structures
-└── public/                # Static assets
+Directory structure:
+└── obliq-2/
+    ├── README.md
+    ├── eslint.config.mjs
+    ├── jest.config.js
+    ├── jest.setup.js
+    ├── LICENSE
+    ├── next-env.d.ts
+    ├── next.config.ts
+    ├── package.json
+    ├── postcss.config.mjs
+    ├── tsconfig.json
+    ├── __tests__/
+    │   ├── modelBuilderApi.test.ts
+    │   ├── modelBuilderApi.unit.test.ts
+    │   ├── modelMigration.test.ts
+    │   ├── modelSchema.test.ts
+    │   ├── multiSheetSimulation.test.ts
+    │   ├── sheetLabels.test.ts
+    │   ├── signalTypeIntegration.test.ts
+    │   ├── signalTypePropagator.test.ts
+    │   ├── typeCompatibityValidator.ts
+    │   ├── typeValidator.test.ts
+    │   └── integration/
+    │       └── code-generation/
+    │           ├── code-compilation.test.ts
+    │           ├── Dockerfile.platformio
+    │           ├── setup-docker-tests.sh
+    │           ├── models/
+    │           └── platformio-test/
+    ├── database-scripts/
+    │   ├── setup.sql
+    │   └── versioning.sql
+    ├── design/
+    │   ├── architecture.md
+    │   ├── expanded-code-generation.md
+    │   ├── expanded-simulation.md
+    │   ├── subsystem-tasks.md
+    │   └── tasks.md
+    ├── docs/
+    │   ├── automation-api.md
+    │   └── model-builder-api.md
+    ├── examples/
+    ├── mcp-server/
+    └── src/
+        ├── app/
+        │   ├── globals.css
+        │   ├── layout.tsx
+        │   ├── page.tsx
+        │   ├── admin/
+        │   │   └── api-metrics/
+        │   │       └── page.tsx
+        │   ├── api/
+        │   │   ├── automations/
+        │   │   │   └── [token]/
+        │   │   │       └── route.ts
+        │   │   ├── generate-code/
+        │   │   │   └── route.ts
+        │   │   └── model-builder/
+        │   │       └── [token]/
+        │   │           └── route.ts
+        │   ├── login/
+        │   │   └── page.tsx
+        │   └── models/
+        │       ├── page.tsx
+        │       └── [id]/
+        │           └── page.tsx
+        ├── components/
+        │   ├── BlockContextMenu.tsx
+        │   ├── BlockLibrarySidebar.tsx
+        │   ├── BlockNode.tsx
+        │   ├── CanvasReactFlow.tsx
+        │   ├── CustomEdge.tsx
+        │   ├── InputPortConfig.tsx
+        │   ├── Lookup1DConfig.tsx
+        │   ├── Lookup2DConfig.tsx
+        │   ├── ModelBuilderMetricsViewer.tsx
+        │   ├── ModelValidationButton.tsx
+        │   ├── ModelValidationModal.tsx
+        │   ├── ScaleConfig.tsx
+        │   ├── SheetBreadcrumbs.tsx
+        │   ├── SheetLabelSinkConfig.tsx
+        │   ├── SheetLabelSourceConfig.tsx
+        │   ├── SheetTabs.tsx
+        │   ├── SignalDisplay.tsx
+        │   ├── SimulationDisplayPanel.tsx
+        │   ├── SourceConfig.tsx
+        │   ├── SubsystemConfig.tsx
+        │   ├── ThemeToggle.tsx
+        │   ├── TransferFunctionConfig.tsx
+        │   └── Wire.tsx
+        ├── hooks/
+        │   └── useWireValidation.ts
+        ├── lib/
+        │   ├── apiErrorHandler.ts
+        │   ├── auth.tsx
+        │   ├── blockParameterValidator.ts
+        │   ├── blockTypeRegistry.ts
+        │   ├── codeGeneration.ts
+        │   ├── connectionValidation.ts
+        │   ├── defaultModel.ts
+        │   ├── middleware.ts
+        │   ├── modelBuilderApiClient.ts
+        │   ├── modelBuilderApiErrorCodes.ts
+        │   ├── modelBuilderApiHelpers.ts
+        │   ├── modelBuilderApiMetrics.ts
+        │   ├── modelBuilderApiTypes.ts
+        │   ├── modelSchema.ts
+        │   ├── modelStore.ts
+        │   ├── multiSheetSimulation.ts
+        │   ├── multiSheetTypeValidator.ts
+        │   ├── navigationUtils.ts
+        │   ├── sheetLabelUtils.ts
+        │   ├── signalTypePropagation.ts
+        │   ├── simulationEngine.ts
+        │   ├── supabaseClient.ts
+        │   ├── themeContext.tsx
+        │   ├── typeCompatibilityValidator.ts
+        │   ├── types.ts
+        │   ├── typeValidator.ts
+        │   └── useAutoSave.ts
+        └── types/
+            └── env.d.ts
+
+
 ```
 
 ## Testing
