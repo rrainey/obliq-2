@@ -43,6 +43,8 @@ const getPortCounts = (blockType: string, parameters?: Record<string, any>) => {
       return { inputs: 1, outputs: 1 }
     case 'lookup_2d':
       return { inputs: 2, outputs: 1 }
+    case 'matrix_multiply':
+      return { inputs: 2, outputs: 1 }
     case 'input_port':
     case 'source':
       return { inputs: 0, outputs: 1 }
@@ -54,6 +56,18 @@ const getPortCounts = (blockType: string, parameters?: Record<string, any>) => {
       return { inputs: 1, outputs: 0 }
     case 'sheet_label_source':
       return { inputs: 0, outputs: 1 }
+    case 'matrix_multiply':
+      return { inputs: 2, outputs: 1 }
+    case 'mux':
+      // Dynamic port count based on configured dimensions
+      const rows = parameters?.rows || 2
+      const cols = parameters?.cols || 2
+      return { inputs: rows * cols, outputs: 1 }
+    case 'demux':
+      // Dynamic port count based on input signal dimensions
+      // Default to 1 input, outputs determined at runtime
+      const outputCount = parameters?.outputCount || 1
+      return { inputs: 1, outputs: outputCount }
     default:
       return { inputs: 1, outputs: 1 }
   }
@@ -171,6 +185,17 @@ const getBlockSymbol = (data: BlockNodeData) => {
   // Handle source blocks with constant values
   if (data.type === 'source' && data.parameters?.value !== undefined) {
     const value = data.parameters.value
+    // Check if it's a matrix
+    if (Array.isArray(value) && value.length > 0 && Array.isArray(value[0])) {
+      const rows = value.length
+      const cols = value[0].length
+      return (
+        <div className="text-sm font-mono px-1">
+          {rows}×{cols} matrix
+        </div>
+      )
+    }
+    // Regular array or scalar
     return (
       <div className="text-sm font-mono px-1">
         {Array.isArray(value) ? `[${value.join(', ')}]` : String(value)}
@@ -205,6 +230,20 @@ const getBlockSymbol = (data: BlockNodeData) => {
     }
   }
 
+  // Handle mux block - show dimensions
+  if (data.type === 'mux') {
+    const rows = data.parameters?.rows || 2
+    const cols = data.parameters?.cols || 2
+    return (
+      <div className="flex flex-col items-center justify-center">
+        <div className="text-lg font-bold">▦</div>
+        <div className="text-xs text-gray-600 mt-0.5">
+          {rows}×{cols}
+        </div>
+      </div>
+    )
+  }
+
   // Regular symbols for other blocks
   const symbols: Record<string, string> = {
     'sum': '∑',
@@ -220,6 +259,9 @@ const getBlockSymbol = (data: BlockNodeData) => {
     'subsystem': '□',
     'sheet_label_sink': '↓',
     'sheet_label_source': '↑',
+    'matrix_multiply': '⊗',
+    'mux': '▦',
+    'demux': '▥',
   }
 
   return symbols[data.type] || '?'
@@ -315,6 +357,11 @@ const getBlockWidth = (data: BlockNodeData): number => {
   // Lookup blocks need space for the SVG diagram
   if (data.type === 'lookup_1d' || data.type === 'lookup_2d') {
     return 80 // Slightly wider to accommodate the 60px SVG
+  }
+  
+  // Matrix blocks might need extra width for dimension display
+  if (data.type === 'mux' || data.type === 'matrix_multiply') {
+    return 90 // Slightly wider for dimension info
   }
   
   return 80 // Default width

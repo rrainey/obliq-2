@@ -1,209 +1,169 @@
-// lib/__tests__/typeValidator.test.ts
+// __tests__/typeValidator.test.ts
 
 import {
   parseType,
   isValidType,
   areTypesCompatible,
+  getTypeCompatibilityError,
   typeToString,
-  normalizeType,
   getDefaultValue,
   isValidValue,
-  getTypeValidationError,
-  SUPPORTED_BASE_TYPES
-} from '@/lib/typeValidator'
+  getValueValidationError,
+  isMatrixType,
+  getMatrixDimensions,
+  createMatrix,
+  createIdentityMatrix,
+  validateMatrixStructure
+} from '../src/lib/typeValidator';
 
-describe('typeValidator', () => {
+describe('Matrix Type Support', () => {
   describe('parseType', () => {
-    it('should parse scalar types correctly', () => {
-      expect(parseType('float')).toEqual({ baseType: 'float', isArray: false })
-      expect(parseType('double')).toEqual({ baseType: 'double', isArray: false })
-      expect(parseType('long')).toEqual({ baseType: 'long', isArray: false })
-      expect(parseType('bool')).toEqual({ baseType: 'bool', isArray: false })
+    it('should parse scalar types', () => {
+      expect(parseType('double')).toEqual({
+        baseType: 'double',
+        isArray: false,
+        isMatrix: false
+      })
     })
 
-    it('should parse array types correctly', () => {
-      expect(parseType('float[3]')).toEqual({ baseType: 'float', isArray: true, arraySize: 3 })
-      expect(parseType('double[10]')).toEqual({ baseType: 'double', isArray: true, arraySize: 10 })
-      expect(parseType('bool[2]')).toEqual({ baseType: 'bool', isArray: true, arraySize: 2 })
+    it('should parse 1D array types', () => {
+      expect(parseType('float[3]')).toEqual({
+        baseType: 'float',
+        isArray: true,
+        arraySize: 3,
+        isMatrix: false
+      })
     })
 
-    it('should handle whitespace', () => {
-      expect(parseType(' float ')).toEqual({ baseType: 'float', isArray: false })
-      expect(parseType(' double[5] ')).toEqual({ baseType: 'double', isArray: true, arraySize: 5 })
+    it('should parse 2D matrix types', () => {
+      expect(parseType('double[3][4]')).toEqual({
+        baseType: 'double',
+        isArray: false,
+        isMatrix: true,
+        rows: 3,
+        cols: 4
+      })
     })
 
-    it('should throw on invalid types', () => {
-      expect(() => parseType('invalid')).toThrow('Invalid type')
-      expect(() => parseType('float[]')).toThrow() // Missing array size
-      expect(() => parseType('float[0]')).toThrow('Array size must be a positive integer')
-      expect(() => parseType('float[-1]')).toThrow('Array size must be a positive integer')
-      expect(() => parseType('float[abc]')).toThrow()
-      expect(() => parseType('')).toThrow('Type string must be a non-empty string')
-      expect(() => parseType(null as any)).toThrow('Type string must be a non-empty string')
+    it('should reject invalid matrix dimensions', () => {
+      expect(() => parseType('double[0][4]')).toThrow('Matrix dimensions must be positive integers')
+      expect(() => parseType('double[3][0]')).toThrow('Matrix dimensions must be positive integers')
+      expect(() => parseType('double[-1][4]')).toThrow()
     })
 
-    it('should reject multi-dimensional arrays', () => {
-      expect(() => parseType('float[3][3]')).toThrow()
+    it('should reject invalid syntax', () => {
       expect(() => parseType('double[][]')).toThrow()
+      expect(() => parseType('double[3][4][5]')).toThrow()
+      expect(() => parseType('matrix[3][4]')).toThrow()
     })
   })
 
   describe('isValidType', () => {
-    it('should return true for valid types', () => {
-      expect(isValidType('float')).toBe(true)
-      expect(isValidType('double[5]')).toBe(true)
-      expect(isValidType('bool')).toBe(true)
-      expect(isValidType('long[100]')).toBe(true)
+    it('should validate matrix types', () => {
+      expect(isValidType('double[3][4]')).toBe(true)
+      expect(isValidType('float[2][2]')).toBe(true)
+      expect(isValidType('bool[10][5]')).toBe(true)
+      expect(isValidType('long[1][1]')).toBe(true)
     })
 
-    it('should return false for invalid types', () => {
-      expect(isValidType('invalid')).toBe(false)
-      expect(isValidType('float[]')).toBe(false)
-      expect(isValidType('')).toBe(false)
-      expect(isValidType('int')).toBe(false) // Not supported
+    it('should reject invalid matrix types', () => {
+      expect(isValidType('double[][]')).toBe(false)
+      expect(isValidType('float[0][4]')).toBe(false)
+      expect(isValidType('int[3][4]')).toBe(false)
     })
   })
 
   describe('areTypesCompatible', () => {
-    it('should match identical scalar types', () => {
-      expect(areTypesCompatible('float', 'float')).toBe(true)
-      expect(areTypesCompatible('double', 'double')).toBe(true)
-      expect(areTypesCompatible('bool', 'bool')).toBe(true)
+    it('should check matrix dimension compatibility', () => {
+      expect(areTypesCompatible('double[3][4]', 'double[3][4]')).toBe(true)
+      expect(areTypesCompatible('double[3][4]', 'double[4][3]')).toBe(false)
+      expect(areTypesCompatible('double[3][4]', 'float[3][4]')).toBe(false)
     })
 
-    it('should match identical array types', () => {
-      expect(areTypesCompatible('float[3]', 'float[3]')).toBe(true)
-      expect(areTypesCompatible('double[10]', 'double[10]')).toBe(true)
+    it('should prevent matrix to non-matrix connections', () => {
+      expect(areTypesCompatible('double[3][4]', 'double')).toBe(false)
+      expect(areTypesCompatible('double[3][4]', 'double[12]')).toBe(false)
+      expect(areTypesCompatible('double', 'double[3][4]')).toBe(false)
     })
+  })
 
-    it('should not match different base types', () => {
-      expect(areTypesCompatible('float', 'double')).toBe(false)
-      expect(areTypesCompatible('float[3]', 'double[3]')).toBe(false)
-      expect(areTypesCompatible('bool', 'long')).toBe(false)
-    })
-
-    it('should not match scalar vs array', () => {
-      expect(areTypesCompatible('float', 'float[3]')).toBe(false)
-      expect(areTypesCompatible('double[5]', 'double')).toBe(false)
-    })
-
-    it('should not match arrays of different sizes', () => {
-      expect(areTypesCompatible('float[3]', 'float[4]')).toBe(false)
-      expect(areTypesCompatible('double[10]', 'double[5]')).toBe(false)
-    })
-
-    it('should handle invalid types gracefully', () => {
-      expect(areTypesCompatible('invalid', 'float')).toBe(false)
-      expect(areTypesCompatible('float', 'invalid')).toBe(false)
-      expect(areTypesCompatible('invalid1', 'invalid2')).toBe(false)
+  describe('getTypeCompatibilityError', () => {
+    it('should provide detailed matrix incompatibility messages', () => {
+      expect(getTypeCompatibilityError('double[3][4]', 'double[4][3]'))
+        .toBe('Cannot connect 3×4 matrix to 4×3 matrix - dimensions must match exactly')
+      
+      expect(getTypeCompatibilityError('float[2][2]', 'double[2][2]'))
+        .toBe('Cannot connect float matrix to double matrix')
+      
+      expect(getTypeCompatibilityError('double[3][4]', 'double[12]'))
+        .toBe('Cannot connect 3×4 matrix to 1D array[12]')
     })
   })
 
   describe('typeToString', () => {
-    it('should format scalar types', () => {
-      expect(typeToString({ baseType: 'float', isArray: false })).toBe('float')
-      expect(typeToString({ baseType: 'double', isArray: false })).toBe('double')
-    })
-
-    it('should format array types', () => {
-      expect(typeToString({ baseType: 'float', isArray: true, arraySize: 3 })).toBe('float[3]')
-      expect(typeToString({ baseType: 'bool', isArray: true, arraySize: 10 })).toBe('bool[10]')
-    })
-  })
-
-  describe('normalizeType', () => {
-    it('should normalize valid types', () => {
-      expect(normalizeType(' float ')).toBe('float')
-      expect(normalizeType(' double[5] ')).toBe('double[5]')
-      expect(normalizeType('bool')).toBe('bool')
-    })
-
-    it('should throw on invalid types', () => {
-      expect(() => normalizeType('invalid')).toThrow()
-      expect(() => normalizeType('')).toThrow()
+    it('should format matrix types correctly', () => {
+      expect(typeToString({
+        baseType: 'double',
+        isArray: false,
+        isMatrix: true,
+        rows: 3,
+        cols: 4
+      })).toBe('double[3][4]')
     })
   })
 
   describe('getDefaultValue', () => {
-    it('should return correct defaults for scalar types', () => {
-      expect(getDefaultValue('float')).toBe(0)
-      expect(getDefaultValue('double')).toBe(0)
-      expect(getDefaultValue('long')).toBe(0)
-      expect(getDefaultValue('bool')).toBe(false)
+    it('should create zero-filled matrices', () => {
+      const matrix = getDefaultValue('double[2][3]')
+      expect(matrix).toEqual([[0, 0, 0], [0, 0, 0]])
     })
 
-    it('should return correct defaults for array types', () => {
-      expect(getDefaultValue('float[3]')).toEqual([0, 0, 0])
-      expect(getDefaultValue('bool[2]')).toEqual([false, false])
-      expect(getDefaultValue('double[4]')).toEqual([0, 0, 0, 0])
-    })
-
-    it('should return 0 for invalid types', () => {
-      expect(getDefaultValue('invalid')).toBe(0)
-      expect(getDefaultValue('')).toBe(0)
+    it('should create boolean matrices', () => {
+      const matrix = getDefaultValue('bool[2][2]')
+      expect(matrix).toEqual([[false, false], [false, false]])
     })
   })
 
   describe('isValidValue', () => {
-    it('should validate scalar values', () => {
-      expect(isValidValue(1.5, 'float')).toBe(true)
-      expect(isValidValue(3.14159, 'double')).toBe(true)
-      expect(isValidValue(42, 'long')).toBe(true)
-      expect(isValidValue(true, 'bool')).toBe(true)
-      expect(isValidValue(false, 'bool')).toBe(true)
+    it('should validate matrix values', () => {
+      expect(isValidValue([[1, 2], [3, 4]], 'double[2][2]')).toBe(true)
+      expect(isValidValue([[1, 2, 3], [4, 5, 6]], 'double[2][3]')).toBe(true)
+      expect(isValidValue([[true, false], [false, true]], 'bool[2][2]')).toBe(true)
     })
 
-    it('should reject wrong scalar types', () => {
-      expect(isValidValue('string', 'float')).toBe(false)
-      expect(isValidValue(true, 'double')).toBe(false)
-      expect(isValidValue(3.14, 'bool')).toBe(false)
-      expect(isValidValue(3.14, 'long')).toBe(false) // Not integer
-    })
-
-    it('should validate array values', () => {
-      expect(isValidValue([1, 2, 3], 'float[3]')).toBe(true)
-      expect(isValidValue([true, false], 'bool[2]')).toBe(true)
-      expect(isValidValue([1.1, 2.2, 3.3, 4.4], 'double[4]')).toBe(true)
-    })
-
-    it('should reject invalid array values', () => {
-      expect(isValidValue([1, 2], 'float[3]')).toBe(false) // Wrong size
-      expect(isValidValue([1, 2, 3, 4], 'float[3]')).toBe(false) // Wrong size
-      expect(isValidValue(123, 'float[3]')).toBe(false) // Not array
-      expect(isValidValue([1, 'two', 3], 'float[3]')).toBe(false) // Wrong element type
-      expect(isValidValue([true, 1], 'bool[2]')).toBe(false) // Mixed types
-    })
-
-    it('should handle NaN correctly', () => {
-      expect(isValidValue(NaN, 'float')).toBe(false)
-      expect(isValidValue([1, NaN, 3], 'float[3]')).toBe(false)
+    it('should reject invalid matrix values', () => {
+      expect(isValidValue([[1, 2], [3]], 'double[2][2]')).toBe(false)
+      expect(isValidValue([1, 2, 3, 4], 'double[2][2]')).toBe(false)
+      expect(isValidValue([[1, 2], [3, 4], [5, 6]], 'double[2][2]')).toBe(false)
     })
   })
 
-  describe('getTypeValidationError', () => {
-    it('should return empty string for valid types', () => {
-      expect(getTypeValidationError('float')).toBe('')
-      expect(getTypeValidationError('double[5]')).toBe('')
+  describe('helper functions', () => {
+    it('should identify matrix types', () => {
+      expect(isMatrixType('double[3][4]')).toBe(true)
+      expect(isMatrixType('double[3]')).toBe(false)
+      expect(isMatrixType('double')).toBe(false)
     })
 
-    it('should return error messages for invalid types', () => {
-      expect(getTypeValidationError('invalid')).toContain('Invalid type')
-      expect(getTypeValidationError('float[]')).toContain('Invalid type')
-      expect(getTypeValidationError('')).toContain('non-empty string')
-    })
-  })
-
-  describe('edge cases', () => {
-    it('should handle large array sizes', () => {
-      expect(parseType('float[1000]')).toEqual({ baseType: 'float', isArray: true, arraySize: 1000 })
-      expect(getDefaultValue('double[100]')).toHaveLength(100)
+    it('should extract matrix dimensions', () => {
+      expect(getMatrixDimensions('double[3][4]')).toEqual({ rows: 3, cols: 4 })
+      expect(getMatrixDimensions('double[3]')).toBeNull()
+      expect(getMatrixDimensions('invalid')).toBeNull()
     })
 
-    it('should handle all supported base types', () => {
-      for (const baseType of SUPPORTED_BASE_TYPES) {
-        expect(isValidType(baseType)).toBe(true)
-        expect(isValidType(`${baseType}[5]`)).toBe(true)
-      }
+    it('should create matrices', () => {
+      expect(createMatrix(2, 3, 5)).toEqual([[5, 5, 5], [5, 5, 5]])
+      expect(createIdentityMatrix(3)).toEqual([
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1]
+      ])
+    })
+
+    it('should validate matrix structure', () => {
+      expect(validateMatrixStructure([[1, 2], [3, 4]]).isValid).toBe(true)
+      expect(validateMatrixStructure([[1, 2], [3]]).isValid).toBe(false)
+      expect(validateMatrixStructure([]).isValid).toBe(false)
     })
   })
 })

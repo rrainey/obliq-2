@@ -190,6 +190,8 @@ function getInputPortCount(blockType: string): number {
       return 1
     case 'lookup_2d':
       return 2
+    case 'matrix_multiply':
+      return 2
     case 'input_port':
     case 'source':
       return 0 // No inputs
@@ -214,6 +216,8 @@ function getOutputPortCount(blockType: string): number {
     case 'source':
     case 'lookup_1d':
     case 'lookup_2d':
+      return 1
+    case 'matrix_multiply':
       return 1
     case 'output_port':
     case 'signal_display':

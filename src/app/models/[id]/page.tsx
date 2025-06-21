@@ -18,8 +18,10 @@ import SubsystemConfig from '@/components/SubsystemConfig'
 import TransferFunctionConfig from '@/components/TransferFunctionConfig'
 import Lookup1DConfig from '@/components/Lookup1DConfig'
 import Lookup2DConfig from '@/components/Lookup2DConfig'
+import MuxConfig from '@/components/MuxConfig'
 import SheetLabelSinkConfig from '@/components/SheetLabelSinkConfig'
 import SheetLabelSourceConfig from '@/components/SheetLabelSourceConfig'
+
 import ModelValidationButton from '@/components/ModelValidationButton'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
 import { getSheetPath } from '@/lib/navigationUtils'
@@ -90,6 +92,11 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         return
       }
 
+      // Check if any configuration dialog is open
+      if (configBlock) {
+        return // Don't handle delete/backspace when config dialog is open
+      }
+
       // Handle delete/backspace for selected items
       if (e.key === 'Delete' || (e.key === 'Backspace' && !e.metaKey && !e.ctrlKey)) {
         e.preventDefault()
@@ -106,7 +113,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [selectedBlockId, selectedWireId, blocks, wires])
+  }, [selectedBlockId, selectedWireId, blocks, wires, configBlock])
 
   const fetchModel = async () => {
     try {
@@ -207,6 +214,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           input1Values: [0, 1],
           input2Values: [0, 1],
           outputTable: [[0, 1], [2, 3]]
+        }
+      case 'mux':
+        return {
+          rows: 2,
+          cols: 2,
+          outputType: 'double[2][2]',
+          baseType: 'double'
         }
       case 'signal_display':
       case 'signal_logger':
@@ -565,7 +579,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'lookup_1d' ||
       block.type === 'lookup_2d' ||
       block.type === 'sheet_label_sink' || 
-      block.type === 'sheet_label_source'
+      block.type === 'sheet_label_source' ||
+      block.type === 'mux'
     )) {
       console.log('Setting config block:', block)
       setConfigBlock(block)
@@ -988,6 +1003,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'lookup_2d' && (
             <Lookup2DConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'mux' && (
+            <MuxConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

@@ -30,17 +30,27 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
   const [typeError, setTypeError] = useState<string>('')
   const [valueError, setValueError] = useState<string>('')
   const [isVector, setIsVector] = useState(false)
+  const [isMatrix, setIsMatrix] = useState(false)
+  const [matrixDims, setMatrixDims] = useState<{ rows: number; cols: number } | null>(null)
 
   // Initialize value string based on existing value
   useEffect(() => {
     if (Array.isArray(block?.parameters?.value)) {
-      setValueString(`[${block.parameters.value.join(', ')}]`)
+      // Check if it's a 2D array (matrix)
+      if (block.parameters.value.length > 0 && Array.isArray(block.parameters.value[0])) {
+        // Format as matrix
+        const rows = block.parameters.value.map((row: number[]) => `{${row.join(', ')}}`).join(', ')
+        setValueString(`{${rows}}`)
+      } else {
+        // Format as 1D array
+        setValueString(`[${block.parameters.value.join(', ')}]`)
+      }
     } else {
       setValueString(String(block?.parameters?.value || 0))
     }
   }, [])
 
-  // Validate type and determine if it's a vector
+  // Validate type and determine if it's a vector or matrix
   useEffect(() => {
     const error = getTypeValidationError(dataType)
     setTypeError(error)
@@ -49,17 +59,63 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
       try {
         const parsedType = parseType(dataType)
         setIsVector(parsedType.isArray)
+        setIsMatrix(parsedType.isMatrix || false)
+        if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
+          setMatrixDims({ rows: parsedType.rows, cols: parsedType.cols })
+        } else {
+          setMatrixDims(null)
+        }
       } catch {
         setIsVector(false)
+        setIsMatrix(false)
+        setMatrixDims(null)
       }
     }
   }, [dataType])
 
-  // Parse value string based on whether it's a vector or scalar
-  const parseValue = (input: string): { value: number | number[], error: string } => {
+  // Parse value string based on whether it's a matrix, vector, or scalar
+  const parseValue = (input: string): { value: number | number[] | number[][], error: string } => {
     const trimmed = input.trim()
     
-    if (isVector) {
+    if (isMatrix && matrixDims) {
+      // Parse matrix value: {{1.0, 2.0}, {3.0, 4.0}}
+      const matrixMatch = trimmed.match(/^\{\s*(.+)\s*\}$/)
+      if (!matrixMatch) {
+        return { value: 0, error: 'Matrix values must be enclosed in braces: {{1.0, 2.0}, {3.0, 4.0}}' }
+      }
+      
+      // Extract the content and find row patterns
+      const content = matrixMatch[1]
+      const rowRegex = /\{([^}]+)\}/g
+      const rows: number[][] = []
+      let match
+      
+      while ((match = rowRegex.exec(content)) !== null) {
+        const rowContent = match[1]
+        const elements = rowContent.split(',').map(s => s.trim())
+        
+        const rowValues: number[] = []
+        for (const element of elements) {
+          const num = parseFloat(element)
+          if (isNaN(num)) {
+            return { value: 0, error: `Invalid number in matrix: ${element}` }
+          }
+          rowValues.push(num)
+        }
+        
+        if (rowValues.length !== matrixDims.cols) {
+          return { value: 0, error: `Row ${rows.length + 1} has ${rowValues.length} columns, expected ${matrixDims.cols}` }
+        }
+        
+        rows.push(rowValues)
+      }
+      
+      if (rows.length !== matrixDims.rows) {
+        return { value: 0, error: `Expected ${matrixDims.rows} rows, got ${rows.length}` }
+      }
+      
+      return { value: rows, error: '' }
+    } else if (isVector) {
       // Parse vector value: [1.0, 2.0, 3.0] or {1.0, 2.0, 3.0}
       const vectorMatch = trimmed.match(/^[\[\{]\s*(.+?)\s*[\]\}]$/)
       if (!vectorMatch) {
@@ -108,7 +164,15 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
     const result = parseValue(valueString)
     setValue(result.value)
     setValueError(result.error)
-  }, [valueString, isVector, dataType])
+  }, [valueString, isVector, isMatrix, dataType])
+
+  // Auto-focus first input when dialog opens
+  useEffect(() => {
+    const firstInput = document.querySelector('.fixed input, .fixed textarea') as HTMLElement
+    if (firstInput) {
+      firstInput.focus()
+    }
+  }, [])
 
   const handleSave = () => {
     const parameters = {
@@ -148,13 +212,19 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 className={`w-full px-3 py-2 border-2 rounded-md text-sm bg-white text-gray-900 focus:outline-none ${
                   valueError ? 'border-red-500 focus:border-red-600' : 'border-gray-400 focus:border-blue-600'
                 }`}
-                placeholder={isVector ? "[1.0, 2.0, 3.0]" : "0.0"}
+                placeholder={
+                  isMatrix ? "{{1.0, 2.0}, {3.0, 4.0}}" : 
+                  isVector ? "[1.0, 2.0, 3.0]" : 
+                  "0.0"
+                }
               />
               {valueError ? (
                 <p className="text-xs text-red-600 mt-1">{valueError}</p>
               ) : (
                 <p className="text-xs text-gray-500 mt-1">
-                  {isVector 
+                  {isMatrix 
+                    ? `Matrix constant (e.g., {{1.0, 2.0}, {3.0, 4.0}} for ${matrixDims?.rows}×${matrixDims?.cols})` 
+                    : isVector 
                     ? "Vector constant (e.g., [1.0, 2.0, 3.0])" 
                     : "Constant output value"}
                 </p>
@@ -191,7 +261,9 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
               <p className="text-xs text-gray-500 mt-1">
-                {isVector 
+                {isMatrix
+                  ? "Value applied to all matrix elements after step time"
+                  : isVector 
                   ? "Value applied to all vector elements after step time" 
                   : "Value after step time"}
               </p>
@@ -214,7 +286,9 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
               <p className="text-xs text-gray-500 mt-1">
-                {isVector 
+                {isMatrix
+                  ? "Rate of change for all matrix elements (units/second)"
+                  : isVector 
                   ? "Rate of change for all elements (units/second)" 
                   : "Rate of change (units/second)"}
               </p>
@@ -261,8 +335,8 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 onChange={(e) => setAmplitude(parseFloat(e.target.value) || 0)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
-              {isVector && (
-                <p className="text-xs text-gray-500 mt-1">Applied to all vector elements</p>
+              {(isVector || isMatrix) && (
+                <p className="text-xs text-gray-500 mt-1">Applied to all elements</p>
               )}
             </div>
             <div>
@@ -321,8 +395,8 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 onChange={(e) => setAmplitude(parseFloat(e.target.value) || 0)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
-              {isVector && (
-                <p className="text-xs text-gray-500 mt-1">Applied to all vector elements</p>
+              {(isVector || isMatrix) && (
+                <p className="text-xs text-gray-500 mt-1">Applied to all elements</p>
               )}
             </div>
           </div>
@@ -343,7 +417,9 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
               <p className="text-xs text-gray-500 mt-1">
-                {isVector 
+                {isMatrix
+                  ? "Noise amplitude (±) for each matrix element"
+                  : isVector 
                   ? "Noise amplitude (±) for each element" 
                   : "Noise amplitude (±)"}
               </p>
@@ -414,8 +490,8 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
                 onChange={(e) => setAmplitude(parseFloat(e.target.value) || 0)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
               />
-              {isVector && (
-                <p className="text-xs text-gray-500 mt-1">Applied to all vector elements</p>
+              {(isVector || isMatrix) && (
+                <p className="text-xs text-gray-500 mt-1">Applied to all elements</p>
               )}
             </div>
           </div>
@@ -428,7 +504,7 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-96 max-h-96 overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl p-6 w-[500px] max-h-[600px] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-medium text-gray-900">
             Configure Source: {block?.name || 'Source Block'}
@@ -453,13 +529,13 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
               className={`w-full px-3 py-2 border-2 rounded-md text-sm bg-white text-gray-900 focus:outline-none ${
                 typeError ? 'border-red-500 focus:border-red-600' : 'border-gray-400 focus:border-blue-600'
               }`}
-              placeholder="e.g., double, float, double[3]"
+              placeholder="e.g., double, float, double[3], double[2][3]"
             />
             {typeError ? (
               <p className="text-xs text-red-600 mt-1">{typeError}</p>
             ) : (
               <p className="text-xs text-gray-500 mt-1">
-                C-style data type (e.g., float, double, long, bool, double[3])
+                C-style data type (e.g., float, double, long, bool, double[3], double[2][3])
               </p>
             )}
           </div>
@@ -489,7 +565,8 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
           <div className="bg-green-50 p-3 rounded-md">
             <p className="text-sm text-green-800">
               <strong>Source Block:</strong> Generates time-varying signals for simulation testing and analysis.
-              {isVector && " For vector types, constant values use C-style array notation: [1.0, 2.0, 3.0]"}
+              {isMatrix && " For matrix types, use C-style notation: {{1.0, 2.0}, {3.0, 4.0}}"}
+              {isVector && " For vector types, use C-style array notation: [1.0, 2.0, 3.0]"}
             </p>
           </div>
         </div>

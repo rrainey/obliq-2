@@ -135,6 +135,32 @@ const blockTypes: BlockType[] = [
     icon: '↑L',
     vectorSupport: 'full'
   },
+  
+  // Matrix Operations
+  { 
+    id: 'matrix_multiply', 
+    name: 'Matrix Multiply', 
+    category: 'Matrix', 
+    description: 'Matrix multiplication (scalar×matrix or matrix×matrix)', 
+    icon: '⊗',
+    vectorSupport: 'full'
+  },
+  { 
+    id: 'mux', 
+    name: 'Mux', 
+    category: 'Matrix', 
+    description: 'Combine scalars into vector/matrix', 
+    icon: '▦',
+    vectorSupport: 'full'
+  },
+  { 
+    id: 'demux', 
+    name: 'Demux', 
+    category: 'Matrix', 
+    description: 'Split vector/matrix into scalars', 
+    icon: '▥',
+    vectorSupport: 'full'
+  },
 ]
 
 const categories = Array.from(new Set(blockTypes.map(block => block.category)))

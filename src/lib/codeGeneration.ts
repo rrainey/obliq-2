@@ -27,6 +27,8 @@ interface CVariable {
   baseType: string
   name: string
   arraySize?: number
+  matrixRows?: number
+  matrixCols?: number
 }
 
 interface BlockContext {
@@ -270,14 +272,17 @@ extern "C" {
       const stateOrder = Math.max(0, denominator.length - 1)
       
       if (stateOrder > 0) {
-        // Check if this TF processes vectors
+        // Check if this TF processes vectors or matrices
         const inputWire = sheet.connections.find(w => w.targetBlockId === tf.id)
         if (inputWire) {
           const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
           const inputType = blockTypes.get(sourceKey)
           if (inputType) {
             const parsed = tryParseType(inputType)
-            if (parsed?.isArray && parsed.arraySize) {
+            if (parsed?.isMatrix && parsed.rows && parsed.cols) {
+              // Matrix transfer function - need 3D array of states
+              header += `    double ${sanitizeIdentifier(tfName)}_states[${parsed.rows}][${parsed.cols}][${stateOrder}];\n`
+            } else if (parsed?.isArray && parsed.arraySize) {
               // Vector transfer function - need 2D array of states
               header += `    double ${sanitizeIdentifier(tfName)}_states[${parsed.arraySize}][${stateOrder}];\n`
             } else {
@@ -444,7 +449,14 @@ function generateInitFunctionMultiSheet(
         const defaultValue = input.parameters?.defaultValue || 0
         const variable = parseTypeToVariable(dataType, portName)
         
-        if (variable.arraySize) {
+        if (variable.matrixRows && variable.matrixCols) {
+          // Initialize matrix with nested loops
+          code += `    for (int i = 0; i < ${variable.matrixRows}; i++) {\n`
+          code += `        for (int j = 0; j < ${variable.matrixCols}; j++) {\n`
+          code += `            model->inputs.${sanitizeIdentifier(variable.name)}[i][j] = ${defaultValue};\n`
+          code += `        }\n`
+          code += `    }\n`
+        } else if (variable.arraySize) {
           // Initialize array
           code += `    for (int i = 0; i < ${variable.arraySize}; i++) {\n`
           code += `        model->inputs.${sanitizeIdentifier(variable.name)}[i] = ${defaultValue};\n`
@@ -1005,11 +1017,19 @@ function flattenModelStructure(sheets: Sheet[]): FlattenedModel {
 function parseTypeToVariable(typeString: string, varName: string): CVariable {
   try {
     const parsed = parseType(typeString)
-    return {
+    const variable: CVariable = {
       baseType: mapToCBaseType(parsed.baseType),
       name: sanitizeIdentifier(varName),
       arraySize: parsed.isArray ? parsed.arraySize : undefined
     }
+    
+    // Add matrix dimensions if present
+    if (parsed.isMatrix && parsed.rows && parsed.cols) {
+      variable.matrixRows = parsed.rows
+      variable.matrixCols = parsed.cols
+    }
+    
+    return variable
   } catch {
     return {
       baseType: 'double',
@@ -1031,7 +1051,9 @@ function mapToCBaseType(baseType: string): string {
 
 // Generate a C struct member declaration
 function generateStructMember(variable: CVariable): string {
-  if (variable.arraySize !== undefined) {
+  if (variable.matrixRows !== undefined && variable.matrixCols !== undefined) {
+    return `    ${variable.baseType} ${variable.name}[${variable.matrixRows}][${variable.matrixCols}];`
+  } else if (variable.arraySize !== undefined) {
     return `    ${variable.baseType} ${variable.name}[${variable.arraySize}];`
   } else {
     return `    ${variable.baseType} ${variable.name};`
@@ -1040,7 +1062,9 @@ function generateStructMember(variable: CVariable): string {
 
 // Generate a C variable declaration
 function generateVariableDeclaration(variable: CVariable): string {
-  if (variable.arraySize !== undefined) {
+  if (variable.matrixRows !== undefined && variable.matrixCols !== undefined) {
+    return `${variable.baseType} ${variable.name}[${variable.matrixRows}][${variable.matrixCols}]`
+  } else if (variable.arraySize !== undefined) {
     return `${variable.baseType} ${variable.name}[${variable.arraySize}]`
   } else {
     return `${variable.baseType} ${variable.name}`
@@ -1118,14 +1142,17 @@ extern "C" {
       const stateOrder = Math.max(0, denominator.length - 1)
       
       if (stateOrder > 0) {
-        // Check if this TF processes vectors
+        // Check if this TF processes vectors or matrices
         const inputWire = sheet.connections.find(w => w.targetBlockId === tf.id)
         if (inputWire) {
           const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
           const inputType = blockTypes.get(sourceKey)
           if (inputType) {
             const parsed = tryParseType(inputType)
-            if (parsed?.isArray && parsed.arraySize) {
+            if (parsed?.isMatrix && parsed.rows && parsed.cols) {
+              // Matrix transfer function - need 3D array of states
+              header += `    double ${tfName}_states[${parsed.rows}][${parsed.cols}][${stateOrder}];\n`
+            } else if (parsed?.isArray && parsed.arraySize) {
               // Vector transfer function - need 2D array of states
               header += `    double ${tfName}_states[${parsed.arraySize}][${stateOrder}];\n`
             } else {
@@ -1238,7 +1265,14 @@ function generateInitFunction(safeName: string, sheet: Sheet, blockTypes: Map<st
       const defaultValue = input.parameters?.defaultValue || 0
       const variable = parseTypeToVariable(dataType, portName)
       
-      if (variable.arraySize) {
+      if (variable.matrixRows && variable.matrixCols) {
+        // Initialize matrix with nested loops
+        code += `    for (int i = 0; i < ${variable.matrixRows}; i++) {\n`
+        code += `        for (int j = 0; j < ${variable.matrixCols}; j++) {\n`
+        code += `            model->inputs.${variable.name}[i][j] = ${defaultValue};\n`
+        code += `        }\n`
+        code += `    }\n`
+      } else if (variable.arraySize) {
         // Initialize array
         code += `    for (int i = 0; i < ${variable.arraySize}; i++) {\n`
         code += `        model->inputs.${variable.name}[i] = ${defaultValue};\n`
@@ -1731,12 +1765,12 @@ function generateInputExpression(
   }
 }
 
-// Helper to check if a transfer function processes vectors
+// Check if a transfer function processes vectors or matrices
 function checkIfVectorTransferFunction(
   tf: BlockData,
   sheet: Sheet,
   blockTypes: Map<string, string>
-): { size: number } | null {
+): { size: number, isMatrix?: boolean, rows?: number, cols?: number } | null {
   const inputWire = sheet.connections.find(w => w.targetBlockId === tf.id)
   if (!inputWire) return null
   
@@ -1745,7 +1779,14 @@ function checkIfVectorTransferFunction(
   if (!inputType) return null
   
   const parsed = tryParseType(inputType)
-  if (parsed?.isArray && parsed.arraySize) {
+  if (parsed?.isMatrix && parsed.rows && parsed.cols) {
+    return { 
+      size: parsed.rows * parsed.cols, 
+      isMatrix: true, 
+      rows: parsed.rows, 
+      cols: parsed.cols 
+    }
+  } else if (parsed?.isArray && parsed.arraySize) {
     return { size: parsed.arraySize }
   }
   
@@ -1848,6 +1889,18 @@ function generateBlockComputation(
       code += `    model->signals.${sanitizeIdentifier(prefixedName)} = 0.0;\n`
       break
       
+    case 'matrix_multiply':
+      code += generateMatrixMultiplyBlock(block, inputWires, sheet, blockTypes, prefixedName, blockContextMap)
+      break
+      
+    case 'mux':
+      code += generateMuxBlock(block, inputWires, sheet, blockTypes, prefixedName, blockContextMap)
+      break
+      
+    case 'demux':
+      code += generateDemuxBlock(block, inputWires, sheet, blockTypes, prefixedName, blockContextMap)
+      break
+      
     default:
       code += `    // Unsupported block type: ${block.type}\n`
   }
@@ -1888,7 +1941,29 @@ function generateSourceBlock(
   
   if (signalType === 'constant') {
     const parsedType = outputType ? tryParseType(outputType) : null
-    if (parsedType?.isArray && parsedType.arraySize) {
+    
+    if (parsedType?.isMatrix && parsedType.rows && parsedType.cols) {
+      // Matrix source
+      if (Array.isArray(value) && Array.isArray(value[0])) {
+        // Use actual matrix values
+        code += `    {\n`
+        code += `        // Initialize matrix from constant values\n`
+        for (let i = 0; i < parsedType.rows; i++) {
+          for (let j = 0; j < parsedType.cols; j++) {
+            const val = (value[i] && value[i][j] !== undefined) ? value[i][j] : 0
+            code += `        ${outputName}[${i}][${j}] = ${val};\n`
+          }
+        }
+        code += `    }\n`
+      } else {
+        // Fill matrix with scalar value
+        code += `    for (int i = 0; i < ${parsedType.rows}; i++) {\n`
+        code += `        for (int j = 0; j < ${parsedType.cols}; j++) {\n`
+        code += `            ${outputName}[i][j] = ${value};\n`
+        code += `        }\n`
+        code += `    }\n`
+      }
+    } else if (parsedType?.isArray && parsedType.arraySize) {
       // Vector source
       if (Array.isArray(value)) {
         // Use actual array values
@@ -1933,11 +2008,27 @@ function generateSumBlock(
     return code
   }
   
-  // Check if we're dealing with vectors
+  // Check if we're dealing with vectors or matrices
   const firstInput = getInputExpression(inputWires[0], sheet, 'model')
   const isVector = checkIfVectorOperation(inputWires[0], sheet)
+  const isMatrix = checkIfMatrixOperation(inputWires[0], sheet)
   
-  if (isVector) {
+  if (isMatrix) {
+    // Matrix sum
+    code += `    // Matrix element-wise addition\n`
+    code += `    for (int i = 0; i < ${isMatrix.rows}; i++) {\n`
+    code += `        for (int j = 0; j < ${isMatrix.cols}; j++) {\n`
+    code += `            ${outputName}[i][j] = `
+    
+    for (let k = 0; k < inputWires.length; k++) {
+      const wire = inputWires[k]
+      const inputExpr = getInputExpression(wire, sheet, 'model')
+      if (k > 0) code += ` + `
+      code += `${inputExpr}[i][j]`
+    }
+    
+    code += `;\n        }\n    }\n`
+  } else if (isVector) {
     // Vector sum
     code += `    for (int i = 0; i < ${isVector.size}; i++) {\n`
     code += `        ${outputName}[i] = `
@@ -1982,10 +2073,26 @@ function generateMultiplyBlock(
     return code
   }
   
-  // Check if we're dealing with vectors
+  // Check if we're dealing with vectors or matrices
   const isVector = checkIfVectorOperation(inputWires[0], sheet)
+  const isMatrix = checkIfMatrixOperation(inputWires[0], sheet)
   
-  if (isVector) {
+  if (isMatrix) {
+    // Matrix element-wise multiply
+    code += `    // Matrix element-wise multiplication\n`
+    code += `    for (int i = 0; i < ${isMatrix.rows}; i++) {\n`
+    code += `        for (int j = 0; j < ${isMatrix.cols}; j++) {\n`
+    code += `            ${outputName}[i][j] = `
+    
+    for (let k = 0; k < inputWires.length; k++) {
+      const wire = inputWires[k]
+      const inputExpr = getInputExpression(wire, sheet, 'model')
+      if (k > 0) code += ` * `
+      code += `${inputExpr}[i][j]`
+    }
+    
+    code += `;\n        }\n    }\n`
+  } else if (isVector) {
     // Vector multiply
     code += `    for (int i = 0; i < ${isVector.size}; i++) {\n`
     code += `        ${outputName}[i] = `
@@ -2030,8 +2137,16 @@ function generateScaleBlock(
     const wire = inputWires[0]
     const inputExpr = getInputExpression(wire, sheet, 'model', blockContextMap)
     const isVector = checkIfVectorOperation(wire, sheet)
+    const isMatrix = checkIfMatrixOperation(wire, sheet)
     
-    if (isVector) {
+    if (isMatrix) {
+      code += `    // Matrix scalar multiplication\n`
+      code += `    for (int i = 0; i < ${isMatrix.rows}; i++) {\n`
+      code += `        for (int j = 0; j < ${isMatrix.cols}; j++) {\n`
+      code += `            ${outputName}[i][j] = ${inputExpr}[i][j] * ${gain};\n`
+      code += `        }\n`
+      code += `    }\n`
+    } else if (isVector) {
       code += `    for (int i = 0; i < ${isVector.size}; i++) {\n`
       code += `        ${outputName}[i] = ${inputExpr}[i] * ${gain};\n`
       code += `    }\n`
@@ -2070,8 +2185,16 @@ function generateTransferFunctionBlock(
     const gain = (numerator[0] || 0) / (denominator[0] || 1)
     const inputExpr = getInputExpression(inputWires[0], sheet, 'model')
     const isVector = checkIfVectorOperation(inputWires[0], sheet)
+    const isMatrix = checkIfMatrixOperation(inputWires[0], sheet)
     
-    if (isVector) {
+    if (isMatrix) {
+      code += `    // Matrix element-wise gain\n`
+      code += `    for (int i = 0; i < ${isMatrix.rows}; i++) {\n`
+      code += `        for (int j = 0; j < ${isMatrix.cols}; j++) {\n`
+      code += `            ${outputName}[i][j] = ${inputExpr}[i][j] * ${gain};\n`
+      code += `        }\n`
+      code += `    }\n`
+    } else if (isVector) {
       code += `    for (int i = 0; i < ${isVector.size}; i++) {\n`
       code += `        ${outputName}[i] = ${inputExpr}[i] * ${gain};\n`
       code += `    }\n`
@@ -2080,10 +2203,17 @@ function generateTransferFunctionBlock(
     }
   } else {
     // Dynamic system - output equals first state
-    const isVector = checkIfVectorTransferFunction(block, sheet, blockTypes)
+    const tfInfo = checkIfVectorTransferFunction(block, sheet, blockTypes)
     
-    if (isVector) {
-      code += `    for (int i = 0; i < ${isVector.size}; i++) {\n`
+    if (tfInfo?.isMatrix && tfInfo.rows && tfInfo.cols) {
+      code += `    // Matrix transfer function output\n`
+      code += `    for (int i = 0; i < ${tfInfo.rows}; i++) {\n`
+      code += `        for (int j = 0; j < ${tfInfo.cols}; j++) {\n`
+      code += `            ${outputName}[i][j] = model->states.${tfName}_states[i][j][0];\n`
+      code += `        }\n`
+      code += `    }\n`
+    } else if (tfInfo) {
+      code += `    for (int i = 0; i < ${tfInfo.size}; i++) {\n`
       code += `        ${outputName}[i] = model->states.${tfName}_states[i][0];\n`
       code += `    }\n`
     } else {
@@ -2207,6 +2337,243 @@ function generateLookup2DBlock(
   return code
 }
 
+function generateMatrixMultiplyBlock(
+  block: BlockData,
+  inputWires: WireData[],
+  sheet: Sheet,
+  blockTypes: Map<string, string>,
+  prefixedName?: string,
+  blockContextMap?: Map<string, BlockContext>
+): string {
+  const outputName = `model->signals.${sanitizeIdentifier(prefixedName || block.name)}`
+  let code = ``
+  
+  if (inputWires.length < 2) {
+    code += `    ${outputName} = 0.0; // Insufficient inputs\n`
+    return code
+  }
+  
+  const wire1 = inputWires.find(w => w.targetPortIndex === 0)
+  const wire2 = inputWires.find(w => w.targetPortIndex === 1)
+  
+  if (!wire1 || !wire2) {
+    code += `    ${outputName} = 0.0; // Missing input\n`
+    return code
+  }
+  
+  const input1Expr = getInputExpression(wire1, sheet, 'model', blockContextMap)
+  const input2Expr = getInputExpression(wire2, sheet, 'model', blockContextMap)
+  
+  // Get types of inputs
+  const input1Key = `${wire1.sourceBlockId}:${wire1.sourcePortIndex}`
+  const input2Key = `${wire2.sourceBlockId}:${wire2.sourcePortIndex}`
+  const input1Type = blockTypes.get(input1Key)
+  const input2Type = blockTypes.get(input2Key)
+  
+  // Parse types to determine operation
+  const type1 = input1Type ? tryParseType(input1Type) : null
+  const type2 = input2Type ? tryParseType(input2Type) : null
+  
+  if (!type1 || !type2) {
+    code += `    ${outputName} = ${input1Expr} * ${input2Expr}; // Default scalar multiply\n`
+    return code
+  }
+  
+  // Determine the multiplication type
+  const isScalar1 = !type1.isArray && !type1.isMatrix
+  const isScalar2 = !type2.isArray && !type2.isMatrix
+  const isVector1 = type1.isArray && !type1.isMatrix
+  const isVector2 = type2.isArray && !type2.isMatrix
+  const isMatrix1 = type1.isMatrix
+  const isMatrix2 = type2.isMatrix
+  
+  if (isScalar1 && isScalar2) {
+    // Scalar × Scalar
+    code += `    ${outputName} = ${input1Expr} * ${input2Expr};\n`
+  } else if (isScalar1 && isVector2) {
+    // Scalar × Vector
+    code += `    for (int i = 0; i < ${type2.arraySize}; i++) {\n`
+    code += `        ${outputName}[i] = ${input1Expr} * ${input2Expr}[i];\n`
+    code += `    }\n`
+  } else if (isVector1 && isScalar2) {
+    // Vector × Scalar
+    code += `    for (int i = 0; i < ${type1.arraySize}; i++) {\n`
+    code += `        ${outputName}[i] = ${input1Expr}[i] * ${input2Expr};\n`
+    code += `    }\n`
+  } else if (isScalar1 && isMatrix2) {
+    // Scalar × Matrix
+    code += `    for (int i = 0; i < ${type2.rows}; i++) {\n`
+    code += `        for (int j = 0; j < ${type2.cols}; j++) {\n`
+    code += `            ${outputName}[i][j] = ${input1Expr} * ${input2Expr}[i][j];\n`
+    code += `        }\n`
+    code += `    }\n`
+  } else if (isMatrix1 && isScalar2) {
+    // Matrix × Scalar
+    code += `    for (int i = 0; i < ${type1.rows}; i++) {\n`
+    code += `        for (int j = 0; j < ${type1.cols}; j++) {\n`
+    code += `            ${outputName}[i][j] = ${input1Expr}[i][j] * ${input2Expr};\n`
+    code += `        }\n`
+    code += `    }\n`
+  } else if (isMatrix1 && isVector2) {
+    // Matrix × Vector
+    code += `    // Matrix-vector multiplication\n`
+    code += `    for (int i = 0; i < ${type1.rows}; i++) {\n`
+    code += `        ${outputName}[i] = 0.0;\n`
+    code += `        for (int j = 0; j < ${type1.cols}; j++) {\n`
+    code += `            ${outputName}[i] += ${input1Expr}[i][j] * ${input2Expr}[j];\n`
+    code += `        }\n`
+    code += `    }\n`
+  } else if (isVector1 && isMatrix2) {
+    // Vector × Matrix (row vector)
+    code += `    // Vector-matrix multiplication\n`
+    code += `    for (int j = 0; j < ${type2.cols}; j++) {\n`
+    code += `        ${outputName}[j] = 0.0;\n`
+    code += `        for (int i = 0; i < ${type1.arraySize}; i++) {\n`
+    code += `            ${outputName}[j] += ${input1Expr}[i] * ${input2Expr}[i][j];\n`
+    code += `        }\n`
+    code += `    }\n`
+  } else if (isMatrix1 && isMatrix2) {
+    // Matrix × Matrix
+    code += `    // Matrix-matrix multiplication\n`
+    code += `    for (int i = 0; i < ${type1.rows}; i++) {\n`
+    code += `        for (int j = 0; j < ${type2.cols}; j++) {\n`
+    code += `            ${outputName}[i][j] = 0.0;\n`
+    code += `            for (int k = 0; k < ${type1.cols}; k++) {\n`
+    code += `                ${outputName}[i][j] += ${input1Expr}[i][k] * ${input2Expr}[k][j];\n`
+    code += `            }\n`
+    code += `        }\n`
+    code += `    }\n`
+  } else {
+    // Default case
+    code += `    // Unsupported matrix multiply combination\n`
+    code += `    ${outputName} = 0.0;\n`
+  }
+  
+  return code
+}
+
+function generateMuxBlock(
+  block: BlockData,
+  inputWires: WireData[],
+  sheet: Sheet,
+  blockTypes: Map<string, string>,
+  prefixedName?: string,
+  blockContextMap?: Map<string, BlockContext>
+): string {
+  const outputName = `model->signals.${sanitizeIdentifier(prefixedName || block.name)}`
+  const rows = block.parameters?.rows || 2
+  const cols = block.parameters?.cols || 2
+  
+  let code = `    // Mux block: ${block.name} (${rows}×${cols})\n`
+  
+  const expectedInputs = rows * cols
+  
+  // Special case: 1x1 mux is pass-through
+  if (rows === 1 && cols === 1) {
+    if (inputWires.length > 0) {
+      const wire = inputWires[0]
+      const inputExpr = getInputExpression(wire, sheet, 'model', blockContextMap)
+      code += `    ${outputName} = ${inputExpr};\n`
+    } else {
+      code += `    ${outputName} = 0.0;\n`
+    }
+    return code
+  }
+  
+  // Case 1: Vector output (1×n or n×1)
+  if (rows === 1 || cols === 1) {
+    const size = Math.max(rows, cols)
+    code += `    // Mux to vector\n`
+    
+    for (let i = 0; i < size; i++) {
+      if (i < inputWires.length) {
+        const wire = inputWires.find(w => w.targetPortIndex === i)
+        if (wire) {
+          const inputExpr = getInputExpression(wire, sheet, 'model', blockContextMap)
+          code += `    ${outputName}[${i}] = ${inputExpr};\n`
+        } else {
+          code += `    ${outputName}[${i}] = 0.0;\n`
+        }
+      } else {
+        code += `    ${outputName}[${i}] = 0.0;\n`
+      }
+    }
+  } else {
+    // Case 2: Matrix output
+    code += `    // Mux to matrix\n`
+    
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        const inputIndex = i * cols + j // Row-major order
+        const wire = inputWires.find(w => w.targetPortIndex === inputIndex)
+        
+        if (wire) {
+          const inputExpr = getInputExpression(wire, sheet, 'model', blockContextMap)
+          code += `    ${outputName}[${i}][${j}] = ${inputExpr};\n`
+        } else {
+          code += `    ${outputName}[${i}][${j}] = 0.0;\n`
+        }
+      }
+    }
+  }
+  
+  return code
+}
+
+function generateDemuxBlock(
+  block: BlockData,
+  inputWires: WireData[],
+  sheet: Sheet,
+  blockTypes: Map<string, string>,
+  prefixedName?: string,
+  blockContextMap?: Map<string, BlockContext>
+): string {
+  const baseName = sanitizeIdentifier(prefixedName || block.name)
+  let code = `    // Demux block: ${block.name}\n`
+  
+  if (inputWires.length === 0) {
+    code += `    // No input connected\n`
+    return code
+  }
+  
+  const wire = inputWires[0]
+  const inputExpr = getInputExpression(wire, sheet, 'model', blockContextMap)
+  
+  // Get input type to determine demux behavior
+  const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+  const inputType = blockTypes.get(sourceKey)
+  const parsedType = inputType ? tryParseType(inputType) : null
+  
+  if (!parsedType) {
+    // Scalar pass-through
+    code += `    model->signals.${baseName}_0 = ${inputExpr};\n`
+    return code
+  }
+  
+  if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
+    // Matrix demux - output each element
+    code += `    // Demux matrix to scalars\n`
+    let outputIndex = 0
+    for (let i = 0; i < parsedType.rows; i++) {
+      for (let j = 0; j < parsedType.cols; j++) {
+        code += `    model->signals.${baseName}_${outputIndex} = ${inputExpr}[${i}][${j}];\n`
+        outputIndex++
+      }
+    }
+  } else if (parsedType.isArray && parsedType.arraySize) {
+    // Vector demux
+    code += `    // Demux vector to scalars\n`
+    for (let i = 0; i < parsedType.arraySize; i++) {
+      code += `    model->signals.${baseName}_${i} = ${inputExpr}[${i}];\n`
+    }
+  } else {
+    // Scalar pass-through
+    code += `    model->signals.${baseName}_0 = ${inputExpr};\n`
+  }
+  
+  return code
+}
+
 function generateOutputPortBlock(
   block: BlockData,
   inputWires: WireData[],
@@ -2321,7 +2688,7 @@ function checkIfVectorOperation(
   if (sourceBlock.type === 'input_port' || sourceBlock.type === 'source') {
     const dataType = sourceBlock.parameters?.dataType || 'double'
     const parsed = tryParseType(dataType)
-    if (parsed?.isArray && parsed.arraySize) {
+    if (parsed?.isArray && parsed.arraySize && !parsed.isMatrix) {
       return { size: parsed.arraySize }
     }
   }
@@ -2329,8 +2696,24 @@ function checkIfVectorOperation(
   return null
 }
 
-
-// Helper functions
+// Check if an operation involves matrices
+function checkIfMatrixOperation(
+  wire: WireData,
+  sheet: Sheet
+): { rows: number, cols: number } | null {
+  const sourceBlock = sheet.blocks.find(b => b.id === wire.sourceBlockId)
+  if (!sourceBlock) return null
+  
+  if (sourceBlock.type === 'input_port' || sourceBlock.type === 'source') {
+    const dataType = sourceBlock.parameters?.dataType || 'double'
+    const parsed = tryParseType(dataType)
+    if (parsed?.isMatrix && parsed.rows && parsed.cols) {
+      return { rows: parsed.rows, cols: parsed.cols }
+    }
+  }
+  
+  return null
+}
 
 function tryParseType(typeString: string): ParsedType | null {
   try {

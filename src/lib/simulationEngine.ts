@@ -19,15 +19,15 @@ export interface SimulationState {
   timeStep: number
   duration: number
   blockStates: Map<string, BlockState>
-  signalValues: Map<string, number | number[] | boolean | boolean[]>
-  sheetLabelValues: Map<string, number | number[] | boolean | boolean[]>
+  signalValues: Map<string, number | number[] | boolean | boolean[] | number[][]>
+  sheetLabelValues: Map<string, number | number[] | boolean | boolean[] | number[][]>
   isRunning: boolean
 }
 
 export interface BlockState {
   blockId: string
   blockType: string
-  outputs: (number | number[] | boolean | boolean[])[]
+  outputs: (number | number[] | boolean | boolean[] | number[][])[]
   internalState?: any
   outputTypes?: ParsedType[] // Track output types for each port
 }
@@ -39,7 +39,7 @@ export interface SimulationConfig {
 
 export interface SimulationResults {
   timePoints: number[]
-  signalData: Map<string, (number | number[] | boolean | boolean[])[]>
+  signalData: Map<string, (number | number[] | boolean | boolean[] | number[][])[]>
   finalTime: number
 }
 
@@ -48,11 +48,11 @@ export class SimulationEngine {
   private wires: WireData[]
   private state: SimulationState
   private executionOrder: string[] = []
-  private getExternalInput?: (portName: string) => number | number[] | boolean | boolean[] | undefined
+  private getExternalInput?: (portName: string) => number | number[] | boolean | boolean[] | number[][] | undefined
   private allSheets: Sheet[] = [] // Store all sheets for subsystem simulation
   private subsystemEngines: Map<string, SimulationEngine> = new Map() // Cache for subsystem engines
 
-  constructor(blocks: BlockData[], wires: WireData[], config: SimulationConfig, externalInputs?: (portName: string) => number | number[] | boolean | boolean[] | undefined, allSheets?: Sheet[]) {
+  constructor(blocks: BlockData[], wires: WireData[], config: SimulationConfig, externalInputs?: (portName: string) => number | number[] | boolean | boolean[] | number[][] | undefined, allSheets?: Sheet[]) {
     this.blocks = blocks
     this.wires = wires
     this.getExternalInput = externalInputs
@@ -105,7 +105,7 @@ export class SimulationEngine {
     return []
   }
 
-  private getInitialOutputs(blockType: string, parameters?: Record<string, any>): (number | number[] | boolean | boolean[])[] {
+  private getInitialOutputs(blockType: string, parameters?: Record<string, any>): (number | number[] | boolean | boolean[] | number[][])[] {
     // For source blocks, check if they output vectors
     if (blockType === 'source' || blockType === 'input_port') {
       const dataType = parameters?.dataType || 'double'
@@ -131,7 +131,13 @@ export class SimulationEngine {
       case 'transfer_function':
       case 'lookup_1d':
       case 'lookup_2d':
+      case 'matrix_multiply':
+      case 'mux':
         return [0] // Single output, actual type determined by inputs
+      case 'demux':
+        // Demux has dynamic outputs based on input
+        const outputCount = parameters?.outputCount || 1
+        return new Array(outputCount).fill(0)
       case 'input_port':
       case 'source':
         return [0] // Single output
@@ -249,6 +255,17 @@ export class SimulationEngine {
         return {
           signalName: parameters?.signalName || ''
         }
+      case 'mux':
+        return {
+          rows: parameters?.rows || 2,
+          cols: parameters?.cols || 2,
+          outputType: parameters?.outputType || 'double'
+        }
+      case 'demux':
+        return {
+          outputCount: parameters?.outputCount || 1,
+          inputDimensions: parameters?.inputDimensions || [1]
+        }
       default:
         return {}
     }
@@ -310,7 +327,7 @@ export class SimulationEngine {
     */
   }
 
-  private executeSheetLabelSinkBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+  private executeSheetLabelSinkBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]){
     const signalName = blockState.internalState?.signalName
     if (!signalName) return
     
@@ -357,6 +374,338 @@ export class SimulationEngine {
       // console.log(`DEBUG: Sheet Label Source '${signalName}' - no value found, defaulting to 0`)
       blockState.outputs[0] = 0
     }
+  }
+
+  private executeMatrixMultiplyBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
+    const input1 = inputs[0]
+    const input2 = inputs[1]
+    
+    // Handle missing inputs
+    if (input1 === undefined || input2 === undefined) {
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    // Check if inputs are boolean arrays (not supported)
+    if ((Array.isArray(input1) && typeof input1[0] === 'boolean') ||
+        (Array.isArray(input2) && typeof input2[0] === 'boolean')) {
+      console.error(`Matrix multiply block ${blockState.blockId} does not support boolean inputs`)
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    // Determine the type of multiplication based on inputs
+    const isInput1Scalar = typeof input1 === 'number'
+    const isInput2Scalar = typeof input2 === 'number'
+    const isInput1Vector = Array.isArray(input1) && !Array.isArray(input1[0])
+    const isInput2Vector = Array.isArray(input2) && !Array.isArray(input2[0])
+    const isInput1Matrix = Array.isArray(input1) && Array.isArray(input1[0])
+    const isInput2Matrix = Array.isArray(input2) && Array.isArray(input2[0])
+    
+    // Case 1: Scalar × Scalar
+    if (isInput1Scalar && isInput2Scalar) {
+      blockState.outputs[0] = input1 * input2
+      return
+    }
+    
+    // Case 2: Scalar × Vector
+    if (isInput1Scalar && isInput2Vector) {
+      blockState.outputs[0] = (input2 as number[]).map(val => input1 * val)
+      return
+    }
+    
+    // Case 3: Vector × Scalar
+    if (isInput1Vector && isInput2Scalar) {
+      blockState.outputs[0] = (input1 as number[]).map(val => val * input2)
+      return
+    }
+    
+    // Case 4: Scalar × Matrix
+    if (isInput1Scalar && isInput2Matrix) {
+      const matrix = input2 as unknown as number[][]
+      blockState.outputs[0] = matrix.map(row => 
+        row.map(val => input1 * val)
+      )
+      return
+    }
+    
+    // Case 5: Matrix × Scalar
+    if (isInput1Matrix && isInput2Scalar) {
+      const matrix = input1 as unknown as number[][]
+      blockState.outputs[0] = matrix.map(row => 
+        row.map(val => val * input2)
+      )
+      return
+    }
+    
+    // Case 6: Vector × Vector (dot product if same length, outer product otherwise)
+    if (isInput1Vector && isInput2Vector) {
+      const vec1 = input1 as number[]
+      const vec2 = input2 as number[]
+      
+      // For now, treat as element-wise multiplication if same length
+      if (vec1.length === vec2.length) {
+        // Element-wise multiplication
+        blockState.outputs[0] = vec1.map((val, i) => val * vec2[i])
+      } else {
+        console.error(`Matrix multiply block ${blockState.blockId}: Vector dimensions incompatible for multiplication`)
+        blockState.outputs[0] = 0
+      }
+      return
+    }
+    
+    // Case 7: Matrix × Vector
+    if (isInput1Matrix && isInput2Vector) {
+      const matrix = input1 as unknown as number[][]
+      const vector = input2 as number[]
+      
+      // Check dimension compatibility: matrix columns must equal vector length
+      if (matrix[0].length !== vector.length) {
+        console.error(`Matrix multiply block ${blockState.blockId}: Dimension mismatch - matrix has ${matrix[0].length} columns but vector has ${vector.length} elements`)
+        blockState.outputs[0] = 0
+        return
+      }
+      
+      // Perform matrix-vector multiplication
+      const result = matrix.map(row => 
+        row.reduce((sum, val, i) => sum + val * vector[i], 0)
+      )
+      blockState.outputs[0] = result
+      return
+    }
+    
+    // Case 8: Vector × Matrix
+    if (isInput1Vector && isInput2Matrix) {
+      const vector = input1 as number[]
+      const matrix = input2 as unknown as number[][]
+      
+      // Check dimension compatibility: vector length must equal matrix rows
+      if (vector.length !== matrix.length) {
+        console.error(`Matrix multiply block ${blockState.blockId}: Dimension mismatch - vector has ${vector.length} elements but matrix has ${matrix.length} rows`)
+        blockState.outputs[0] = 0
+        return
+      }
+      
+      // Perform vector-matrix multiplication (row vector × matrix)
+      const cols = matrix[0].length
+      const result = new Array(cols).fill(0)
+      
+      for (let j = 0; j < cols; j++) {
+        for (let i = 0; i < vector.length; i++) {
+          result[j] += vector[i] * matrix[i][j]
+        }
+      }
+      
+      blockState.outputs[0] = result
+      return
+    }
+    
+    // Case 9: Matrix × Matrix
+    if (isInput1Matrix && isInput2Matrix) {
+      const mat1 = input1 as unknown as number[][]
+      const mat2 = input2 as unknown as number[][]
+      
+      // Validate dimensions
+      const rows1 = mat1.length
+      const cols1 = mat1[0]?.length || 0
+      const rows2 = mat2.length
+      const cols2 = mat2[0]?.length || 0
+      
+      // Check dimension compatibility
+      if (cols1 !== rows2) {
+        console.error(`Matrix multiply block ${blockState.blockId}: Dimension mismatch - first matrix has ${cols1} columns but second matrix has ${rows2} rows`)
+        blockState.outputs[0] = 0
+        return
+      }
+      
+      // Perform matrix multiplication
+      const result: number[][] = []
+      
+      for (let i = 0; i < rows1; i++) {
+        result[i] = []
+        for (let j = 0; j < cols2; j++) {
+          let sum = 0
+          for (let k = 0; k < cols1; k++) {
+            sum += mat1[i][k] * mat2[k][j]
+          }
+          result[i][j] = sum
+        }
+      }
+      
+      blockState.outputs[0] = result
+      return
+    }
+    
+    // Fallback for unexpected input types
+    console.error(`Matrix multiply block ${blockState.blockId}: Unsupported input types`)
+    blockState.outputs[0] = 0
+  }
+
+  private executeMuxBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
+    const rows = blockState.internalState?.rows || 2
+    const cols = blockState.internalState?.cols || 2
+    const outputType = blockState.internalState?.outputType || 'double'
+    
+    // Check if we have the expected number of inputs
+    const expectedInputs = rows * cols
+    if (inputs.length !== expectedInputs) {
+      console.warn(`Mux block ${blockState.blockId} expected ${expectedInputs} inputs but received ${inputs.length}`)
+    }
+    
+    // Special case: 1x1 mux acts as a pass-through
+    if (rows === 1 && cols === 1) {
+      blockState.outputs[0] = inputs[0] !== undefined ? inputs[0] : 0
+      return
+    }
+    
+    // Determine if output should be boolean based on outputType
+    const isBooleanOutput = outputType === 'bool'
+    
+    // Case 1: Vector output (either 1×n or n×1)
+    if (rows === 1 || cols === 1) {
+      const size = Math.max(rows, cols)
+      
+      if (isBooleanOutput) {
+        // Create boolean array
+        const result: boolean[] = []
+        for (let i = 0; i < size; i++) {
+          const input = inputs[i]
+          if (typeof input === 'boolean') {
+            result.push(input)
+          } else if (typeof input === 'number') {
+            result.push(input !== 0) // Convert number to boolean
+          } else {
+            result.push(false) // Default
+          }
+        }
+        blockState.outputs[0] = result
+      } else {
+        // Create number array
+        const result: number[] = []
+        for (let i = 0; i < size; i++) {
+          const input = inputs[i]
+          if (typeof input === 'number') {
+            result.push(input)
+          } else if (typeof input === 'boolean') {
+            result.push(input ? 1 : 0) // Convert boolean to number
+          } else {
+            result.push(0) // Default
+          }
+        }
+        blockState.outputs[0] = result
+      }
+      return
+    }
+    
+    // Case 2: Matrix output (m×n where both > 1)
+    if (isBooleanOutput) {
+      // Create boolean matrix
+      const result: boolean[][] = []
+      for (let i = 0; i < rows; i++) {
+        result[i] = []
+        for (let j = 0; j < cols; j++) {
+          const inputIndex = i * cols + j // Row-major order
+          const input = inputs[inputIndex]
+          
+          if (typeof input === 'boolean') {
+            result[i][j] = input
+          } else if (typeof input === 'number') {
+            result[i][j] = input !== 0 // Convert number to boolean
+          } else {
+            result[i][j] = false // Default
+          }
+        }
+      }
+      // Cast to unknown first to satisfy TypeScript
+      blockState.outputs[0] = result as unknown as number[][]
+    } else {
+      // Create number matrix
+      const result: number[][] = []
+      for (let i = 0; i < rows; i++) {
+        result[i] = []
+        for (let j = 0; j < cols; j++) {
+          const inputIndex = i * cols + j // Row-major order
+          const input = inputs[inputIndex]
+          
+          if (typeof input === 'number') {
+            result[i][j] = input
+          } else if (typeof input === 'boolean') {
+            result[i][j] = input ? 1 : 0 // Convert boolean to number
+          } else {
+            result[i][j] = 0 // Default
+          }
+        }
+      }
+      blockState.outputs[0] = result
+    }
+  }
+
+  private executeDemuxBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
+    const input = inputs[0]
+    
+    // Handle missing input
+    if (input === undefined) {
+      // Set single output to 0
+      blockState.outputs = [0]
+      return
+    }
+    
+    // Case 1: Scalar input - pass through as single output
+    if (typeof input === 'number' || typeof input === 'boolean') {
+      blockState.outputs = [input]
+      return
+    }
+    
+    // Case 2: 1D array (vector) input
+    if (Array.isArray(input) && !Array.isArray(input[0])) {
+      // Split vector into scalar outputs
+      const vector = input as (number | boolean)[]
+      blockState.outputs = []
+      
+      for (let i = 0; i < vector.length; i++) {
+        blockState.outputs[i] = vector[i]
+      }
+      
+      // Store the output count for dynamic port updates
+      blockState.internalState = {
+        ...blockState.internalState,
+        outputCount: vector.length,
+        inputDimensions: [vector.length]
+      }
+      return
+    }
+    
+    // Case 3: 2D array (matrix) input
+    if (Array.isArray(input) && Array.isArray(input[0])) {
+      // Split matrix into scalar outputs in row-major order
+      const matrix = input as unknown as (number[][] | boolean[][])
+      blockState.outputs = []
+      let outputIndex = 0
+      
+      for (let i = 0; i < matrix.length; i++) {
+        const row = matrix[i]
+        if (Array.isArray(row)) {
+          for (let j = 0; j < row.length; j++) {
+            blockState.outputs[outputIndex] = row[j]
+            outputIndex++
+          }
+        }
+      }
+      
+      // Store the output count and dimensions for dynamic port updates
+      const rows = matrix.length
+      const cols = matrix[0]?.length || 0
+      blockState.internalState = {
+        ...blockState.internalState,
+        outputCount: rows * cols,
+        inputDimensions: [rows, cols]
+      }
+      return
+    }
+    
+    // Fallback for unexpected input types
+    console.warn(`Demux block ${blockState.blockId}: Unexpected input type`)
+    blockState.outputs = [0]
   }
 
   private isSourceBlock(blockType: string): boolean {
@@ -434,6 +783,15 @@ export class SimulationEngine {
       case 'sheet_label_source':
         this.executeSheetLabelSourceBlock(blockState)
         break
+      case 'matrix_multiply':
+        this.executeMatrixMultiplyBlock(blockState, inputs)
+        break
+      case 'mux':
+        this.executeMuxBlock(blockState, inputs)
+        break
+      case 'demux':
+        this.executeDemuxBlock(blockState, inputs)
+        break
     }
 
     // Store signal values
@@ -455,9 +813,9 @@ export class SimulationEngine {
     this.executeBlock(blockId)
   }
 
-  private getBlockInputs(blockId: string): (number | number[] | boolean | boolean[])[] {
+  private getBlockInputs(blockId: string): (number | number[] | boolean | boolean[] | number[][])[] {
     const inputWires = this.wires.filter(wire => wire.targetBlockId === blockId)
-    const inputs: (number | number[] | boolean | boolean[])[] = []
+    const inputs: (number | number[] | boolean | boolean[] | number[][])[] = []
 
     // Sort by port index to ensure correct order
     inputWires.sort((a, b) => a.targetPortIndex - b.targetPortIndex)
@@ -471,7 +829,7 @@ export class SimulationEngine {
     return inputs
   }
 
-  private executeSumBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+  private executeSumBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]){
     if (inputs.length === 0) {
       blockState.outputs[0] = 0
       return
@@ -509,15 +867,50 @@ export class SimulationEngine {
     }
   }
 
-  private executeMultiplyBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+  private executeMultiplyBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
     if (inputs.length === 0) {
       blockState.outputs[0] = 0
       return
     }
     
-    // Check if we're dealing with vectors
+    // Check if we're dealing with matrices
     const firstInput = inputs[0]
-    if (Array.isArray(firstInput)) {
+    if (Array.isArray(firstInput) && Array.isArray(firstInput[0])) {
+      // Matrix multiplication (element-wise)
+      const firstMatrix = firstInput as unknown as number[][]
+      const rows = firstMatrix.length
+      const cols = firstMatrix[0]?.length || 0
+      
+      // Initialize result matrix with first input
+      const result: number[][] = firstMatrix.map(row => [...row])
+      
+      // Multiply remaining matrices element-wise
+      for (let i = 1; i < inputs.length; i++) {
+        const input = inputs[i]
+        if (Array.isArray(input) && Array.isArray(input[0])) {
+          const matrix = input as unknown as number[][]
+          // Check dimensions match
+          if (matrix.length === rows && matrix[0]?.length === cols) {
+            for (let r = 0; r < rows; r++) {
+              for (let c = 0; c < cols; c++) {
+                result[r][c] *= matrix[r][c]
+              }
+            }
+          } else {
+            console.warn(`Dimension mismatch in multiply block ${blockState.blockId}: expected ${rows}×${cols} matrix`)
+          }
+        } else if (typeof input === 'number') {
+          // Multiply all elements by scalar
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              result[r][c] *= input
+            }
+          }
+        }
+      }
+      
+      blockState.outputs[0] = result
+    } else if (Array.isArray(firstInput)) {
       // Vector multiplication (element-wise)
       const result = [...firstInput] as number[]
       
@@ -527,6 +920,11 @@ export class SimulationEngine {
           // Element-wise multiplication
           for (let j = 0; j < result.length; j++) {
             result[j] *= (input[j] as number) || 0
+          }
+        } else if (typeof input === 'number') {
+          // Multiply all elements by scalar
+          for (let j = 0; j < result.length; j++) {
+            result[j] *= input
           }
         } else {
           // Type mismatch
@@ -547,15 +945,24 @@ export class SimulationEngine {
     }
   }
 
-  private executeScaleBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+  private executeScaleBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
     const input = inputs[0]
     const gain = blockState.internalState?.gain || 1
     
     if (Array.isArray(input)) {
-      // Scale each element of the vector
-      blockState.outputs[0] = input.map(val => 
-        typeof val === 'number' ? val * gain : 0
-      )
+      // Check if it's a 2D array (matrix)
+      if (Array.isArray(input[0])) {
+        // Scale each element of the matrix
+        const matrix = input as unknown as number[][]
+        blockState.outputs[0] = matrix.map(row => 
+          row.map(val => val * gain)
+        )
+      } else {
+        // Scale each element of the vector
+        blockState.outputs[0] = (input as number[]).map(val => 
+          typeof val === 'number' ? val * gain : 0
+        )
+      }
     } else if (typeof input === 'number') {
       blockState.outputs[0] = input * gain
     } else {
@@ -567,7 +974,7 @@ export class SimulationEngine {
     // Source blocks are the actual signal generators
     const { signalType, dataType } = blockState.internalState
     
-    // Parse the data type to check if it's a vector
+    // Parse the data type to check if it's a vector or matrix
     let parsedType: ParsedType | null = null
     try {
       parsedType = parseType(dataType || 'double')
@@ -575,13 +982,28 @@ export class SimulationEngine {
       parsedType = { baseType: 'double', isArray: false }
     }
     
-    // For constant signal type with vectors, use the value directly
-    if (signalType === 'constant' && parsedType.isArray) {
+    // For constant signal type with vectors or matrices, use the value directly
+    if (signalType === 'constant') {
       // Get the block to access its parameters
       const block = this.blocks.find(b => b.id === blockState.blockId)
-      if (block && Array.isArray(block.parameters?.value)) {
-        blockState.outputs[0] = [...block.parameters.value]
-        return
+      if (block && block.parameters?.value !== undefined) {
+        const paramValue = block.parameters.value
+        
+        // Handle matrix values
+        if (Array.isArray(paramValue) && paramValue.length > 0 && Array.isArray(paramValue[0])) {
+          blockState.outputs[0] = paramValue.map((row: any[]) => [...row])
+          return
+        }
+        // Handle vector values
+        else if (parsedType.isArray && Array.isArray(paramValue)) {
+          blockState.outputs[0] = [...paramValue]
+          return
+        }
+        // Handle scalar values
+        else if (!parsedType.isArray && !parsedType.isMatrix) {
+          blockState.outputs[0] = paramValue
+          return
+        }
       }
     }
     
@@ -656,8 +1078,15 @@ export class SimulationEngine {
         scalarValue = constantValue
     }
     
-    // Apply to vector if needed (for non-constant signal types)
-    if (parsedType.isArray && parsedType.arraySize) {
+    // Apply to vector or matrix if needed (for non-constant signal types)
+    if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
+      // For matrix output, create a matrix filled with the signal value
+      const matrix: number[][] = []
+      for (let i = 0; i < parsedType.rows; i++) {
+        matrix[i] = new Array(parsedType.cols).fill(scalarValue)
+      }
+      blockState.outputs[0] = matrix
+    } else if (parsedType.isArray && parsedType.arraySize) {
       // For vector output, apply the same signal to all elements
       blockState.outputs[0] = new Array(parsedType.arraySize).fill(scalarValue)
     } else {
@@ -703,19 +1132,65 @@ export class SimulationEngine {
     }
   }
 
-  private executeTransferFunctionBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+  private executeTransferFunctionBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
     const input = inputs[0]
     const { numerator, denominator } = blockState.internalState
     
     // Validate coefficients
     if (!denominator || denominator.length === 0) {
-      blockState.outputs[0] = Array.isArray(input) ? new Array(input.length).fill(0) : 0
+      blockState.outputs[0] = Array.isArray(input) ? 
+        (Array.isArray(input[0]) ? 
+          (input as unknown as number[][]).map(row => row.map(() => 0)) : 
+          new Array((input as number[]).length).fill(0)) : 
+        0
       return
     }
     
-    // Check if input is a vector
-    if (Array.isArray(input)) {
-      // Initialize vector states if needed
+    // Check if input is a matrix
+    if (Array.isArray(input) && Array.isArray(input[0])) {
+      // Process matrix element-wise
+      const matrix = input as unknown as number[][]
+      const rows = matrix.length
+      const cols = matrix[0]?.length || 0
+      const stateOrder = Math.max(0, denominator.length - 1)
+      
+      // Initialize matrix states if needed
+      if (!blockState.internalState.matrixStates || 
+          blockState.internalState.matrixStates.length !== rows ||
+          blockState.internalState.matrixStates[0]?.length !== cols) {
+        // Initialize states for each matrix element
+        blockState.internalState.matrixStates = []
+        for (let i = 0; i < rows; i++) {
+          blockState.internalState.matrixStates[i] = []
+          for (let j = 0; j < cols; j++) {
+            blockState.internalState.matrixStates[i][j] = new Array(stateOrder).fill(0)
+          }
+        }
+      }
+      
+      // Process each element independently
+      const output: number[][] = []
+      for (let i = 0; i < rows; i++) {
+        output[i] = []
+        for (let j = 0; j < cols; j++) {
+          const elementInput = matrix[i][j]
+          const elementStates = blockState.internalState.matrixStates[i][j]
+          
+          // Apply transfer function to this element
+          output[i][j] = this.processTransferFunctionElement(
+            elementInput,
+            numerator,
+            denominator,
+            elementStates,
+            this.state.timeStep
+          )
+        }
+      }
+      
+      blockState.outputs[0] = output
+      
+    } else if (Array.isArray(input)) {
+      // Process vector element-wise (existing code)
       const vectorSize = input.length
       const stateOrder = Math.max(0, denominator.length - 1)
       
@@ -860,7 +1335,7 @@ export class SimulationEngine {
     }
   }
 
-  private executeLookup1DBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+  private executeLookup1DBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
     const input = inputs[0]
     
     // Lookup blocks only accept scalar inputs
@@ -946,7 +1421,7 @@ export class SimulationEngine {
     blockState.outputs[0] = outputValues[0]
   }
 
-  private executeLookup2DBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+  private executeLookup2DBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
     const input1 = inputs[0]
     const input2 = inputs[1]
     
@@ -1044,9 +1519,15 @@ export class SimulationEngine {
     }
   }
 
-  private executeSignalDisplayBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+  private executeSignalDisplayBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
     const input = inputs[0]
     const { samples, maxSamples } = blockState.internalState
+    
+    // Check if input is a matrix and reject it
+    if (Array.isArray(input) && Array.isArray(input[0])) {
+      console.error(`Signal display block ${blockState.blockId} cannot display matrix signals. Use separate displays for each matrix element.`)
+      return
+    }
     
     // Store the current input value
     // For vectors, we'll store the entire vector
@@ -1062,9 +1543,15 @@ export class SimulationEngine {
     blockState.internalState.currentValue = input
   }
 
-  private executeSignalLoggerBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+  private executeSignalLoggerBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
     const input = inputs[0]
     const { loggedData, timeStamps } = blockState.internalState
+    
+    // Check if input is a matrix and reject it
+    if (Array.isArray(input) && Array.isArray(input[0])) {
+      console.error(`Signal logger block ${blockState.blockId} cannot log matrix signals. Use separate loggers for each matrix element.`)
+      return
+    }
     
     // Store both the value and timestamp
     // For vectors, we'll store the entire vector
@@ -1076,7 +1563,7 @@ export class SimulationEngine {
     blockState.internalState.currentValue = input
   }
 
-  private executeOutputPortBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+  private executeOutputPortBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
     // Output ports represent external outputs to parent subsystem/model
     const input = inputs[0]
     const portName = blockState.internalState?.portName || `Output_${blockState.blockId}`
@@ -1092,7 +1579,7 @@ export class SimulationEngine {
     // Output ports don't produce outputs to other blocks within the same level
   }
 
-  private executeSubsystemBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[])[]) {
+  private executeSubsystemBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
     // In the hybrid approach, subsystem blocks are just containers and don't execute
     // They're handled by the MultiSheetSimulationEngine
     // This method is kept for compatibility but does nothing
@@ -1106,7 +1593,7 @@ export class SimulationEngine {
   }
 
   // Helper method to update external inputs (for subsystem simulation)
-  public updateExternalInputs(inputProvider: (portName: string) => number | number[] | boolean | boolean[] | undefined) {
+  public updateExternalInputs(inputProvider: (portName: string) => number | number[] | boolean | boolean[] | number[][] | undefined) {
     this.getExternalInput = inputProvider
   }
   
@@ -1149,7 +1636,7 @@ export class SimulationEngine {
   public run(): SimulationResults {
     this.state.isRunning = true
     const timePoints: number[] = []
-    const signalData = new Map<string, (number | number[] | boolean | boolean[])[]>()
+    const signalData = new Map<string, (number | number[] | boolean | boolean[] | number[][])[]>()
 
     // Initialize signal data arrays for display and logger blocks
     for (const block of this.blocks) {
@@ -1189,7 +1676,7 @@ export class SimulationEngine {
     return { ...this.state }
   }
 
-  public getLoggedData(blockId: string): { timeStamps: number[], values: (number | number[] | boolean | boolean[])[] } | null {
+  public getLoggedData(blockId: string): { timeStamps: number[], values: (number | number[] | boolean | boolean[] | number[][])[] } | null {
     const blockState = this.state.blockStates.get(blockId)
     if (!blockState || blockState.blockType !== 'signal_logger') {
       return null
@@ -1256,7 +1743,7 @@ export class SimulationEngine {
     
     // Find the maximum number of samples across all loggers
     let maxSamples = 0
-    const blockData = new Map<string, { timeStamps: number[], values: (number | number[] | boolean | boolean[])[] }>()
+    const blockData = new Map<string, { timeStamps: number[], values: (number | number[] | boolean | boolean[] | number[][])[] }>()
     
     for (const block of loggerBlocks) {
       const data = this.getLoggedData(block.id)
@@ -1337,8 +1824,8 @@ export class SimulationEngine {
     return csv
   }
 
-  public getOutputPortValues(): Map<string, number | number[] | boolean | boolean[]> {
-    const outputValues = new Map<string, number | number[] | boolean | boolean[]>()
+  public getOutputPortValues(): Map<string, number | number[] | boolean | boolean[] | number[][]> {
+    const outputValues = new Map<string, number | number[] | boolean | boolean[] | number[][]>()
     
     for (const block of this.blocks) {
       if (block.type === 'output_port') {
@@ -1354,7 +1841,7 @@ export class SimulationEngine {
     return outputValues
   }
 
-  public getOutputPortValue(portName: string): number | number[] | boolean | boolean[] | undefined {
+  public getOutputPortValue(portName: string): number | number[] | boolean | boolean[] | number[][] | undefined {
     for (const block of this.blocks) {
       if (block.type === 'output_port') {
         const blockState = this.state.blockStates.get(block.id)
