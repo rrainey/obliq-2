@@ -1,7 +1,7 @@
 // lib/multiSheetSimulation.ts - Improved version with global execution order
 
 import { SimulationEngine, SimulationConfig, SimulationResults, Sheet } from './simulationEngine'
-import { BlockData } from '@/components/Block'
+import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 
 
@@ -150,8 +150,8 @@ export class MultiSheetSimulationEngine {
    * @param sheetId - Optional sheet ID. If not provided, returns values from all sheets
    * Returns a map of port names to their current values
    */
-  getOutputPortValues(sheetId?: string): Map<string, number | number[] | boolean | boolean[]> {
-    const outputValues = new Map<string, number | number[] | boolean | boolean[]>()
+ getOutputPortValues(sheetId?: string): Map<string, number | number[] | number[][] | boolean | boolean[]> {
+    const outputValues = new Map<string, number | number[] | number[][] | boolean | boolean[]>()
     
     if (sheetId) {
       // Get values from specific sheet only

@@ -1,6 +1,6 @@
 // lib/signalTypePropagation.ts
 
-import { BlockData } from '@/components/Block'
+import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { areTypesCompatible, getTypeCompatibilityError, parseType, ParsedType, typeToString, isMatrixType, getMatrixDimensions } from './typeValidator'
 import { ca } from 'zod/v4/locales'

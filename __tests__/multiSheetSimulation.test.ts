@@ -2,7 +2,7 @@
 
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
 import { Sheet } from '@/lib/simulationEngine'
-import { BlockData } from '@/components/Block'
+import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 
 describe('MultiSheetSimulationEngine with Nested Subsystems', () => {

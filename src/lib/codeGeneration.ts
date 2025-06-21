@@ -1,6 +1,6 @@
 // lib/codeGeneration.ts - Complete module with proper RK4 integration support
 
-import { BlockData } from '@/components/Block'
+import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { Sheet } from '@/lib/simulationEngine'
 import { propagateSignalTypes } from '@/lib/signalTypePropagation'
@@ -200,14 +200,15 @@ function generateHeaderFileMultiSheet(
   const inputs = sheet.blocks.filter(b => {
     if (b.type !== 'input_port') return false
     const context = blockContextMap.get(b.id)
-    return !context || context.sheetPath.length === 0
+    // Only include if at top level (empty sheetPath)
+    return context && context.sheetPath.length === 0
   })
   
   const outputs = sheet.blocks.filter(b => {
       if (b.type !== 'output_port') return false
       const context = blockContextMap.get(b.id)
-      // Include if no context (shouldn't happen) OR if at top level (sheetPath.length === 0)
-      return !context || context.sheetPath.length === 0
+      // Only include if at top level (empty sheetPath)
+      return context && context.sheetPath.length === 0
   })
   const transferFunctions = sheet.blocks.filter(b => b.type === 'transfer_function')
   
@@ -304,11 +305,13 @@ extern "C" {
   // Group blocks by their original sheet for better organization
   const blocksBySheet = new Map<string, BlockData[]>()
   for (const block of sheet.blocks) {
-    // Include all blocks except top-level input/output ports and certain display blocks
     const context = blockContextMap.get(block.id)
     const isTopLevelPort = (block.type === 'input_port' || block.type === 'output_port') && 
                           (!context || context.sheetPath.length === 0)
     
+    // Include:
+    // - All blocks except top-level input/output ports and certain display blocks
+    // - Input ports that are inside subsystems (not at top level)
     if (!isTopLevelPort && 
         block.type !== 'signal_display' && 
         block.type !== 'signal_logger' &&
@@ -419,52 +422,38 @@ function generateInitFunctionMultiSheet(
   code += `    model->time = 0.0;\n`
   code += `    model->dt = time_step;\n\n`
 
-  // Initialize inputs with prefixed names
-  const inputs = sheet.blocks.filter(b => b.type === 'input_port')
+  // Initialize only top-level inputs
+  const inputs = sheet.blocks.filter(b => {
+    if (b.type !== 'input_port') return false
+    const context = blockContextMap.get(b.id)
+    // Only include if at top level (empty sheetPath)
+    return context && context.sheetPath.length === 0
+  })
+  
   if (inputs.length > 0) {
     code += `    // Initialize inputs\n`
     
-    // Group by original sheet
-    const inputsBySheet = new Map<string, BlockData[]>()
     for (const input of inputs) {
-      const context = blockContextMap.get(input.id)
-      const sheetId = context?.sheetId || 'main'
-      if (!inputsBySheet.has(sheetId)) {
-        inputsBySheet.set(sheetId, [])
-      }
-      inputsBySheet.get(sheetId)!.push(input)
-    }
-    
-    for (const [sheetId, sheetInputs] of inputsBySheet) {
-      const context = blockContextMap.get(sheetInputs[0].id)
-      const sheetPath = context?.sheetPath || []
-      if (sheetPath.length > 0) {
-        code += `    // From: ${sheetPath.join(' > ')}\n`
-      }
+      const portName = input.parameters?.portName || input.name
+      const dataType = input.parameters?.dataType || 'double'
+      const defaultValue = input.parameters?.defaultValue || 0
+      const variable = parseTypeToVariable(dataType, portName)
       
-      for (const input of sheetInputs) {
-        const context = blockContextMap.get(input.id)
-        const portName = context?.prefixedName || input.name
-        const dataType = input.parameters?.dataType || 'double'
-        const defaultValue = input.parameters?.defaultValue || 0
-        const variable = parseTypeToVariable(dataType, portName)
-        
-        if (variable.matrixRows && variable.matrixCols) {
-          // Initialize matrix with nested loops
-          code += `    for (int i = 0; i < ${variable.matrixRows}; i++) {\n`
-          code += `        for (int j = 0; j < ${variable.matrixCols}; j++) {\n`
-          code += `            model->inputs.${sanitizeIdentifier(variable.name)}[i][j] = ${defaultValue};\n`
-          code += `        }\n`
-          code += `    }\n`
-        } else if (variable.arraySize) {
-          // Initialize array
-          code += `    for (int i = 0; i < ${variable.arraySize}; i++) {\n`
-          code += `        model->inputs.${sanitizeIdentifier(variable.name)}[i] = ${defaultValue};\n`
-          code += `    }\n`
-        } else {
-          // Initialize scalar
-          code += `    model->inputs.${sanitizeIdentifier(variable.name)} = ${defaultValue};\n`
-        }
+      if (variable.matrixRows && variable.matrixCols) {
+        // Initialize matrix with nested loops
+        code += `    for (int i = 0; i < ${variable.matrixRows}; i++) {\n`
+        code += `        for (int j = 0; j < ${variable.matrixCols}; j++) {\n`
+        code += `            model->inputs.${sanitizeIdentifier(variable.name)}[i][j] = ${defaultValue};\n`
+        code += `        }\n`
+        code += `    }\n`
+      } else if (variable.arraySize) {
+        // Initialize array
+        code += `    for (int i = 0; i < ${variable.arraySize}; i++) {\n`
+        code += `        model->inputs.${sanitizeIdentifier(variable.name)}[i] = ${defaultValue};\n`
+        code += `    }\n`
+      } else {
+        // Initialize scalar
+        code += `    model->inputs.${sanitizeIdentifier(variable.name)} = ${defaultValue};\n`
       }
     }
     code += `\n`
@@ -532,10 +521,29 @@ function generateStepFunctionMultiSheet(
     // Skip certain block types that don't need computation
     if (block.type === 'sheet_label_sink' || 
         block.type === 'sheet_label_source' ||
-        block.type === 'input_port' ||
         block.type === 'signal_display' ||
         block.type === 'signal_logger') {
       continue
+    }
+
+    // Handle input ports specially - top-level ones are skipped, subsystem ones need computation
+    if (block.type === 'input_port') {
+      const isTopLevel = context && context.sheetPath.length === 0
+      if (isTopLevel) {
+        // Top-level input ports don't need computation - they're already in model->inputs
+        continue
+      }
+      // Subsystem input ports will be handled by generateBlockComputation
+    }
+    
+    // Handle input ports specially - top-level ones are skipped, subsystem ones need computation
+    if (block.type === 'input_port') {
+      const isTopLevel = context && context.sheetPath.length === 0
+      if (isTopLevel) {
+        // Top-level input ports don't need computation - they're already in model->inputs
+        continue
+      }
+      // Subsystem input ports will be handled by generateBlockComputation
     }
     
     code += generateBlockComputation(block, sheet, blockTypes, blockContextMap)
@@ -617,8 +625,6 @@ function getAllSheets(sheets: Sheet[]): Sheet[] {
   collectSheets(sheets)
   return allSheets
 }
-
-// Add this function after flattenModelStructure in codeGeneration.ts:
 
 /**
  * Extract sheet label signal mappings from the original model structure
@@ -784,7 +790,7 @@ function flattenModelStructure(sheets: Sheet[]): FlattenedModel {
   // Collect all blocks from all sheets (excluding subsystems)
   for (const sheet of allSheets) {
     const sheetPath = getSheetPath(sheet.id, sheets)
-    
+
     for (const block of sheet.blocks) {
       // Skip subsystem blocks - they're just containers
       if (block.type === 'subsystem') {
@@ -793,7 +799,7 @@ function flattenModelStructure(sheets: Sheet[]): FlattenedModel {
           inputPorts: new Map<number, string>(),
           outputPorts: new Map<number, string>()
         }
-        
+
         // Find input/output port blocks inside this subsystem
         if (block.parameters?.sheets) {
           const subsystemSheets = block.parameters.sheets as Sheet[]
@@ -815,11 +821,16 @@ function flattenModelStructure(sheets: Sheet[]): FlattenedModel {
             }
           }
         }
-        
+
         subsystemPortMappings.set(block.id, portMapping)
         continue
       }
-      
+
+      // Skip input/output ports that are inside subsystems - they'll be replaced by direct connections
+      if ((block.type === 'input_port' || block.type === 'output_port') && sheetPath.length > 0) {
+        continue
+      }
+
       // Create a new block with prefixed name
       const prefixedName = getPrefixedBlockName(block.name, sheetPath, blockContextMap, allSheets)
       const flattenedBlock: BlockData = {
@@ -827,7 +838,7 @@ function flattenModelStructure(sheets: Sheet[]): FlattenedModel {
         id: block.id, // Keep original ID for wire remapping
         name: prefixedName // Use prefixed name for C code generation
       }
-      
+
       blocks.push(flattenedBlock)
     }
   }
@@ -1172,7 +1183,7 @@ extern "C" {
   header += `typedef struct {\n`
   // Add members for each internal signal that needs to be stored
   for (const block of sheet.blocks) {
-    if (block.type !== 'input_port' && block.type !== 'output_port' && 
+    if (block.type !== 'output_port' && 
         block.type !== 'signal_display' && block.type !== 'signal_logger' &&
         block.type !== 'sheet_label_sink' && block.type !== 'sheet_label_source') {
       const outputKey = `${block.id}:0`
@@ -1329,17 +1340,22 @@ function generateStepFunction(safeName: string, sheet: Sheet, blockTypes: Map<st
         console.warn('[CodeGen] Block not found in execution order:', blockId)
         continue
       }
-      
-      console.log('[CodeGen] Processing block:', block.type, block.name)
+
       
       // Skip certain block types that don't need computation
       if (block.type === 'sheet_label_sink' || 
           block.type === 'sheet_label_source' ||
-          block.type === 'input_port' ||
           block.type === 'signal_display' ||
           block.type === 'signal_logger') {
         console.log('[CodeGen] Skipping block type:', block.type)
         continue
+      }
+
+      // For single-sheet generation, input ports need to be processed
+      // to copy values from inputs struct to signals struct
+      if (block.type === 'input_port') {
+        // In single-sheet mode, we still need to process input ports
+        // so they can be referenced by other blocks
       }
       
       try {
@@ -1497,7 +1513,6 @@ function generateDerivativesFunctionMultiSheet(
   return code
 }
 
-// Add helper function for multi-sheet input expression generation
 function generateInputExpressionMultiSheet(
   inputWire: WireData,
   sheet: Sheet,
@@ -1508,11 +1523,20 @@ function generateInputExpressionMultiSheet(
   if (!sourceBlock) return "0.0"
   
   const context = blockContextMap.get(sourceBlock.id)
-  const sourceName = context?.prefixedName || sourceBlock.name
   
   if (sourceBlock.type === 'input_port') {
-    return `${modelVar}->inputs.${sanitizeIdentifier(sourceName)}`
+    // Check if this is a top-level input port
+    if (context && context.sheetPath.length === 0) {
+      // Top-level input port - use inputs struct with portName
+      const portName = sourceBlock.parameters?.portName || sourceBlock.name
+      return `${modelVar}->inputs.${sanitizeIdentifier(portName)}`
+    } else {
+      // Subsystem input port - use signals struct with prefixed name
+      const signalName = context?.prefixedName || sourceBlock.name
+      return `${modelVar}->signals.${sanitizeIdentifier(signalName)}`
+    }
   } else {
+    const sourceName = context?.prefixedName || sourceBlock.name
     return `${modelVar}->signals.${sanitizeIdentifier(sourceName)}`
   }
 }
@@ -1747,7 +1771,6 @@ function generateDerivativesFunction(
   return code
 }
 
-// Helper function that should be used
 function generateInputExpression(
   inputWire: WireData,
   sheet: Sheet,
@@ -1757,6 +1780,7 @@ function generateInputExpression(
   if (!sourceBlock) return "0.0"
   
   if (sourceBlock.type === 'input_port') {
+    // For single-sheet generation, assume all input ports are top-level
     const portName = sourceBlock.parameters?.portName || sourceBlock.name
     return `${modelVar}->inputs.${sanitizeIdentifier(portName)}`
   } else {
@@ -1872,6 +1896,14 @@ function generateBlockComputation(
     case 'lookup_2d':
       code += generateLookup2DBlock(block, inputWires, sheet, prefixedName, blockContextMap)
       break
+
+    case 'input_port':
+      // Input ports inside subsystems need special handling
+      // They get their value from the subsystem's input connection
+      code += generateInputPortBlock(block, sheet, prefixedName, blockContextMap)
+      break
+      
+    case 'output_port':
       
     case 'output_port':
       const context = blockContextMap?.get(block.id)
@@ -1904,6 +1936,45 @@ function generateBlockComputation(
     default:
       code += `    // Unsupported block type: ${block.type}\n`
   }
+  
+  return code
+}
+
+function generateInputPortBlock(
+  block: BlockData,
+  sheet: Sheet,
+  prefixedName?: string,
+  blockContextMap?: Map<string, BlockContext>
+): string {
+  let code = ''
+  const context = blockContextMap?.get(block.id)
+  
+  if (context && context.sheetPath.length > 0) {
+    // This is an input port inside a subsystem
+    // For now, we'll initialize it to 0. The actual value should come from
+    // the subsystem's input connection, which is handled by the flattening process
+    code += `    // Input port inside subsystem - value comes from subsystem connection\n`
+    code += `    model->signals.${sanitizeIdentifier(prefixedName || block.name)} = 0.0; // Will be set by subsystem connection\n`
+  } else if (!blockContextMap) {
+    // Single-sheet mode - copy from inputs to signals
+    const portName = block.parameters?.portName || block.name
+    const dataType = block.parameters?.dataType || 'double'
+    const parsed = tryParseType(dataType)
+    
+    code += `    // Copy input port value to signals for internal use\n`
+    
+    if (parsed?.isMatrix && parsed.rows && parsed.cols) {
+      // Matrix copy
+      code += `    memcpy(model->signals.${sanitizeIdentifier(block.name)}, model->inputs.${sanitizeIdentifier(portName)}, sizeof(model->signals.${sanitizeIdentifier(block.name)}));\n`
+    } else if (parsed?.isArray && parsed.arraySize) {
+      // Array copy
+      code += `    memcpy(model->signals.${sanitizeIdentifier(block.name)}, model->inputs.${sanitizeIdentifier(portName)}, sizeof(model->signals.${sanitizeIdentifier(block.name)}));\n`
+    } else {
+      // Scalar copy
+      code += `    model->signals.${sanitizeIdentifier(block.name)} = model->inputs.${sanitizeIdentifier(portName)};\n`
+    }
+  }
+  // Top-level input ports in multi-sheet mode don't need any computation
   
   return code
 }
@@ -2667,9 +2738,16 @@ function getInputExpression(
   const context = blockContextMap?.get(sourceBlock.id)
   
   if (sourceBlock.type === 'input_port') {
-    // Always use the prefixed name for input ports
-    const inputName = context?.prefixedName || sourceBlock.name
-    return `${modelVar}->inputs.${sanitizeIdentifier(inputName)}`
+    // Check if this is a top-level input port
+    if (context && context.sheetPath.length === 0) {
+      // Top-level input port - use inputs struct with portName
+      const portName = sourceBlock.parameters?.portName || sourceBlock.name
+      return `${modelVar}->inputs.${sanitizeIdentifier(portName)}`
+    } else {
+      // Subsystem input port - use signals struct with prefixed name
+      const signalName = context?.prefixedName || sourceBlock.name
+      return `${modelVar}->signals.${sanitizeIdentifier(signalName)}`
+    }
   } else {
     // For other blocks, use prefixed name from signals
     const sourceName = context?.prefixedName || sourceBlock.name

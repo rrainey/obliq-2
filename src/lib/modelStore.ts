@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
-import { BlockData } from '@/components/Block'
+import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { SimulationResults, SimulationEngine } from '@/lib/simulationEngine'
 import { Model, ModelVersion } from '@/lib/types'

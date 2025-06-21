@@ -1,6 +1,6 @@
 // lib/multiSheetTypeValidator.ts
 
-import { BlockData } from '@/components/Block'
+import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { propagateSignalTypesMultiSheet, validateSignalTypes } from './signalTypePropagation'
 
