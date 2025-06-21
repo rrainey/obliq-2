@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import { useWireValidation } from '@/hooks/useWireValidation'
 import ModelValidationModal from './ModelValidationModal'
-import { BlockData } from './Block'
+import { BlockData } from './BlockNode'
 import { WireData } from './Wire'
 
 interface ModelValidationButtonProps {

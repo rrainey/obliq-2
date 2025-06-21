@@ -1,7 +1,7 @@
 // lib/__tests__/signalTypePropagation.test.ts
 
 import { propagateSignalTypes } from '@/lib/signalTypePropagation'
-import { BlockData } from '@/components/Block'
+import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 
 describe('signalTypePropagation', () => {

@@ -30,7 +30,7 @@ import 'reactflow/dist/style.css'
 
 import BlockNode, { nodeTypes, blockDataToNode, wireDataToEdge, BlockNodeData } from './BlockNode'
 import { edgeTypes, createCustomEdge, updateEdgeData, CustomEdgeData, CustomEdgeWrapper } from './CustomEdge'
-import { BlockData, PortInfo } from './Block'
+import { BlockData, PortInfo } from './BlockNode'
 import { WireData } from './Wire'
 import { validateConnection, detectAlgebraicLoop } from '@/lib/connectionValidation'
 import { propagateSignalTypes, SignalType } from '@/lib/signalTypePropagation'

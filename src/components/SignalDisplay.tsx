@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { BlockData } from './Block'
+import { BlockData } from './BlockNode'
 
 interface SignalDisplayProps {
   block: BlockData

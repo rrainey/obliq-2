@@ -3,7 +3,7 @@
 
 import { useUser } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
-import { BlockData, PortInfo } from '@/components/Block'
+import { BlockData, PortInfo } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'

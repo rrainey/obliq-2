@@ -1,4 +1,4 @@
-import { BlockData, PortInfo } from '@/components/Block'
+import { BlockData, PortInfo } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 
 export interface ValidationResult {

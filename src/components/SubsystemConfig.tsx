@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react'
-import { BlockData } from './Block'
+import { BlockData } from './BlockNode'
 import { Sheet } from '@/lib/modelStore'
 
 interface SubsystemConfigProps {

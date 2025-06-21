@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { BlockData } from './Block'
+import { BlockData } from './BlockNode'
 import { collectAvailableSignalNames } from '@/lib/sheetLabelUtils'
 
 interface SheetLabelSinkConfigProps {

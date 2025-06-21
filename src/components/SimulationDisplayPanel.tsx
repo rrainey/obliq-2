@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react'
 import SignalDisplay from './SignalDisplay'
-import { BlockData } from './Block'
+import { BlockData } from './BlockNode'
 import { SimulationResults } from '@/lib/simulationEngine'
 
 interface SimulationDisplayPanelProps {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BlockData } from './Block'
+import { BlockData } from './BlockNode'
 import { isValidType, getTypeValidationError, parseType } from '@/lib/typeValidator'
 
 interface SourceConfigProps {

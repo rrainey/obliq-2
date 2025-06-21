@@ -4,7 +4,20 @@
 
 import { memo, CSSProperties } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
-import { BlockData } from './Block'
+
+export interface BlockData {
+  id: string
+  type: string
+  name: string
+  position: { x: number; y: number }
+  parameters?: Record<string, any>
+}
+
+export interface PortInfo {
+  blockId: string
+  portIndex: number
+  isOutput: boolean
+}
 
 // Define custom node data structure that extends BlockData
 export interface BlockNodeData extends Omit<BlockData, 'position'> {

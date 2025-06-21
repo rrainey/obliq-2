@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react'
 import { TypeCompatibilityError, formatTypeError } from '@/lib/typeCompatibilityValidator'
-import { BlockData } from './Block'
+import { BlockData } from './BlockNode'
 
 interface ModelValidationModalProps {
   isOpen: boolean

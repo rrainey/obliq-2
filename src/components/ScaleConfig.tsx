@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { BlockData } from './Block'
+import { BlockData } from './BlockNode'
 
 interface ScaleConfigProps {
   block: BlockData

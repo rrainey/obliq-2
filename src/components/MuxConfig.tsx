@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BlockData } from './Block'
+import { BlockData } from './BlockNode'
 
 // Extract base type from outputType (e.g., "double" from "double[2][3]")
 const extractBaseType = (outputType: string): string => {

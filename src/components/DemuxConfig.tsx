@@ -1,6 +1,6 @@
 'use client'
 
-import { BlockData } from './Block'
+import { BlockData } from './BlockNode'
 
 interface DemuxConfigProps {
   block: BlockData
