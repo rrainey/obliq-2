@@ -295,6 +295,68 @@ export function validateBlockParameters(
         sanitized.signalName = defaults.signalName;
       }
       break;
+
+    case BlockTypes.MATRIX_MULTIPLY:
+      // Matrix multiply has no configurable parameters
+      // Type checking is done at connection time
+      break;
+
+    case BlockTypes.MUX:
+      // Validate rows
+      if (parameters.rows !== undefined) {
+        const rows = Number(parameters.rows);
+        if (!Number.isInteger(rows) || rows < 1 || rows > 100) {
+          errors.push('rows must be an integer between 1 and 100');
+        } else {
+          sanitized.rows = rows;
+        }
+      } else {
+        sanitized.rows = defaults.rows;
+      }
+      
+      // Validate cols
+      if (parameters.cols !== undefined) {
+        const cols = Number(parameters.cols);
+        if (!Number.isInteger(cols) || cols < 1 || cols > 100) {
+          errors.push('cols must be an integer between 1 and 100');
+        } else {
+          sanitized.cols = cols;
+        }
+      } else {
+        sanitized.cols = defaults.cols;
+      }
+      
+      // Validate baseType
+      if (parameters.baseType !== undefined) {
+        if (!['double', 'float', 'int', 'long'].includes(parameters.baseType)) {
+          errors.push('baseType must be double, float, int, or long');
+        } else {
+          sanitized.baseType = parameters.baseType;
+        }
+      } else {
+        sanitized.baseType = defaults.baseType;
+      }
+      
+      // Generate outputType based on rows, cols, and baseType
+      if (sanitized.rows && sanitized.cols && sanitized.baseType) {
+        sanitized.outputType = `${sanitized.baseType}[${sanitized.rows}][${sanitized.cols}]`;
+      }
+      break;
+
+    case BlockTypes.DEMUX:
+      // outputCount is dynamically determined based on input
+      // but we can validate if it's manually set
+      if (parameters.outputCount !== undefined) {
+        const count = Number(parameters.outputCount);
+        if (!Number.isInteger(count) || count < 1 || count > 1000) {
+          errors.push('outputCount must be an integer between 1 and 1000');
+        } else {
+          sanitized.outputCount = count;
+        }
+      } else {
+        sanitized.outputCount = defaults.outputCount;
+      }
+      break;
       
     case BlockTypes.SUBSYSTEM:
       // Validate linkedSheetId

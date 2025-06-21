@@ -40,6 +40,10 @@ export const BlockTypes = {
   // Sheet labels
   SHEET_LABEL_SINK: 'sheet_label_sink',
   SHEET_LABEL_SOURCE: 'sheet_label_source',
+
+  MATRIX_MULTIPLY: 'matrix_multiply',
+  MUX: 'mux',
+  DEMUX: 'demux',
   
   // Subsystem
   SUBSYSTEM: 'subsystem'
@@ -222,6 +226,56 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     outputs: [{ name: 'output' }],
     description: 'Outputs a signal from a corresponding sheet label sink'
   },
+
+  [BlockTypes.MATRIX_MULTIPLY]: {
+    type: BlockTypes.MATRIX_MULTIPLY,
+    displayName: 'Matrix Multiply',
+    category: 'Matrix',
+    defaultParameters: {},
+    inputs: [
+      { name: 'input1' },
+      { name: 'input2' }
+    ],
+    outputs: [{ name: 'output' }],
+    description: 'Performs matrix multiplication (A×B) or scalar multiplication'
+  },
+
+  [BlockTypes.MUX]: {
+    type: BlockTypes.MUX,
+    displayName: 'Mux',
+    category: 'Matrix',
+    defaultParameters: {
+      rows: 2,
+      cols: 2,
+      outputType: 'double[2][2]',
+      baseType: 'double'
+    },
+    inputs: [
+      { name: 'input1' },
+      { name: 'input2' },
+      { name: 'input3' },
+      { name: 'input4' }
+    ], // Dynamic based on rows*cols
+    outputs: [{ name: 'output' }],
+    description: 'Multiplexer: combines scalar inputs into a matrix'
+  },
+
+  [BlockTypes.DEMUX]: {
+    type: BlockTypes.DEMUX,
+    displayName: 'Demux',
+    category: 'Matrix',
+    defaultParameters: {
+      outputCount: 4 // Will be updated based on input
+    },
+    inputs: [{ name: 'input' }],
+    outputs: [
+      { name: 'output1' },
+      { name: 'output2' },
+      { name: 'output3' },
+      { name: 'output4' }
+    ], // Dynamic based on input dimensions
+    description: 'Demultiplexer: splits a matrix into scalar outputs'
+  },
   
   [BlockTypes.SUBSYSTEM]: {
     type: BlockTypes.SUBSYSTEM,
@@ -285,6 +339,38 @@ export function generateDynamicPorts(type: BlockType, parameters: any): {
     return {
       inputs,
       outputs: baseDefinition.outputs
+    };
+  }
+  
+  // Add Mux dynamic port generation
+  if (type === BlockTypes.MUX) {
+    const rows = parameters.rows || 2;
+    const cols = parameters.cols || 2;
+    const totalInputs = rows * cols;
+    const inputs: PortDefinition[] = [];
+    
+    for (let i = 1; i <= totalInputs; i++) {
+      inputs.push({ name: `input${i}` });
+    }
+    
+    return {
+      inputs,
+      outputs: baseDefinition.outputs
+    };
+  }
+  
+  // Add Demux dynamic port generation
+  if (type === BlockTypes.DEMUX) {
+    const outputCount = parameters.outputCount || 4;
+    const outputs: PortDefinition[] = [];
+    
+    for (let i = 1; i <= outputCount; i++) {
+      outputs.push({ name: `output${i}` });
+    }
+    
+    return {
+      inputs: baseDefinition.inputs,
+      outputs
     };
   }
   
