@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { CodeGenerator } from '@/lib/codeGeneration'
+import { ModelCodeGenerator } from '@/lib/codeGenerationNew'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
 import JSZip from 'jszip'
 
@@ -156,14 +156,11 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
   })))
 
   // Generate the code
-  let codeGenerator: CodeGenerator
+  let codeGenerator: ModelCodeGenerator
   try {
-    codeGenerator = new CodeGenerator(
-      blocks,
-      mainSheet.connections || [],
-      sheets,
-      model.name
-    )
+    codeGenerator = new ModelCodeGenerator()
+
+  
   } catch (error) {
     throw new AppError(
       'Failed to initialize code generator',
@@ -175,17 +172,21 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   console.log('CodeGenerator instantiated successfully')
 
-  const result = codeGenerator.generateCode()
+  const result = codeGenerator.generateCode(sheets, model.name)
 
   console.log('generateCode result:', result)
 
-  if (!result.success) {
+  const safeName = sanitizeFilename(model.name)
+
+  if (result.warnings.length > 0) {
+    let warningMessage = 'Code generation completed with warnings:\n'
+    warningMessage += result.warnings.map((w: string) => `- ${w}`).join('\n')
     throw new AppError(
-      'Code generation failed',
+      "Code generation failed:\n" + warningMessage,
       400,
       ErrorTypes.VALIDATION_ERROR,
       { 
-        errors: result.errors,
+        errors: warningMessage,
         modelId,
         modelName: model.name,
         version: versionToUse
@@ -194,6 +195,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
   }
 
   // Validate generated files
+  /*
   if (!result.files || result.files.length === 0) {
     throw new AppError(
       'Code generation produced no files',
@@ -202,6 +204,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
       { modelId, modelName: model.name, version: versionToUse }
     )
   }
+  */
 
   console.log('Code generated successfully, creating ZIP')
 
@@ -211,19 +214,10 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   try {
     zip = new JSZip()
-    
-    // Add generated files to the zip
-    for (const file of result.files) {
-      if (!file.name || !file.content) {
-        throw new AppError(
-          'Generated file missing name or content',
-          500,
-          ErrorTypes.INTERNAL_ERROR,
-          { fileName: file.name, hasContent: !!file.content }
-        )
-      }
-      zip.file(file.name, file.content)
-    }
+
+    zip.file(`${safeName}.h`, result.header)
+    zip.file(`${safeName}.c`, result.source)  
+    zip.file('library.properties', `name=${safeName}\nversion=${versionToUse}\ndescription=Generated C library for ${model.name}\n\n`)
 
     // Add a README file
     const readmeContent = generateReadmeContent(model.name, versionToUse)
