@@ -1,4 +1,4 @@
-// lib/multiSheetSimulation.ts - Improved version with global execution order
+// lib/multiSheetSimulation.ts - Updated with enable state support
 
 import { SimulationEngine, SimulationConfig, SimulationResults, Sheet } from './simulationEngine'
 import { BlockData } from '@/components/BlockNode'
@@ -10,11 +10,120 @@ export class MultiSheetSimulationEngine {
   private config: SimulationConfig
   private blockEngines: Map<string, SimulationEngine> = new Map() 
   private executionOrder: { sheetId: string, blockId: string }[] = []
-  private blockToSheet: Map<string, string> = new Map() 
+  private blockToSheet: Map<string, string> = new Map()
+  // New: Track subsystem hierarchy globally
+  private subsystemHierarchy: Map<string, string | null> = new Map() // subsystemId -> parent subsystemId
+  private blockToSubsystem: Map<string, string | null> = new Map() // blockId -> containing subsystemId
   
+/**
+   * Compute initial outputs for all subsystem blocks
+   */
+  private computeInitialSubsystemOutputs() {
+    const allSheets = this.getAllSheets(this.sheets)
+    
+    // Process subsystems in reverse order (children before parents)
+    const subsystemBlocks: { block: BlockData, sheetId: string }[] = []
+    for (const sheet of allSheets) {
+      for (const block of sheet.blocks) {
+        if (block.type === 'subsystem') {
+          subsystemBlocks.push({ block, sheetId: sheet.id })
+        }
+      }
+    }
+    
+    // Sort by depth (deeper subsystems first)
+    subsystemBlocks.sort((a, b) => {
+      const depthA = this.getSubsystemDepth(a.block.id)
+      const depthB = this.getSubsystemDepth(b.block.id)
+      return depthB - depthA
+    })
+    
+    // Compute initial outputs for each subsystem
+    for (const { block, sheetId } of subsystemBlocks) {
+      const engine = this.blockEngines.get(sheetId)
+      if (!engine) continue
+      
+      const state = engine.getState()
+      let subsystemBlockState = state.blockStates.get(block.id)
+      
+      if (!subsystemBlockState) {
+        // Initialize subsystem block state
+        const outputCount = block.parameters?.outputPorts?.length || 1
+        subsystemBlockState = {
+          blockId: block.id,
+          blockType: 'subsystem',
+          outputs: new Array(outputCount).fill(0),
+          frozenOutputs: new Array(outputCount).fill(0)
+        }
+        state.blockStates.set(block.id, subsystemBlockState)
+      }
+      
+      // Find output values from the subsystem's internal output ports
+      if (block.parameters?.sheets) {
+        for (let portIndex = 0; portIndex < (block.parameters.outputPorts?.length || 0); portIndex++) {
+          const outputPortName = block.parameters.outputPorts[portIndex]
+          
+          // Search for the output port block in subsystem sheets
+          for (const subSheet of block.parameters.sheets) {
+            const outputPortBlock = subSheet.blocks.find((b:any) => 
+              b.type === 'output_port' && 
+              b.parameters?.portName === outputPortName
+            )
+            
+            if (outputPortBlock) {
+              // Get the engine for this sheet
+              const subSheetEngine = this.blockEngines.get(subSheet.id)
+              if (subSheetEngine) {
+                const outputState = subSheetEngine.getState().blockStates.get(outputPortBlock.id)
+                if (outputState && outputState.internalState?.currentValue !== undefined) {
+                  // Set this as the subsystem's initial output
+                  subsystemBlockState.outputs[portIndex] = outputState.internalState.currentValue
+                  subsystemBlockState.frozenOutputs![portIndex] = outputState.internalState.currentValue
+                }
+              }
+              break
+            }
+          }
+        }
+      }
+      
+      // Store initial outputs in signal values
+      for (let i = 0; i < subsystemBlockState.outputs.length; i++) {
+        state.signalValues.set(
+          `${block.id}_output_${i}`, 
+          subsystemBlockState.outputs[i]
+        )
+      }
+    }
+  }
+  
+  /**
+   * Get the depth of a subsystem in the hierarchy
+   */
+  private getSubsystemDepth(subsystemId: string): number {
+    let depth = 0
+    let currentId: string | null = subsystemId
+    
+    while (currentId) {
+      const parentId = this.subsystemHierarchy.get(currentId)
+      if (parentId) {
+        depth++
+        currentId = parentId
+      } else {
+        break
+      }
+    }
+    
+    return depth
+  }
+
+  // Update constructor to compute initial outputs
   constructor(sheets: Sheet[], config: SimulationConfig) {
     this.sheets = sheets
     this.config = config
+    
+    // Build subsystem hierarchy first
+    this.buildSubsystemHierarchy()
     
     // Create engines for all sheets (including nested)
     const allSheets = this.getAllSheets(sheets)
@@ -31,11 +140,324 @@ export class MultiSheetSimulationEngine {
       // Track block locations
       for (const block of sheet.blocks) {
         this.blockToSheet.set(block.id, sheet.id)
+        
+        // Set parent subsystem for each block in the engine
+        const parentSubsystem = this.blockToSubsystem.get(block.id) ?? null
+        engine.setParentSubsystem(block.id, parentSubsystem)
       }
     }
     
     // Build global execution order
     this.buildGlobalExecutionOrder()
+    
+    // Compute initial outputs for all subsystems
+    this.computeInitialSubsystemOutputs()
+  }
+  
+  /**
+   * Build the subsystem hierarchy and block-to-subsystem mapping
+   */
+  private buildSubsystemHierarchy() {
+    const allSheets = this.getAllSheets(this.sheets)
+    
+    // First, map all subsystems to their parents
+    for (const sheet of allSheets) {
+      for (const block of sheet.blocks) {
+        if (block.type === 'subsystem') {
+          // Find if this subsystem is inside another subsystem
+          const parentSubsystem = this.findContainingSubsystem(block.id, allSheets)
+          this.subsystemHierarchy.set(
+            block.id, 
+            parentSubsystem ? parentSubsystem.block.id : null
+          )
+        }
+      }
+    }
+    
+    // Then, map all blocks to their containing subsystems
+    for (const sheet of allSheets) {
+      for (const block of sheet.blocks) {
+        const containingSubsystem = this.findContainingSubsystem(block.id, allSheets)
+        this.blockToSubsystem.set(
+          block.id,
+          containingSubsystem ? containingSubsystem.block.id : null
+        )
+      }
+    }
+  }
+  
+  /**
+   * Check if a subsystem is enabled, considering parent hierarchy
+   */
+  private updateAllSubsystemEnableStates() {
+    const allSheets = this.getAllSheets(this.sheets)
+    
+    // Step 1: Evaluate all enable signals first
+    const enableSignals = new Map<string, boolean>()
+    
+    for (const sheet of allSheets) {
+      for (const block of sheet.blocks) {
+        if (block.type === 'subsystem') {
+          // Default to enabled if no enable input
+          if (!block.parameters?.showEnableInput) {
+            enableSignals.set(block.id, true)
+            continue
+          }
+          
+          // Find enable wire
+          const enableWire = sheet.connections.find(w => 
+            w.targetBlockId === block.id && w.targetPortIndex === -1
+          )
+          
+          if (enableWire) {
+            const engine = this.blockEngines.get(sheet.id)
+            if (engine) {
+              const state = engine.getState()
+              const signalKey = `${enableWire.sourceBlockId}_output_${enableWire.sourcePortIndex}`
+              const signalValue = state.signalValues.get(signalKey)
+              
+              // Convert to boolean
+              let enableSignal = true
+              if (typeof signalValue === 'boolean') {
+                enableSignal = signalValue
+              } else if (typeof signalValue === 'number') {
+                enableSignal = signalValue !== 0
+              } else if (Array.isArray(signalValue)) {
+                // For arrays, check if first element is truthy
+                enableSignal = signalValue.length > 0 && 
+                  signalValue[0] !== 0 && 
+                  signalValue[0] !== false
+              }
+              
+              enableSignals.set(block.id, enableSignal)
+            }
+          } else {
+            // No connection to enable port, default to enabled
+            enableSignals.set(block.id, true)
+          }
+        }
+      }
+    }
+    
+    // Step 2: Build parent-child relationships and compute effective enable states
+    // Process in order from root to leaves to ensure parent states are computed first
+    const processedSubsystems = new Set<string>()
+    const effectiveEnableStates = new Map<string, boolean>()
+    
+    // Helper function to compute effective enable state
+    const computeEffectiveEnableState = (subsystemId: string): boolean => {
+      // Check if already computed
+      if (effectiveEnableStates.has(subsystemId)) {
+        return effectiveEnableStates.get(subsystemId)!
+      }
+      
+      // Get signal state
+      const signalEnabled = enableSignals.get(subsystemId) ?? true
+      
+      // Get parent state
+      const parentId = this.subsystemHierarchy.get(subsystemId)
+      let parentEnabled = true
+      
+      if (parentId) {
+        // Recursively compute parent state
+        parentEnabled = computeEffectiveEnableState(parentId)
+      }
+      
+      // Effective state is AND of signal and parent states
+      const effectiveEnabled = signalEnabled && parentEnabled
+      effectiveEnableStates.set(subsystemId, effectiveEnabled)
+      
+      return effectiveEnabled
+    }
+    
+    // Step 3: Update all subsystem states
+    for (const sheet of allSheets) {
+      for (const block of sheet.blocks) {
+        if (block.type === 'subsystem') {
+          const engine = this.blockEngines.get(sheet.id)
+          if (!engine) continue
+          
+          const state = engine.getState()
+          const previousState = state.subsystemEnableStates.get(block.id) ?? true
+          
+          // Compute effective enable state
+          const newState = computeEffectiveEnableState(block.id)
+          
+          // Update engine state
+          state.subsystemEnableStates.set(block.id, newState)
+          state.subsystemEnableSignals.set(block.id, enableSignals.get(block.id) ?? true)
+          
+          // Handle state transitions
+          if (previousState && !newState) {
+            // Transitioning to disabled
+            console.log(`Subsystem ${block.name} (${block.id}) transitioning to disabled`)
+            this.handleSubsystemDisabled(block.id)
+          } else if (!previousState && newState) {
+            // Transitioning to enabled
+            console.log(`Subsystem ${block.name} (${block.id}) transitioning to enabled`)
+            this.handleSubsystemEnabled(block.id)
+          }
+        }
+      }
+    }
+    
+    // Step 4: Update enable states in all engines for cross-sheet access
+    this.propagateEnableStatesToEngines(effectiveEnableStates)
+  }
+  
+  /**
+   * Handle subsystem transitioning to disabled state
+   */
+  private handleSubsystemDisabled(subsystemId: string) {
+    // Freeze outputs for the subsystem block itself
+    const sheetId = this.blockToSheet.get(subsystemId)
+    if (sheetId) {
+      const engine = this.blockEngines.get(sheetId)
+      if (engine) {
+        const state = engine.getState()
+        const blockState = state.blockStates.get(subsystemId)
+        if (blockState) {
+          blockState.frozenOutputs = [...blockState.outputs]
+        }
+      }
+    }
+    
+    // Freeze all blocks within this subsystem and its children
+    this.freezeSubsystemAndChildren(subsystemId)
+  }
+  
+  /**
+   * Handle subsystem transitioning to enabled state
+   */
+  private handleSubsystemEnabled(subsystemId: string) {
+    // Record enable time
+    const sheetId = this.blockToSheet.get(subsystemId)
+    if (sheetId) {
+      const engine = this.blockEngines.get(sheetId)
+      if (engine) {
+        const state = engine.getState()
+        const blockState = state.blockStates.get(subsystemId)
+        if (blockState) {
+          blockState.lastEnabledTime = state.time
+        }
+      }
+    }
+    
+    // Note: We don't need to unfreeze blocks - they'll compute new values on next execution
+  }
+  
+  /**
+   * Freeze all blocks within a subsystem and its child subsystems
+   */
+  private freezeSubsystemAndChildren(subsystemId: string) {
+    const blocksToFreeze = new Set<string>()
+    
+    // Find all blocks in this subsystem
+    for (const [blockId, containingSubsystem] of this.blockToSubsystem) {
+      if (containingSubsystem === subsystemId) {
+        blocksToFreeze.add(blockId)
+      }
+    }
+    
+    // Find all child subsystems
+    const childSubsystems = new Set<string>()
+    for (const [childId, parentId] of this.subsystemHierarchy) {
+      if (parentId === subsystemId) {
+        childSubsystems.add(childId)
+      }
+    }
+    
+    // Recursively freeze child subsystems
+    for (const childId of childSubsystems) {
+      this.freezeSubsystemAndChildren(childId)
+    }
+    
+    // Freeze all identified blocks
+    for (const blockId of blocksToFreeze) {
+      const sheetId = this.blockToSheet.get(blockId)
+      if (sheetId) {
+        const engine = this.blockEngines.get(sheetId)
+        if (engine) {
+          const state = engine.getState()
+          const blockState = state.blockStates.get(blockId)
+          if (blockState) {
+            blockState.frozenOutputs = [...blockState.outputs]
+          }
+        }
+      }
+    }
+  }
+  
+  /**
+   * Propagate enable states to all engines for consistent access
+   */
+  private propagateEnableStatesToEngines(effectiveStates: Map<string, boolean>) {
+    // Update each engine with the global enable states
+    for (const [sheetId, engine] of this.blockEngines) {
+      const state = engine.getState()
+      
+      // Update subsystem enable states in this engine
+      for (const [subsystemId, enabled] of effectiveStates) {
+        // Check if this subsystem's state is relevant to this engine
+        const subsystemSheetId = this.blockToSheet.get(subsystemId)
+        if (subsystemSheetId === sheetId) {
+          state.subsystemEnableStates.set(subsystemId, enabled)
+        }
+      }
+    }
+  }
+  
+  /**
+   * Enhanced isSubsystemEnabled to use computed effective states during simulation
+   */
+  private isSubsystemEnabled(subsystemId: string): boolean {
+    // During simulation, check the computed enable state
+    const sheetId = this.blockToSheet.get(subsystemId)
+    if (!sheetId) return true
+    
+    const engine = this.blockEngines.get(sheetId)
+    if (!engine) return true
+    
+    const state = engine.getState()
+    return state.subsystemEnableStates.get(subsystemId) ?? true
+  }
+  
+  /**
+   * Check if a block should execute based on its containing subsystem's enable state
+   */
+  private shouldExecuteBlock(blockId: string): boolean {
+    const containingSubsystem = this.blockToSubsystem.get(blockId)
+    if (!containingSubsystem) {
+      return true // Root level blocks always execute
+    }
+    
+    return this.isSubsystemEnabled(containingSubsystem)
+  }
+  
+  
+  /**
+   * Freeze outputs for all blocks within a subsystem
+   */
+  private freezeSubsystemBlocks(subsystemId: string) {
+    const allSheets = this.getAllSheets(this.sheets)
+    
+    // Find all blocks that belong to this subsystem
+    for (const [blockId, containingSubsystem] of this.blockToSubsystem) {
+      if (containingSubsystem === subsystemId) {
+        const sheetId = this.blockToSheet.get(blockId)
+        if (sheetId) {
+          const engine = this.blockEngines.get(sheetId)
+          if (engine) {
+            const state = engine.getState()
+            const blockState = state.blockStates.get(blockId)
+            if (blockState) {
+              // Freeze current outputs
+              blockState.frozenOutputs = [...blockState.outputs]
+            }
+          }
+        }
+      }
+    }
   }
   
   private buildGlobalExecutionOrder() {
@@ -46,6 +468,9 @@ export class MultiSheetSimulationEngine {
     // First pass: collect all dependencies from wires
     for (const sheet of allSheets) {
       for (const wire of sheet.connections) {
+        // Skip enable connections in dependency graph
+        if (wire.targetPortIndex === -1) continue
+        
         if (!dependencies.has(wire.targetBlockId)) {
           dependencies.set(wire.targetBlockId, new Set())
         }
@@ -133,10 +558,7 @@ export class MultiSheetSimulationEngine {
     }
     
     this.executionOrder = order
-    
   }
-
-  // In lib/multiSheetSimulation.ts, add these methods to the MultiSheetSimulationEngine class:
 
   /**
    * Get the simulation engine for a specific sheet
@@ -150,7 +572,7 @@ export class MultiSheetSimulationEngine {
    * @param sheetId - Optional sheet ID. If not provided, returns values from all sheets
    * Returns a map of port names to their current values
    */
- getOutputPortValues(sheetId?: string): Map<string, number | number[] | number[][] | boolean | boolean[]> {
+  getOutputPortValues(sheetId?: string): Map<string, number | number[] | number[][] | boolean | boolean[]> {
     const outputValues = new Map<string, number | number[] | number[][] | boolean | boolean[]>()
     
     if (sheetId) {
@@ -205,6 +627,21 @@ export class MultiSheetSimulationEngine {
           const block = sheet?.blocks.find((b: BlockData) => b.id === blockId)
 
           if (block?.type === 'subsystem') {
+            continue // Subsystems are just containers
+          }
+          
+          // Check if block should execute based on enable state
+          if (!this.shouldExecuteBlock(blockId)) {
+            // Skip execution for disabled blocks
+            // But still need to output frozen values for output ports
+            if (block?.type === 'output_port') {
+              const engineState = engine.getState()
+              const blockState = engineState.blockStates.get(blockId)
+              if (blockState && blockState.frozenOutputs) {
+                // Use frozen output value
+                blockState.internalState.currentValue = blockState.frozenOutputs[0] ?? 0
+              }
+            }
             continue
           }
           
@@ -212,6 +649,12 @@ export class MultiSheetSimulationEngine {
             // Find if this input port is inside a subsystem
             const subsystemBlock = this.findContainingSubsystem(blockId, allSheets)
             if (subsystemBlock) {
+              // Check if the subsystem is enabled
+              if (!this.isSubsystemEnabled(subsystemBlock.block.id)) {
+                // Skip input processing for disabled subsystem
+                continue
+              }
+              
               // Find the wire going into the subsystem at the corresponding port
               const portName = block.parameters?.portName
               const portIndex = subsystemBlock.block.parameters?.inputPorts?.indexOf(portName) ?? -1
@@ -306,16 +749,27 @@ export class MultiSheetSimulationEngine {
                       subsystemBlockState = {
                         blockId: subsystemBlock.block.id,
                         blockType: 'subsystem',
-                        outputs: new Array(outputCount).fill(0)
+                        outputs: new Array(outputCount).fill(0),
+                        frozenOutputs: new Array(outputCount).fill(0)
                       }
                       parentEngine.getState().blockStates.set(subsystemBlock.block.id, subsystemBlockState)
                     }
                     
-                    subsystemBlockState.outputs[portIndex] = value
-                    parentEngine.getState().signalValues.set(
-                      `${subsystemBlock.block.id}_output_${portIndex}`, 
-                      value
-                    )
+                    // Use frozen output if subsystem is disabled
+                    if (this.isSubsystemEnabled(subsystemBlock.block.id)) {
+                      subsystemBlockState.outputs[portIndex] = value
+                      parentEngine.getState().signalValues.set(
+                        `${subsystemBlock.block.id}_output_${portIndex}`, 
+                        value
+                      )
+                    } else {
+                      // Use frozen value
+                      const frozenValue = subsystemBlockState.frozenOutputs?.[portIndex] ?? 0
+                      parentEngine.getState().signalValues.set(
+                        `${subsystemBlock.block.id}_output_${portIndex}`, 
+                        frozenValue
+                      )
+                    }
                   }
                 }
               }
@@ -350,6 +804,9 @@ export class MultiSheetSimulationEngine {
           }
         }
       }
+      
+      // Update enable states at end of time step
+      this.updateAllSubsystemEnableStates()
       
       // Advance time for all engines
       for (const [_, engine] of this.blockEngines) {
@@ -475,6 +932,181 @@ export class MultiSheetSimulationEngine {
     // Remove the subsystem block itself from execution order
     // It's just a container, not an executable block
     dependencies.delete(subsystemBlock.id)
+  }
+
+  // In multiSheetSimulation.ts - Add comprehensive testing and debugging support
+
+  /**
+   * Get complete enable state report for debugging
+   */
+  public getEnableStateReport(): {
+    hierarchy: Map<string, string | null>,
+    signals: Map<string, boolean>,
+    effectiveStates: Map<string, boolean>,
+    blockStates: Map<string, { subsystem: string | null, enabled: boolean }>
+  } {
+    const signals = new Map<string, boolean>()
+    const effectiveStates = new Map<string, boolean>()
+    const blockStates = new Map<string, { subsystem: string | null, enabled: boolean }>()
+    
+    // Collect all subsystem states
+    for (const [sheetId, engine] of this.blockEngines) {
+      const state = engine.getState()
+      
+      // Collect subsystem signals and states
+      for (const [subsystemId, signal] of state.subsystemEnableSignals) {
+        signals.set(subsystemId, signal)
+      }
+      
+      for (const [subsystemId, enabled] of state.subsystemEnableStates) {
+        effectiveStates.set(subsystemId, enabled)
+      }
+    }
+    
+    // Collect block states
+    for (const [blockId, subsystemId] of this.blockToSubsystem) {
+      const enabled = subsystemId ? this.isSubsystemEnabled(subsystemId) : true
+      blockStates.set(blockId, { subsystem: subsystemId, enabled })
+    }
+    
+    return {
+      hierarchy: new Map(this.subsystemHierarchy),
+      signals,
+      effectiveStates,
+      blockStates
+    }
+  }
+  
+  /**
+   * Run a single time step with detailed logging
+   */
+  public runSingleStepWithLogging(): {
+    time: number,
+    executedBlocks: string[],
+    skippedBlocks: string[],
+    signalValues: Map<string, any>,
+    enableChanges: string[]
+  } {
+    const executedBlocks: string[] = []
+    const skippedBlocks: string[] = []
+    const enableChanges: string[] = []
+    const allSheets = this.getAllSheets(this.sheets)
+    
+    // Store previous enable states
+    const previousEnableStates = new Map<string, boolean>()
+    for (const [sheetId, engine] of this.blockEngines) {
+      const state = engine.getState()
+      for (const [subsystemId, enabled] of state.subsystemEnableStates) {
+        previousEnableStates.set(subsystemId, enabled)
+      }
+    }
+    
+    // Execute blocks
+    for (const { sheetId, blockId } of this.executionOrder) {
+      const engine = this.blockEngines.get(sheetId)
+      if (!engine) continue
+      
+      const sheet = allSheets.find(s => s.id === sheetId)
+      const block = sheet?.blocks.find(b => b.id === blockId)
+      
+      if (!block || block.type === 'subsystem') continue
+      
+      if (this.shouldExecuteBlock(blockId)) {
+        engine.executeBlockById(blockId)
+        executedBlocks.push(`${block.name} (${block.type})`)
+      } else {
+        skippedBlocks.push(`${block.name} (${block.type})`)
+      }
+    }
+    
+    // Update enable states
+    this.updateAllSubsystemEnableStates()
+    
+    // Check for enable state changes
+    for (const [sheetId, engine] of this.blockEngines) {
+      const state = engine.getState()
+      for (const [subsystemId, enabled] of state.subsystemEnableStates) {
+        const previous = previousEnableStates.get(subsystemId) ?? true
+        if (previous !== enabled) {
+          const sheet = allSheets.find(s => 
+            s.blocks.some(b => b.id === subsystemId)
+          )
+          const subsystem = sheet?.blocks.find(b => b.id === subsystemId)
+          enableChanges.push(
+            `${subsystem?.name || subsystemId}: ${previous ? 'enabled' : 'disabled'} → ${enabled ? 'enabled' : 'disabled'}`
+          )
+        }
+      }
+    }
+    
+    // Collect all signal values
+    const signalValues = new Map<string, any>()
+    for (const [sheetId, engine] of this.blockEngines) {
+      const state = engine.getState()
+      for (const [key, value] of state.signalValues) {
+        signalValues.set(key, value)
+      }
+    }
+    
+    // Advance time
+    for (const [_, engine] of this.blockEngines) {
+      engine.advanceTime(this.config.timeStep)
+    }
+    
+    return {
+      time: this.config.timeStep,
+      executedBlocks,
+      skippedBlocks,
+      signalValues,
+      enableChanges
+    }
+  }
+  
+  /**
+   * Validate the complete enable setup
+   */
+  public validateEnableSetup(): {
+    valid: boolean,
+    errors: string[],
+    warnings: string[]
+  } {
+    const errors: string[] = []
+    const warnings: string[] = []
+    
+    // Validate all enable connections
+    for (const [sheetId, engine] of this.blockEngines) {
+      const engineErrors = engine.validateEnableConnections()
+      errors.push(...engineErrors)
+    }
+    
+    // Check for orphaned enable signals
+    const allSheets = this.getAllSheets(this.sheets)
+    for (const sheet of allSheets) {
+      for (const block of sheet.blocks) {
+        if (block.type === 'subsystem' && block.parameters?.showEnableInput) {
+          const hasEnableConnection = sheet.connections.some(w => 
+            w.targetBlockId === block.id && w.targetPortIndex === -1
+          )
+          
+          if (!hasEnableConnection) {
+            warnings.push(`Subsystem ${block.name} has enable input but no connection`)
+          }
+        }
+      }
+    }
+    
+    // Validate hierarchy consistency
+    for (const [childId, parentId] of this.subsystemHierarchy) {
+      if (parentId && !this.blockToSheet.has(parentId)) {
+        errors.push(`Subsystem ${childId} has invalid parent ${parentId}`)
+      }
+    }
+    
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings
+    }
   }
   
 }

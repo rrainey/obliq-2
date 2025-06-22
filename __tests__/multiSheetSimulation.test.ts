@@ -1,15 +1,138 @@
 // __tests__/multiSheetSimulation.test.ts - Fixed version
 
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet, SimulationConfig } from '@/lib/simulationEngine'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 
-describe('MultiSheetSimulationEngine with Nested Subsystems', () => {
-  const config = {
+describe('MultiSheetSimulationEngine with Nested Subsystems and Enable functionality', () => {
+
+  const config: SimulationConfig = {
     timeStep: 0.01,
     duration: 1.0
   }
+
+  it('set up and dump structure of a nested simulation with enable blocks', () => {
+    // Create a simple model with nested subsystems
+    const sheets: Sheet[] = [
+      {
+        id: 'main',
+        name: 'Main',
+        blocks: [
+          {
+            id: 'enable_source',
+            type: 'source',
+            name: 'EnableSignal',
+            position: { x: 100, y: 100 },
+            parameters: {
+              dataType: 'bool',
+              signalType: 'constant',
+              value: true
+            }
+          },
+          {
+            id: 'subsystem1',
+            type: 'subsystem',
+            name: 'Subsystem1',
+            position: { x: 300, y: 100 },
+            parameters: {
+              showEnableInput: true,
+              inputPorts: ['Input1'],
+              outputPorts: ['Output1'],
+              sheets: [
+                {
+                  id: 'sub1_sheet',
+                  name: 'Sub1 Sheet',
+                  blocks: [
+                    {
+                      id: 'sub1_input',
+                      type: 'input_port',
+                      name: 'Input1',
+                      position: { x: 100, y: 100 },
+                      parameters: { portName: 'Input1' }
+                    },
+                    {
+                      id: 'sub1_tf',
+                      type: 'transfer_function',
+                      name: 'TF1',
+                      position: { x: 300, y: 100 },
+                      parameters: {
+                        numerator: [1],
+                        denominator: [1, 1]
+                      }
+                    },
+                    {
+                      id: 'sub1_output',
+                      type: 'output_port',
+                      name: 'Output1',
+                      position: { x: 500, y: 100 },
+                      parameters: { portName: 'Output1' }
+                    }
+                  ],
+                  connections: [
+                    {
+                      id: 'w1',
+                      sourceBlockId: 'sub1_input',
+                      sourcePortIndex: 0,
+                      targetBlockId: 'sub1_tf',
+                      targetPortIndex: 0
+                    },
+                    {
+                      id: 'w2',
+                      sourceBlockId: 'sub1_tf',
+                      sourcePortIndex: 0,
+                      targetBlockId: 'sub1_output',
+                      targetPortIndex: 0
+                    }
+                  ],
+                  extents: { width: 1000, height: 600 }
+                }
+              ]
+            }
+          }
+        ],
+        connections: [
+          {
+            id: 'enable_wire',
+            sourceBlockId: 'enable_source',
+            sourcePortIndex: 0,
+            targetBlockId: 'subsystem1',
+            targetPortIndex: -1  // Enable port
+          }
+        ],
+        extents: { width: 1000, height: 600 }
+      }
+    ]
+
+    const engine = new MultiSheetSimulationEngine(sheets, config)
+
+    // Validate setup
+    const validation = engine.validateEnableSetup()
+    console.log('Validation:', validation)
+
+    // Run a few steps with logging
+    console.log('\n--- Simulation Steps ---')
+    for (let i = 0; i < 5; i++) {
+      const stepResult = engine.runSingleStepWithLogging()
+      console.log(`\nStep ${i + 1}:`)
+      console.log('Executed:', stepResult.executedBlocks)
+      // Toggle enabled state after a few steps
+      if (i > 2 && sheets[0].blocks[0].parameters) {
+        sheets[0].blocks[0].parameters.value = !sheets[0].blocks[0].parameters.value 
+      }
+      console.log('Skipped:', stepResult.skippedBlocks)
+      console.log('Enable changes:', stepResult.enableChanges)
+    }
+
+    // Get final state report
+    const report = engine.getEnableStateReport()
+    console.log('\n--- Final Enable State Report ---')
+    console.log('Hierarchy:', Array.from(report.hierarchy.entries()))
+    console.log('Signals:', Array.from(report.signals.entries()))
+    console.log('Effective States:', Array.from(report.effectiveStates.entries()))
+
+    expect(true).toBe(true)
+  })
 
   it('should simulate a model with nested subsystems correctly', () => {
     // Create subsystem sheets first
@@ -192,11 +315,11 @@ describe('MultiSheetSimulationEngine with Nested Subsystems', () => {
     const loggerData = rootResults!.signalData.get('logger1')
     expect(loggerData).toBeDefined()
     expect(loggerData!.length).toBeGreaterThan(0)
-    
+
     // For now, let's check what value we actually get
     const finalValue = loggerData![loggerData!.length - 1]
     console.log('Final logged value:', finalValue)
-    
+
     // The subsystem implementation might need fixing
     // For now, let's test that we at least get the input value
     expect(finalValue).toBe(30) // 5 * 2 * 3 = 30
@@ -263,10 +386,14 @@ describe('MultiSheetSimulationEngine with Nested Subsystems', () => {
               }
             ],
             connections: [
-              { id: 'sub1_w1', sourceBlockId: 'sub1_input', sourcePortIndex: 0, 
-                targetBlockId: 'sub1_sink', targetPortIndex: 0 },
-              { id: 'sub1_w2', sourceBlockId: 'sub1_source', sourcePortIndex: 0, 
-                targetBlockId: 'sub1_output', targetPortIndex: 0 }
+              {
+                id: 'sub1_w1', sourceBlockId: 'sub1_input', sourcePortIndex: 0,
+                targetBlockId: 'sub1_sink', targetPortIndex: 0
+              },
+              {
+                id: 'sub1_w2', sourceBlockId: 'sub1_source', sourcePortIndex: 0,
+                targetBlockId: 'sub1_output', targetPortIndex: 0
+              }
             ],
             extents: { width: 1000, height: 800 }
           }]
@@ -315,10 +442,14 @@ describe('MultiSheetSimulationEngine with Nested Subsystems', () => {
               }
             ],
             connections: [
-              { id: 'sub2_w1', sourceBlockId: 'sub2_input', sourcePortIndex: 0, 
-                targetBlockId: 'sub2_sink', targetPortIndex: 0 },
-              { id: 'sub2_w2', sourceBlockId: 'sub2_source', sourcePortIndex: 0, 
-                targetBlockId: 'sub2_output', targetPortIndex: 0 }
+              {
+                id: 'sub2_w1', sourceBlockId: 'sub2_input', sourcePortIndex: 0,
+                targetBlockId: 'sub2_sink', targetPortIndex: 0
+              },
+              {
+                id: 'sub2_w2', sourceBlockId: 'sub2_source', sourcePortIndex: 0,
+                targetBlockId: 'sub2_output', targetPortIndex: 0
+              }
             ],
             extents: { width: 1000, height: 800 }
           }]
@@ -341,14 +472,22 @@ describe('MultiSheetSimulationEngine with Nested Subsystems', () => {
     ]
 
     const rootConnections: WireData[] = [
-      { id: 'w1', sourceBlockId: 'source1', sourcePortIndex: 0, 
-        targetBlockId: 'subsystem1', targetPortIndex: 0 },
-      { id: 'w2', sourceBlockId: 'source2', sourcePortIndex: 0, 
-        targetBlockId: 'subsystem2', targetPortIndex: 0 },
-      { id: 'w3', sourceBlockId: 'subsystem1', sourcePortIndex: 0, 
-        targetBlockId: 'logger1', targetPortIndex: 0 },
-      { id: 'w4', sourceBlockId: 'subsystem2', sourcePortIndex: 0, 
-        targetBlockId: 'logger2', targetPortIndex: 0 }
+      {
+        id: 'w1', sourceBlockId: 'source1', sourcePortIndex: 0,
+        targetBlockId: 'subsystem1', targetPortIndex: 0
+      },
+      {
+        id: 'w2', sourceBlockId: 'source2', sourcePortIndex: 0,
+        targetBlockId: 'subsystem2', targetPortIndex: 0
+      },
+      {
+        id: 'w3', sourceBlockId: 'subsystem1', sourcePortIndex: 0,
+        targetBlockId: 'logger1', targetPortIndex: 0
+      },
+      {
+        id: 'w4', sourceBlockId: 'subsystem2', sourcePortIndex: 0,
+        targetBlockId: 'logger2', targetPortIndex: 0
+      }
     ]
 
     const rootSheet: Sheet = {

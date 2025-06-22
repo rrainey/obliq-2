@@ -1,4 +1,4 @@
-// lib/simulationEngine.ts
+// lib/simulationEngine.ts - Updated with enable state tracking
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { parseType, ParsedType } from '@/lib/typeValidator'
@@ -22,6 +22,10 @@ export interface SimulationState {
   signalValues: Map<string, number | number[] | boolean | boolean[] | number[][]>
   sheetLabelValues: Map<string, number | number[] | boolean | boolean[] | number[][]>
   isRunning: boolean
+  // New enable state tracking
+  subsystemEnableStates: Map<string, boolean> // subsystemId -> enabled state
+  subsystemEnableSignals: Map<string, boolean> // subsystemId -> enable signal value
+  parentSubsystemMap: Map<string, string | null> // blockId -> parent subsystem ID (null for root)
 }
 
 export interface BlockState {
@@ -30,6 +34,9 @@ export interface BlockState {
   outputs: (number | number[] | boolean | boolean[] | number[][])[]
   internalState?: any
   outputTypes?: ParsedType[] // Track output types for each port
+  // New fields for state freezing
+  frozenOutputs?: (number | number[] | boolean | boolean[] | number[][])[]
+  lastEnabledTime?: number
 }
 
 export interface SimulationConfig {
@@ -64,29 +71,214 @@ export class SimulationEngine {
       blockStates: new Map(),
       signalValues: new Map(),
       sheetLabelValues: new Map(),
-      isRunning: false
+      isRunning: false,
+      // Initialize new enable state maps
+      subsystemEnableStates: new Map(),
+      subsystemEnableSignals: new Map(),
+      parentSubsystemMap: new Map()
     }
     this.initializeBlocks()
+    this.initializeEnableStates()
     this.calculateExecutionOrder()
+    this.computeInitialOutputs() // Add this line
   }
 
   private initializeBlocks() {
     for (const block of this.blocks) {
       const outputTypes = this.getBlockOutputTypes(block)
+      const initialOutputs = this.getInitialOutputs(block.type, block.parameters)
       const blockState: BlockState = {
         blockId: block.id,
         blockType: block.type,
-        outputs: this.getInitialOutputs(block.type, block.parameters),
+        outputs: initialOutputs,
         internalState: this.getInitialInternalState(block.type, block.parameters),
-        outputTypes
+        outputTypes,
+        // Initialize frozen outputs with initial values
+        frozenOutputs: [...initialOutputs],
+        lastEnabledTime: 0
       }
       this.state.blockStates.set(block.id, blockState)
     }
   }
 
+  private initializeEnableStates() {
+    // Initialize all subsystems as enabled by default
+    for (const block of this.blocks) {
+      if (block.type === 'subsystem') {
+        this.state.subsystemEnableStates.set(block.id, true)
+        // Check if this subsystem has showEnableInput
+        if (block.parameters?.showEnableInput) {
+          // Initialize enable signal as true
+          this.state.subsystemEnableSignals.set(block.id, true)
+        }
+      }
+    }
+    
+    // Build parent subsystem map (this would be populated by MultiSheetSimulationEngine)
+    // For now, all blocks in this engine are at the same level
+    for (const block of this.blocks) {
+      this.state.parentSubsystemMap.set(block.id, null)
+    }
+  }
+
+  /**
+   * Set the parent subsystem for a block
+   * Used by MultiSheetSimulationEngine to build the hierarchy
+   */
+  public setParentSubsystem(blockId: string, parentSubsystemId: string | null) {
+    this.state.parentSubsystemMap.set(blockId, parentSubsystemId)
+  }
+
+/**
+   * Check if a subsystem is enabled, considering parent state
+   * This is used during block execution
+   */
+  private isSubsystemEnabled(subsystemId: string): boolean {
+    // Check the pre-computed enable state
+    const enabled = this.state.subsystemEnableStates.get(subsystemId)
+    
+    // If not found, default to true (shouldn't happen in normal operation)
+    return enabled ?? true
+  }
+  
+  /**
+   * Check if the current block is in an enabled context
+   * This checks all parent subsystems up the hierarchy
+   */
+  private isBlockEnabled(blockId: string): boolean {
+    const containingSubsystem = this.getContainingSubsystem(blockId)
+    
+    if (!containingSubsystem) {
+      // Root level blocks are always enabled
+      return true
+    }
+    
+    // Check if the containing subsystem is enabled
+    // The subsystem's enable state already considers parent hierarchy
+    return this.isSubsystemEnabled(containingSubsystem)
+  }
+  
+  /**
+   * Update the shouldExecuteBlock method to use isBlockEnabled
+   */
+  private shouldExecuteBlock(blockId: string): boolean {
+    return this.isBlockEnabled(blockId)
+  }
+  /**
+   * Evaluate the enable signal for a subsystem
+   */
+  private evaluateEnableSignal(subsystemId: string): boolean {
+    // Find the subsystem block
+    const subsystemBlock = this.blocks.find(b => b.id === subsystemId && b.type === 'subsystem')
+    if (!subsystemBlock || !subsystemBlock.parameters?.showEnableInput) {
+      return true // No enable input, always enabled
+    }
+    
+    // Find wire connected to enable port (targetPortIndex = -1)
+    const enableWire = this.wires.find(w => 
+      w.targetBlockId === subsystemId && w.targetPortIndex === -1
+    )
+    
+    if (!enableWire) {
+      return true // No connection to enable port, default to enabled
+    }
+    
+    // Get the signal value
+    const signalKey = `${enableWire.sourceBlockId}_output_${enableWire.sourcePortIndex}`
+    const signalValue = this.state.signalValues.get(signalKey)
+    
+    // Convert to boolean (handle truthy/falsy values)
+    if (typeof signalValue === 'boolean') {
+      return signalValue
+    } else if (typeof signalValue === 'number') {
+      return signalValue !== 0
+    } else if (Array.isArray(signalValue)) {
+      // For arrays, check if first element is truthy
+      return signalValue.length > 0 && signalValue[0] !== 0 && signalValue[0] !== false
+    }
+    
+    return true // Default to enabled if signal is undefined
+  }
+
+  /**
+   * Update all subsystem enable states based on signals and parent states
+   * Should be called at the end of each time step
+   */
+  private updateSubsystemEnableStates() {
+    for (const block of this.blocks) {
+      if (block.type === 'subsystem') {
+        const previousState = this.state.subsystemEnableStates.get(block.id) ?? true
+        
+        // Evaluate enable signal
+        const signalEnabled = this.evaluateEnableSignal(block.id)
+        this.state.subsystemEnableSignals.set(block.id, signalEnabled)
+        
+        // Check parent state
+        const parentId = this.state.parentSubsystemMap.get(block.id)
+        const parentEnabled = parentId ? this.isSubsystemEnabled(parentId) : true
+        
+        // Subsystem is enabled only if both signal and parent are enabled
+        const newState = signalEnabled && parentEnabled
+        this.state.subsystemEnableStates.set(block.id, newState)
+        
+        // Handle state transition
+        if (previousState && !newState) {
+          // Transitioning from enabled to disabled - freeze outputs
+          this.freezeSubsystemOutputs(block.id)
+        } else if (!previousState && newState) {
+          // Transitioning from disabled to enabled - record time
+          const blockState = this.state.blockStates.get(block.id)
+          if (blockState) {
+            blockState.lastEnabledTime = this.state.time
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Freeze outputs for all blocks in a subsystem
+   */
+  private freezeSubsystemOutputs(subsystemId: string) {
+    // In a single-sheet engine, we only freeze the subsystem block itself
+    // The MultiSheetSimulationEngine will handle freezing blocks within the subsystem
+    const blockState = this.state.blockStates.get(subsystemId)
+    if (blockState) {
+      blockState.frozenOutputs = [...blockState.outputs]
+    }
+  }
+
+  /**
+   * Get the containing subsystem for a block
+   */
+  public getContainingSubsystem(blockId: string): string | null {
+    return this.state.parentSubsystemMap.get(blockId) ?? null
+  }
+
   public advanceTime(timeStep: number): void {
     // Advance the simulation time without executing any blocks
     this.state.time += timeStep
+  }
+
+  public step(): boolean {
+    if (this.state.time >= this.state.duration) {
+      this.state.isRunning = false
+      return false
+    }
+
+    // Clear signal values for this step
+    this.state.signalValues.clear()
+
+    // Execute blocks in order
+    for (const blockId of this.executionOrder) {
+      this.executeBlock(blockId)
+    }
+
+    // Update subsystem enable states at end of time step
+    this.updateSubsystemEnableStates()
+
+    this.state.time += this.state.timeStep
+    return true
   }
 
   private getBlockOutputTypes(block: BlockData): ParsedType[] {
@@ -712,89 +904,111 @@ export class SimulationEngine {
     return ['input_port', 'source'].includes(blockType)
   }
 
-  public step(): boolean {
-    if (this.state.time >= this.state.duration) {
-      this.state.isRunning = false
-      return false
-    }
-
-    // Clear signal values for this step
-    this.state.signalValues.clear()
-
-    // Execute blocks in order
-    for (const blockId of this.executionOrder) {
-      this.executeBlock(blockId)
-    }
-
-    this.state.time += this.state.timeStep
-    return true
-  }
-
   public executeBlock(blockId: string) {
     const block = this.blocks.find(b => b.id === blockId)
     const blockState = this.state.blockStates.get(blockId)
     
     if (!block || !blockState) return
 
+    // Check if block should execute
+    const containingSubsystem = this.getContainingSubsystem(blockId)
+    const isEnabled = containingSubsystem ? this.isSubsystemEnabled(containingSubsystem) : true
+
     // Get inputs for this block
     const inputs = this.getBlockInputs(blockId)
 
-    // Execute block logic based on type
-    switch (block.type) {
-      case 'sum':
-        this.executeSumBlock(blockState, inputs)
-        break
-      case 'multiply':
-        this.executeMultiplyBlock(blockState, inputs)
-        break
-      case 'scale':
-        this.executeScaleBlock(blockState, inputs)
-        break
-      case 'source':
-        this.executeSourceBlock(blockState)
-        break
-      case 'input_port':
-        this.executeInputPortBlock(blockState, block.parameters)
-        break
-      case 'transfer_function':
-        this.executeTransferFunctionBlock(blockState, inputs)
-        break
-      case 'lookup_1d':
-        this.executeLookup1DBlock(blockState, inputs)
-        break
-      case 'lookup_2d':
-        this.executeLookup2DBlock(blockState, inputs)
-        break
-      case 'signal_display':
-        this.executeSignalDisplayBlock(blockState, inputs)
-        break
-      case 'signal_logger':
-        this.executeSignalLoggerBlock(blockState, inputs)
-        break
-      case 'output_port':
-        this.executeOutputPortBlock(blockState, inputs)
-        break
-      case 'subsystem':
-        this.executeSubsystemBlock(blockState, inputs)
-        break
-      case 'sheet_label_sink':
-        this.executeSheetLabelSinkBlock(blockState, inputs)
-        break
-      case 'sheet_label_source':
-        this.executeSheetLabelSourceBlock(blockState)
-        break
-      case 'matrix_multiply':
-        this.executeMatrixMultiplyBlock(blockState, inputs)
-        break
-      case 'mux':
-        this.executeMuxBlock(blockState, inputs)
-        break
-      case 'demux':
-        this.executeDemuxBlock(blockState, inputs)
-        break
+    // For disabled blocks, we need special handling
+    if (!isEnabled) {
+      // Most blocks just output their frozen values
+      if (blockState.frozenOutputs && blockState.frozenOutputs.length > 0) {
+        blockState.outputs = [...blockState.frozenOutputs]
+      }
+      
+      // Special handling for specific block types
+      switch (block.type) {
+        case 'source':
+          // Sources continue to generate signals even when disabled
+          // This allows enable signals to work properly
+          this.executeSourceBlock(blockState)
+          break;
+          
+        case 'output_port':
+          // Output ports need to update their internal state even when disabled
+          // so parent can read the frozen value
+          this.executeOutputPortBlock(blockState, inputs)
+          break;
+          
+        case 'signal_display':
+        case 'signal_logger':
+          // These blocks should not record new data when disabled
+          // Just maintain their current state
+          break;
+          
+        default:
+          // All other blocks use frozen outputs
+          break;
+      }
+    } else {
+      // Execute block logic based on type (normal execution)
+      switch (block.type) {
+        case 'sum':
+          this.executeSumBlock(blockState, inputs)
+          break
+        case 'multiply':
+          this.executeMultiplyBlock(blockState, inputs)
+          break
+        case 'scale':
+          this.executeScaleBlock(blockState, inputs)
+          break
+        case 'source':
+          this.executeSourceBlock(blockState)
+          break
+        case 'input_port':
+          this.executeInputPortBlock(blockState, block.parameters)
+          break
+        case 'transfer_function':
+          this.executeTransferFunctionBlock(blockState, inputs)
+          break
+        case 'lookup_1d':
+          this.executeLookup1DBlock(blockState, inputs)
+          break
+        case 'lookup_2d':
+          this.executeLookup2DBlock(blockState, inputs)
+          break
+        case 'signal_display':
+          this.executeSignalDisplayBlock(blockState, inputs)
+          break
+        case 'signal_logger':
+          this.executeSignalLoggerBlock(blockState, inputs)
+          break
+        case 'output_port':
+          this.executeOutputPortBlock(blockState, inputs)
+          break
+        case 'subsystem':
+          this.executeSubsystemBlock(blockState, inputs)
+          break
+        case 'sheet_label_sink':
+          this.executeSheetLabelSinkBlock(blockState, inputs)
+          break
+        case 'sheet_label_source':
+          this.executeSheetLabelSourceBlock(blockState)
+          break
+        case 'matrix_multiply':
+          this.executeMatrixMultiplyBlock(blockState, inputs)
+          break
+        case 'mux':
+          this.executeMuxBlock(blockState, inputs)
+          break
+        case 'demux':
+          this.executeDemuxBlock(blockState, inputs)
+          break
+      }
+      
+      // Update frozen outputs when enabled
+      blockState.frozenOutputs = [...blockState.outputs]
     }
 
-    // Store signal values
+    // Store signal values (whether enabled or disabled)
     for (let i = 0; i < blockState.outputs.length; i++) {
       const signalKey = `${blockId}_output_${i}`
       this.state.signalValues.set(signalKey, blockState.outputs[i])
@@ -1132,9 +1346,14 @@ export class SimulationEngine {
     }
   }
 
+
   private executeTransferFunctionBlock(blockState: BlockState, inputs: (number | number[] | boolean | boolean[] | number[][])[]) {
     const input = inputs[0]
     const { numerator, denominator } = blockState.internalState
+    
+    // Check if this block is in an enabled subsystem
+    const containingSubsystem = this.getContainingSubsystem(blockState.blockId)
+    const isEnabled = containingSubsystem ? this.isSubsystemEnabled(containingSubsystem) : true
     
     // Validate coefficients
     if (!denominator || denominator.length === 0) {
@@ -1176,14 +1395,25 @@ export class SimulationEngine {
           const elementInput = matrix[i][j]
           const elementStates = blockState.internalState.matrixStates[i][j]
           
-          // Apply transfer function to this element
-          output[i][j] = this.processTransferFunctionElement(
-            elementInput,
-            numerator,
-            denominator,
-            elementStates,
-            this.state.timeStep
-          )
+          if (isEnabled) {
+            // Apply transfer function to this element
+            output[i][j] = this.processTransferFunctionElement(
+              elementInput,
+              numerator,
+              denominator,
+              elementStates,
+              this.state.timeStep
+            )
+          } else {
+            // Subsystem is disabled - use frozen state
+            // Output based on current state without updating
+            output[i][j] = this.getTransferFunctionOutputWithoutUpdate(
+              elementInput,
+              numerator,
+              denominator,
+              elementStates
+            )
+          }
         }
       }
       
@@ -1210,14 +1440,24 @@ export class SimulationEngine {
         const elementInput = typeof input[idx] === 'number' ? input[idx] as number : 0
         const elementStates = blockState.internalState.vectorStates[idx]
         
-        // Apply transfer function to this element
-        output[idx] = this.processTransferFunctionElement(
-          elementInput,
-          numerator,
-          denominator,
-          elementStates,
-          this.state.timeStep
-        )
+        if (isEnabled) {
+          // Apply transfer function to this element
+          output[idx] = this.processTransferFunctionElement(
+            elementInput,
+            numerator,
+            denominator,
+            elementStates,
+            this.state.timeStep
+          )
+        } else {
+          // Subsystem is disabled - use frozen state
+          output[idx] = this.getTransferFunctionOutputWithoutUpdate(
+            elementInput,
+            numerator,
+            denominator,
+            elementStates
+          )
+        }
       }
       
       blockState.outputs[0] = output
@@ -1225,16 +1465,55 @@ export class SimulationEngine {
     } else if (typeof input === 'number') {
       // Scalar processing
       const states = blockState.internalState.states
-      blockState.outputs[0] = this.processTransferFunctionElement(
-        input,
-        numerator,
-        denominator,
-        states,
-        this.state.timeStep
-      )
+      
+      if (isEnabled) {
+        blockState.outputs[0] = this.processTransferFunctionElement(
+          input,
+          numerator,
+          denominator,
+          states,
+          this.state.timeStep
+        )
+      } else {
+        // Subsystem is disabled - use frozen state
+        blockState.outputs[0] = this.getTransferFunctionOutputWithoutUpdate(
+          input,
+          numerator,
+          denominator,
+          states
+        )
+      }
     } else {
       blockState.outputs[0] = 0
     }
+    
+    // Update frozen outputs if transitioning or if enabled
+    if (isEnabled || blockState.frozenOutputs === undefined) {
+      blockState.frozenOutputs = [...blockState.outputs]
+    }
+  }
+  
+  /**
+   * Get transfer function output without updating states (for disabled subsystems)
+   */
+  private getTransferFunctionOutputWithoutUpdate(
+    input: number,
+    numerator: number[],
+    denominator: number[],
+    states: number[]
+  ): number {
+    // Pure gain case
+    if (denominator.length === 1) {
+      return input * (numerator[0] || 0) / denominator[0]
+    }
+    
+    // For dynamic systems, output the current state value
+    // This maintains the last computed output when the subsystem was enabled
+    if (states.length > 0) {
+      return states[0] // First state is typically the output
+    }
+    
+    return 0
   }
   
   private processTransferFunctionElement(
@@ -1860,4 +2139,237 @@ export class SimulationEngine {
     this.state.isRunning = false
     this.initializeBlocks()
   }
+
+  // In simulationEngine.ts - Add initial output computation method
+
+  /**
+   * Compute initial outputs for all blocks
+   * This ensures disabled subsystems have valid initial outputs
+   */
+  private computeInitialOutputs() {
+    // First pass: compute outputs for source blocks and blocks with explicit initial values
+    for (const blockId of this.executionOrder) {
+      const block = this.blocks.find(b => b.id === blockId)
+      const blockState = this.state.blockStates.get(blockId)
+      
+      if (!block || !blockState) continue
+      
+      switch (block.type) {
+        case 'source':
+          // Sources generate their initial value
+          this.executeSourceBlock(blockState)
+          break
+          
+        case 'input_port':
+          // Input ports use their default value
+          const defaultValue = block.parameters?.defaultValue || 0
+          const dataType = block.parameters?.dataType || 'double'
+          
+          // Parse the data type to check if it's a vector or matrix
+          let parsedType: ParsedType | null = null
+          try {
+            parsedType = parseType(dataType)
+          } catch {
+            parsedType = { baseType: 'double', isArray: false }
+          }
+          
+          // Set initial output based on type
+          if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
+            // Initialize matrix with default value
+            const matrix: number[][] = []
+            for (let i = 0; i < parsedType.rows; i++) {
+              matrix[i] = new Array(parsedType.cols).fill(defaultValue)
+            }
+            blockState.outputs[0] = matrix
+          } else if (parsedType.isArray && parsedType.arraySize) {
+            // Initialize array with default value
+            blockState.outputs[0] = new Array(parsedType.arraySize).fill(defaultValue)
+          } else {
+            blockState.outputs[0] = defaultValue
+          }
+          
+          // Store in signal values
+          this.state.signalValues.set(`${blockId}_output_0`, blockState.outputs[0])
+          break
+          
+        case 'transfer_function':
+          // For transfer functions, compute steady-state output for zero input
+          // This gives a reasonable initial output
+          const { numerator, denominator } = blockState.internalState
+          if (denominator && denominator.length > 0) {
+            // For zero input, steady state is 0
+            blockState.outputs[0] = 0
+          }
+          break
+      }
+      
+      // Update frozen outputs with initial values
+      blockState.frozenOutputs = [...blockState.outputs]
+    }
+    
+    // Second pass: propagate initial values through the network
+    // Run one execution cycle with time = 0 to establish initial outputs
+    const savedTime = this.state.time
+    this.state.time = 0
+    
+    // Execute all blocks once to propagate initial values
+    for (const blockId of this.executionOrder) {
+      const block = this.blocks.find(b => b.id === blockId)
+      const blockState = this.state.blockStates.get(blockId)
+      
+      if (!block || !blockState) continue
+      
+      // Skip source and input blocks (already initialized)
+      if (block.type === 'source' || block.type === 'input_port') {
+        continue
+      }
+      
+      // Get inputs
+      const inputs = this.getBlockInputs(blockId)
+      
+      // Execute block to compute initial output
+      switch (block.type) {
+        case 'sum':
+          this.executeSumBlock(blockState, inputs)
+          break
+        case 'multiply':
+          this.executeMultiplyBlock(blockState, inputs)
+          break
+        case 'scale':
+          this.executeScaleBlock(blockState, inputs)
+          break
+        case 'transfer_function':
+          // For initial computation, just pass through scaled input
+          const input = inputs[0] || 0
+          const gain = blockState.internalState.numerator[0] / blockState.internalState.denominator[0]
+          if (Array.isArray(input)) {
+            if (Array.isArray(input[0])) {
+              // Matrix
+              blockState.outputs[0] = (input as unknown as number[][]).map(row => 
+                row.map(val => val * gain)
+              )
+            } else {
+              // Vector
+              blockState.outputs[0] = (input as number[]).map(val => val * gain)
+            }
+          } else {
+            blockState.outputs[0] = (input as number) * gain
+          }
+          break
+        case 'lookup_1d':
+          this.executeLookup1DBlock(blockState, inputs)
+          break
+        case 'lookup_2d':
+          this.executeLookup2DBlock(blockState, inputs)
+          break
+        case 'output_port':
+          this.executeOutputPortBlock(blockState, inputs)
+          break
+        case 'sheet_label_sink':
+          this.executeSheetLabelSinkBlock(blockState, inputs)
+          break
+        case 'sheet_label_source':
+          this.executeSheetLabelSourceBlock(blockState)
+          break
+        case 'matrix_multiply':
+          this.executeMatrixMultiplyBlock(blockState, inputs)
+          break
+        case 'mux':
+          this.executeMuxBlock(blockState, inputs)
+          break
+        case 'demux':
+          this.executeDemuxBlock(blockState, inputs)
+          break
+      }
+      
+      // Store computed initial values
+      for (let i = 0; i < blockState.outputs.length; i++) {
+        const signalKey = `${blockId}_output_${i}`
+        this.state.signalValues.set(signalKey, blockState.outputs[i])
+      }
+      
+      // Update frozen outputs
+      blockState.frozenOutputs = [...blockState.outputs]
+    }
+    
+    // Restore time
+    this.state.time = savedTime
+  }
+
+    /**
+   * Get current enable state information for debugging
+   */
+  public getEnableStateInfo(): {
+    subsystemStates: Map<string, boolean>,
+    subsystemSignals: Map<string, boolean>,
+    blockParents: Map<string, string | null>
+  } {
+    return {
+      subsystemStates: new Map(this.state.subsystemEnableStates),
+      subsystemSignals: new Map(this.state.subsystemEnableSignals),
+      blockParents: new Map(this.state.parentSubsystemMap)
+    }
+  }
+  
+  /**
+   * Validate enable connections
+   */
+  public validateEnableConnections(): string[] {
+    const errors: string[] = []
+    
+    // Check all enable connections
+    for (const wire of this.wires) {
+      if (wire.targetPortIndex === -1) {
+        // This is an enable connection
+        const targetBlock = this.blocks.find(b => b.id === wire.targetBlockId)
+        const sourceBlock = this.blocks.find(b => b.id === wire.sourceBlockId)
+        
+        if (!targetBlock) {
+          errors.push(`Enable wire ${wire.id} has invalid target block ${wire.targetBlockId}`)
+          continue
+        }
+        
+        if (!sourceBlock) {
+          errors.push(`Enable wire ${wire.id} has invalid source block ${wire.sourceBlockId}`)
+          continue
+        }
+        
+        if (targetBlock.type !== 'subsystem') {
+          errors.push(`Enable wire ${wire.id} targets non-subsystem block ${targetBlock.name}`)
+          continue
+        }
+        
+        if (!targetBlock.parameters?.showEnableInput) {
+          errors.push(`Enable wire ${wire.id} targets subsystem ${targetBlock.name} without showEnableInput`)
+          continue
+        }
+        
+        // Check source type
+        const sourceType = this.getBlockOutputType(sourceBlock, wire.sourcePortIndex)
+        if (sourceType && !sourceType.includes('bool')) {
+          errors.push(`Enable wire ${wire.id} from ${sourceBlock.name} has non-boolean type: ${sourceType}`)
+        }
+      }
+    }
+    
+    return errors
+  }
+  
+  /**
+   * Get block output type for validation
+   */
+  private getBlockOutputType(block: BlockData, portIndex: number): string | null {
+    if (block.type === 'source' || block.type === 'input_port') {
+      return block.parameters?.dataType || 'double'
+    }
+    
+    // For other blocks, we'd need full type propagation
+    // For now, just check known boolean sources
+    if (block.type === 'source' && block.parameters?.dataType === 'bool') {
+      return 'bool'
+    }
+    
+    return null
+  }
 }
+
