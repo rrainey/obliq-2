@@ -532,10 +532,27 @@ The application uses a unified approach for handling multi-sheet models in both 
 
 The code generator handles hierarchical multi-sheet models through a flattening process:
 
-1. **Model Flattening**: The `flattenModelStructure()` function converts the hierarchical sheet structure into a single flat representation:
-   - All blocks from all sheets are collected with prefixed names (e.g., `Subsystem1_Scale1`)
-   - Subsystem boundaries are removed, with connections remapped to flow directly
-   - Sheet labels are replaced with direct wire connections
+1. **Model Flattening**: The C-code Generator makes no distinction between single sheet and multi-sheet models as it generates C-language code. Instead, the code generator shall - early in the code generation process - flatten the entire model into a single logical sheet in all cases. This implies that Subsystem input and output block are removed and replace with direct connections to their connected blocks on both sides. Signal Source and Signal Sink blocks would be handled in the same way.  (inputs and outputs of the top level model must be excluded from this treatment - only inputs and outputs of contained Subsystems should be replaced with direct connections).
+
+2. **Modularized Block Definitions** Blocks are modularized by defining Block-specific classes in the `lib/blocks/` folder - A `lib/blocks/BlockModule.ts` module defines an interface, `IBlockModule`, for implementing these Block-specific behavior methods:
+  - `generateComputation(block: BlockData, inputs: string[]): string` - generates the C-code corresponding to any computations performed by the block - sets the output based on inputs and state of the model structure
+  - `getOutputType(block: BlockData, inputTypes: string[]): string` - specifies the C-style type of the Block's output signal
+  - `generateStructMember(block: BlockData, outputType: string): string | null` - generates member variables that should be defined in the _signals_t structure typedef
+  - `requiresState(block: BlockData): boolean` - true where this block has continuous state that requires RK4 integration
+  - `generateStateStructMembers(block: BlockData, outputType: string): string[]` - generates member variables that should be defined in the _states_t structure typedef
+  - `generateInitialization?(block: BlockData): string` - generates code that should be inserted into the _init function
+
+3. **Subsystems can be Dynamically Enabled or Disabled** Subsystems have a special "enable" Boolean input signal.  By default, its value is True.  While enabled, all blocks in the subsystem operate normally.  It is disabled when the signal connected to the enable pin is "false-y". In this state, no integration is performed on any contained stateful Blocks (e.g., Transfer Function blocks) or Subsystems. Subsystem outputs would be generated as usual including using any frozen state values.  Supporting this, define a new Boolean property for Subsystem blocks called "showEnableInput". The default value will be False. We'll describe how we'll expose "enable" ports in the Canvas/Block UI later - for now, these rules should add proper functionality for C-code generation.  The enabled state of a Subsystem may change from one time step to the next, based on the "truthy-ness" of the connected "Enabled" input. Adding this feature affects the approach to properly flattening the model.  A notion of the scope of each active Enable signal will need to be maintained to correctly handle "disabled" elements during a live simulation - at least for Subsystems that have "showEnableInput" set.
+
+**Enable signal propagation** When a subsystem is disabled (enable=false), should nested subsystems shall be considered, regardless of their own enable signal.
+
+**Output behavior when disabled** You mentioned "Subsystem outputs would be generated as usual including using any frozen state values." Disabled Subsystems should hold their last values from when the subsystem was enabled. This implies that an initial value of all outputs must be computed based on the state of the system (taking into account initial values of all state variables), so that these outputs may be used for the Subsystem until it is enabled.
+
+**"enable" has a Special Port Number** Enable ports will be assigned a special index of -1 - for example, -1 will appear as the targetPortIndex for a connection where the "enable" port is the target of a connection.  Using -1 avoids affecting the order of other, regular input ports.
+
+**Default enable behavior** Where a subsystem has showEnableInput=false, it is enabled only if immediate parent is enabled. Similar to other rules, the top level model is special: it does not have its own showEnableInput tracking. Instead, it is always considered "enabled".
+
+**Subsystem Enabled Status updates in the Time Step Function** The Enabled state of all subsystems should be re-evaluated and updated at the end of the time step function.
 
 2. **Context Preservation**: A `BlockContextMap` tracks each block's original location:
    - Original sheet path for comments (e.g., "from Subsystem1 > Controller")
