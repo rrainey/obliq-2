@@ -1,4 +1,4 @@
-// components/CanvasReactFlow.tsx - Updated to follow ReactFlow's context menu pattern
+// components/CanvasReactFlow.tsx - Updated to handle enable port connections
 
 'use client'
 
@@ -169,6 +169,11 @@ function CanvasReactFlowInner({
         }
       }
       
+      // Special styling for enable connections
+      if (wire.targetPortIndex === -1) {
+        edgeData.sourceType = 'bool' // Enable ports always expect boolean
+      }
+      
       return {
         ...wireDataToEdge(wire),
         type: 'step',
@@ -186,8 +191,20 @@ function CanvasReactFlowInner({
     }
 
     // Extract port indices from handle IDs
-    const sourcePortIndex = parseInt(connection.sourceHandle.split('-')[1])
-    const targetPortIndex = parseInt(connection.targetHandle.split('-')[1])
+    let sourcePortIndex = 0
+    let targetPortIndex = 0
+    
+    // Parse source port index
+    if (connection.sourceHandle.startsWith('output-')) {
+      sourcePortIndex = parseInt(connection.sourceHandle.split('-')[1])
+    }
+    
+    // Parse target port index
+    if (connection.targetHandle === '_enable_') {
+      targetPortIndex = -1 // Special enable port
+    } else if (connection.targetHandle.startsWith('input-')) {
+      targetPortIndex = parseInt(connection.targetHandle.split('-')[1])
+    }
 
     // Create PortInfo objects
     const sourcePort: PortInfo = {
@@ -211,20 +228,22 @@ function CanvasReactFlowInner({
       return false
     }
 
-    // Check for algebraic loops
-    const newWire: WireData = {
-      id: 'temp',
-      sourceBlockId: connection.source,
-      sourcePortIndex,
-      targetBlockId: connection.target,
-      targetPortIndex,
-    }
+    // Check for algebraic loops (unless it's an enable connection)
+    if (targetPortIndex !== -1) {
+      const newWire: WireData = {
+        id: 'temp',
+        sourceBlockId: connection.source,
+        sourcePortIndex,
+        targetBlockId: connection.target,
+        targetPortIndex,
+      }
 
-    const loopValidation = detectAlgebraicLoop(newWire, wires)
-    if (!loopValidation.isValid) {
-      setConnectionError(loopValidation.errorMessage || 'Would create algebraic loop')
-      setTimeout(() => setConnectionError(null), 3000)
-      return false
+      const loopValidation = detectAlgebraicLoop(newWire, wires)
+      if (!loopValidation.isValid) {
+        setConnectionError(loopValidation.errorMessage || 'Would create algebraic loop')
+        setTimeout(() => setConnectionError(null), 3000)
+        return false
+      }
     }
 
     return true
@@ -238,8 +257,20 @@ function CanvasReactFlowInner({
     }
 
     // Extract port indices
-    const sourcePortIndex = parseInt(connection.sourceHandle.split('-')[1])
-    const targetPortIndex = parseInt(connection.targetHandle.split('-')[1])
+    let sourcePortIndex = 0
+    let targetPortIndex = 0
+    
+    // Parse source port index
+    if (connection.sourceHandle.startsWith('output-')) {
+      sourcePortIndex = parseInt(connection.sourceHandle.split('-')[1])
+    }
+    
+    // Parse target port index
+    if (connection.targetHandle === '_enable_') {
+      targetPortIndex = -1 // Special enable port
+    } else if (connection.targetHandle.startsWith('input-')) {
+      targetPortIndex = parseInt(connection.targetHandle.split('-')[1])
+    }
 
     if (onWireCreate) {
       onWireCreate(

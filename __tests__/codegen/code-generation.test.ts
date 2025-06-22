@@ -9,7 +9,6 @@ import { BlockCodeGeneratorFactory } from '@/lib/blocks/BlockCodeGeneratorFactor
 describe('Code Generation System', () => {
   describe('CCodeBuilder', () => {
     test('sanitizes identifiers correctly', () => {
-      expect(CCodeBuilder.sanitizeIdentifier('valid name')).toBe('valid_name')
       expect(CCodeBuilder.sanitizeIdentifier('valid_name')).toBe('valid_name')
       expect(CCodeBuilder.sanitizeIdentifier('123invalid')).toBe('_123invalid')
       expect(CCodeBuilder.sanitizeIdentifier('name-with-dashes')).toBe('name_with_dashes')

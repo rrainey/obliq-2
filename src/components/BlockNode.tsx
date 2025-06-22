@@ -64,13 +64,13 @@ const getPortCounts = (blockType: string, parameters?: Record<string, any>) => {
     case 'subsystem':
       const inputPorts = parameters?.inputPorts || ['Input1']
       const outputPorts = parameters?.outputPorts || ['Output1']
-      return { inputs: inputPorts.length, outputs: outputPorts.length }
+      const hasEnable = parameters?.showEnableInput || false
+      // Don't count enable port in regular input count
+      return { inputs: inputPorts.length, outputs: outputPorts.length, hasEnable }
     case 'sheet_label_sink':
       return { inputs: 1, outputs: 0 }
     case 'sheet_label_source':
       return { inputs: 0, outputs: 1 }
-    case 'matrix_multiply':
-      return { inputs: 2, outputs: 1 }
     case 'mux':
       // Dynamic port count based on configured dimensions
       const rows = parameters?.rows || 2
@@ -382,7 +382,7 @@ const getBlockWidth = (data: BlockNodeData): number => {
 
 // Custom node component
 const BlockNode = memo(({ data, selected }: NodeProps<BlockNodeData>) => {
-  const { inputs: inputCount, outputs: outputCount } = getPortCounts(data.type, data.parameters)
+  const { inputs: inputCount, outputs: outputCount, hasEnable } = getPortCounts(data.type, data.parameters)
   const blockWidth = getBlockWidth(data)
   const isTerminator = data.type === 'input_port' || data.type === 'output_port'
   const minHeight = isTerminator ? TERMINATOR_HEIGHT : Math.max(MIN_HEIGHT, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
@@ -400,6 +400,21 @@ const BlockNode = memo(({ data, selected }: NodeProps<BlockNodeData>) => {
   const handleHoverStyle: CSSProperties = {
     backgroundColor: '#3b82f6',
     boxShadow: '0 0 0 2px #93bbfc',
+  }
+
+  // Special style for enable handle
+  const enableHandleStyle: CSSProperties = {
+    width: 12,
+    height: 12,
+    borderRadius: '50%',
+    backgroundColor: '#7c3aed', // Purple color for enable
+    border: '2px solid #ffffff',
+    cursor: 'crosshair',
+  }
+
+  const enableHandleHoverStyle: CSSProperties = {
+    backgroundColor: '#9333ea',
+    boxShadow: '0 0 0 2px #c4b5fd',
   }
 
   return (
@@ -423,6 +438,21 @@ const BlockNode = memo(({ data, selected }: NodeProps<BlockNodeData>) => {
           </div>
         )}
       </div>
+
+      {/* Enable port indicator for subsystems with showEnableInput */}
+      {data.type === 'subsystem' && hasEnable && (
+        <div
+          className="absolute text-purple-700 font-bold pointer-events-none"
+          style={{
+            top: -8,
+            left: blockWidth / 2 - 6,
+            fontSize: '0.75rem',
+            transform: 'translateX(-50%)',
+          }}
+        >
+          ▼
+        </div>
+      )}
 
       {/* Main block body */}
       {(data.type === 'input_port' || data.type === 'output_port') ? (
@@ -477,6 +507,29 @@ const BlockNode = memo(({ data, selected }: NodeProps<BlockNodeData>) => {
             {getBlockSymbol(data)}
           </div>
         </div>
+      )}
+
+      {/* Enable Handle - Special port at top center for subsystems */}
+      {data.type === 'subsystem' && hasEnable && (
+        <Handle
+          type="target"
+          position={Position.Top}
+          id="_enable_"
+          style={{
+            ...enableHandleStyle,
+            top: -6,
+            left: blockWidth / 2,
+            transform: 'translateX(-50%)',
+          }}
+          onMouseEnter={(e) => {
+            const target = e.target as HTMLElement
+            Object.assign(target.style, enableHandleHoverStyle)
+          }}
+          onMouseLeave={(e) => {
+            const target = e.target as HTMLElement
+            Object.assign(target.style, enableHandleStyle)
+          }}
+        />
       )}
 
       {/* Input Handles */}
@@ -559,7 +612,7 @@ export const wireDataToEdge = (wire: any) => {
     source: wire.sourceBlockId,
     target: wire.targetBlockId,
     sourceHandle: `output-${wire.sourcePortIndex}`,
-    targetHandle: `input-${wire.targetPortIndex}`,
+    targetHandle: wire.targetPortIndex === -1 ? '_enable_' : `input-${wire.targetPortIndex}`,
     type: 'default',
   }
 }

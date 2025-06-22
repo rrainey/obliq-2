@@ -21,13 +21,15 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
   const [outputPorts, setOutputPorts] = useState(block.parameters?.outputPorts || ['Output1'])
   const [editingSheetId, setEditingSheetId] = useState<string | null>(null)
   const [editingSheetName, setEditingSheetName] = useState('')
+  const [showEnableInput, setShowEnableInput] = useState(block.parameters?.showEnableInput || false)
 
   const handleSave = () => {
     const parameters = {
       sheets, 
       sheetName,
       inputPorts: inputPorts.filter((port: string) => port.trim() !== ''),
-      outputPorts: outputPorts.filter((port: string) => port.trim() !== '')
+      outputPorts: outputPorts.filter((port: string) => port.trim() !== ''),
+      showEnableInput
     }
     onUpdate(parameters)
     onClose()
@@ -307,6 +309,25 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
             >
               + Add Output Port
             </button>
+          </div>
+
+          {/* Enable Input Checkbox */}
+          <div className="border-t pt-4">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={showEnableInput}
+                onChange={(e) => setShowEnableInput(e.target.checked)}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                Show Enable Input
+              </span>
+            </label>
+            <p className="mt-1 ml-6 text-xs text-gray-500">
+              When enabled, adds a special boolean input port that controls whether the subsystem is active. 
+              When false, the subsystem's state is frozen.
+            </p>
           </div>
 
           <div className="bg-gray-50 p-3 rounded-md">

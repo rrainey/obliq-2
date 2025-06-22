@@ -1,4 +1,4 @@
-// lib/signalTypePropagation.ts
+// lib/signalTypePropagation.ts - Updated to handle enable port type validation
 
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
@@ -399,6 +399,31 @@ export function propagateSignalTypes(
         if (wireType) {
           try {
             const parsedType = parseType(wireType)
+            
+            // Special validation for enable port connections
+            if (wire.targetPortIndex === -1) {
+              // This is an enable port connection
+              const targetBlock = blockMap.get(wire.targetBlockId)
+              if (targetBlock && targetBlock.type === 'subsystem' && targetBlock.parameters?.showEnableInput) {
+                // Validate that the signal is boolean
+                if (parsedType.baseType !== 'bool') {
+                  errors.push({
+                    wireId: wire.id,
+                    message: `Enable port on ${targetBlock.name} requires boolean signal but received ${wireType}`,
+                    severity: 'error'
+                  })
+                  continue
+                }
+              } else {
+                errors.push({
+                  wireId: wire.id,
+                  message: `Invalid enable port connection`,
+                  severity: 'error'
+                })
+                continue
+              }
+            }
+            
             signalTypes.set(wire.id, {
               wireId: wire.id,
               sourceBlockId: wire.sourceBlockId,
@@ -796,8 +821,9 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'source':
       return 0
     case 'subsystem':
+      // Don't count enable port in regular input count
       return block.parameters?.inputPorts?.length || 1
-     case 'sheet_label_sink':
+    case 'sheet_label_sink':
       return 1
     case 'sheet_label_source':
       return 0
@@ -817,6 +843,7 @@ function getBlockInputTypes(
   const inputTypes: string[] = []
   const inputPortCount = getBlockInputPortCount(block)
   
+  // Handle regular input ports
   for (let portIndex = 0; portIndex < inputPortCount; portIndex++) {
     const targetKey = `${block.id}:${portIndex}`
     const wires = wiresByTarget.get(targetKey) || []
@@ -826,6 +853,21 @@ function getBlockInputTypes(
       const sourceType = blockOutputTypes.get(sourceKey)
       if (sourceType) {
         inputTypes.push(sourceType)
+      }
+    }
+  }
+  
+  // Handle enable port separately if it exists
+  if (block.type === 'subsystem' && block.parameters?.showEnableInput) {
+    const enableKey = `${block.id}:-1`
+    const enableWires = wiresByTarget.get(enableKey) || []
+    
+    for (const wire of enableWires) {
+      const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+      const sourceType = blockOutputTypes.get(sourceKey)
+      if (sourceType) {
+        // Enable port type is handled separately in validation
+        // Don't include it in regular input types
       }
     }
   }

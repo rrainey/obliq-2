@@ -1,9 +1,31 @@
+// src/lib/connectionValidation.ts
 import { BlockData, PortInfo } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 
 export interface ValidationResult {
   isValid: boolean
   errorMessage?: string
+}
+
+/**
+ * Get the output type of a block port
+ */
+function getBlockOutputType(block: BlockData, portIndex: number): string | null {
+  // For blocks with explicit types
+  if (block.type === 'source' || block.type === 'input_port') {
+    return block.parameters?.dataType || 'double'
+  }
+  
+  // For other blocks, we'd need full type propagation
+  // This is a simplified version
+  return null
+}
+
+/**
+ * Check if a type is boolean
+ */
+function isBooleanType(type: string): boolean {
+  return type === 'bool' || type.startsWith('bool[')
 }
 
 /**
@@ -63,20 +85,41 @@ export function validateConnection(
   }
 
   // Rule 5: Check if ports exist on the blocks
-  const sourcePortCount = getOutputPortCount(sourceBlock.type)
-  const targetPortCount = getInputPortCount(targetBlock.type)
-
-  if (sourcePort.portIndex >= sourcePortCount) {
-    return {
-      isValid: false,
-      errorMessage: "Source port index out of range"
+  const sourcePortCount = getOutputPortCount(sourceBlock.type, sourceBlock.parameters)
+  const targetPortCount = getInputPortCount(targetBlock.type, targetBlock.parameters)
+  
+  // Special handling for enable port (port index -1)
+  if (targetPort.portIndex === -1) {
+    // Verify this is a subsystem with enable input
+    if (targetBlock.type !== 'subsystem' || !targetBlock.parameters?.showEnableInput) {
+      return {
+        isValid: false,
+        errorMessage: "Block does not have an enable port"
+      }
     }
-  }
+    
+    // Rule 5a: Enable port must receive boolean signal
+    const sourceType = getBlockOutputType(sourceBlock, sourcePort.portIndex)
+    if (sourceType && !isBooleanType(sourceType)) {
+      return {
+        isValid: false,
+        errorMessage: `Enable port requires boolean signal, but source provides ${sourceType}`
+      }
+    }
+  } else {
+    // Regular port validation
+    if (sourcePort.portIndex >= sourcePortCount) {
+      return {
+        isValid: false,
+        errorMessage: "Source port index out of range"
+      }
+    }
 
-  if (targetPort.portIndex >= targetPortCount) {
-    return {
-      isValid: false,
-      errorMessage: "Target port index out of range"
+    if (targetPort.portIndex >= targetPortCount) {
+      return {
+        isValid: false,
+        errorMessage: "Target port index out of range"
+      }
     }
   }
 
@@ -140,6 +183,11 @@ export function detectAlgebraicLoop(
   newWire: WireData,
   existingWires: WireData[]
 ): ValidationResult {
+  // Enable connections don't participate in algebraic loops
+  if (newWire.targetPortIndex === -1) {
+    return { isValid: true }
+  }
+
   // Create a simple path from the new connection's target back to its source
   const visited = new Set<string>()
   const stack = [newWire.targetBlockId]
@@ -175,7 +223,7 @@ export function detectAlgebraicLoop(
 }
 
 // Helper functions to get port counts
-function getInputPortCount(blockType: string): number {
+function getInputPortCount(blockType: string, parameters?: Record<string, any>): number {
   switch (blockType) {
     case 'sum':
     case 'multiply':
@@ -196,17 +244,26 @@ function getInputPortCount(blockType: string): number {
     case 'source':
       return 0 // No inputs
     case 'subsystem':
-      return 1 // Can be configured
+      // Count regular input ports, not the enable port
+      const inputPorts = parameters?.inputPorts || ['Input1']
+      return inputPorts.length
     case 'sheet_label_sink':
       return 1
     case 'sheet_label_source':
       return 0
+    case 'mux':
+      // Dynamic based on configuration
+      const rows = parameters?.rows || 2
+      const cols = parameters?.cols || 2
+      return rows * cols
+    case 'demux':
+      return 1
     default:
       return 0
   }
 }
 
-function getOutputPortCount(blockType: string): number {
+function getOutputPortCount(blockType: string, parameters?: Record<string, any>): number {
   switch (blockType) {
     case 'sum':
     case 'multiply':
@@ -224,12 +281,22 @@ function getOutputPortCount(blockType: string): number {
     case 'signal_logger':
       return 0 // No outputs
     case 'subsystem':
-      return 1 // Can be configured
+      const outputPorts = parameters?.outputPorts || ['Output1']
+      return outputPorts.length
     case 'sheet_label_sink':
       return 0
     case 'sheet_label_source':
       return 1
+    case 'mux':
+      return 1
+    case 'demux':
+      // Dynamic based on input signal dimensions
+      const outputCount = parameters?.outputCount || 1
+      return outputCount
     default:
       return 0
   }
 }
+
+// Export the helper functions for use in other modules
+export { getInputPortCount, getOutputPortCount }
