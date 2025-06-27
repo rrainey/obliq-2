@@ -1,0 +1,108 @@
+{
+    "sheets": [
+        {
+            "id": "main",
+            "name": "Main",
+            "blocks": [
+                {
+                    "id": "source_1750981191627",
+                    "name": "Source1",
+                    "type": "source",
+                    "position": {
+                        "x": -14.5,
+                        "y": 350.5
+                    },
+                    "parameters": {
+                        "f0": 0.1,
+                        "f1": 10,
+                        "mean": 0,
+                        "phase": 0,
+                        "slope": 1,
+                        "value": 1,
+                        "offset": 0,
+                        "dataType": "double",
+                        "duration": 10,
+                        "stepTime": 1,
+                        "amplitude": 1,
+                        "frequency": 1,
+                        "startTime": 0,
+                        "stepValue": 1,
+                        "signalType": "constant"
+                    }
+                },
+                {
+                    "id": "scale_1750981201247",
+                    "name": "Scale2",
+                    "type": "scale",
+                    "position": {
+                        "x": 117.5,
+                        "y": 350.75
+                    },
+                    "parameters": {
+                        "gain": 2
+                    }
+                },
+                {
+                    "id": "signal_display_1750981217450",
+                    "name": "Signal display3",
+                    "type": "signal_display",
+                    "position": {
+                        "x": 285,
+                        "y": 350.75
+                    },
+                    "parameters": {
+                        "maxSamples": 1000
+                    }
+                },
+                {
+                    "id": "output_port_1750981248634",
+                    "name": "Output port4",
+                    "type": "output_port",
+                    "position": {
+                        "x": 278.5,
+                        "y": 252.25
+                    },
+                    "parameters": {
+                        "portName": "Output"
+                    }
+                }
+            ],
+            "extents": {
+                "width": 1000,
+                "height": 800
+            },
+            "connections": [
+                {
+                    "id": "wire_1750981203928",
+                    "sourceBlockId": "source_1750981191627",
+                    "targetBlockId": "scale_1750981201247",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1750981218942",
+                    "sourceBlockId": "scale_1750981201247",
+                    "targetBlockId": "signal_display_1750981217450",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1750981250451",
+                    "sourceBlockId": "scale_1750981201247",
+                    "targetBlockId": "output_port_1750981248634",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                }
+            ]
+        }
+    ],
+    "version": "2.0",
+    "metadata": {
+        "created": "2025-06-26T23:39:42.735018+00:00",
+        "description": "Model scale-test-01"
+    },
+    "globalSettings": {
+        "simulationDuration": 10,
+        "simulationTimeStep": 0.01
+    }
+}

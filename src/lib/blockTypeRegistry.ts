@@ -79,19 +79,20 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
   },
   
   [BlockTypes.SUM]: {
-    type: BlockTypes.SUM,
-    displayName: 'Sum',
-    category: 'Math',
-    defaultParameters: {
-      numInputs: 2
-    },
-    inputs: [
-      { name: 'input1' },
-      { name: 'input2' }
-    ],
-    outputs: [{ name: 'output' }],
-    description: 'Sums multiple input signals'
+  type: BlockTypes.SUM,
+  displayName: 'Sum',
+  category: 'Math',
+  defaultParameters: {
+    numInputs: 2,
+    signs: '++' 
   },
+  inputs: [
+    { name: 'input1' },
+    { name: 'input2' }
+  ],
+  outputs: [{ name: 'output' }],
+  description: 'Sums multiple input signals with configurable signs'
+},
   
   [BlockTypes.MULTIPLY]: {
     type: BlockTypes.MULTIPLY,
@@ -329,18 +330,20 @@ export function generateDynamicPorts(type: BlockType, parameters: any): {
   const baseDefinition = blockTypeRegistry[type];
   
   if (type === BlockTypes.SUM || type === BlockTypes.MULTIPLY) {
-    const numInputs = parameters.numInputs || 2;
-    const inputs: PortDefinition[] = [];
-    
-    for (let i = 1; i <= numInputs; i++) {
-      inputs.push({ name: `input${i}` });
-    }
-    
-    return {
-      inputs,
-      outputs: baseDefinition.outputs
-    };
+  const numInputs = type === BlockTypes.SUM && parameters.signs 
+    ? parameters.signs.length 
+    : (parameters.numInputs || 2)
+  const inputs: PortDefinition[] = []
+  
+  for (let i = 1; i <= numInputs; i++) {
+    inputs.push({ name: `input${i}` })
   }
+  
+  return {
+    inputs,
+    outputs: baseDefinition.outputs
+  }
+}
   
   // Add Mux dynamic port generation
   if (type === BlockTypes.MUX) {

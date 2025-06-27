@@ -73,6 +73,38 @@ export function validateBlockParameters(
       break;
       
     case BlockTypes.SUM:
+      // Validate signs parameter (new)
+      if (parameters.signs !== undefined) {
+        if (typeof parameters.signs !== 'string') {
+          errors.push('signs must be a string');
+        } else if (!/^[+-]+$/.test(parameters.signs)) {
+          errors.push('signs must contain only + and - characters');
+        } else if (parameters.signs.length < 2) {
+          errors.push('signs must have at least 2 characters');
+        } else if (parameters.signs.length > 10) {
+          errors.push('signs must have at most 10 characters');
+        } else {
+          sanitized.signs = parameters.signs;
+          // Override numInputs based on signs length
+          sanitized.numInputs = parameters.signs.length;
+        }
+      } else if (parameters.numInputs !== undefined) {
+        // Original numInputs validation (only if signs not provided)
+        const num = Number(parameters.numInputs);
+        if (!Number.isInteger(num) || num < 2 || num > 10) {
+          errors.push('numInputs must be an integer between 2 and 10');
+        } else {
+          sanitized.numInputs = num;
+          // Generate default signs (all positive)
+          sanitized.signs = '+'.repeat(num);
+        }
+      } else {
+        // Use defaults
+        sanitized.numInputs = defaults.numInputs;
+        sanitized.signs = defaults.signs || '++';
+      }
+      break;
+
     case BlockTypes.MULTIPLY:
       // Validate numInputs
       if (parameters.numInputs !== undefined) {

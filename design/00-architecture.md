@@ -11,6 +11,7 @@ This application is a web-based visual modeling and simulation tool, similar in 
 
 Additionally, the system includes an **MCP Server** that provides programmatic access to model manipulation capabilities. The MCP server runs as a separate Node.js process and communicates with the Next.js backend through the existing Automation API. This allows MCP clients (such as AI assistants or automated testing tools) to create, modify, simulate, and validate models without using the web UI. The MCP server maintains no state and acts as a protocol adapter, translating MCP tool calls into appropriate HTTP requests to the backend.
 
+
 ## Project Structure and Folder Organization
 
 The project follows a clean, modular folder structure to organize different concerns. Next.js does not enforce a specific organization, so we structure files by feature and functionality for clarity. Below is an outline of the key directories and files, with each part explained:
@@ -68,7 +69,7 @@ The project follows a clean, modular folder structure to organize different conc
   * **`mcp-server/client.ts`** – HTTP client wrapper for calling the Automation API endpoints
   * **`mcp-server/types.ts`** – TypeScript types for MCP tool inputs and outputs
   * **`mcp-server/auth.ts`** – Authentication handling for MCP requests
-  * **`mcp-server/config.ts`** – Configuration for MCP server (port, API endpoints, etc.)
+  * **`mcp-server/config.ts`** – Configuration for MCP server (port, API endpoints, etc.
 
 * **Configuration & Misc**:
 
@@ -352,6 +353,143 @@ execution order of blocks and also for passing Signal data types and calculated 
 
 If we later needed server-side simulation (for example, to offload work or allow long-running simulations to run without keeping the browser open), the architecture can accommodate it. We would implement the `app/api/simulate` route such that it loads the model JSON from the database, runs a simulation using perhaps a Node.js library or a headless version of our simulation engine, and returns the results (likely not as detailed interactive data, but maybe summary or logs). However, for now, the client-side approach is sufficient and simpler.
 
+## Architecture Update: Modular Block Definition
+
+### Block Module Architecture
+
+The application implements a modular block system that centralizes all block-specific behavior in dedicated modules. This architecture supports code generation, simulation execution, and port management through a unified interface.
+
+#### Block Module Interface (IBlockModule)
+
+Each block type implements the `IBlockModule` interface defined in `lib/blocks/BlockModule.ts`, which provides:
+
+##### Code Generation Methods
+- **`generateComputation(block: BlockData, inputs: string[]): string`**  
+  Generates C code for the block's computation logic
+  
+- **`getOutputType(block: BlockData, inputTypes: string[]): string`**  
+  Determines the C type of the block's output based on input types
+  
+- **`generateStructMember(block: BlockData, outputType: string): string | null`**  
+  Generates signal struct member declarations
+  
+- **`requiresState(block: BlockData): boolean`**  
+  Indicates if the block needs state variables for integration
+  
+- **`generateStateStructMembers(block: BlockData, outputType: string): string[]`**  
+  Generates state struct member declarations
+  
+- **`generateInitialization?(block: BlockData): string`**  
+  Optional initialization code generation
+
+##### Simulation Methods
+- **`executeSimulation(blockState: BlockState, inputs: any[], simulationState: SimulationState): void`**  
+  Executes the block's simulation logic, updating outputs in the blockState
+
+##### Port Management Methods
+- **`getInputPortCount(block: BlockData): number`**  
+  Returns the number of input ports (may be dynamic based on parameters)
+  
+- **`getOutputPortCount(block: BlockData): number`**  
+  Returns the number of output ports
+  
+- **`getInputPortLabels?(block: BlockData): string[]`**  
+  Optional custom labels for input ports (e.g., "row1_col2" for demux)
+  
+- **`getOutputPortLabels?(block: BlockData): string[]`**  
+  Optional custom labels for output ports
+
+#### Block Module Factory
+
+The `BlockModuleFactory` (formerly `BlockModuleFactory`) provides centralized access to all block modules:
+
+```typescript
+// Get a block module for any block type
+const module = BlockModuleFactory.getBlockModule('sum')
+
+// Execute simulation
+module.executeSimulation(blockState, inputs, simulationState)
+
+// Get port information
+const inputCount = module.getInputPortCount(block)
+const outputLabels = module.getOutputPortLabels(block)
+```
+
+### Simulation Execution Flow
+
+The simulation engine delegates block execution to the appropriate modules:
+
+1. **Block Execution Adapter** (`lib/simulation/BlockSimulationAdapter.ts`)
+   - Retrieves the appropriate block module from the factory
+   - Calls `executeSimulation` with current state and inputs
+   - Handles blocks without modules (like subsystems)
+
+2. **Simulation Engine Integration**
+   - Replaces the large switch statement with adapter calls
+   - Maintains the same execution order and state management
+   - Improves maintainability and testability
+
+3. **Enable State Handling**
+   - Block modules check enable states when needed
+   - Transfer functions freeze states when disabled
+   - Subsystem outputs use frozen values when disabled
+
+### Port Management System
+
+The port system is now unified across the application:
+
+1. **Port Count Adapter** (`lib/validation/PortCountAdapter.ts`)
+   - Provides consistent port count retrieval
+   - Used by connection validation and UI components
+   - Handles dynamic port counts (mux, demux, subsystems)
+
+2. **Dynamic Port Updates**
+   - Mux blocks update port count based on rows × columns
+   - Demux blocks update based on input signal dimensions
+   - Subsystems reflect their configured input/output ports
+
+3. **Port Label Support**
+   - Blocks can provide custom port labels
+   - Demux shows position labels (e.g., "row1_col2")
+   - UI components display labels when available
+
+### Benefits of the Module System
+
+1. **Single Source of Truth**
+   - All block behavior in one file per block type
+   - No duplication across simulation, code generation, and validation
+
+2. **Easier Extension**
+   - New blocks only need to implement one interface
+   - Automatic support for all features (simulation, codegen, ports)
+
+3. **Better Testing**
+   - Each module can be tested in isolation
+   - Mock modules for testing framework components
+
+4. **Type Safety**
+   - Strong typing throughout the system
+   - Compile-time checks for interface compliance
+
+5. **Performance**
+   - Factory uses singleton pattern for module instances
+   - No repeated instantiation overhead
+
+### Example: Adding a New Block Type
+
+To add a new block type:
+
+1. Create `lib/blocks/NewBlockModule.ts`
+2. Implement all `IBlockModule` methods
+3. Add to `BlockModuleFactory`
+4. The block automatically works in:
+   - Simulation engine
+   - Code generation
+   - Connection validation
+   - UI port display
+
+No changes needed in multiple files across the codebase!
+
 ### Matrix Simulation Support
 
 The simulation engine efficiently handles matrix operations:
@@ -360,6 +498,20 @@ The simulation engine efficiently handles matrix operations:
 * **Block Execution**: Matrix operations are computed element-wise or using optimized algorithms (e.g., matrix multiplication)
 * **Performance**: Large matrices (up to 100×100) are supported with acceptable performance
 * **State Management**: Transfer functions maintain separate state arrays for each matrix element
+
+### Subsystems can be Disabled and Re-Enabled
+
+Subsystems have a special "enable" Boolean input signal.  By default, its value is True.  While enabled, all blocks in the subsystem operate normally.  It is disabled when the signal connected to the enable pin is "false-y". In this state, no integration is performed on any contained stateful Blocks (e.g., Transfer Function blocks) or Subsystems. Subsystem outputs would be generated as usual including using any frozen state values.  Supporting this, define a new Boolean property for Subsystem blocks called "showEnableInput". The default value will be False. We'll describe how we'll expose "enable" ports in the Canvas/Block UI later - for now, these rules should add proper functionality for C-code generation.  The enabled state of a Subsystem may change from one time step to the next, based on the "truthy-ness" of the connected "Enabled" input. Adding this feature affects the approach to properly flattening the model.  A notion of the scope of each active Enable signal will need to be maintained to correctly handle "disabled" elements during a live simulation - at least for Subsystems that have "showEnableInput" set.
+
+**Enable signal propagation** When a subsystem is disabled (enable=false), should nested subsystems shall be considered, regardless of their own enable signal.
+
+**Output behavior when disabled** You mentioned "Subsystem outputs would be generated as usual including using any frozen state values." Disabled Subsystems should hold their last values from when the subsystem was enabled. This implies that an initial value of all outputs must be computed based on the state of the system (taking into account initial values of all state variables), so that these outputs may be used for the Subsystem until it is enabled.
+
+**"enable" has a Special Port Number** Enable ports will be assigned a special index of -1 - for example, -1 will appear as the targetPortIndex for a connection where the "enable" port is the target of a connection.  Using -1 avoids affecting the order of other, regular input ports.
+
+**Default enable behavior** Where a subsystem has showEnableInput=false, it is enabled only if immediate parent is enabled. Similar to other rules, the top level model is special: it does not have its own showEnableInput tracking. Instead, it is always considered "enabled".
+
+**Subsystem Enabled Status updates in the Time Step Function** The Enabled state of all subsystems should be re-evaluated and updated at the end of the time step function.
 
 ### Multi-Sheet Simulation Architecture
 
@@ -514,6 +666,8 @@ The application uses a unified approach for handling multi-sheet models in both 
    - Subsystem port mappings (input/output port blocks)
    - Sheet label connections within subsystem scopes
 
+4. **Subsystem Semantics**: The ability to dynamically enable/disable subsystems within the simulation is designed to operate consistently across both simulation frameworks.
+
 ### Key Differences
 
 **Simulation (Runtime)**:
@@ -533,26 +687,6 @@ The application uses a unified approach for handling multi-sheet models in both 
 The code generator handles hierarchical multi-sheet models through a flattening process:
 
 1. **Model Flattening**: The C-code Generator makes no distinction between single sheet and multi-sheet models as it generates C-language code. Instead, the code generator shall - early in the code generation process - flatten the entire model into a single logical sheet in all cases. This implies that Subsystem input and output block are removed and replace with direct connections to their connected blocks on both sides. Signal Source and Signal Sink blocks would be handled in the same way.  (inputs and outputs of the top level model must be excluded from this treatment - only inputs and outputs of contained Subsystems should be replaced with direct connections).
-
-2. **Modularized Block Definitions** Blocks are modularized by defining Block-specific classes in the `lib/blocks/` folder - A `lib/blocks/BlockModule.ts` module defines an interface, `IBlockModule`, for implementing these Block-specific behavior methods:
-  - `generateComputation(block: BlockData, inputs: string[]): string` - generates the C-code corresponding to any computations performed by the block - sets the output based on inputs and state of the model structure
-  - `getOutputType(block: BlockData, inputTypes: string[]): string` - specifies the C-style type of the Block's output signal
-  - `generateStructMember(block: BlockData, outputType: string): string | null` - generates member variables that should be defined in the _signals_t structure typedef
-  - `requiresState(block: BlockData): boolean` - true where this block has continuous state that requires RK4 integration
-  - `generateStateStructMembers(block: BlockData, outputType: string): string[]` - generates member variables that should be defined in the _states_t structure typedef
-  - `generateInitialization?(block: BlockData): string` - generates code that should be inserted into the _init function
-
-3. **Subsystems can be Dynamically Enabled or Disabled** Subsystems have a special "enable" Boolean input signal.  By default, its value is True.  While enabled, all blocks in the subsystem operate normally.  It is disabled when the signal connected to the enable pin is "false-y". In this state, no integration is performed on any contained stateful Blocks (e.g., Transfer Function blocks) or Subsystems. Subsystem outputs would be generated as usual including using any frozen state values.  Supporting this, define a new Boolean property for Subsystem blocks called "showEnableInput". The default value will be False. We'll describe how we'll expose "enable" ports in the Canvas/Block UI later - for now, these rules should add proper functionality for C-code generation.  The enabled state of a Subsystem may change from one time step to the next, based on the "truthy-ness" of the connected "Enabled" input. Adding this feature affects the approach to properly flattening the model.  A notion of the scope of each active Enable signal will need to be maintained to correctly handle "disabled" elements during a live simulation - at least for Subsystems that have "showEnableInput" set.
-
-**Enable signal propagation** When a subsystem is disabled (enable=false), should nested subsystems shall be considered, regardless of their own enable signal.
-
-**Output behavior when disabled** You mentioned "Subsystem outputs would be generated as usual including using any frozen state values." Disabled Subsystems should hold their last values from when the subsystem was enabled. This implies that an initial value of all outputs must be computed based on the state of the system (taking into account initial values of all state variables), so that these outputs may be used for the Subsystem until it is enabled.
-
-**"enable" has a Special Port Number** Enable ports will be assigned a special index of -1 - for example, -1 will appear as the targetPortIndex for a connection where the "enable" port is the target of a connection.  Using -1 avoids affecting the order of other, regular input ports.
-
-**Default enable behavior** Where a subsystem has showEnableInput=false, it is enabled only if immediate parent is enabled. Similar to other rules, the top level model is special: it does not have its own showEnableInput tracking. Instead, it is always considered "enabled".
-
-**Subsystem Enabled Status updates in the Time Step Function** The Enabled state of all subsystems should be re-evaluated and updated at the end of the time step function.
 
 2. **Context Preservation**: A `BlockContextMap` tracks each block's original location:
    - Original sheet path for comments (e.g., "from Subsystem1 > Controller")

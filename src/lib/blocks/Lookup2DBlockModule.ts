@@ -1,146 +1,165 @@
 // lib/blocks/Lookup2DBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
+import { BlockState, SimulationState } from '@/lib/simulationEngine'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class Lookup2DBlockModule implements IBlockModule {
   generateComputation(block: BlockData, inputs: string[]): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
+    const blockName = BlockModuleUtils.sanitizeIdentifier(block.name)
+    
+    if (inputs.length < 2) {
+      return `    ${outputName} = 0.0; // Insufficient inputs\n`
+    }
+    
+    const input1Expr = inputs[0]
+    const input2Expr = inputs[1]
     const input1Values = block.parameters?.input1Values || [0, 1]
     const input2Values = block.parameters?.input2Values || [0, 1]
     const outputTable = block.parameters?.outputTable || [[0, 0], [0, 1]]
     const extrapolation = block.parameters?.extrapolation || 'clamp'
     
+    const rows = input1Values.length
+    const cols = input2Values.length
+    
     let code = `    // 2D Lookup block: ${block.name}\n`
+    code += `    {\n`
+    code += `        double input1 = ${input1Expr};\n`
+    code += `        double input2 = ${input2Expr};\n`
+    code += `        double output = 0.0;\n`
+    code += `        \n`
     
-    if (inputs.length < 2) {
-      code += `    ${outputName} = 0.0; // Insufficient inputs\n`
-      return code
-    }
-    
-    const input1Expr = inputs[0]
-    const input2Expr = inputs[1]
-    
-    // Generate lookup tables as static arrays
-    code += `    static const double ${outputName}_x[] = {`
-    code += input1Values.map((v: number) => v.toString()).join(', ')
+    // Generate lookup table data
+    code += `        // Lookup table dimensions\n`
+    code += `        const int ${blockName}_rows = ${rows};\n`
+    code += `        const int ${blockName}_cols = ${cols};\n`
+    code += `        \n`
+    code += `        // Input breakpoints\n`
+    code += `        const double ${blockName}_input1[${rows}] = {`
+    code += input1Values.join(', ')
     code += `};\n`
-    
-    code += `    static const double ${outputName}_y[] = {`
-    code += input2Values.map((v: number) => v.toString()).join(', ')
+    code += `        const double ${blockName}_input2[${cols}] = {`
+    code += input2Values.join(', ')
     code += `};\n`
-    
-    // Generate 2D output table
-    code += `    static const double ${outputName}_z[${input1Values.length}][${input2Values.length}] = {\n`
-    for (let i = 0; i < outputTable.length; i++) {
-      code += `        {`
-      code += outputTable[i].map((v: number) => v.toString()).join(', ')
+    code += `        \n`
+    code += `        // Output table\n`
+    code += `        const double ${blockName}_table[${rows}][${cols}] = {\n`
+    for (let i = 0; i < rows; i++) {
+      code += `            {`
+      const row = outputTable[i] || []
+      const rowValues = []
+      for (let j = 0; j < cols; j++) {
+        rowValues.push(row[j] || 0)
+      }
+      code += rowValues.join(', ')
       code += `}`
-      if (i < outputTable.length - 1) code += ','
+      if (i < rows - 1) code += ','
       code += '\n'
     }
-    code += `    };\n`
+    code += `        };\n`
+    code += `        \n`
     
-    code += `    const int ${outputName}_nx = ${input1Values.length};\n`
-    code += `    const int ${outputName}_ny = ${input2Values.length};\n`
-    code += `    double ${outputName}_u = ${input1Expr};\n`
-    code += `    double ${outputName}_v = ${input2Expr};\n`
-    code += `    \n`
+    // Generate interpolation code
+    code += `        // Find indices and interpolation factors\n`
+    code += `        int i0 = 0, i1 = 0;\n`
+    code += `        int j0 = 0, j1 = 0;\n`
+    code += `        double t1 = 0.0, t2 = 0.0;\n`
+    code += `        \n`
     
-    // Generate bilinear interpolation code
-    code += `    // 2D bilinear interpolation\n`
-    code += `    double result = 0.0;\n`
-    code += `    \n`
-    
-    // Find indices and interpolation factors for first dimension
-    code += `    // Find x index and factor\n`
-    code += `    int ix = 0;\n`
-    code += `    double fx = 0.0;\n`
-    
-    if (extrapolation === 'clamp') {
-      code += `    if (${outputName}_u <= ${outputName}_x[0]) {\n`
-      code += `        ix = 0;\n`
-      code += `        fx = 0.0;\n`
-      code += `    } else if (${outputName}_u >= ${outputName}_x[${outputName}_nx - 1]) {\n`
-      code += `        ix = ${outputName}_nx - 2;\n`
-      code += `        fx = 1.0;\n`
-      code += `    } else {\n`
-    } else {
-      code += `    if (${outputName}_u < ${outputName}_x[0]) {\n`
-      code += `        ix = 0;\n`
-      code += `        fx = (${outputName}_u - ${outputName}_x[0]) / (${outputName}_x[1] - ${outputName}_x[0]);\n`
-      code += `    } else if (${outputName}_u > ${outputName}_x[${outputName}_nx - 1]) {\n`
-      code += `        ix = ${outputName}_nx - 2;\n`
-      code += `        fx = (${outputName}_u - ${outputName}_x[${outputName}_nx - 2]) / `
-      code += `(${outputName}_x[${outputName}_nx - 1] - ${outputName}_x[${outputName}_nx - 2]);\n`
-      code += `    } else {\n`
+    // Find input1 indices
+    code += `        // Find row indices for input1\n`
+    code += `        if (input1 <= ${blockName}_input1[0]) {\n`
+    code += `            i0 = i1 = 0;\n`
+    code += `            t1 = 0.0;\n`
+    if (extrapolation === 'extrapolate') {
+      code += `            if (${rows} > 1 && ${blockName}_input1[1] != ${blockName}_input1[0]) {\n`
+      code += `                t1 = (input1 - ${blockName}_input1[0]) / (${blockName}_input1[1] - ${blockName}_input1[0]);\n`
+      code += `                i1 = 1;\n`
+      code += `            }\n`
     }
-    
-    code += `        for (int i = 0; i < ${outputName}_nx - 1; i++) {\n`
-    code += `            if (${outputName}_u >= ${outputName}_x[i] && ${outputName}_u <= ${outputName}_x[i + 1]) {\n`
-    code += `                ix = i;\n`
-    code += `                fx = (${outputName}_u - ${outputName}_x[i]) / (${outputName}_x[i + 1] - ${outputName}_x[i]);\n`
-    code += `                break;\n`
+    code += `        } else if (input1 >= ${blockName}_input1[${rows - 1}]) {\n`
+    code += `            i0 = i1 = ${rows - 1};\n`
+    code += `            t1 = 0.0;\n`
+    if (extrapolation === 'extrapolate') {
+      code += `            if (${rows} > 1 && ${blockName}_input1[${rows - 1}] != ${blockName}_input1[${rows - 2}]) {\n`
+      code += `                i0 = ${rows - 2};\n`
+      code += `                t1 = (input1 - ${blockName}_input1[${rows - 2}]) / (${blockName}_input1[${rows - 1}] - ${blockName}_input1[${rows - 2}]);\n`
+      code += `            }\n`
+    }
+    code += `        } else {\n`
+    code += `            for (int i = 0; i < ${rows - 1}; i++) {\n`
+    code += `                if (input1 >= ${blockName}_input1[i] && input1 <= ${blockName}_input1[i + 1]) {\n`
+    code += `                    i0 = i;\n`
+    code += `                    i1 = i + 1;\n`
+    code += `                    if (${blockName}_input1[i1] != ${blockName}_input1[i0]) {\n`
+    code += `                        t1 = (input1 - ${blockName}_input1[i0]) / (${blockName}_input1[i1] - ${blockName}_input1[i0]);\n`
+    code += `                    }\n`
+    code += `                    break;\n`
+    code += `                }\n`
     code += `            }\n`
     code += `        }\n`
-    code += `    }\n`
-    code += `    \n`
+    code += `        \n`
     
-    // Find indices and interpolation factors for second dimension
-    code += `    // Find y index and factor\n`
-    code += `    int iy = 0;\n`
-    code += `    double fy = 0.0;\n`
-    
-    if (extrapolation === 'clamp') {
-      code += `    if (${outputName}_v <= ${outputName}_y[0]) {\n`
-      code += `        iy = 0;\n`
-      code += `        fy = 0.0;\n`
-      code += `    } else if (${outputName}_v >= ${outputName}_y[${outputName}_ny - 1]) {\n`
-      code += `        iy = ${outputName}_ny - 2;\n`
-      code += `        fy = 1.0;\n`
-      code += `    } else {\n`
-    } else {
-      code += `    if (${outputName}_v < ${outputName}_y[0]) {\n`
-      code += `        iy = 0;\n`
-      code += `        fy = (${outputName}_v - ${outputName}_y[0]) / (${outputName}_y[1] - ${outputName}_y[0]);\n`
-      code += `    } else if (${outputName}_v > ${outputName}_y[${outputName}_ny - 1]) {\n`
-      code += `        iy = ${outputName}_ny - 2;\n`
-      code += `        fy = (${outputName}_v - ${outputName}_y[${outputName}_ny - 2]) / `
-      code += `(${outputName}_y[${outputName}_ny - 1] - ${outputName}_y[${outputName}_ny - 2]);\n`
-      code += `    } else {\n`
+    // Find input2 indices
+    code += `        // Find column indices for input2\n`
+    code += `        if (input2 <= ${blockName}_input2[0]) {\n`
+    code += `            j0 = j1 = 0;\n`
+    code += `            t2 = 0.0;\n`
+    if (extrapolation === 'extrapolate') {
+      code += `            if (${cols} > 1 && ${blockName}_input2[1] != ${blockName}_input2[0]) {\n`
+      code += `                t2 = (input2 - ${blockName}_input2[0]) / (${blockName}_input2[1] - ${blockName}_input2[0]);\n`
+      code += `                j1 = 1;\n`
+      code += `            }\n`
     }
-    
-    code += `        for (int i = 0; i < ${outputName}_ny - 1; i++) {\n`
-    code += `            if (${outputName}_v >= ${outputName}_y[i] && ${outputName}_v <= ${outputName}_y[i + 1]) {\n`
-    code += `                iy = i;\n`
-    code += `                fy = (${outputName}_v - ${outputName}_y[i]) / (${outputName}_y[i + 1] - ${outputName}_y[i]);\n`
-    code += `                break;\n`
+    code += `        } else if (input2 >= ${blockName}_input2[${cols - 1}]) {\n`
+    code += `            j0 = j1 = ${cols - 1};\n`
+    code += `            t2 = 0.0;\n`
+    if (extrapolation === 'extrapolate') {
+      code += `            if (${cols} > 1 && ${blockName}_input2[${cols - 1}] != ${blockName}_input2[${cols - 2}]) {\n`
+      code += `                j0 = ${cols - 2};\n`
+      code += `                t2 = (input2 - ${blockName}_input2[${cols - 2}]) / (${blockName}_input2[${cols - 1}] - ${blockName}_input2[${cols - 2}]);\n`
+      code += `            }\n`
+    }
+    code += `        } else {\n`
+    code += `            for (int j = 0; j < ${cols - 1}; j++) {\n`
+    code += `                if (input2 >= ${blockName}_input2[j] && input2 <= ${blockName}_input2[j + 1]) {\n`
+    code += `                    j0 = j;\n`
+    code += `                    j1 = j + 1;\n`
+    code += `                    if (${blockName}_input2[j1] != ${blockName}_input2[j0]) {\n`
+    code += `                        t2 = (input2 - ${blockName}_input2[j0]) / (${blockName}_input2[j1] - ${blockName}_input2[j0]);\n`
+    code += `                    }\n`
+    code += `                    break;\n`
+    code += `                }\n`
     code += `            }\n`
     code += `        }\n`
-    code += `    }\n`
-    code += `    \n`
+    code += `        \n`
     
-    // Perform bilinear interpolation
-    code += `    // Bilinear interpolation\n`
-    code += `    double z00 = ${outputName}_z[ix][iy];\n`
-    code += `    double z10 = (ix + 1 < ${outputName}_nx) ? ${outputName}_z[ix + 1][iy] : z00;\n`
-    code += `    double z01 = (iy + 1 < ${outputName}_ny) ? ${outputName}_z[ix][iy + 1] : z00;\n`
-    code += `    double z11 = (ix + 1 < ${outputName}_nx && iy + 1 < ${outputName}_ny) ? ${outputName}_z[ix + 1][iy + 1] : z00;\n`
-    code += `    \n`
-    code += `    double z0 = z00 * (1.0 - fx) + z10 * fx;\n`
-    code += `    double z1 = z01 * (1.0 - fx) + z11 * fx;\n`
-    code += `    ${outputName} = z0 * (1.0 - fy) + z1 * fy;\n`
+    // Bilinear interpolation
+    code += `        // Bilinear interpolation\n`
+    code += `        double v00 = ${blockName}_table[i0][j0];\n`
+    code += `        double v01 = ${blockName}_table[i0][j1];\n`
+    code += `        double v10 = ${blockName}_table[i1][j0];\n`
+    code += `        double v11 = ${blockName}_table[i1][j1];\n`
+    code += `        \n`
+    code += `        double v0 = v00 + t2 * (v01 - v00);\n`
+    code += `        double v1 = v10 + t2 * (v11 - v10);\n`
+    code += `        output = v0 + t1 * (v1 - v0);\n`
+    code += `        \n`
+    code += `        ${outputName} = output;\n`
+    code += `    }\n`
     
     return code
   }
 
   getOutputType(block: BlockData, inputTypes: string[]): string {
-    // Output type matches input types for 2D lookup
-    // Assumes both inputs have the same type
+    // Output type matches the first input type for 2D lookup
     if (inputTypes.length === 0) {
       return 'double' // Default type
     }
-    return inputTypes[0]
+    // 2D lookup only accepts scalar inputs
+    const baseType = BlockModuleUtils.parseType(inputTypes[0]).baseType
+    return baseType // Return scalar type
   }
 
   generateStructMember(block: BlockData, outputType: string): string | null {
@@ -149,14 +168,132 @@ export class Lookup2DBlockModule implements IBlockModule {
   }
 
   requiresState(block: BlockData): boolean {
-    // Lookup blocks don't need state
+    // Lookup blocks don't need state variables
     return false
   }
 
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
-    // No state needed for lookup blocks
+    // No state needed
     return []
   }
 
-  // No initialization needed for lookup blocks
+  generateInitialization(block: BlockData): string {
+    // No initialization needed
+    return ''
+  }
+
+  executeSimulation(
+    blockState: BlockState,
+    inputs: (number | number[] | boolean | boolean[] | number[][])[],
+    simulationState: SimulationState
+  ): void {
+    const input1 = inputs[0]
+    const input2 = inputs[1]
+    
+    // Lookup blocks only accept scalar inputs
+    if (Array.isArray(input1) || Array.isArray(input2)) {
+      console.error(`Lookup2D block ${blockState.blockId} received vector input but expects scalar inputs`)
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    const scalarInput1 = typeof input1 === 'number' ? input1 : 0
+    const scalarInput2 = typeof input2 === 'number' ? input2 : 0
+    const { input1Values, input2Values, outputTable, extrapolation } = blockState.internalState
+    
+    // Validate that we have data
+    if (!input1Values || !input2Values || !outputTable || 
+        input1Values.length === 0 || input2Values.length === 0 || outputTable.length === 0) {
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    // Ensure table dimensions match input arrays
+    const rows = input1Values.length
+    const cols = input2Values.length
+    
+    if (outputTable.length !== rows) {
+      blockState.outputs[0] = 0
+      return
+    }
+    
+    // Single point case
+    if (rows === 1 && cols === 1) {
+      blockState.outputs[0] = outputTable[0][0] || 0
+      return
+    }
+    
+    // Find input1 (row) indices
+    let i0 = 0, i1 = 0, t1 = 0
+    if (scalarInput1 <= input1Values[0]) {
+      i0 = i1 = 0
+      t1 = 0
+    } else if (scalarInput1 >= input1Values[rows - 1]) {
+      i0 = i1 = rows - 1
+      t1 = 0
+    } else {
+      for (let i = 0; i < rows - 1; i++) {
+        if (scalarInput1 >= input1Values[i] && scalarInput1 <= input1Values[i + 1]) {
+          i0 = i
+          i1 = i + 1
+          t1 = (input1Values[i + 1] - input1Values[i]) !== 0 ? 
+               (scalarInput1 - input1Values[i]) / (input1Values[i + 1] - input1Values[i]) : 0
+          break
+        }
+      }
+    }
+    
+    // Find input2 (column) indices
+    let j0 = 0, j1 = 0, t2 = 0
+    if (scalarInput2 <= input2Values[0]) {
+      j0 = j1 = 0
+      t2 = 0
+    } else if (scalarInput2 >= input2Values[cols - 1]) {
+      j0 = j1 = cols - 1
+      t2 = 0
+    } else {
+      for (let j = 0; j < cols - 1; j++) {
+        if (scalarInput2 >= input2Values[j] && scalarInput2 <= input2Values[j + 1]) {
+          j0 = j
+          j1 = j + 1
+          t2 = (input2Values[j + 1] - input2Values[j]) !== 0 ? 
+               (scalarInput2 - input2Values[j]) / (input2Values[j + 1] - input2Values[j]) : 0
+          break
+        }
+      }
+    }
+    
+    // Get the four corner values for bilinear interpolation
+    const v00 = (outputTable[i0] && outputTable[i0][j0] !== undefined) ? outputTable[i0][j0] : 0
+    const v01 = (outputTable[i0] && outputTable[i0][j1] !== undefined) ? outputTable[i0][j1] : 0
+    const v10 = (outputTable[i1] && outputTable[i1][j0] !== undefined) ? outputTable[i1][j0] : 0
+    const v11 = (outputTable[i1] && outputTable[i1][j1] !== undefined) ? outputTable[i1][j1] : 0
+    
+    // Bilinear interpolation
+    const v0 = v00 + t2 * (v01 - v00)  // Interpolate along input2 axis at i0
+    const v1 = v10 + t2 * (v11 - v10)  // Interpolate along input2 axis at i1
+    const result = v0 + t1 * (v1 - v0) // Interpolate along input1 axis
+    
+    // Handle extrapolation if needed
+    if (extrapolation === 'clamp') {
+      // Clamping is already handled by the index finding logic above
+      blockState.outputs[0] = result
+    } else {
+      // For extrapolation, we could extend the gradients, but for now use the result
+      blockState.outputs[0] = result
+    }
+  }
+
+  getInputPortCount(block: BlockData): number {
+    // 2D lookup blocks have exactly 2 inputs
+    return 2
+  }
+
+  getOutputPortCount(block: BlockData): number {
+    // 2D lookup blocks have exactly 1 output
+    return 1
+  }
+
+  // No custom port labels needed
+  
 }

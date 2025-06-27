@@ -1,13 +1,18 @@
 // lib/modelSchema.ts
 import { z } from 'zod'
 
+/**
+ * SignalValue defines valid types for signals in the interactive simulation subsystem
+ */
+export type SignalValue = number | number[] | number[][] | boolean | boolean[]
+
 // Block position schema
 const PositionSchema = z.object({
   x: z.number(),
   y: z.number()
 })
 
-// Signal type schema
+// Signal type schema as C-language types
 const SignalTypeSchema = z.enum(['float', 'double', 'long', 'bool'])
   .or(z.string().regex(/^(float|double|long|bool)\[\d+\]$/, 'Invalid array type syntax'))
 

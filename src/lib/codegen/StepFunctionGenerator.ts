@@ -2,7 +2,7 @@
 
 import { FlattenedModel, FlattenedBlock } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
-import { BlockCodeGeneratorFactory } from '../blocks/BlockCodeGeneratorFactory'
+import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 import { EnableEvaluator } from './EnableEvaluator'
 
 /**
@@ -166,7 +166,7 @@ export class StepFunctionGenerator {
       }
       
       // Skip blocks that don't generate code
-      if (!BlockCodeGeneratorFactory.isSupported(block.block.type)) {
+      if (!BlockModuleFactory.isSupported(block.block.type)) {
         continue
       }
       
@@ -175,7 +175,7 @@ export class StepFunctionGenerator {
       
       // Generate computation
       try {
-        const generator = BlockCodeGeneratorFactory.getBlockCodeGenerator(block.block.type)
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
         
         // Add block comment
         code += `\n    /* ${block.flattenedName}`
@@ -320,7 +320,7 @@ export class StepFunctionGenerator {
   private hasStatefulBlocks(): boolean {
     return this.model.blocks.some(block => {
       try {
-        const generator = BlockCodeGeneratorFactory.getBlockCodeGenerator(block.block.type)
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
         return generator.requiresState(block.block)
       } catch {
         return false

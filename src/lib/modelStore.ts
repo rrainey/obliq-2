@@ -5,6 +5,7 @@ import { WireData } from '@/components/Wire'
 import { SimulationResults, SimulationEngine } from '@/lib/simulationEngine'
 import { Model, ModelVersion } from '@/lib/types'
 import { supabase } from '@/lib/supabaseClient'
+import { SignalValue } from '@/lib/modelSchema'
 
 export interface Sheet {
   id: string
@@ -40,7 +41,7 @@ export interface ModelState {
   simulationResults: SimulationResults | null
   isSimulating: boolean
   simulationEngine: SimulationEngine | null
-  outputPortValues: Map<string, number | number[] | boolean | boolean[]> | null
+  outputPortValues: Map<string, SignalValue> | null
   
   // Loading states
   modelLoading: boolean
@@ -93,7 +94,7 @@ export interface ModelActions {
   setSimulationResults: (results: SimulationResults | null) => void
   setIsSimulating: (simulating: boolean) => void
   setSimulationEngine: (engine: SimulationEngine | null) => void
-  setOutputPortValues: (values: Map<string, number | number[] | boolean | boolean[]> | null) => void
+  setOutputPortValues: (values: Map<string, SignalValue > | null | undefined) => void
   setGlobalSimulationResults: (results: Map<string, SimulationResults>) => void
   clearGlobalSimulationResults: () => void
   

@@ -21,6 +21,7 @@ import Lookup2DConfig from '@/components/Lookup2DConfig'
 import MuxConfig from '@/components/MuxConfig'
 import SheetLabelSinkConfig from '@/components/SheetLabelSinkConfig'
 import SheetLabelSourceConfig from '@/components/SheetLabelSourceConfig'
+import SumConfig from '@/components/SumConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
@@ -239,6 +240,12 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       case 'sheet_label_source':
         return {
           signalName: ''  // Will be populated from available sinks
+        }
+      case 'sum':
+        return {
+          signs: '++',
+          numInputs: 2, // Default to 2 inputs
+          inputs: ['Input1', 'Input2'] // Legacy support
         }
       default:
         return {}
@@ -580,6 +587,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'lookup_2d' ||
       block.type === 'sheet_label_sink' || 
       block.type === 'sheet_label_source' ||
+      block.type === 'sum' ||
       block.type === 'mux'
     )) {
       console.log('Setting config block:', block)
@@ -963,6 +971,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'source' && (
             <SourceConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'sum' && (
+            <SumConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

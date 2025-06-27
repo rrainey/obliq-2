@@ -19,6 +19,7 @@ export interface CustomEdgeData {
   sourceType?: string
   targetType?: string
   signalName?: string
+  isEnableConnection?: boolean
 }
 
 // Helper to extract matrix dimensions from type string
@@ -52,28 +53,54 @@ const formatTypeForDisplay = (typeStr?: string): string => {
 }
 
 // Default edge with enhanced visualization
-export const DefaultEdge: FC<EdgeProps<CustomEdgeData>> = ({
-  id,
-  sourceX,
-  sourceY,
-  targetX,
-  targetY,
-  sourcePosition,
-  targetPosition,
-  style = {},
-  data,
-  markerEnd,
-  selected,
-}) => {
-  const [isHovered, setIsHovered] = useState(false)
-  const [edgePath, labelX, labelY] = getBezierPath({
+export const DefaultEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
+  const {
+    id,
     sourceX,
     sourceY,
-    sourcePosition,
     targetX,
     targetY,
+    sourcePosition,
     targetPosition,
-  })
+    style = {},
+    data,
+    markerEnd,
+    selected,
+  } = props
+  
+  const [isHovered, setIsHovered] = useState(false)
+  
+  // Check if this is an enable connection
+  // ReactFlow passes the edge object which contains targetHandle
+  const edge = (props as any)
+  const isEnableConnection = edge.targetHandle === '_enable_' || data?.isEnableConnection === true
+  
+  // Debug logging
+  if (isEnableConnection) {
+    console.log('Enable connection detected:', { id, targetHandle: edge.targetHandle, dataFlag: data?.isEnableConnection })
+  }
+  
+  let edgePath: string
+  let labelX: number
+  let labelY: number
+  
+  if (isEnableConnection) {
+    // Custom path for enable connections - drop vertically to the top port
+    const midY = sourceY + (targetY - sourceY) * 0.7
+    edgePath = `M ${sourceX} ${sourceY} L ${targetX} ${midY} L ${targetX} ${targetY}`
+    labelX = targetX
+    labelY = (sourceY + targetY) / 2
+  } else {
+    // Use default bezier path for regular connections
+    [edgePath, labelX, labelY] = getBezierPath({
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+    })
+  }
 
   const hasError = !!data?.typeError
   const isMatrix = !!extractMatrixDimensions(data?.sourceType)
@@ -81,14 +108,15 @@ export const DefaultEdge: FC<EdgeProps<CustomEdgeData>> = ({
   // Dynamic styles based on state
   const edgeStyle = {
     ...style,
-    stroke: hasError ? '#ef4444' : (selected ? '#3b82f6' : (isHovered ? '#6b7280' : '#374151')),
+    stroke: hasError ? '#ef4444' : (selected ? '#3b82f6' : (isHovered ? '#6b7280' : (isEnableConnection ? '#7c3aed' : '#374151'))),
     strokeWidth: selected || isHovered ? 3 : (isMatrix ? 3 : 2),
     strokeDasharray: hasError ? '5,5' : (isMatrix && !isHovered && !selected ? '10,3' : 'none'),
     transition: 'stroke 0.2s, stroke-width 0.2s',
   }
 
-  // Custom marker based on state
+  // Custom marker based on state and connection type
   const customMarkerEnd = hasError ? 'url(#arrow-error)' : 
+                         isEnableConnection ? 'url(#arrow-enable)' :
                          selected ? 'url(#arrow-selected)' : 
                          isHovered ? 'url(#arrow-hover)' : 
                          isMatrix ? 'url(#arrow-matrix)' :
@@ -171,17 +199,29 @@ export const DefaultEdge: FC<EdgeProps<CustomEdgeData>> = ({
 }
 
 // Animated edge for active signals during simulation
+// Animated edge for active signals during simulation
 export const AnimatedEdge: FC<EdgeProps<CustomEdgeData & { signalValue?: number | number[] }>> = (props) => {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data } = props
   const [offset, setOffset] = useState(0)
   
-  const [edgePath] = getBezierPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-  })
+  // Check if this is an enable connection
+  const isEnableConnection = (props as any).targetHandle === '_enable_' || data?.isEnableConnection === true
+  
+  let edgePath: string
+  if (isEnableConnection) {
+    // Custom path for enable connections
+    const midY = sourceY + (targetY - sourceY) * 0.7
+    edgePath = `M ${sourceX} ${sourceY} L ${targetX} ${midY} L ${targetX} ${targetY}`
+  } else {
+    [edgePath] = getBezierPath({
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+    })
+  }
 
   // Animate the dash offset for flowing effect
   useEffect(() => {

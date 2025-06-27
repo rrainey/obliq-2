@@ -206,8 +206,6 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
   }
   */
 
-  console.log('Code generated successfully, creating ZIP')
-
   // Create ZIP file
   let zip: JSZip
   let zipBuffer: Buffer

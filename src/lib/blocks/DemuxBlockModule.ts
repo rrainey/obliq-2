@@ -1,62 +1,48 @@
 // lib/blocks/DemuxBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
+import { BlockState, SimulationState } from '@/lib/simulationEngine'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class DemuxBlockModule implements IBlockModule {
   generateComputation(block: BlockData, inputs: string[]): string {
-    const baseName = BlockModuleUtils.sanitizeIdentifier(block.name)
-    
-    let code = `    // Demux block: ${block.name}\n`
-    
     if (inputs.length === 0) {
-      code += `    // No input connected\n`
-      return code
+      return `    // Demux block: ${block.name} - no input\n`
     }
     
     const inputExpr = inputs[0]
+    const blockName = BlockModuleUtils.sanitizeIdentifier(block.name)
     
-    // Without type information, generate basic scalar output
-    // In full implementation, we'd use input type to determine behavior
-    code += `    // Demux output (type-dependent)\n`
-    code += `    model->signals.${baseName}_0 = ${inputExpr}; // Placeholder\n`
-    
-    return code
-  }
-  
-  generateComputationWithType(block: BlockData, inputs: string[], inputType: string): string {
-    const baseName = BlockModuleUtils.sanitizeIdentifier(block.name)
+    // Get the output count from parameters (would be set dynamically based on input)
+    const outputCount = block.parameters?.outputCount || 1
+    const inputDimensions = block.parameters?.inputDimensions || [1]
     
     let code = `    // Demux block: ${block.name}\n`
     
-    if (inputs.length === 0) {
-      code += `    // No input connected\n`
+    // Single output case
+    if (outputCount === 1) {
+      code += `    model->signals.${blockName}_0 = ${inputExpr};\n`
       return code
     }
     
-    const inputExpr = inputs[0]
-    const typeInfo = BlockModuleUtils.parseType(inputType)
-    
-    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-      // Matrix demux - output each element
-      code += `    // Demux matrix to scalars\n`
+    // Vector input case
+    if (inputDimensions.length === 1) {
+      code += `    // Demux vector input\n`
+      for (let i = 0; i < outputCount; i++) {
+        code += `    model->signals.${blockName}_${i} = ${inputExpr}[${i}];\n`
+      }
+    } else if (inputDimensions.length === 2) {
+      // Matrix input case
+      const rows = inputDimensions[0]
+      const cols = inputDimensions[1]
+      code += `    // Demux matrix input (row-major order)\n`
       let outputIndex = 0
-      for (let i = 0; i < typeInfo.rows; i++) {
-        for (let j = 0; j < typeInfo.cols; j++) {
-          code += `    model->signals.${baseName}_${outputIndex} = ${inputExpr}[${i}][${j}];\n`
+      for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < cols; j++) {
+          code += `    model->signals.${blockName}_${outputIndex} = ${inputExpr}[${i}][${j}];\n`
           outputIndex++
         }
       }
-    } else if (typeInfo.isArray && typeInfo.arraySize) {
-      // Vector demux
-      code += `    // Demux vector to scalars\n`
-      for (let i = 0; i < typeInfo.arraySize; i++) {
-        code += `    model->signals.${baseName}_${i} = ${inputExpr}[${i}];\n`
-      }
-    } else {
-      // Scalar pass-through
-      code += `    // Scalar pass-through\n`
-      code += `    model->signals.${baseName}_0 = ${inputExpr};\n`
     }
     
     return code
@@ -64,51 +50,37 @@ export class DemuxBlockModule implements IBlockModule {
 
   getOutputType(block: BlockData, inputTypes: string[]): string {
     // Demux always outputs scalars
-    // The actual number of outputs depends on input type
     if (inputTypes.length === 0) {
       return 'double'
     }
     
-    const typeInfo = BlockModuleUtils.parseType(inputTypes[0])
-    return typeInfo.baseType // Individual elements are scalars
+    // Extract base type from input
+    const inputType = inputTypes[0]
+    const parsed = BlockModuleUtils.parseType(inputType)
+    return parsed.baseType
   }
 
   generateStructMember(block: BlockData, outputType: string): string | null {
-    // Demux needs multiple signal storage locations
-    // This will be handled specially by the code generator
-    // For now, return null as individual signals are generated elsewhere
-    return null
-  }
-  
-  /**
-   * Generate struct members for all demux outputs
-   */
-  generateDemuxStructMembers(block: BlockData, inputType: string): string[] {
-    const baseName = BlockModuleUtils.sanitizeIdentifier(block.name)
-    const typeInfo = BlockModuleUtils.parseType(inputType)
-    const members: string[] = []
+    // Demux needs multiple output signals
+    const outputCount = block.parameters?.outputCount || 1
+    const blockName = BlockModuleUtils.sanitizeIdentifier(block.name)
     
-    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-      // Generate output for each matrix element
-      const count = typeInfo.rows * typeInfo.cols
-      for (let i = 0; i < count; i++) {
-        members.push(`    ${typeInfo.baseType} ${baseName}_${i};`)
-      }
-    } else if (typeInfo.isArray && typeInfo.arraySize) {
-      // Generate output for each vector element
-      for (let i = 0; i < typeInfo.arraySize; i++) {
-        members.push(`    ${typeInfo.baseType} ${baseName}_${i};`)
-      }
-    } else {
-      // Single scalar output
-      members.push(`    ${typeInfo.baseType} ${baseName}_0;`)
+    if (outputCount === 1) {
+      return `    ${outputType} ${blockName}_0;`
+    }
+    
+    // Generate multiple scalar outputs
+    let members = ''
+    for (let i = 0; i < outputCount; i++) {
+      if (i > 0) members += '\n'
+      members += `    ${outputType} ${blockName}_${i};`
     }
     
     return members
   }
 
   requiresState(block: BlockData): boolean {
-    // Demux blocks don't need state
+    // Demux blocks don't need state variables
     return false
   }
 
@@ -117,40 +89,123 @@ export class DemuxBlockModule implements IBlockModule {
     return []
   }
 
-  /**
-   * Get the number of output ports based on input type
-   */
-  getOutputPortCount(block: BlockData, inputType: string): number {
-    const typeInfo = BlockModuleUtils.parseType(inputType)
-    
-    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-      return typeInfo.rows * typeInfo.cols
-    } else if (typeInfo.isArray && typeInfo.arraySize) {
-      return typeInfo.arraySize
-    } else {
-      return 1 // Scalar
-    }
+  generateInitialization(block: BlockData): string {
+    // No initialization needed
+    return ''
   }
 
-  /**
-   * Get a descriptive name for an output port
-   */
-  getOutputPortName(block: BlockData, portIndex: number, inputType: string): string {
-    const typeInfo = BlockModuleUtils.parseType(inputType)
+  executeSimulation(
+    blockState: BlockState,
+    inputs: (number | number[] | boolean | boolean[] | number[][])[],
+    simulationState: SimulationState
+  ): void {
+    const input = inputs[0]
     
-    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-      // For matrices, use row_col notation
-      const row = Math.floor(portIndex / typeInfo.cols)
-      const col = portIndex % typeInfo.cols
-      return `out_${row}_${col}`
-    } else if (typeInfo.isArray) {
-      // For vectors, use index
-      return `out_${portIndex}`
-    } else {
-      // Scalar
-      return 'out'
+    // Handle missing input
+    if (input === undefined) {
+      // Set single output to 0
+      blockState.outputs = [0]
+      return
     }
+    
+    // Case 1: Scalar input - pass through as single output
+    if (typeof input === 'number' || typeof input === 'boolean') {
+      blockState.outputs = [input]
+      return
+    }
+    
+    // Case 2: 1D array (vector) input
+    if (Array.isArray(input) && !Array.isArray(input[0])) {
+      // Split vector into scalar outputs
+      const vector = input as (number | boolean)[]
+      blockState.outputs = []
+      
+      for (let i = 0; i < vector.length; i++) {
+        blockState.outputs[i] = vector[i]
+      }
+      
+      // Store the output count for dynamic port updates
+      blockState.internalState = {
+        ...blockState.internalState,
+        outputCount: vector.length,
+        inputDimensions: [vector.length]
+      }
+      return
+    }
+    
+    // Case 3: 2D array (matrix) input
+    if (Array.isArray(input) && Array.isArray(input[0])) {
+      // Split matrix into scalar outputs in row-major order
+      const matrix = input as unknown as (number[][] | boolean[][])
+      blockState.outputs = []
+      let outputIndex = 0
+      
+      for (let i = 0; i < matrix.length; i++) {
+        const row = matrix[i]
+        if (Array.isArray(row)) {
+          for (let j = 0; j < row.length; j++) {
+            blockState.outputs[outputIndex] = row[j]
+            outputIndex++
+          }
+        }
+      }
+      
+      // Store the output count and dimensions for dynamic port updates
+      const rows = matrix.length
+      const cols = matrix[0]?.length || 0
+      blockState.internalState = {
+        ...blockState.internalState,
+        outputCount: rows * cols,
+        inputDimensions: [rows, cols]
+      }
+      return
+    }
+    
+    // Fallback for unexpected input types
+    console.warn(`Demux block ${blockState.blockId}: Unexpected input type`)
+    blockState.outputs = [0]
   }
 
-  // No initialization needed
+  getInputPortCount(block: BlockData): number {
+    // Demux blocks have exactly 1 input
+    return 1
+  }
+
+  getOutputPortCount(block: BlockData): number {
+    // Demux blocks have dynamic output count based on input dimensions
+    const outputCount = block.parameters?.outputCount || 1
+    return outputCount
+  }
+
+
+  getOutputPortLabels?(block: BlockData): string[] | undefined {
+    // Generate custom labels for matrix outputs
+    const outputCount = block.parameters?.outputCount || 1
+    const inputDimensions = block.parameters?.inputDimensions || [1]
+    
+    if (outputCount === 1) {
+      return undefined // Use default for single output
+    }
+    
+    const labels: string[] = []
+    
+    if (inputDimensions.length === 1) {
+      // Vector input - simple numeric labels
+      for (let i = 0; i < outputCount; i++) {
+        labels.push(`[${i}]`)
+      }
+    } else if (inputDimensions.length === 2) {
+      // Matrix input - row/col labels
+      const rows = inputDimensions[0]
+      const cols = inputDimensions[1]
+      
+      for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < cols; j++) {
+          labels.push(`row${i}_col${j}`)
+        }
+      }
+    }
+    
+    return labels
+  }
 }

@@ -2,7 +2,7 @@
 
 import { FlattenedModel } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
-import { BlockCodeGeneratorFactory } from '../blocks/BlockCodeGeneratorFactory'
+import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 
 /**
  * Generates the initialization function for a flattened model
@@ -96,7 +96,7 @@ export class InitFunctionGenerator {
     
     for (const block of this.model.blocks) {
       try {
-        const generator = BlockCodeGeneratorFactory.getBlockCodeGenerator(block.block.type)
+        const generator = BlockModuleFactory.getModuleGenerator(block.block.type)
         
         // Check if this block type has initialization
         if (generator.generateInitialization) {

@@ -3,18 +3,159 @@
         {
             "id": "main",
             "name": "Main",
-            "blocks": [],
+            "blocks": [
+                {
+                    "id": "source_1749830153859",
+                    "name": "Source1",
+                    "type": "source",
+                    "position": {
+                        "x": -38.25,
+                        "y": 115.75
+                    },
+                    "parameters": {
+                        "f0": 0.1,
+                        "f1": 10,
+                        "mean": 0,
+                        "phase": 0,
+                        "slope": 1,
+                        "value": 1,
+                        "offset": 0,
+                        "dataType": "double",
+                        "duration": 10,
+                        "stepTime": 1,
+                        "amplitude": 1,
+                        "frequency": 1,
+                        "startTime": 0,
+                        "stepValue": 1,
+                        "signalType": "constant"
+                    }
+                },
+                {
+                    "id": "transfer_function_1749830168708",
+                    "name": "Transfer function2",
+                    "type": "transfer_function",
+                    "position": {
+                        "x": 87.25,
+                        "y": 115.75
+                    },
+                    "parameters": {
+                        "numerator": [
+                            1
+                        ],
+                        "denominator": [
+                            1,
+                            0
+                        ]
+                    }
+                },
+                {
+                    "id": "lookup_1d_1749830205087",
+                    "name": "Lookup 1d3",
+                    "type": "lookup_1d",
+                    "position": {
+                        "x": 225.25,
+                        "y": 115.75
+                    },
+                    "parameters": {
+                        "inputValues": [
+                            0,
+                            1,
+                            2,
+                            10
+                        ],
+                        "outputValues": [
+                            0,
+                            1,
+                            4,
+                            5
+                        ],
+                        "extrapolation": "clamp"
+                    }
+                },
+                {
+                    "id": "output_port_1749830250451",
+                    "name": "Output port4",
+                    "type": "output_port",
+                    "position": {
+                        "x": 362.25,
+                        "y": 115.75
+                    },
+                    "parameters": {
+                        "portName": "Output"
+                    }
+                },
+                {
+                    "id": "signal_display_1749830281219",
+                    "name": "Signal display5",
+                    "type": "signal_display",
+                    "position": {
+                        "x": 379.75,
+                        "y": -18.75
+                    },
+                    "parameters": {
+                        "maxSamples": 1000
+                    }
+                },
+                {
+                    "id": "signal_logger_1749830308257",
+                    "name": "Signal logger6",
+                    "type": "signal_logger",
+                    "position": {
+                        "x": 377.75,
+                        "y": 234.75
+                    },
+                    "parameters": {
+                        "maxSamples": 1000
+                    }
+                }
+            ],
             "extents": {
                 "width": 1000,
                 "height": 800
             },
-            "connections": []
+            "connections": [
+                {
+                    "id": "wire_1749830184941",
+                    "sourceBlockId": "source_1749830153859",
+                    "targetBlockId": "transfer_function_1749830168708",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1749830208363",
+                    "sourceBlockId": "transfer_function_1749830168708",
+                    "targetBlockId": "lookup_1d_1749830205087",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1749830253891",
+                    "sourceBlockId": "lookup_1d_1749830205087",
+                    "targetBlockId": "output_port_1749830250451",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1749830284221",
+                    "sourceBlockId": "lookup_1d_1749830205087",
+                    "targetBlockId": "signal_display_1749830281219",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                },
+                {
+                    "id": "wire_1749830310462",
+                    "sourceBlockId": "lookup_1d_1749830205087",
+                    "targetBlockId": "signal_logger_1749830308257",
+                    "sourcePortIndex": 0,
+                    "targetPortIndex": 0
+                }
+            ]
         }
     ],
     "version": "1.0",
     "metadata": {
-        "created": "2025-06-06T02:15:10.940Z",
-        "description": "New Model"
+        "created": "2025-06-13T15:55:49.476479+00:00",
+        "description": "Model itest-02"
     },
     "globalSettings": {
         "simulationDuration": 10,

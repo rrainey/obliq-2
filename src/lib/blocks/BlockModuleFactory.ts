@@ -1,4 +1,4 @@
-// lib/blocks/BlockCodeGeneratorFactory.ts
+// lib/blocks/BlockModuleFactory.ts
 
 import { IBlockModule } from './BlockModule'
 import { SumBlockModule } from './SumBlockModule'
@@ -14,10 +14,16 @@ import { MatrixMultiplyBlockModule } from './MatrixMultiplyBlockModule'
 import { MuxBlockModule } from './MuxBlockModule'
 import { DemuxBlockModule } from './DemuxBlockModule'
 
+import { SheetLabelSinkBlockModule } from './SheetLabelSinkBlockModule'
+import { SheetLabelSourceBlockModule } from './SheetLabelSourceBlockModule'
+import { SubsystemBlockModule } from './SubsystemBlockModule'
+import { SignalDisplayBlockModule } from './SignalDisplayBlockModule'
+import { SignalLoggerBlockModule } from './SignalLoggerBlockModule'
+
 /**
  * Factory for creating block-specific code generators
  */
-export class BlockCodeGeneratorFactory {
+export class BlockModuleFactory {
   private static instances: Map<string, IBlockModule> = new Map()
   
   /**
@@ -26,7 +32,7 @@ export class BlockCodeGeneratorFactory {
    * @returns The appropriate code generator module
    * @throws Error if block type is not supported
    */
-  static getBlockCodeGenerator(blockType: string): IBlockModule {
+  static getBlockModule(blockType: string): IBlockModule {
     // Use singleton instances for each block type
     if (!this.instances.has(blockType)) {
       const instance = this.createInstance(blockType)
@@ -37,7 +43,7 @@ export class BlockCodeGeneratorFactory {
     
     const generator = this.instances.get(blockType)
     if (!generator) {
-      throw new Error(`Unsupported block type for code generation: ${blockType}`)
+      throw new Error(`Unsupported block type: ${blockType}`)
     }
     
     return generator
@@ -84,13 +90,22 @@ export class BlockCodeGeneratorFactory {
       case 'demux':
         return new DemuxBlockModule()
         
-      // Blocks that don't generate computation code
+      // Blocks that don't generate compiled code but have specific behavior
+
       case 'signal_display':
+        return new SignalDisplayBlockModule() 
+
       case 'signal_logger':
+        return new SignalLoggerBlockModule() 
+
       case 'sheet_label_sink':
+        return new SheetLabelSinkBlockModule()
+
       case 'sheet_label_source':
+        return new SheetLabelSourceBlockModule()
+
       case 'subsystem':
-        return null
+        return new SubsystemBlockModule()
         
       default:
         return null
@@ -133,6 +148,6 @@ export class BlockCodeGeneratorFactory {
 }
 
 // Export convenience function
-export function getBlockCodeGenerator(blockType: string): IBlockModule {
-  return BlockCodeGeneratorFactory.getBlockCodeGenerator(blockType)
+export function getModuleGenerator(blockType: string): IBlockModule {
+  return BlockModuleFactory.getBlockModule(blockType)
 }

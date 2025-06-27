@@ -1,11 +1,12 @@
 // lib/blocks/BlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
+import { BlockState, SimulationState } from '@/lib/simulationEngine'
 
 /**
- * Interface for block-specific code generation modules.
+ * Interface for block-specific code generation and simulation modules.
  * Each block type implements this interface to provide its specific
- * C code generation logic.
+ * behavior for code generation, simulation execution, and port management.
  */
 export interface IBlockModule {
   /**
@@ -53,10 +54,51 @@ export interface IBlockModule {
    * @returns C code for initialization or undefined if not needed
    */
   generateInitialization?(block: BlockData): string
+
+  /**
+   * Execute the simulation logic for this block.
+   * Updates the blockState outputs based on inputs and internal logic.
+   * @param blockState - The current state of the block including outputs and internal state
+   * @param inputs - Array of input values (numbers, arrays, or matrices)
+   * @param simulationState - The global simulation state for accessing time, signals, etc.
+   */
+  executeSimulation(
+    blockState: BlockState,
+    inputs: (number | number[] | boolean | boolean[] | number[][])[],
+    simulationState: SimulationState
+  ): void
+
+  /**
+   * Get the number of input ports for this block.
+   * @param block - The block data containing parameters
+   * @returns Number of input ports (may be dynamic based on parameters)
+   */
+  getInputPortCount(block: BlockData): number
+
+  /**
+   * Get the number of output ports for this block.
+   * @param block - The block data containing parameters
+   * @returns Number of output ports
+   */
+  getOutputPortCount(block: BlockData): number
+
+  /**
+   * Get custom labels for input ports (optional).
+   * @param block - The block data containing parameters
+   * @returns Array of port labels or undefined to use default numbering
+   */
+  getInputPortLabels?(block: BlockData): string[] | undefined
+
+/**
+   * Get custom labels for output ports (optional).
+   * @param block - The block data containing parameters
+   * @returns Array of port labels or undefined to use default numbering
+   */
+  getOutputPortLabels?(block: BlockData): string[] | undefined
 }
 
 /**
- * Common utility functions for block code generators
+ * Common utility functions for block code generators and simulations
  */
 export class BlockModuleUtils {
   /**

@@ -2,7 +2,7 @@
 
 import { FlattenedModel, FlattenedBlock } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
-import { BlockCodeGeneratorFactory } from '../blocks/BlockCodeGeneratorFactory'
+import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 import { EnableEvaluator } from './EnableEvaluator'
 
 /**
@@ -83,7 +83,7 @@ export class RK4Generator {
     let code = ''
     
     try {
-      const generator = BlockCodeGeneratorFactory.getBlockCodeGenerator(block.block.type)
+      const generator = BlockModuleFactory.getModuleGenerator(block.block.type)
       
       // Only process blocks that have state
       if (!generator.requiresState(block.block)) {
@@ -377,7 +377,7 @@ export class RK4Generator {
   private getStatefulBlocks(): FlattenedBlock[] {
     return this.model.blocks.filter(block => {
       try {
-        const generator = BlockCodeGeneratorFactory.getBlockCodeGenerator(block.block.type)
+        const generator = BlockModuleFactory.getModuleGenerator(block.block.type)
         return generator.requiresState(block.block)
       } catch {
         return false

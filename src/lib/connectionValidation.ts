@@ -1,6 +1,7 @@
 // src/lib/connectionValidation.ts
 import { BlockData, PortInfo } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
+import { PortCountAdapter } from './validation/PortCountAdapter'
 
 export interface ValidationResult {
   isValid: boolean
@@ -85,8 +86,8 @@ export function validateConnection(
   }
 
   // Rule 5: Check if ports exist on the blocks
-  const sourcePortCount = getOutputPortCount(sourceBlock.type, sourceBlock.parameters)
-  const targetPortCount = getInputPortCount(targetBlock.type, targetBlock.parameters)
+  const sourcePortCount = getOutputPortCount(sourceBlock)
+  const targetPortCount = getBlockInputPortCount(targetBlock)
   
   // Special handling for enable port (port index -1)
   if (targetPort.portIndex === -1) {
@@ -222,81 +223,11 @@ export function detectAlgebraicLoop(
   return { isValid: true }
 }
 
-// Helper functions to get port counts
-function getInputPortCount(blockType: string, parameters?: Record<string, any>): number {
-  switch (blockType) {
-    case 'sum':
-    case 'multiply':
-      return 2 // Can be extended for more inputs
-    case 'scale':
-    case 'transfer_function':
-    case 'output_port':
-    case 'signal_display':
-    case 'signal_logger':
-      return 1
-    case 'lookup_1d':
-      return 1
-    case 'lookup_2d':
-      return 2
-    case 'matrix_multiply':
-      return 2
-    case 'input_port':
-    case 'source':
-      return 0 // No inputs
-    case 'subsystem':
-      // Count regular input ports, not the enable port
-      const inputPorts = parameters?.inputPorts || ['Input1']
-      return inputPorts.length
-    case 'sheet_label_sink':
-      return 1
-    case 'sheet_label_source':
-      return 0
-    case 'mux':
-      // Dynamic based on configuration
-      const rows = parameters?.rows || 2
-      const cols = parameters?.cols || 2
-      return rows * cols
-    case 'demux':
-      return 1
-    default:
-      return 0
-  }
+export function getBlockInputPortCount(block: BlockData): number {
+  return PortCountAdapter.getInputPortCount(block)
 }
 
-function getOutputPortCount(blockType: string, parameters?: Record<string, any>): number {
-  switch (blockType) {
-    case 'sum':
-    case 'multiply':
-    case 'scale':
-    case 'transfer_function':
-    case 'input_port':
-    case 'source':
-    case 'lookup_1d':
-    case 'lookup_2d':
-      return 1
-    case 'matrix_multiply':
-      return 1
-    case 'output_port':
-    case 'signal_display':
-    case 'signal_logger':
-      return 0 // No outputs
-    case 'subsystem':
-      const outputPorts = parameters?.outputPorts || ['Output1']
-      return outputPorts.length
-    case 'sheet_label_sink':
-      return 0
-    case 'sheet_label_source':
-      return 1
-    case 'mux':
-      return 1
-    case 'demux':
-      // Dynamic based on input signal dimensions
-      const outputCount = parameters?.outputCount || 1
-      return outputCount
-    default:
-      return 0
-  }
+// Remove the old getOutputPortCount function and replace with:
+export function getOutputPortCount(block: BlockData): number {
+  return PortCountAdapter.getOutputPortCount(block)
 }
-
-// Export the helper functions for use in other modules
-export { getInputPortCount, getOutputPortCount }

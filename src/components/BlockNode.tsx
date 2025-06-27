@@ -2,8 +2,10 @@
 
 'use client'
 
-import { memo, CSSProperties } from 'react'
+import { memo, CSSProperties, useEffect, useState } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
+import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
+import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
 
 export interface BlockData {
   id: string
@@ -17,6 +19,11 @@ export interface PortInfo {
   blockId: string
   portIndex: number
   isOutput: boolean
+}
+
+export interface BlockNodeProps {
+  data: BlockData
+  selected?: boolean
 }
 
 // Define custom node data structure that extends BlockData
@@ -39,52 +46,6 @@ const calculatePortPosition = (index: number, count: number, blockHeight: number
   return startY + index * PORT_SPACING
 }
 
-// Get port counts based on block type
-const getPortCounts = (blockType: string, parameters?: Record<string, any>) => {
-  switch (blockType) {
-    case 'sum':
-    case 'multiply':
-      return { inputs: 2, outputs: 1 }
-    case 'scale':
-    case 'transfer_function':
-      return { inputs: 1, outputs: 1 }
-    case 'signal_display':
-    case 'signal_logger':
-    case 'output_port':
-      return { inputs: 1, outputs: 0 }
-    case 'lookup_1d':
-      return { inputs: 1, outputs: 1 }
-    case 'lookup_2d':
-      return { inputs: 2, outputs: 1 }
-    case 'matrix_multiply':
-      return { inputs: 2, outputs: 1 }
-    case 'input_port':
-    case 'source':
-      return { inputs: 0, outputs: 1 }
-    case 'subsystem':
-      const inputPorts = parameters?.inputPorts || ['Input1']
-      const outputPorts = parameters?.outputPorts || ['Output1']
-      const hasEnable = parameters?.showEnableInput || false
-      // Don't count enable port in regular input count
-      return { inputs: inputPorts.length, outputs: outputPorts.length, hasEnable }
-    case 'sheet_label_sink':
-      return { inputs: 1, outputs: 0 }
-    case 'sheet_label_source':
-      return { inputs: 0, outputs: 1 }
-    case 'mux':
-      // Dynamic port count based on configured dimensions
-      const rows = parameters?.rows || 2
-      const cols = parameters?.cols || 2
-      return { inputs: rows * cols, outputs: 1 }
-    case 'demux':
-      // Dynamic port count based on input signal dimensions
-      // Default to 1 input, outputs determined at runtime
-      const outputCount = parameters?.outputCount || 1
-      return { inputs: 1, outputs: outputCount }
-    default:
-      return { inputs: 1, outputs: 1 }
-  }
-}
 
 // Helper to render 1D lookup curve
 const render1DLookupCurve = (parameters?: Record<string, any>) => {
@@ -380,12 +341,53 @@ const getBlockWidth = (data: BlockNodeData): number => {
   return 80 // Default width
 }
 
+// Add this CSS for port signs
+const portSignStyles = `
+  .port-sign {
+    position: absolute;
+    font-size: 0.60rem;
+    font-weight: bold;
+    pointer-events: none;
+  }
+  
+  .port-sign.positive {
+    color: #555555; /* green */
+  }
+  
+  .port-sign.negative {
+    color: #555555; /* red */
+  }
+`
+
 // Custom node component
-const BlockNode = memo(({ data, selected }: NodeProps<BlockNodeData>) => {
-  const { inputs: inputCount, outputs: outputCount, hasEnable } = getPortCounts(data.type, data.parameters)
+export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
+  const getPortCounts = () => {
+    return PortCountAdapter.getPortCounts(data)
+  }
+
+  const getPortLabels = () => {
+    return {
+      inputs: PortCountAdapter.getInputPortLabels(data),
+      outputs: PortCountAdapter.getOutputPortLabels(data)
+    }
+  }
+
+  const { inputCount, outputCount } = getPortCounts()
+  const portLabels = getPortLabels()
   const blockWidth = getBlockWidth(data)
   const isTerminator = data.type === 'input_port' || data.type === 'output_port'
   const minHeight = isTerminator ? TERMINATOR_HEIGHT : Math.max(MIN_HEIGHT, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
+  const [updateTrigger, setUpdateTrigger] = useState(0);
+
+  // Get sum block signs
+  const getSumSigns = () => {
+    if (data.type === 'sum' && data.parameters?.signs) {
+      return data.parameters.signs.split('')
+    }
+    return null
+  }
+
+  const sumSigns = getSumSigns()
 
   // Handle styles for ReactFlow node
   const handleStyle: CSSProperties = {
@@ -417,169 +419,318 @@ const BlockNode = memo(({ data, selected }: NodeProps<BlockNodeData>) => {
     boxShadow: '0 0 0 2px #c4b5fd',
   }
 
-  return (
-    <>
-      {/* Block Name - positioned above the block */}
-      <div
-        className="absolute left-0 right-0 text-center text-gray-800 font-medium pointer-events-none"
-        style={{ 
-          width: blockWidth, 
-          fontSize: '0.5rem', 
-          lineHeight: '0.75rem',
-          top: isTerminator ? '-0.7rem' : '-0.75rem' // Adjust position based on block type
-        }}
-      >
-        {data.name}
-        {/* Signal name indicator for sheet labels */}
-        {(data.type === 'sheet_label_sink' || data.type === 'sheet_label_source') && 
-        data.parameters?.signalName && (
-          <div className="text-purple-600 mt-0.5" style={{ fontSize: '0.5rem' }}>
-            "{data.parameters.signalName}"
-          </div>
-        )}
-      </div>
+  // CSS additions for port labels
+  const blockNodeStyles = `
+    .port-labels {
+      position: absolute;
+      font-size: 0.7rem;
+      color: #6b7280;
+    }
+    
+    .output-labels {
+      right: -60px;
+      top: 0;
+    }
+    
+    .port-label {
+      height: 20px;
+      line-height: 20px;
+    }
+  `
 
-      {/* Enable port indicator for subsystems with showEnableInput */}
-      {data.type === 'subsystem' && hasEnable && (
-        <div
-          className="absolute text-purple-700 font-bold pointer-events-none"
+  // Function to render input ports with labels
+  const renderInputPorts = () => {
+    const ports = []
+    for (let i = 0; i < inputCount; i++) {
+      const label = portLabels.inputs?.[i]
+      ports.push(
+        <Handle
+          key={`input-${i}`}
+          type="target"
+          position={Position.Left}
+          id={`input-${i}`}
           style={{
-            top: -8,
-            left: blockWidth / 2 - 6,
-            fontSize: '0.75rem',
-            transform: 'translateX(-50%)',
+            top: `${((i + 1) / (inputCount + 1)) * 100}%`,
+            background: '#374151',
+            width: 12,
+            height: 12,
+            border: '2px solid white',
           }}
-        >
-          ▼
-        </div>
-      )}
+          title={label || `Input ${i + 1}`}
+        />
+      )
+    }
+    return ports
+  }
 
-      {/* Main block body */}
-      {(data.type === 'input_port' || data.type === 'output_port') ? (
-        // Terminator shape for input/output ports
-        <div style={{ position: 'relative', width: blockWidth, height: minHeight }}>
-          <svg
-            width={blockWidth}
-            height={minHeight}
-            style={{ position: 'absolute', top: 0, left: 0 }}
-            className={`${selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
-          >
-            {/* Terminator shape path - stadium/pill shape */}
-            <path
-              d={`
-                M ${minHeight/2} 2
-                L ${blockWidth - minHeight/2} 2
-                A ${minHeight/2 - 2} ${minHeight/2 - 2} 0 0 1 ${blockWidth - minHeight/2} ${minHeight - 2}
-                L ${minHeight/2} ${minHeight - 2}
-                A ${minHeight/2 - 2} ${minHeight/2 - 2} 0 0 1 ${minHeight/2} 2
-                Z
-              `}
-              fill="white"
-              stroke="#9ca3af"
-              strokeWidth="2"
-            />
-          </svg>
-          
-          {/* Port name text overlay */}
-          <div 
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
-            style={{ width: blockWidth, height: minHeight }}
-          >
-            {getBlockSymbol(data)}
-          </div>
-        </div>
-      ) : (
-        // Regular rectangular block
-        <div
-          className={`
-            relative rounded-lg border-2 flex items-center justify-center
-            bg-white border-gray-400
-            ${selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}
-            transition-shadow
-          `}
+  // Function to render output ports with labels
+  const renderOutputPorts = () => {
+    const ports = []
+    for (let i = 0; i < outputCount; i++) {
+      const label = portLabels.outputs?.[i]
+      ports.push(
+        <Handle
+          key={`output-${i}`}
+          type="source"
+          position={Position.Right}
+          id={`output-${i}`}
           style={{
-            width: blockWidth,
-            height: minHeight,
+            top: `${((i + 1) / (outputCount + 1)) * 100}%`,
+            background: '#374151',
+            width: 12,
+            height: 12,
+            border: '2px solid white',
           }}
-        >
-          {/* Block Symbol */}
-          <div className="text-xl font-bold text-gray-900 pointer-events-none">
-            {getBlockSymbol(data)}
-          </div>
-        </div>
-      )}
+          title={label || `Output ${i + 1}`}
+        />
+      )
+    }
+    return ports
+  }
 
-      {/* Enable Handle - Special port at top center for subsystems */}
-      {data.type === 'subsystem' && hasEnable && (
+  // Special handling for subsystem enable port
+  const renderEnablePort = () => {
+    if (data.type === 'subsystem' && data.parameters?.showEnableInput) {
+      return (
         <Handle
           type="target"
           position={Position.Top}
-          id="_enable_"
+          id="enable"
           style={{
-            ...enableHandleStyle,
-            top: -6,
-            left: blockWidth / 2,
-            transform: 'translateX(-50%)',
+            left: '50%',
+            background: '#374151',
+            width: 12,
+            height: 12,
+            border: '2px solid white',
           }}
-          onMouseEnter={(e) => {
-            const target = e.target as HTMLElement
-            Object.assign(target.style, enableHandleHoverStyle)
-          }}
-          onMouseLeave={(e) => {
-            const target = e.target as HTMLElement
-            Object.assign(target.style, enableHandleStyle)
-          }}
+          title="Enable"
         />
+      )
+    }
+    return null
+  }
+
+  const proposedNewRender= () => {
+    <div className={`block-node ${data.type} ${selected ? 'selected' : ''}`}>
+      {/* Block content */}
+      <div className="block-name">{data.name}</div>
+      
+      {/* Port labels for special blocks */}
+      {data.type === 'demux' && portLabels.outputs && (
+        <div className="port-labels output-labels">
+          {portLabels.outputs.map((label, i) => (
+            <div key={i} className="port-label">{label}</div>
+          ))}
+        </div>
       )}
+      
+      {/* Render ports */}
+      {renderInputPorts()}
+      {renderOutputPorts()}
+      {renderEnablePort()}
+    </div>
+  }
 
-      {/* Input Handles */}
-      {Array.from({ length: inputCount }).map((_, index) => (
-        <Handle
-          key={`input-${index}`}
-          type="target"
-          position={Position.Left}
-          id={`input-${index}`}
-          style={{
-            ...handleStyle,
-            top: calculatePortPosition(index, inputCount, minHeight),
-            left: -6,
+  const oldRender = () => {
+    return (
+      <>
+        <style>{portSignStyles}</style>
+        
+        {/* Block Name - positioned above the block */}
+        <div
+          className="absolute left-0 right-0 text-center text-gray-800 font-medium pointer-events-none"
+          style={{ 
+            width: blockWidth, 
+            fontSize: '0.5rem', 
+            lineHeight: '0.75rem',
+            top: isTerminator ? '-0.7rem' : '-0.75rem'
           }}
-          onMouseEnter={(e) => {
-            const target = e.target as HTMLElement
-            Object.assign(target.style, handleHoverStyle)
-          }}
-          onMouseLeave={(e) => {
-            const target = e.target as HTMLElement
-            Object.assign(target.style, handleStyle)
-          }}
-        />
-      ))}
+        >
+          {data.name}
+          {/* Signal name indicator for sheet labels */}
+          {(data.type === 'sheet_label_sink' || data.type === 'sheet_label_source') && 
+          data.parameters?.signalName && (
+            <div className="text-purple-600 mt-0.5" style={{ fontSize: '0.5rem' }}>
+              "{data.parameters.signalName}"
+            </div>
+          )}
+        </div>
 
-      {/* Output Handles */}
-      {Array.from({ length: outputCount }).map((_, index) => (
-        <Handle
-          key={`output-${index}`}
-          type="source"
-          position={Position.Right}
-          id={`output-${index}`}
-          style={{
-            ...handleStyle,
-            top: calculatePortPosition(index, outputCount, minHeight),
-            right: -6,
-          }}
-          onMouseEnter={(e) => {
-            const target = e.target as HTMLElement
-            Object.assign(target.style, handleHoverStyle)
-          }}
-          onMouseLeave={(e) => {
-            const target = e.target as HTMLElement
-            Object.assign(target.style, handleStyle)
-          }}
-        />
-      ))}
+        {/* Enable port indicator for subsystems with showEnableInput */}
+        {data.type === 'subsystem' && data.parameters?.showEnableInput && (
+          <div
+            className="absolute text-purple-700 font-bold pointer-events-none"
+            style={{
+              top: -8,
+              left: blockWidth / 2 - 6,
+              fontSize: '0.75rem',
+              transform: 'translateX(-50%)',
+            }}
+          >
+            ▼
+          </div>
+        )}
+
+        {/* Main block body */}
+        {(data.type === 'input_port' || data.type === 'output_port') ? (
+          // Terminator shape for input/output ports
+          <div style={{ position: 'relative', width: blockWidth, height: minHeight }}>
+            <svg
+              width={blockWidth}
+              height={minHeight}
+              style={{ position: 'absolute', top: 0, left: 0 }}
+              className={`${selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
+            >
+              {/* Terminator shape path - stadium/pill shape */}
+              <path
+                d={`
+                  M ${minHeight/2} 2
+                  L ${blockWidth - minHeight/2} 2
+                  A ${minHeight/2 - 2} ${minHeight/2 - 2} 0 0 1 ${blockWidth - minHeight/2} ${minHeight - 2}
+                  L ${minHeight/2} ${minHeight - 2}
+                  A ${minHeight/2 - 2} ${minHeight/2 - 2} 0 0 1 ${minHeight/2} 2
+                  Z
+                `}
+                fill="white"
+                stroke="#9ca3af"
+                strokeWidth="2"
+              />
+            </svg>
+            
+            {/* Port name text overlay */}
+            <div 
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+              style={{ width: blockWidth, height: minHeight }}
+            >
+              {getBlockSymbol(data)}
+            </div>
+          </div>
+        ) : (
+          // Regular rectangular block
+          <div
+            className={`
+              relative rounded-lg border-2 flex items-center justify-center
+              bg-white border-gray-400
+              ${selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}
+              transition-shadow
+            `}
+            style={{
+              width: blockWidth,
+              height: minHeight,
+            }}
+          >
+            {/* Block Symbol */}
+            <div className="text-xl font-bold text-gray-900 pointer-events-none">
+              {getBlockSymbol(data)}
+            </div>
+          </div>
+        )}
+
+        {/* Sum block input signs */}
+        {data.type === 'sum' && sumSigns && sumSigns.map((sign: any, index: number) => (
+          <div
+            key={`sign-${index}`}
+            className={`port-sign ${sign === '+' ? 'positive' : 'negative'}`}
+            style={{
+              top: calculatePortPosition(index, inputCount, minHeight) - 8,
+              left: 8,
+            }}
+          >
+            {sign}
+          </div>
+        ))}
+
+        {/* Enable Handle - Special port at top center for subsystems */}
+        {data.type === 'subsystem' && data.parameters?.showEnableInput && (
+          <Handle
+            type="target"
+            position={Position.Top}
+            id="_enable_"
+            style={{
+              ...enableHandleStyle,
+              top: -6,
+              left: blockWidth / 2,
+              transform: 'translateX(-50%)',
+            }}
+            onMouseEnter={(e) => {
+              const target = e.target as HTMLElement
+              Object.assign(target.style, enableHandleHoverStyle)
+            }}
+            onMouseLeave={(e) => {
+              const target = e.target as HTMLElement
+              Object.assign(target.style, enableHandleStyle)
+            }}
+          />
+        )}
+
+        {/* Input Handles with tooltips showing signs for sum blocks */}
+        {Array.from({ length: inputCount }).map((_, index) => (
+          <Handle
+            key={`input-${index}`}
+            type="target"
+            position={Position.Left}
+            id={`input-${index}`}
+            style={{
+              ...handleStyle,
+              top: calculatePortPosition(index, inputCount, minHeight),
+              left: -6,
+            }}
+            title={
+              data.type === 'sum' && sumSigns && sumSigns[index]
+                ? `Input ${index + 1} (${sumSigns[index] === '+' ? 'Add' : 'Subtract'})`
+                : `Input ${index + 1}`
+            }
+            onMouseEnter={(e) => {
+              const target = e.target as HTMLElement
+              Object.assign(target.style, handleHoverStyle)
+            }}
+            onMouseLeave={(e) => {
+              const target = e.target as HTMLElement
+              Object.assign(target.style, handleStyle)
+            }}
+          />
+        ))}
+
+        {/* Output Handles */}
+        {Array.from({ length: outputCount }).map((_, index) => (
+          <Handle
+            key={`output-${index}`}
+            type="source"
+            position={Position.Right}
+            id={`output-${index}`}
+            style={{
+              ...handleStyle,
+              top: calculatePortPosition(index, outputCount, minHeight),
+              right: -6,
+            }}
+            onMouseEnter={(e) => {
+              const target = e.target as HTMLElement
+              Object.assign(target.style, handleHoverStyle)
+            }}
+            onMouseLeave={(e) => {
+              const target = e.target as HTMLElement
+              Object.assign(target.style, handleStyle)
+            }}
+          />
+        ))}
+      </>
+    )
+  }
+
+  // Update effect to re-render when parameters change (for dynamic ports)
+  useEffect(() => {
+    if (PortCountAdapter.hasDynamicPorts(data)) {
+      // Force re-render when parameters change
+      setUpdateTrigger(prev => prev + 1)
+    }
+  }, [data.parameters])
+
+  return (
+    <>
+      {oldRender()}
     </>
   )
-})
+}
 
 BlockNode.displayName = 'BlockNode'
 
@@ -607,7 +758,7 @@ export const blockDataToNode = (block: BlockData) => {
 
 // Helper function to convert WireData to ReactFlow edge format
 export const wireDataToEdge = (wire: any) => {
-  return {
+  const edge = {
     id: wire.id,
     source: wire.sourceBlockId,
     target: wire.targetBlockId,
@@ -615,4 +766,10 @@ export const wireDataToEdge = (wire: any) => {
     targetHandle: wire.targetPortIndex === -1 ? '_enable_' : `input-${wire.targetPortIndex}`,
     type: 'default',
   }
+  
+  // Important: ReactFlow needs the targetHandle to be accessible for our custom edge
+  // to detect enable connections
+  return edge
 }
+
+

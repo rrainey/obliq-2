@@ -172,6 +172,7 @@ function CanvasReactFlowInner({
       // Special styling for enable connections
       if (wire.targetPortIndex === -1) {
         edgeData.sourceType = 'bool' // Enable ports always expect boolean
+        edgeData.isEnableConnection = true
       }
       
       return {
@@ -219,8 +220,17 @@ function CanvasReactFlowInner({
       isOutput: false,
     }
 
-    // Validate connection
-    const validation = validateConnection(sourcePort, targetPort, blocks, wires)
+    // Get the current edges from ReactFlow state instead of props
+    const currentWires = edges.map(edge => ({
+      id: edge.id,
+      sourceBlockId: edge.source,
+      sourcePortIndex: parseInt(edge.sourceHandle?.split('-')[1] || '0'),
+      targetBlockId: edge.target,
+      targetPortIndex: edge.targetHandle === '_enable_' ? -1 : parseInt(edge.targetHandle?.split('-')[1] || '0'),
+    }))
+
+    // Validate connection using currentWires instead of wires prop
+    const validation = validateConnection(sourcePort, targetPort, blocks, currentWires)
     
     if (!validation.isValid) {
       setConnectionError(validation.errorMessage || 'Invalid connection')
@@ -287,6 +297,19 @@ function CanvasReactFlowInner({
       )
     }
   }, [onWireCreate])
+
+  const handleEdgesChange = useCallback((changes: any[]) => {
+    // First apply the changes to ReactFlow's internal state
+    onEdgesChange(changes)
+    
+    // Then handle deletions to update our external state
+    const deletions = changes.filter(change => change.type === 'remove')
+    deletions.forEach(deletion => {
+      if (onWireDelete) {
+        onWireDelete(deletion.id)
+      }
+    })
+  }, [onEdgesChange, onWireDelete])
 
   // Handle node context menu - following ReactFlow example pattern
   const onNodeContextMenu = useCallback(
@@ -387,8 +410,18 @@ function CanvasReactFlowInner({
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Check if user is typing in an input field
+      const target = event.target as HTMLElement
+      if (target.tagName === 'INPUT' || 
+          target.tagName === 'TEXTAREA' || 
+          target.isContentEditable) {
+        return
+      }
+
       // Delete selected nodes/edges
       if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault()
+        
         const selectedNodes = nodes.filter((n: Node) => n.selected)
         const selectedEdges = edges.filter((e: Edge) => e.selected)
 

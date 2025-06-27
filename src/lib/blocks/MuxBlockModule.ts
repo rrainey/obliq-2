@@ -1,6 +1,7 @@
 // lib/blocks/MuxBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
+import { BlockState, SimulationState } from '@/lib/simulationEngine'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class MuxBlockModule implements IBlockModule {
@@ -8,12 +9,11 @@ export class MuxBlockModule implements IBlockModule {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     const rows = block.parameters?.rows || 2
     const cols = block.parameters?.cols || 2
+    const expectedInputs = rows * cols
     
     let code = `    // Mux block: ${block.name} (${rows}×${cols})\n`
     
-    const expectedInputs = rows * cols
-    
-    // Special case: 1x1 mux is pass-through
+    // Special case: 1×1 mux is a pass-through
     if (rows === 1 && cols === 1) {
       if (inputs.length > 0) {
         code += `    ${outputName} = ${inputs[0]};\n`
@@ -23,13 +23,12 @@ export class MuxBlockModule implements IBlockModule {
       return code
     }
     
-    // Case 1: Vector output (1×n or n×1)
+    // Case 1: Vector output (either 1×n or n×1)
     if (rows === 1 || cols === 1) {
       const size = Math.max(rows, cols)
-      code += `    // Mux to vector\n`
-      
+      code += `    // Vector output\n`
       for (let i = 0; i < size; i++) {
-        if (i < inputs.length && inputs[i]) {
+        if (i < inputs.length) {
           code += `    ${outputName}[${i}] = ${inputs[i]};\n`
         } else {
           code += `    ${outputName}[${i}] = 0.0;\n`
@@ -37,13 +36,11 @@ export class MuxBlockModule implements IBlockModule {
       }
     } else {
       // Case 2: Matrix output
-      code += `    // Mux to matrix\n`
-      
+      code += `    // Matrix output (row-major order)\n`
       for (let i = 0; i < rows; i++) {
         for (let j = 0; j < cols; j++) {
-          const inputIndex = i * cols + j // Row-major order
-          
-          if (inputIndex < inputs.length && inputs[inputIndex]) {
+          const inputIndex = i * cols + j
+          if (inputIndex < inputs.length) {
             code += `    ${outputName}[${i}][${j}] = ${inputs[inputIndex]};\n`
           } else {
             code += `    ${outputName}[${i}][${j}] = 0.0;\n`
@@ -58,20 +55,21 @@ export class MuxBlockModule implements IBlockModule {
   getOutputType(block: BlockData, inputTypes: string[]): string {
     const rows = block.parameters?.rows || 2
     const cols = block.parameters?.cols || 2
+    const baseType = block.parameters?.outputType || 'double'
     
-    // Special case: 1x1 mux
+    // Special case: 1×1 mux outputs a scalar
     if (rows === 1 && cols === 1) {
-      return inputTypes.length > 0 ? inputTypes[0] : 'double'
+      return baseType
     }
     
-    // Vector output (1×n or n×1)
+    // Vector output (either 1×n or n×1)
     if (rows === 1 || cols === 1) {
       const size = Math.max(rows, cols)
-      return `double[${size}]`
+      return `${baseType}[${size}]`
     }
     
     // Matrix output
-    return `double[${rows}][${cols}]`
+    return `${baseType}[${rows}][${cols}]`
   }
 
   generateStructMember(block: BlockData, outputType: string): string | null {
@@ -80,7 +78,7 @@ export class MuxBlockModule implements IBlockModule {
   }
 
   requiresState(block: BlockData): boolean {
-    // Mux blocks don't need state
+    // Mux blocks don't need state variables
     return false
   }
 
@@ -89,36 +87,132 @@ export class MuxBlockModule implements IBlockModule {
     return []
   }
 
-  /**
-   * Get the number of input ports for this mux block
-   */
+  generateInitialization(block: BlockData): string {
+    // No initialization needed
+    return ''
+  }
+
+  executeSimulation(
+    blockState: BlockState,
+    inputs: (number | number[] | boolean | boolean[] | number[][])[],
+    simulationState: SimulationState
+  ): void {
+    const rows = blockState.internalState?.rows || 2
+    const cols = blockState.internalState?.cols || 2
+    const outputType = blockState.internalState?.outputType || 'double'
+    
+    // Check if we have the expected number of inputs
+    const expectedInputs = rows * cols
+    if (inputs.length !== expectedInputs) {
+      console.warn(`Mux block ${blockState.blockId} expected ${expectedInputs} inputs but received ${inputs.length}`)
+    }
+    
+    // Special case: 1×1 mux acts as a pass-through
+    if (rows === 1 && cols === 1) {
+      blockState.outputs[0] = inputs[0] !== undefined ? inputs[0] : 0
+      return
+    }
+    
+    // Determine if output should be boolean based on outputType
+    const isBooleanOutput = outputType === 'bool'
+    
+    // Case 1: Vector output (either 1×n or n×1)
+    if (rows === 1 || cols === 1) {
+      const size = Math.max(rows, cols)
+      
+      if (isBooleanOutput) {
+        // Create boolean array
+        const result: boolean[] = []
+        for (let i = 0; i < size; i++) {
+          const input = inputs[i]
+          if (typeof input === 'boolean') {
+            result.push(input)
+          } else if (typeof input === 'number') {
+            result.push(input !== 0) // Convert number to boolean
+          } else {
+            result.push(false) // Default
+          }
+        }
+        blockState.outputs[0] = result
+      } else {
+        // Create number array
+        const result: number[] = []
+        for (let i = 0; i < size; i++) {
+          const input = inputs[i]
+          if (typeof input === 'number') {
+            result.push(input)
+          } else if (typeof input === 'boolean') {
+            result.push(input ? 1 : 0) // Convert boolean to number
+          } else {
+            result.push(0) // Default
+          }
+        }
+        blockState.outputs[0] = result
+      }
+      return
+    }
+    
+    // Case 2: Matrix output (m×n where both > 1)
+    if (isBooleanOutput) {
+      // Create boolean matrix
+      const result: boolean[][] = []
+      for (let i = 0; i < rows; i++) {
+        result[i] = []
+        for (let j = 0; j < cols; j++) {
+          const inputIndex = i * cols + j // Row-major order
+          const input = inputs[inputIndex]
+          
+          if (typeof input === 'boolean') {
+            result[i][j] = input
+          } else if (typeof input === 'number') {
+            result[i][j] = input !== 0 // Convert number to boolean
+          } else {
+            result[i][j] = false // Default
+          }
+        }
+      }
+      // Cast to unknown first to satisfy TypeScript
+      blockState.outputs[0] = result as unknown as number[][]
+    } else {
+      // Create number matrix
+      const result: number[][] = []
+      for (let i = 0; i < rows; i++) {
+        result[i] = []
+        for (let j = 0; j < cols; j++) {
+          const inputIndex = i * cols + j // Row-major order
+          const input = inputs[inputIndex]
+          
+          if (typeof input === 'number') {
+            result[i][j] = input
+          } else if (typeof input === 'boolean') {
+            result[i][j] = input ? 1 : 0 // Convert boolean to number
+          } else {
+            result[i][j] = 0 // Default
+          }
+        }
+      }
+      blockState.outputs[0] = result
+    }
+  }
+
   getInputPortCount(block: BlockData): number {
+    // Mux blocks have dynamic input count based on dimensions
     const rows = block.parameters?.rows || 2
     const cols = block.parameters?.cols || 2
     return rows * cols
   }
 
-  /**
-   * Get a descriptive name for an input port
-   */
-  getInputPortName(block: BlockData, portIndex: number): string {
-    const rows = block.parameters?.rows || 2
-    const cols = block.parameters?.cols || 2
-    
-    if (rows === 1 && cols === 1) {
-      return 'in'
-    }
-    
-    // For vectors
-    if (rows === 1 || cols === 1) {
-      return `in${portIndex}`
-    }
-    
-    // For matrices (row-major order)
-    const row = Math.floor(portIndex / cols)
-    const col = portIndex % cols
-    return `in_${row}_${col}`
+  getOutputPortCount(block: BlockData): number {
+    // Mux blocks always have exactly 1 output
+    return 1
   }
 
-  // No initialization needed
+  // Could provide custom labels but default numbering is fine
+  getInputPortLabels?(block: BlockData): string[] | undefined {
+    return undefined
+  }
+
+  getOutputPortLabels?(block: BlockData): string[] | undefined {
+    return undefined
+  }
 }

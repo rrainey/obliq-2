@@ -141,3 +141,5 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
+todo-private.md
+

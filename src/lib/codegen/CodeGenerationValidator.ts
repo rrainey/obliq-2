@@ -1,7 +1,7 @@
 // lib/codegen/CodeGenerationValidator.ts
 
 import { FlattenedModel, FlattenedBlock } from './ModelFlattener'
-import { BlockCodeGeneratorFactory } from '../blocks/BlockCodeGeneratorFactory'
+import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 
 /**
  * Validation error with severity and details
@@ -58,7 +58,7 @@ export class CodeGenerationValidator {
   private validateBlocks(model: FlattenedModel): void {
     for (const block of model.blocks) {
       // Check if block type is supported
-      if (!BlockCodeGeneratorFactory.isSupported(block.block.type)) {
+      if (!BlockModuleFactory.isSupported(block.block.type)) {
         // Some blocks don't generate code (like signal_display) - this is OK
         if (!['signal_display', 'signal_logger'].includes(block.block.type)) {
           this.addWarning({

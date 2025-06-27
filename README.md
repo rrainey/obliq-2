@@ -15,7 +15,7 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 ### Visual Modeling
 - **Drag-and-drop interface** for building block diagrams
 - **Multiple block types** including:
-  - Mathematical operations (Sum, Multiply, Scale)
+  - Mathematical operations (Sum, Multiply, Matrix Multiply, Scale)
   - Dynamic systems (Laplace Transfer Functions with RK4 integration)
   - Signal routing (Input/Output Ports, Sheet Labels)
   - Data operations (1D/2D Lookup Tables)
@@ -25,7 +25,7 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 
 ### Signal Type System
 - Support for C-style data types: `float`, `double`, `long`, `bool`
-- 1D array support (e.g., `double[3]`, `float[10]`)
+- 1D and 2D array support (e.g., `double[3]`, `float[3][3]`)
 - Automatic type propagation through connections
 - Type validation with visual error indicators
 
