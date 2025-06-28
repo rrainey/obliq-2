@@ -135,6 +135,15 @@ const blockTypes: BlockType[] = [
     icon: '↑L',
     vectorSupport: 'full'
   },
+
+  { 
+    id: 'trig', 
+    name: 'Trig Function', 
+    category: 'Math', 
+    description: 'Compute trigonometric functions; angles are radians', 
+    icon: 'sin(x)',
+    vectorSupport: 'scalar-only'
+  },
   
   // Matrix Operations
   { 
@@ -161,6 +170,40 @@ const blockTypes: BlockType[] = [
     icon: '▥',
     vectorSupport: 'full'
   },
+  { 
+    id: 'mag', 
+    name: 'Magnitude', 
+    category: 'Vector', 
+    description: 'Calculate magnitude of a vector', 
+    icon: '|v|',
+    vectorSupport: 'full'
+  },
+  {
+    id: 'cross',
+    name: 'Cross Product',
+    category: 'Vector',
+    description: 'Calculate cross product of two vectors',
+    icon: 'A×B',
+    vectorSupport: 'full'
+  },
+   {
+    id: 'dot',
+    name: 'Dot Product',
+    category: 'Vector',
+    description: 'Calculate dot product of two vectors (a scalar result)',
+    icon: 'A.B',
+    vectorSupport: 'full'
+  },
+  // Control Flow
+  { 
+    id: 'if', 
+    name: 'If', 
+    category: 'Control', 
+    description: 'Conditional signal selection', 
+    icon: '?:',
+    vectorSupport: 'full'
+  },
+
 ]
 
 const categories = Array.from(new Set(blockTypes.map(block => block.category)))

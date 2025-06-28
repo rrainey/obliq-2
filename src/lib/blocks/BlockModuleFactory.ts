@@ -13,6 +13,11 @@ import { Lookup2DBlockModule } from './Lookup2DBlockModule'
 import { MatrixMultiplyBlockModule } from './MatrixMultiplyBlockModule'
 import { MuxBlockModule } from './MuxBlockModule'
 import { DemuxBlockModule } from './DemuxBlockModule'
+import { TrigBlockModule } from './TrigBlockModule'
+import { MagnitudeBlockModule } from './MagnitudeBlockModule'
+import { CrossProductBlockModule } from './CrossProductBlockModule'
+import { DotProductBlockModule } from './DotProductBlockModule'
+import { IfBlockModule } from './IfBlockModule'
 
 import { SheetLabelSinkBlockModule } from './SheetLabelSinkBlockModule'
 import { SheetLabelSourceBlockModule } from './SheetLabelSourceBlockModule'
@@ -106,6 +111,21 @@ export class BlockModuleFactory {
 
       case 'subsystem':
         return new SubsystemBlockModule()
+
+      case 'trig':
+        return new TrigBlockModule()
+
+      case 'mag':
+        return new MagnitudeBlockModule()
+
+      case 'cross':
+        return new CrossProductBlockModule()
+
+      case 'dot':
+        return new DotProductBlockModule()
+
+      case 'if':
+        return new IfBlockModule()
         
       default:
         return null
@@ -135,7 +155,14 @@ export class BlockModuleFactory {
       'lookup_2d',
       'matrix_multiply',
       'mux',
-      'demux'
+      'demux',
+      'trig',
+      'mag',
+      'cross',
+      'dot',
+      'signal_display',
+      'signal_logger',
+      'if',
     ]
   }
   

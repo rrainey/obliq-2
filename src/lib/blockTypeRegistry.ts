@@ -46,7 +46,16 @@ export const BlockTypes = {
   DEMUX: 'demux',
   
   // Subsystem
-  SUBSYSTEM: 'subsystem'
+  SUBSYSTEM: 'subsystem',
+
+  TRIG:  'trig',
+  CROSS: 'cross',
+  MAG:   'mag',
+  DOT:   'dot', 
+
+  // Control blocks
+  IF: 'if',
+
 } as const;
 
 export type BlockType = typeof BlockTypes[keyof typeof BlockTypes];
@@ -288,7 +297,76 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [], // Dynamic based on subsystem content
     outputs: [], // Dynamic based on subsystem content
     description: 'Encapsulates another sheet as a reusable block'
-  }
+  },
+
+  [BlockTypes.TRIG]: {
+    type: BlockTypes.TRIG,
+    displayName: 'Trig',
+    category: 'Math',
+    defaultParameters: {
+      numInputs: 1,
+      function: 'sin' 
+    },
+    inputs: [
+      { name: 'input1' },
+    ],
+    outputs: [{ name: 'output' }],
+    description: 'Configurable trigonometry function'
+  },
+
+  [BlockTypes.CROSS]: {
+    type: BlockTypes.CROSS,
+    displayName: 'Cross Product',
+    category: 'Vector',
+    defaultParameters: {
+    },
+    inputs: [
+      { name: 'A' },
+      { name: 'B' },
+    ],
+    outputs: [{ name: 'C' }],
+    description: 'Vector Cross product'
+  },
+
+  [BlockTypes.DOT]: {
+    type: BlockTypes.DOT,
+    displayName: 'Dot Product',
+    category: 'Vector',
+    defaultParameters: {
+    },
+    inputs: [
+      { name: 'A' },
+      { name: 'B' },
+    ],
+    outputs: [{ name: 'C' }],
+    description: 'Vector Dot product'
+  },
+
+  [BlockTypes.MAG]: {
+    type: BlockTypes.MAG,
+    displayName: 'Magnitude',
+    category: 'Vector',
+    defaultParameters: {
+    },
+    inputs: [
+      { name: 'input1' },
+    ],
+    outputs: [{ name: 'output1' }],
+    description: 'Vector Magnitude'
+  },
+  [BlockTypes.IF]: {
+    type: BlockTypes.IF,
+    displayName: 'If',
+    category: 'Control',
+    defaultParameters: {},
+    inputs: [
+      { name: 'input1' },
+      { name: 'control' },
+      { name: 'input2' }
+    ],
+    outputs: [{ name: 'output' }],
+    description: 'Conditional selection: if control is true/nonzero, output = input2, else output = input1'
+  },
 };
 
 /**

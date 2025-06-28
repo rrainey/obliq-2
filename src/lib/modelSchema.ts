@@ -51,7 +51,7 @@ const BlockSchema = z.discriminatedUnion('type', [
     type: z.enum([
       'sum', 'multiply', 'transfer_function', 'signal_display', 'signal_logger',
       'input_port', 'output_port', 'source', 'scale', 'lookup_1d', 'lookup_2d',
-      'sheet_label_sink', 'sheet_label_source'
+      'sheet_label_sink', 'sheet_label_source', 'trig'
     ]),
     name: z.string().min(1, 'Block name cannot be empty'),
     position: PositionSchema,

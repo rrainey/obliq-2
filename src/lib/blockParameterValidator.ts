@@ -162,6 +162,20 @@ export function validateBlockParameters(
         errors.push('a denominator coefficient array must be defined');
       }
       break;
+
+    case BlockTypes.TRIG:
+      if (parameters.function !== undefined) {
+        if (typeof parameters.function !== 'string') {
+          errors.push('function parameter must be a string');
+        } else if (!['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sincos', 'atan2'].includes(parameters.function)) {
+          errors.push('function must be one of: sin, cos, tan, asin, acos, atan, sincos, atan2');
+        } else {
+          sanitized.function = parameters.function;
+        }
+      } else {
+        sanitized.function = defaults.function || 'sin';  
+      }
+      break;
       
     case BlockTypes.LOOKUP_1D:
       // Validate inputValues array
@@ -401,6 +415,14 @@ export function validateBlockParameters(
       } else {
         sanitized.linkedSheetId = defaults.linkedSheetId;
       }
+      break;
+
+    case BlockTypes.CROSS:
+    case BlockTypes.DOT:
+    case BlockTypes.MAG:
+
+    case BlockTypes.IF:
+      // type validation performed at connection time
       break;
       
     default:

@@ -16,6 +16,7 @@ import SourceConfig from '@/components/SourceConfig'
 import ScaleConfig from '@/components/ScaleConfig'
 import SubsystemConfig from '@/components/SubsystemConfig'
 import TransferFunctionConfig from '@/components/TransferFunctionConfig'
+import TrigConfig from '@/components/TrigConfig'
 import Lookup1DConfig from '@/components/Lookup1DConfig'
 import Lookup2DConfig from '@/components/Lookup2DConfig'
 import MuxConfig from '@/components/MuxConfig'
@@ -246,6 +247,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           signs: '++',
           numInputs: 2, // Default to 2 inputs
           inputs: ['Input1', 'Input2'] // Legacy support
+        }
+      case 'trig':
+        return {
+          function: 'sin', // Default to sine function
+          inputPortName: 'Input1',
+          outputPortName: 'Output1'
+        }
+      case 'if':
+        return {
         }
       default:
         return {}
@@ -1045,6 +1055,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               block={configBlock}
               blocks={blocks}  // Current sheet blocks  
               allSheetsBlocks={sheets.flatMap(sheet => sheet.blocks)}  // All top-level sheet blocks
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+
+           {configBlock.type === 'trig' && (
+            <TrigConfig
+              block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}
             />

@@ -218,6 +218,24 @@ const getBlockSymbol = (data: BlockNodeData) => {
     )
   }
 
+  if (data.type === 'trig') {
+    type TrigFunc = 'sin' | 'cos' | 'tan' | 'atan' | 'atan2' | 'sincos'
+    const func: string = data.parameters?.function || 'sin'
+    const funcDisplay: Record<TrigFunc, string> = {
+      'sin': 'sin(x)',
+      'cos': 'cos(x)',
+      'tan': 'tan(x)',
+      'atan': 'atan(x)',
+      'atan2': 'atan2(y,x)',
+      'sincos': 'sincos(x)'
+    }
+    return (
+      <div className="text-sm font-mono">
+        { funcDisplay[func as TrigFunc] || func }
+      </div>
+    )
+  }
+
   // Regular symbols for other blocks
   const symbols: Record<string, string> = {
     'sum': '∑',
@@ -236,6 +254,11 @@ const getBlockSymbol = (data: BlockNodeData) => {
     'matrix_multiply': '⊗',
     'mux': '▦',
     'demux': '▥',
+    'trig': 'sin(x)',
+    'cross': 'A×B',
+    'dot': 'A·B',
+    'mag': '‖v‖',
+    'if': '?:',
   }
 
   return symbols[data.type] || '?'

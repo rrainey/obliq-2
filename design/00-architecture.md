@@ -171,6 +171,7 @@ Each primitive block type is defined with specific behavior:
 * **1-D Lookup Block** - a block which estimates the value of a 1-D function from an array of samples and their associated output values. The input must be a scalar int, float, or double. The output will be the same type as the input. Lookup is performed using linear interpolation. Values for inputs outside of the range of the lookup table can be either clamped to the smallest or largest lookup value or extrapolated.  Lookup is driven by similarly sized vectors: the input values (supplied in order sorted from smalled to largest value) and the corresponding output value for each. 
 * **2-D Lookup Block** - this block is almost identical in function to a **1-D Lookup Block** excepts that it takes two inputs. The types of the two inputs must match and the output will be that same type. Lookup is performed using linear interpolation. Values for inputs outside of the range of the lookup table can be either clamped to the smallest or largest lookup value or extrapolated.  Lookup is driven by two vectors, an N-sized input1, an M-sized input 2, and a N by M table of corresponding output values.
 * **Scale Block** - this block multiplies the input signal by a sclalar constant. It has one input port and one output port.
+* **Trig Block** - this block supports any one of several common trigonometry functions: sin(), cos(), tan(), atan(), atan2(), and sincos(). Inputs and outputs are "double" scalar data types.
 
 ### Matrix Operation Blocks
 
@@ -251,6 +252,11 @@ Each block type has a distinct visual appearance designed to convey its function
 - Matrix connections display dimension information (e.g., "double[3][4]") on hover
 - Type mismatches show specific dimension errors (e.g., "3×4 → 2×3 ✗")
 - Matrix-capable blocks show a small matrix indicator icon
+
+**Vector Operations:**
+- **Cross Product** - 3-dimensional cross product of two input vectors
+- **Dot Product** - Dot (inner) product of two input vectors (a scalar value)
+- **Vector Magnitude** - The scalar magnitude of an N-dimenional input vector
 
 #### Visual Design Principles
 
