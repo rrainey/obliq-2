@@ -332,6 +332,52 @@ function validateBlockInputType(
       // These blocks require all inputs to have the same type
       // This is validated separately in validateMultiInputBlock
       break
+
+    case 'transpose':
+      // Transpose accepts vectors or matrices (not scalars)
+      // Actually, we'll allow scalars too - they just pass through
+      if (parsedInputType.baseType === 'bool') {
+        return {
+          blockId: block.id,
+          message: `${block.name} cannot process boolean signals`,
+          severity: 'error',
+          details: {
+            expectedType: 'numeric vector or matrix',
+            actualType: inputType
+          }
+        }
+      }
+      break;
+
+    case 'abs':
+      // Absolute value only accepts scalar inputs
+      if (parsedInputType.isArray || parsedInputType.isMatrix) {
+        return {
+          blockId: block.id,
+          message: `${block.name} requires scalar input but received ${inputType} from ${sourceBlock.name}`,
+          severity: 'error',
+          details: {
+            expectedType: parsedInputType.baseType,
+            actualType: inputType
+          }
+        }
+      }
+      break;
+
+    case 'uminus':
+      // Unary minus accepts any numeric type (scalar, vector, or matrix)
+      if (parsedInputType.baseType === 'bool') {
+        return {
+          blockId: block.id,
+          message: `${block.name} cannot process boolean signals`,
+          severity: 'error',
+          details: {
+            expectedType: 'numeric type (float, double, long)',
+            actualType: inputType
+          }
+        }
+      }
+      break;
       
     case 'trig':
       // Trig blocks only accept scalar double inputs

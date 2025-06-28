@@ -11,6 +11,7 @@ import { TransferFunctionBlockModule } from './TransferFunctionBlockModule'
 import { Lookup1DBlockModule } from './Lookup1DBlockModule'
 import { Lookup2DBlockModule } from './Lookup2DBlockModule'
 import { MatrixMultiplyBlockModule } from './MatrixMultiplyBlockModule'
+import { TransposeBlockModule } from './TransposeBlockModule'
 import { MuxBlockModule } from './MuxBlockModule'
 import { DemuxBlockModule } from './DemuxBlockModule'
 import { TrigBlockModule } from './TrigBlockModule'
@@ -18,6 +19,8 @@ import { MagnitudeBlockModule } from './MagnitudeBlockModule'
 import { CrossProductBlockModule } from './CrossProductBlockModule'
 import { DotProductBlockModule } from './DotProductBlockModule'
 import { IfBlockModule } from './IfBlockModule'
+import { AbsoluteValueBlockModule } from './AbsoluteValueBlockModule'
+import { UnaryMinusBlockModule } from './UnaryMinusBlockModule'
 
 import { SheetLabelSinkBlockModule } from './SheetLabelSinkBlockModule'
 import { SheetLabelSourceBlockModule } from './SheetLabelSourceBlockModule'
@@ -88,14 +91,15 @@ export class BlockModuleFactory {
         
       case 'matrix_multiply':
         return new MatrixMultiplyBlockModule()
+
+      case 'transpose': 
+        return new TransposeBlockModule()
         
       case 'mux':
         return new MuxBlockModule()
         
       case 'demux':
         return new DemuxBlockModule()
-        
-      // Blocks that don't generate compiled code but have specific behavior
 
       case 'signal_display':
         return new SignalDisplayBlockModule() 
@@ -126,6 +130,12 @@ export class BlockModuleFactory {
 
       case 'if':
         return new IfBlockModule()
+
+      case 'abs': 
+        return new AbsoluteValueBlockModule()
+
+      case 'uminus':
+        return new UnaryMinusBlockModule()
         
       default:
         return null
@@ -163,6 +173,8 @@ export class BlockModuleFactory {
       'signal_display',
       'signal_logger',
       'if',
+      'abs',
+      'uminus'
     ]
   }
   

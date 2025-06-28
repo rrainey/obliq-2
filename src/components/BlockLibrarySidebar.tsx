@@ -37,6 +37,22 @@ const blockTypes: BlockType[] = [
     icon: 'K',
     vectorSupport: 'full'
   },
+   { 
+    id: 'abs', 
+    name: 'Absolute Value', 
+    category: 'Math', 
+    description: 'Absolute value of scalar input', 
+    icon: '|x|',
+    vectorSupport: 'scalar-only'
+  },
+  { 
+    id: 'uminus', 
+    name: 'Unary Minus', 
+    category: 'Math', 
+    description: 'Negates input signal', 
+    icon: '-x',
+    vectorSupport: 'full'
+  },
   
   // Dynamic Systems
   { 
@@ -152,6 +168,14 @@ const blockTypes: BlockType[] = [
     category: 'Matrix', 
     description: 'Matrix multiplication (scalar×matrix or matrix×matrix)', 
     icon: '⊗',
+    vectorSupport: 'full'
+  },
+   { 
+    id: 'transpose', 
+    name: 'Transpose', 
+    category: 'Matrix', 
+    description: 'Matrix/vector transpose operation', 
+    icon: 'Aᵀ',
     vectorSupport: 'full'
   },
   { 

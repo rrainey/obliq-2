@@ -161,6 +161,8 @@ Each primitive block type is defined with specific behavior:
 
 * **Sum Block** – multiple inputs, one output (sums the inputs).
 * **Multiply Block** – multiple inputs, one output (multiplies inputs).
+* **Unary Minus** - one scalar input
+* **Absolute Value** - in input of any type. Output type matches the input.
 * **Laplace Transfer Function Block** – represents a dynamic system; it has a mathematical transfer function (one input, one output with internal state representing the differential equation). The transfer function is specified by numerator and denominator polynomial coefficients ordered from highest to lowest power of s (e.g., for H(s) = (s + 2)/(s² + 3s + 1), numerator = [1, 2] and denominator = [1, 3, 1]). Internal integration of this block shall be performed by a Runge-Kutta Fourth Order Integration algorithm. The generated C code shall include a separate `_derivatives` function to support proper RK4 implementation.
 * **Signal Display Block** – an output-only block that graphically displays a signal (for simulation visualization purposes; no outputs). The Signal display block should be capable of storing a fixed number of input Signal samples from each time step of the simulation.  The number of samples should be configurable for each block. The default number of stored samples should be 1000.  Signal Display blocks are only important to the interactive simulation.  These will be ignored when generating C-code. Recorded signals will be plotted as line charts using a popular charting package such as **Recharts**.
 * **Signal Logger Block** – an output-only block that logs a signal's values during simulation (could be used to export data later; no outputs).
@@ -181,6 +183,8 @@ Each primitive block type is defined with specific behavior:
   - Matrix × Vector (m×n × n×1 = m×1)  
   - Matrix × Matrix (m×n × n×p = m×p)
   The block validates dimension compatibility at connection time and displays the operation symbol ⊗.
+
+* **Transpose** - performs a transpose operation on matrices or vectors.
 
 * **Mux Block** – multiplexer that combines multiple scalar inputs into a vector or matrix output. The block configuration specifies the output dimensions (rows × columns), which determines the number of input ports dynamically. Inputs are arranged in row-major order. For example, a 2×3 mux creates 6 input ports and produces a double[2][3] output.
 

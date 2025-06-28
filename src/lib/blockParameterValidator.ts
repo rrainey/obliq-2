@@ -417,10 +417,16 @@ export function validateBlockParameters(
       }
       break;
 
+    case BlockTypes.TRANSPOSE:
+      // Transpose block has no configurable parameters
+      break;
+
     case BlockTypes.CROSS:
     case BlockTypes.DOT:
     case BlockTypes.MAG:
-
+    case BlockTypes.ABS:
+    case BlockTypes.UMINUS:
+      // These blocks have no configurable parameters
     case BlockTypes.IF:
       // type validation performed at connection time
       break;

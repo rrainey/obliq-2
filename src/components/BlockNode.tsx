@@ -156,6 +156,14 @@ const getBlockSymbol = (data: BlockNodeData) => {
     return render2DLookupCurves(data.parameters)
   }
 
+  if (data.type === 'transpose') {
+    return (
+      <div className="text-sm font-mono">
+        Aᵀ
+      </div>
+    )
+  }
+
   // Handle source blocks with constant values
   if (data.type === 'source' && data.parameters?.value !== undefined) {
     const value = data.parameters.value
@@ -241,6 +249,8 @@ const getBlockSymbol = (data: BlockNodeData) => {
     'sum': '∑',
     'multiply': '×',
     'scale': data.parameters?.gain || 'K',
+    'abs': '|x|',
+    'uminus': '-x',
     'signal_display': '📊',
     'signal_logger': '📝',
     'input_port': '▶',
@@ -259,6 +269,7 @@ const getBlockSymbol = (data: BlockNodeData) => {
     'dot': 'A·B',
     'mag': '‖v‖',
     'if': '?:',
+    'transpose': 'Aᵀ',
   }
 
   return symbols[data.type] || '?'

@@ -24,6 +24,8 @@ export const BlockTypes = {
   SUM: 'sum',
   MULTIPLY: 'multiply',
   SCALE: 'scale',
+  ABS: 'abs',
+  UMINUS: 'uminus',
   
   // Dynamic blocks
   TRANSFER_FUNCTION: 'transfer_function',
@@ -42,6 +44,7 @@ export const BlockTypes = {
   SHEET_LABEL_SOURCE: 'sheet_label_source',
 
   MATRIX_MULTIPLY: 'matrix_multiply',
+  TRANSPOSE: 'transpose',
   MUX: 'mux',
   DEMUX: 'demux',
   
@@ -55,6 +58,7 @@ export const BlockTypes = {
 
   // Control blocks
   IF: 'if',
+  
 
 } as const;
 
@@ -250,6 +254,16 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     description: 'Performs matrix multiplication (A×B) or scalar multiplication'
   },
 
+  [BlockTypes.TRANSPOSE]: {
+    type: BlockTypes.TRANSPOSE,
+    displayName: 'Transpose',
+    category: 'Matrix',
+    defaultParameters: {},
+    inputs: [{ name: 'input' }],
+    outputs: [{ name: 'output' }],
+    description: 'Matrix transpose. Vectors [n] become [n][1] matrices. Matrices [m][n] become [n][m].'
+  },
+
   [BlockTypes.MUX]: {
     type: BlockTypes.MUX,
     displayName: 'Mux',
@@ -367,6 +381,27 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     outputs: [{ name: 'output' }],
     description: 'Conditional selection: if control is true/nonzero, output = input2, else output = input1'
   },
+
+  [BlockTypes.ABS]: {
+    type: BlockTypes.ABS,
+    displayName: 'Absolute Value',
+    category: 'Math',
+    defaultParameters: {},
+    inputs: [{ name: 'input' }],
+    outputs: [{ name: 'output' }],
+    description: 'Absolute value of scalar input'
+  },
+
+  [BlockTypes.UMINUS]: {
+    type: BlockTypes.UMINUS,
+    displayName: 'Unary Minus',
+    category: 'Math',
+    defaultParameters: {},
+    inputs: [{ name: 'input' }],
+    outputs: [{ name: 'output' }],
+    description: 'Negates input (element-wise for vectors/matrices)'
+  },
+  
 };
 
 /**
