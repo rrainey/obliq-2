@@ -144,6 +144,52 @@ export function validateModelTypeCompatibility(
         targetBlockId: targetBlock.id
       })
     }
+
+     // Validate multi-input blocks (Sum, Multiply)
+    for (const block of blocks) {
+      if (['sum', 'multiply'].includes(block.type)) {
+        const inputErrors = validateMultiInputBlock(block, wires, propagationResult)
+        errors.push(...inputErrors)
+      }
+    }
+    
+    // Validate lookup blocks for scalar inputs
+    for (const block of blocks) {
+      if (['lookup_1d', 'lookup_2d'].includes(block.type)) {
+        const lookupErrors = validateLookupBlock(block, wires, propagationResult)
+        errors.push(...lookupErrors)
+      }
+    }
+    
+    // Validate vector operation blocks
+    for (const block of blocks) {
+      if (['cross', 'dot'].includes(block.type)) {
+        const vectorErrors = validateVectorOperationBlock(block, wires, propagationResult)
+        errors.push(...vectorErrors)
+      }
+    }
+    
+    // Validate if blocks
+    for (const block of blocks) {
+      if (block.type === 'if') {
+        const ifErrors = validateIfBlock(block, wires, propagationResult)
+        errors.push(...ifErrors)
+      }
+    }
+    
+    // Validate matrix multiply blocks
+    for (const block of blocks) {
+      if (block.type === 'matrix_multiply') {
+        const matrixErrors = validateMatrixMultiplyBlock(block, wires, propagationResult)
+        errors.push(...matrixErrors)
+      }
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors,
+      warnings
+    }
   }
   
   // Validate multi-input blocks (Sum, Multiply)
@@ -268,10 +314,10 @@ function validateBlockInputType(
     case 'lookup_1d':
     case 'lookup_2d':
       // Lookup blocks only accept scalars
-      if (parsedInputType.isArray) {
+      if (parsedInputType.isArray || parsedInputType.isMatrix) {
         return {
           blockId: block.id,
-          message: `${block.name} requires scalar inputs but received array type ${inputType} from ${sourceBlock.name}`,
+          message: `${block.name} requires scalar inputs but received ${inputType} from ${sourceBlock.name}`,
           severity: 'error',
           details: {
             expectedType: parsedInputType.baseType,
@@ -287,13 +333,150 @@ function validateBlockInputType(
       // This is validated separately in validateMultiInputBlock
       break
       
+    case 'trig':
+      // Trig blocks only accept scalar double inputs
+      if (parsedInputType.isArray || parsedInputType.isMatrix || parsedInputType.baseType !== 'double') {
+        const func = block.parameters?.function || 'sin'
+        const expectedPorts = func === 'atan2' ? 2 : 1
+        
+        return {
+          blockId: block.id,
+          message: `${block.name} (${func}) requires scalar double inputs but received ${inputType} from ${sourceBlock.name}`,
+          severity: 'error',
+          details: {
+            expectedType: 'double',
+            actualType: inputType
+          }
+        }
+      }
+      break
+      
+    case 'cross':
+      // Cross product requires vector inputs (not scalars or matrices)
+      if (!parsedInputType.isArray || parsedInputType.isMatrix) {
+        return {
+          blockId: block.id,
+          message: `${block.name} requires vector inputs but received ${inputType} from ${sourceBlock.name}`,
+          severity: 'error',
+          details: {
+            expectedType: 'vector (double[n])',
+            actualType: inputType
+          }
+        }
+      }
+      // Must be 2D or 3D vectors
+      if (parsedInputType.arraySize !== 2 && parsedInputType.arraySize !== 3) {
+        return {
+          blockId: block.id,
+          message: `${block.name} requires 2D or 3D vectors but received ${parsedInputType.arraySize}D vector from ${sourceBlock.name}`,
+          severity: 'error',
+          details: {
+            expectedType: 'double[2] or double[3]',
+            actualType: inputType
+          }
+        }
+      }
+      break
+      
+    case 'dot':
+      // Dot product requires vector inputs of the same dimension
+      if (!parsedInputType.isArray || parsedInputType.isMatrix) {
+        return {
+          blockId: block.id,
+          message: `${block.name} requires vector inputs but received ${inputType} from ${sourceBlock.name}`,
+          severity: 'error',
+          details: {
+            expectedType: 'vector (double[n])',
+            actualType: inputType
+          }
+        }
+      }
+      break
+      
+    case 'mag':
+      // Magnitude requires vector input
+      if (!parsedInputType.isArray || parsedInputType.isMatrix) {
+        return {
+          blockId: block.id,
+          message: `${block.name} requires vector input but received ${inputType} from ${sourceBlock.name}`,
+          severity: 'error',
+          details: {
+            expectedType: 'vector (double[n])',
+            actualType: inputType
+          }
+        }
+      }
+      break
+      
+    case 'if':
+      // If block requires:
+      // - Port 0 (input1) and Port 2 (input2) must have matching types
+      // - Port 1 (control) should be scalar (bool or numeric)
+      if (portIndex === 1) {
+        // Control input should be scalar
+        if (parsedInputType.isArray || parsedInputType.isMatrix) {
+          return {
+            blockId: block.id,
+            message: `${block.name} control input must be scalar but received ${inputType} from ${sourceBlock.name}`,
+            severity: 'error',
+            details: {
+              expectedType: 'scalar (bool or numeric)',
+              actualType: inputType
+            }
+          }
+        }
+      }
+      // For ports 0 and 2, type matching is validated separately
+      break
+      
+    case 'matrix_multiply':
+      // Matrix multiply can accept scalars, vectors, or matrices
+      // Dimension compatibility is checked separately
+      break
+      
+    case 'mux':
+      // Mux only accepts scalar inputs
+      if (parsedInputType.isArray || parsedInputType.isMatrix) {
+        return {
+          blockId: block.id,
+          message: `${block.name} requires scalar inputs but received ${inputType} from ${sourceBlock.name}`,
+          severity: 'error',
+          details: {
+            expectedType: parsedInputType.baseType,
+            actualType: inputType
+          }
+        }
+      }
+      break
+      
+    case 'demux':
+      // Demux requires vector or matrix input
+      if (!parsedInputType.isArray && !parsedInputType.isMatrix) {
+        return {
+          blockId: block.id,
+          message: `${block.name} requires vector or matrix input but received scalar ${inputType} from ${sourceBlock.name}`,
+          severity: 'error',
+          details: {
+            expectedType: 'vector or matrix',
+            actualType: inputType
+          }
+        }
+      }
+      break
+      
     case 'scale':
     case 'transfer_function':
     case 'signal_display':
     case 'signal_logger':
     case 'output_port':
-      // These blocks accept any numeric type (scalar or vector)
-      if (parsedInputType.baseType === 'bool' && block.type !== 'signal_display' && block.type !== 'signal_logger') {
+    case 'sheet_label_sink':
+    case 'sheet_label_source':
+      // These blocks accept any numeric type (scalar, vector, or matrix)
+      if (parsedInputType.baseType === 'bool' && 
+          block.type !== 'signal_display' && 
+          block.type !== 'signal_logger' &&
+          block.type !== 'output_port' &&
+          block.type !== 'sheet_label_sink') {
         return {
           blockId: block.id,
           message: `${block.name} cannot process boolean signals`,
@@ -528,4 +711,154 @@ export function validateBlockOperation(
   }
   
   return null
+}
+
+/**
+ * Validates that vector operation blocks have matching input dimensions
+ */
+function validateVectorOperationBlock(
+  block: BlockData,
+  wires: WireData[],
+  propagationResult: TypePropagationResult
+): TypeCompatibilityError[] {
+  const errors: TypeCompatibilityError[] = []
+  
+  if (block.type === 'cross' || block.type === 'dot') {
+    // Get input wires
+    const inputWires = wires.filter(w => w.targetBlockId === block.id)
+    
+    if (inputWires.length === 2) {
+      const type1 = propagationResult.signalTypes.get(inputWires[0].id)?.type
+      const type2 = propagationResult.signalTypes.get(inputWires[1].id)?.type
+      
+      if (type1 && type2) {
+        try {
+          const parsed1 = parseType(type1)
+          const parsed2 = parseType(type2)
+          
+          // Check dimensions match
+          if (parsed1.arraySize !== parsed2.arraySize) {
+            errors.push({
+              blockId: block.id,
+              message: `${block.name} requires vectors of same dimension. Input 1: ${type1}, Input 2: ${type2}`,
+              severity: 'error',
+              details: {
+                expectedType: type1,
+                actualType: type2
+              }
+            })
+          }
+        } catch {
+          // Type parsing error handled elsewhere
+        }
+      }
+    }
+  }
+  
+  return errors
+}
+
+/**
+ * Validates that if block has matching types for input1 and input2
+ */
+function validateIfBlock(
+  block: BlockData,
+  wires: WireData[],
+  propagationResult: TypePropagationResult
+): TypeCompatibilityError[] {
+  const errors: TypeCompatibilityError[] = []
+  
+  if (block.type !== 'if') return errors
+  
+  // Get input wires
+  const inputWires = wires.filter(w => w.targetBlockId === block.id)
+  
+  // Find wires for port 0 (input1) and port 2 (input2)
+  const input1Wire = inputWires.find(w => w.targetPortIndex === 0)
+  const input2Wire = inputWires.find(w => w.targetPortIndex === 2)
+  
+  if (input1Wire && input2Wire) {
+    const type1 = propagationResult.signalTypes.get(input1Wire.id)?.type
+    const type2 = propagationResult.signalTypes.get(input2Wire.id)?.type
+    
+    if (type1 && type2 && !areTypesCompatible(type1, type2)) {
+      errors.push({
+        blockId: block.id,
+        message: `${block.name} requires input1 and input2 to have matching types. Input1: ${type1}, Input2: ${type2}`,
+        severity: 'error',
+        details: {
+          expectedType: type1,
+          actualType: type2
+        }
+      })
+    }
+  }
+  
+  return errors
+}
+
+/**
+ * Validates matrix multiply dimension compatibility
+ */
+function validateMatrixMultiplyBlock(
+  block: BlockData,
+  wires: WireData[],
+  propagationResult: TypePropagationResult
+): TypeCompatibilityError[] {
+  const errors: TypeCompatibilityError[] = []
+  
+  if (block.type !== 'matrix_multiply') return errors
+  
+  const inputWires = wires.filter(w => w.targetBlockId === block.id)
+  
+  if (inputWires.length === 2) {
+    const type1 = propagationResult.signalTypes.get(inputWires[0].id)?.type
+    const type2 = propagationResult.signalTypes.get(inputWires[1].id)?.type
+    
+    if (type1 && type2) {
+      try {
+        const parsed1 = parseType(type1)
+        const parsed2 = parseType(type2)
+        
+        // Validate dimension compatibility for matrix multiplication
+        if (parsed1.isMatrix && parsed2.isMatrix) {
+          // Matrix × Matrix: inner dimensions must match
+          if (parsed1.cols !== parsed2.rows) {
+            errors.push({
+              blockId: block.id,
+              message: `${block.name}: Matrix dimensions incompatible. ${type1} × ${type2} requires inner dimensions to match`,
+              severity: 'error',
+              details: {
+                expectedType: `${parsed1.baseType}[${parsed1.rows}][${parsed2.cols}]`,
+                actualType: 'incompatible dimensions'
+              }
+            })
+          }
+        } else if (parsed1.isArray && parsed2.isMatrix) {
+          // Vector × Matrix: vector size must match matrix rows
+          if (parsed1.arraySize !== parsed2.rows) {
+            errors.push({
+              blockId: block.id,
+              message: `${block.name}: Vector-matrix dimensions incompatible. ${type1} × ${type2}`,
+              severity: 'error'
+            })
+          }
+        } else if (parsed1.isMatrix && parsed2.isArray) {
+          // Matrix × Vector: matrix cols must match vector size
+          if (parsed1.cols !== parsed2.arraySize) {
+            errors.push({
+              blockId: block.id,
+              message: `${block.name}: Matrix-vector dimensions incompatible. ${type1} × ${type2}`,
+              severity: 'error'
+            })
+          }
+        }
+        // Scalar × anything is always valid
+      } catch {
+        // Type parsing error handled elsewhere
+      }
+    }
+  }
+  
+  return errors
 }
