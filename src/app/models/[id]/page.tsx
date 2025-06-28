@@ -7,6 +7,7 @@ import { BlockData, PortInfo } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
+import SaveAsDialog from '@/components/SaveAsDialog'
 import CanvasReactFlow from '@/components/CanvasReactFlow'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SignalDisplay from '@/components/SignalDisplay'
@@ -31,7 +32,7 @@ import { parseType } from '@/lib/typeValidator'
 import { useModelStore } from '@/lib/modelStore'
 
 import { useAutoSave } from '@/lib/useAutoSave'
-import { use, useEffect } from 'react'
+import { use, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
@@ -62,8 +63,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   setSelectedBlockId, setSelectedWireId, setConfigBlock,
   setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
   setGlobalSimulationResults, clearGlobalSimulationResults, 
-  updateCurrentSheet, saveCurrentSheetData, initializeFromModel
+  updateCurrentSheet, saveCurrentSheetData, initializeFromModel, saveAsNewModel,
   } = useModelStore()
+
+  const [showSaveAsDialog, setShowSaveAsDialog] = useState(false)
   
   // Unwrap the params Promise
   const { id } = use(params)
@@ -397,7 +400,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       targetBlockId: targetPort.blockId,
       targetPortIndex: targetPort.portIndex
     }
-    
+
     addWire(newWire)
     updateCurrentSheet({ connections: [...wires, newWire] })
     console.log('Wire created:', newWire)
@@ -409,6 +412,58 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     saveCurrentSheetData()
     console.log('Wire deleted:', wireId)
   }
+
+  const handleSaveAs = async (newName: string) => {
+    const success = await saveAsNewModel(newName)
+    if (success) {
+      setShowSaveAsDialog(false)
+      // Navigation is handled in the store
+    }
+  }
+
+const handleExportModel = () => {
+  if (!model) {
+    alert('No model to export')
+    return
+  }
+  
+  // Save current sheet data first
+  saveCurrentSheetData()
+  
+  // Create the model data structure
+  const exportData = {
+    name: model.name,
+    version: currentVersion,
+    created: model.created_at,
+    updated: model.updated_at,
+    data: {
+      version: '2.0',
+      metadata: {
+        created: new Date().toISOString(),
+        description: `Exported from obliq-2 on ${new Date().toLocaleDateString()}`
+      },
+      sheets,
+      globalSettings: {
+        simulationTimeStep: 0.01,
+        simulationDuration: 10
+      }
+    }
+  }
+  
+  // Pretty print the JSON
+  const jsonString = JSON.stringify(exportData, null, 2)
+  
+  // Create blob and download
+  const blob = new Blob([jsonString], { type: 'application/json' })
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${model.name}.json`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(url)
+}
 
   const handleRunSimulation = async () => {
     // Check if any sheet has blocks
@@ -740,6 +795,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               >
                 {saving ? 'Saving...' : (isOlderVersion ? 'Save as New Model' : 'Save')}
               </button>
+
+              <button 
+                className="px-4 py-2 rounded-md font-medium border bg-green-600 text-white hover:bg-green-700 border-green-500"
+                onClick={() => setShowSaveAsDialog(true)}
+              >
+                Save as...
+              </button>
               
               {/* Validation Button */}
               <ModelValidationButton
@@ -765,6 +827,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                 onClick={handleGenerateCode}
               >
                 Generate Code
+              </button>
+
+              <button 
+                className="px-4 py-2 bg-indigo-700 text-white rounded-md hover:bg-indigo-800 border border-indigo-600 font-medium"
+                onClick={handleExportModel}
+              >
+                Export
               </button>
 
             </div>
@@ -956,6 +1025,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                       </p>
                     </div>
                   )}
+
                 </div>
               ) : (
                 <div className="p-4">
@@ -968,6 +1038,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           </div>
         </div>
       </div>
+
+      {showSaveAsDialog && (
+        <SaveAsDialog
+          currentName={model.name}
+          onSave={handleSaveAs}
+          onClose={() => setShowSaveAsDialog(false)}
+        />
+      )}
 
       {/* Configuration Modals */}
       {configBlock && (
@@ -1060,7 +1138,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             />
           )}
 
-           {configBlock.type === 'trig' && (
+          {configBlock.type === 'trig' && (
             <TrigConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}

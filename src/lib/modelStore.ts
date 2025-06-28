@@ -430,6 +430,72 @@ export const useModelStore = create<ModelStore>()(
       }
     },
 
+    // In lib/modelStore.ts, add this function to the store:
+
+    saveAsModel: async (newName: string) => {
+      const { model, sheets, currentVersion, initializeFromModel } = get()
+
+      if (!model) return false
+
+      set({ saving: true, error: null })
+
+      try {
+        // Create a new model with the new name
+        const { data: newModel, error: modelError } = await supabase
+          .from('models')
+          .insert({
+            user_id: model.user_id,
+            name: newName,
+            latest_version: 1
+          })
+          .select()
+          .single()
+
+        if (modelError) throw modelError
+
+        // Create the model data for version 1
+        const modelData = {
+          version: '2.0',
+          metadata: {
+            created: new Date().toISOString(),
+            description: `Copy of ${model.name}`
+          },
+          sheets,
+          globalSettings: {
+            simulationTimeStep: 0.01,
+            simulationDuration: 10
+          }
+        }
+
+        // Save as version 1 of the new model
+        const { data: versionData, error: versionError } = await supabase
+          .from('model_versions')
+          .insert({
+            model_id: newModel.id,
+            version: 1,
+            data: modelData
+          })
+          .select()
+          .single()
+
+        if (versionError) throw versionError
+
+        // Initialize the store with the new model
+        initializeFromModel(newModel, versionData)
+
+        // Navigate to the new model
+        window.location.href = `/models/${newModel.id}`
+
+        return true
+      } catch (error) {
+        console.error('Save as error:', error)
+        set({ error: 'Failed to save model copy' })
+        return false
+      } finally {
+        set({ saving: false })
+      }
+    },
+
     deleteAutoSave: async () => {
       const state = get()
       if (!state.model) return
