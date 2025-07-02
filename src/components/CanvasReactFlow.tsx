@@ -186,6 +186,9 @@ function CanvasReactFlowInner({
 
   // Handle connection validation
   const isValidConnection = useCallback((connection: Connection) => {
+    //console.log('=== isValidConnection called ===')
+    //console.log('Connection attempt:', connection)
+    
     if (!connection.source || !connection.target || 
         connection.sourceHandle === null || connection.targetHandle === null) {
       return false
@@ -228,9 +231,14 @@ function CanvasReactFlowInner({
       targetBlockId: edge.target,
       targetPortIndex: edge.targetHandle === '_enable_' ? -1 : parseInt(edge.targetHandle?.split('-')[1] || '0'),
     }))
-
+    
+    //console.log('Current wires for validation:', currentWires)
+    //console.log('Props wires:', wires)
+    
     // Validate connection using currentWires instead of wires prop
     const validation = validateConnection(sourcePort, targetPort, blocks, currentWires)
+    
+    //console.log('Validation result:', validation)
     
     if (!validation.isValid) {
       setConnectionError(validation.errorMessage || 'Invalid connection')
@@ -257,7 +265,7 @@ function CanvasReactFlowInner({
     }
 
     return true
-  }, [blocks, wires])
+  }, [blocks, wires, edges])
 
   // Handle new connections
   const onConnect: OnConnect = useCallback((connection) => {
@@ -298,18 +306,25 @@ function CanvasReactFlowInner({
     }
   }, [onWireCreate])
 
-  const handleEdgesChange = useCallback((changes: any[]) => {
-    // First apply the changes to ReactFlow's internal state
-    onEdgesChange(changes)
-    
-    // Then handle deletions to update our external state
-    const deletions = changes.filter(change => change.type === 'remove')
-    deletions.forEach(deletion => {
-      if (onWireDelete) {
-        onWireDelete(deletion.id)
-      }
-    })
-  }, [onEdgesChange, onWireDelete])
+const handleEdgesChange = useCallback((changes: any[]) => {
+  console.log('=== handleEdgesChange called ===')
+  console.log('Changes:', changes)
+  console.log('Current edges before change:', edges.map(e => ({ id: e.id, source: e.source, target: e.target })))
+  
+  // First apply the changes to ReactFlow's internal state
+  onEdgesChange(changes)
+  
+  // Then handle deletions to update our external state
+  const deletions = changes.filter(change => change.type === 'remove')
+  console.log('Deletions detected:', deletions)
+  
+  deletions.forEach(deletion => {
+    console.log(`Calling onWireDelete for wire: ${deletion.id}`)
+    if (onWireDelete) {
+      onWireDelete(deletion.id)
+    }
+  })
+}, [onEdgesChange, onWireDelete, edges])
 
   // Handle node context menu - following ReactFlow example pattern
   const onNodeContextMenu = useCallback(
@@ -407,6 +422,7 @@ function CanvasReactFlowInner({
     [project, onDrop]
   )
 
+  /*
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -438,6 +454,7 @@ function CanvasReactFlowInner({
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [nodes, edges, onBlockDelete, onWireDelete])
+  */
 
   // Get the block data for context menu
   const contextMenuBlock = contextMenu ? blocks.find(b => b.id === contextMenu.nodeId) : null

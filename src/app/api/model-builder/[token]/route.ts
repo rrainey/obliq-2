@@ -9,6 +9,7 @@ import {
 } from '@/lib/blockTypeRegistry';
 import { validateBlockParameters } from '@/lib/blockParameterValidator';
 import { modelBuilderApiMetrics } from '@/lib/modelBuilderApiMetrics';
+import { authenticateApiRequest } from '@/lib/apiAuthMiddleware';
 
 // Rate limiting configuration
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
@@ -99,17 +100,6 @@ function rateLimitExceededResponse(retryAfter: number): NextResponse {
   );
 }
 
-// Helper function to validate API token
-function validateToken(token: string): boolean {
-  const validToken = process.env.MODEL_BUILDER_API_TOKEN;
-  
-  if (!validToken) {
-    console.error('MODEL_BUILDER_API_TOKEN not configured');
-    return false;
-  }
-  
-  return token === validToken;
-}
 
 // Helper function to create unauthorized response
 function unauthorizedResponse(): NextResponse {
@@ -226,37 +216,63 @@ const ModelBuilderActions = {
 // GET handler for retrieving model data and introspection
 export async function GET(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   const startTime = Date.now();
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
   const modelId = searchParams.get('modelId');
   
-  // Prepare logging params
+  // Await the params
+  const { token } = await params;
+  
+  // Prepare logging params (mask token for security)
   const logParams = {
-    token: params.token,
+    token: token.substring(0, 8) + '...',
     action,
     modelId,
     ...Object.fromEntries(searchParams.entries())
   };
   
+  // Authenticate the request using the new middleware
+  const authResult = await authenticateApiRequest(token);
+  
+  if (!authResult.authenticated) {
+    modelBuilderApiMetrics.record(
+      'GET',
+      action || 'unknown',
+      Date.now() - startTime,
+      false,
+      401,
+      authResult.error
+    );
+    
+    return NextResponse.json(
+      { 
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: authResult.error || 'Authentication failed',
+        code: 'UNAUTHORIZED'
+      },
+      { status: 401 }
+    );
+  }
+  
   // Check rate limit
-  const rateLimit = checkRateLimit(params.token);
+  const rateLimit = checkRateLimit(token);
   if (!rateLimit.allowed) {
     const response = rateLimitExceededResponse(rateLimit.retryAfter!);
     logRequest('GET', action, logParams, startTime, { success: false, status: 429, error: 'Rate limit exceeded' });
     return response;
   }
   
-  // Validate token
-  if (!validateToken(params.token)) {
-    const response = unauthorizedResponse();
-    logRequest('GET', action, logParams, startTime, { success: false, status: 401, error: 'Unauthorized' });
-    return response;
-  }
-  
   try {
+    // Initialize Supabase client with service role for full access
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    
     // Get query parameters
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
@@ -269,12 +285,6 @@ export async function GET(
         return ErrorResponses.missingParameter('modelId');
       }
       
-      // Initialize Supabase client with service role for full access
-      const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      );
-      
       // Fetch the model
       const { data: model, error } = await supabase
         .from('models')
@@ -286,6 +296,30 @@ export async function GET(
         return ErrorResponses.modelNotFound(modelId);
       }
       
+      // If using a user token (not environment token), verify ownership
+      if (authResult.userId && !authResult.isEnvironmentToken) {
+        if (model.user_id !== authResult.userId) {
+          modelBuilderApiMetrics.record(
+            'GET',
+            action || 'getModel',
+            Date.now() - startTime,
+            false,
+            403,
+            'Access denied'
+          );
+          
+          return NextResponse.json(
+            {
+              success: false,
+              timestamp: new Date().toISOString(),
+              error: 'Access denied: You can only access your own models',
+              code: 'FORBIDDEN'
+            },
+            { status: 403 }
+          );
+        }
+      }
+      
       // Return the complete model data
       const response = successResponse({
         id: model.id,
@@ -295,6 +329,15 @@ export async function GET(
         created_at: model.created_at,
         updated_at: model.updated_at
       });
+      
+      modelBuilderApiMetrics.record(
+        'GET',
+        action || 'getModel',
+        Date.now() - startTime,
+        true,
+        200
+      );
+      
       logRequest('GET', action || 'getModel', logParams, startTime, { success: true, status: 200 });
       return response;
     }
@@ -891,25 +934,45 @@ export async function GET(
 // POST handler for creating models, sheets, blocks, and connections
 export async function POST(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   const startTime = Date.now();
   let action = 'unknown';
   let body: any = {};
   
+  // Await the params
+  const { token } = await params;
+  
   // Check rate limit
-  const rateLimit = checkRateLimit(params.token);
+  const rateLimit = checkRateLimit(token);
   if (!rateLimit.allowed) {
     const response = rateLimitExceededResponse(rateLimit.retryAfter!);
-    logRequest('POST', action, { token: params.token }, startTime, { success: false, status: 429, error: 'Rate limit exceeded' });
+    logRequest('POST', action, { token: token }, startTime, { success: false, status: 429, error: 'Rate limit exceeded' });
     return response;
   }
   
-  // Validate token
-  if (!validateToken(params.token)) {
-    const response = unauthorizedResponse();
-    logRequest('POST', action, { token: params.token }, startTime, { success: false, status: 401, error: 'Unauthorized' });
-    return response;
+  // Authenticate the request using the new middleware
+  const authResult = await authenticateApiRequest(token);
+  
+  if (!authResult.authenticated) {
+    modelBuilderApiMetrics.record(
+      'GET',
+      action || 'unknown',
+      Date.now() - startTime,
+      false,
+      401,
+      authResult.error
+    );
+    
+    return NextResponse.json(
+      { 
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: authResult.error || 'Authentication failed',
+        code: 'UNAUTHORIZED'
+      },
+      { status: 401 }
+    );
   }
   
   try {
@@ -920,24 +983,28 @@ export async function POST(
       body = text ? JSON.parse(text) : {};
     } catch {
       const response = errorResponse('Invalid JSON in request body', 'INVALID_JSON');
-      logRequest('POST', 'unknown', { token: params.token }, startTime, { success: false, status: 400, error: 'Invalid JSON' });
+      logRequest('POST', 'unknown', { token: token }, startTime, { success: false, status: 400, error: 'Invalid JSON' });
       return response;
     }
+
+    
     
     const { action } = body;
     
     // Handle create model action
     if (action === 'createModel') {
-      const { name, userId } = body;
+      const { name, userId: providedUserId } = body;
+
+      const userIdToUse = authResult.userId || providedUserId;
       
       // Validate required parameters
       if (!name) {
         return ErrorResponses.missingParameter('name');
       }
-      if (!userId) {
+      if (!userIdToUse) {
         return ErrorResponses.missingParameter('userId');
       }
-      
+    
       // Initialize Supabase client with service role
       const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -948,7 +1015,7 @@ export async function POST(
       const { data: newModel, error: modelError } = await supabase
         .from('models')
         .insert({
-          user_id: userId,
+          user_id: userIdToUse,
           name: name,
           latest_version: 1
         })
@@ -1153,6 +1220,7 @@ export async function POST(
             .from('models')
             .select('latest_version')
             .eq('id', modelId)
+            .eq('user_id', authResult.userId)
             .single();
             
           if (model) {
@@ -1207,7 +1275,7 @@ export async function POST(
               headers: request.headers
             });
             
-            response = await GET(getRequest, { params });
+            response = await GET(getRequest, { params: Promise.resolve({ token }) });
           } else if (['createModel', 'createSheet', 'addBlock', 'addConnection', 'validateModel'].includes(operation.action)) {
             // POST operations
             const postRequest = new NextRequest(request.url, {
@@ -1216,7 +1284,7 @@ export async function POST(
               body: JSON.stringify(operation)
             });
             
-            response = await POST(postRequest, { params });
+            response = await POST(postRequest, { params: Promise.resolve({ token }) });
           } else if (['renameSheet', 'updateBlockPosition', 'updateBlockName', 'updateBlockParameters'].includes(operation.action)) {
             // PUT operations
             const putRequest = new NextRequest(request.url, {
@@ -1225,7 +1293,7 @@ export async function POST(
               body: JSON.stringify(operation)
             });
             
-            response = await PUT(putRequest, { params });
+            response = await PUT(putRequest, { params: Promise.resolve({ token }) });
           } else if (['deleteSheet', 'deleteBlock', 'deleteConnection'].includes(operation.action)) {
             // DELETE operations
             operationUrl.searchParams.set('action', operation.action);
@@ -1240,7 +1308,7 @@ export async function POST(
               headers: request.headers
             });
             
-            response = await DELETE(deleteRequest, { params });
+            response = await DELETE(deleteRequest, { params: Promise.resolve({ token }) });
           } else {
             errors.push({
               operationId,
@@ -1299,6 +1367,7 @@ export async function POST(
               .from('model_versions')
               .select('data')
               .eq('model_id', modelId)
+              .eq('user_id', authResult.userId)
               .eq('version', originalVersion)
               .single();
               
@@ -1381,6 +1450,7 @@ export async function POST(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
+        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -1570,6 +1640,7 @@ export async function POST(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
+        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -1704,6 +1775,7 @@ export async function POST(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
+        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -1880,6 +1952,7 @@ export async function POST(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
+        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -2157,25 +2230,45 @@ export async function POST(
 // PUT handler for updating models, sheets, blocks, and connections
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   const startTime = Date.now();
   let action = 'unknown';
   let body: any = {};
   
+  // Await the params
+  const { token } = await params;
+  
   // Check rate limit
-  const rateLimit = checkRateLimit(params.token);
+  const rateLimit = checkRateLimit(token);
   if (!rateLimit.allowed) {
     const response = rateLimitExceededResponse(rateLimit.retryAfter!);
-    logRequest('PUT', action, { token: params.token }, startTime, { success: false, status: 429, error: 'Rate limit exceeded' });
+    logRequest('PUT', action, { token: token }, startTime, { success: false, status: 429, error: 'Rate limit exceeded' });
     return response;
   }
   
-  // Validate token
-  if (!validateToken(params.token)) {
-    const response = unauthorizedResponse();
-    logRequest('PUT', action, { token: params.token }, startTime, { success: false, status: 401, error: 'Unauthorized' });
-    return response;
+  // Authenticate the request using the new middleware
+  const authResult = await authenticateApiRequest(token);
+  
+  if (!authResult.authenticated) {
+    modelBuilderApiMetrics.record(
+      'GET',
+      action || 'unknown',
+      Date.now() - startTime,
+      false,
+      401,
+      authResult.error
+    );
+    
+    return NextResponse.json(
+      { 
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: authResult.error || 'Authentication failed',
+        code: 'UNAUTHORIZED'
+      },
+      { status: 401 }
+    );
   }
   
   try {
@@ -2213,6 +2306,7 @@ export async function PUT(
         .from('models')
         .select('id, name')
         .eq('id', modelId)
+        .eq('user_id', authResult.userId)
         .single();
         
       if (fetchError || !currentModel) {
@@ -2273,6 +2367,7 @@ export async function PUT(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
+        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -2426,6 +2521,7 @@ export async function PUT(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
+        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -2539,6 +2635,7 @@ export async function PUT(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
+        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -2638,6 +2735,7 @@ export async function PUT(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
+        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -2719,34 +2817,54 @@ export async function PUT(
 // DELETE handler for removing models, sheets, blocks, and connections
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   const startTime = Date.now();
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
   const modelId = searchParams.get('modelId');
   
+  // Await the params
+  const { token } = await params;
+  
   // Prepare logging params
   const logParams = {
-    token: params.token,
+    token: token,
     action,
     modelId,
     ...Object.fromEntries(searchParams.entries())
   };
   
   // Check rate limit
-  const rateLimit = checkRateLimit(params.token);
+  const rateLimit = checkRateLimit(token);
   if (!rateLimit.allowed) {
     const response = rateLimitExceededResponse(rateLimit.retryAfter!);
     logRequest('DELETE', action, logParams, startTime, { success: false, status: 429, error: 'Rate limit exceeded' });
     return response;
   }
   
-  // Validate token
-  if (!validateToken(params.token)) {
-    const response = unauthorizedResponse();
-    logRequest('DELETE', action, logParams, startTime, { success: false, status: 401, error: 'Unauthorized' });
-    return response;
+  // Authenticate the request using the new middleware
+  const authResult = await authenticateApiRequest(token);
+  
+  if (!authResult.authenticated) {
+    modelBuilderApiMetrics.record(
+      'GET',
+      action || 'unknown',
+      Date.now() - startTime,
+      false,
+      401,
+      authResult.error
+    );
+    
+    return NextResponse.json(
+      { 
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: authResult.error || 'Authentication failed',
+        code: 'UNAUTHORIZED'
+      },
+      { status: 401 }
+    );
   }
   
   try {
@@ -2769,11 +2887,32 @@ export async function DELETE(
         .from('models')
         .select('id')
         .eq('id', modelId)
+        .eq('user_id', authResult.userId)
         .single();
         
       if (fetchError || !model) {
         return ErrorResponses.modelNotFound(modelId);
       }
+
+      if (modelId && authResult.userId && !authResult.isEnvironmentToken) {
+      const { data: model, error: modelCheckError } = await supabase
+        .from('models')
+        .select('user_id')
+        .eq('id', modelId)
+        .single();
+        
+      if (modelCheckError || !model || model.user_id !== authResult.userId) {
+        return NextResponse.json(
+          {
+            success: false,
+            timestamp: new Date().toISOString(),
+            error: 'Access denied: You can only access your own models',
+            code: 'FORBIDDEN'
+          },
+          { status: 403 }
+        );
+      }
+    }
       
       // Delete all model versions first (due to foreign key constraint)
       const { error: versionsError } = await supabase

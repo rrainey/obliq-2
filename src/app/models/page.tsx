@@ -245,13 +245,32 @@ export default function ModelsPage() {
               Visual modeling and simulation projects
             </p>
           </div>
-          <div className="mt-4 flex md:mt-0 md:ml-4">
+          <div className="mt-4 flex md:mt-0 md:ml-4 space-x-3">
             <button
               onClick={() => setShowNewModelDialog(true)}
               className="inline-flex items-center px-4 py-2 border-2 border-blue-600 rounded-md shadow-sm text-sm font-medium text-white bg-blue-700 hover:bg-blue-800"
             >
               New Model
             </button>
+            <Link
+              href="/tokens"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <svg
+                className="mr-2 h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+                />
+              </svg>
+              API Keys
+            </Link>
           </div>
         </div>
 

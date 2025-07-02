@@ -89,6 +89,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }, [user, id, requestedVersion])
 
+  /*
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Check if user is typing in an input field
@@ -121,6 +122,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [selectedBlockId, selectedWireId, blocks, wires, configBlock])
+  */
 
   const fetchModel = async () => {
     try {
@@ -409,10 +411,19 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleWireDelete = (wireId: string) => {
+    //console.log('=== handleWireDelete called ===')
+    //console.log('Deleting wire:', wireId)
+    //console.log('Wires before delete:', wires.map(w => ({ id: w.id, source: w.sourceBlockId, target: w.targetBlockId })))
+    
     deleteWire(wireId)
     setSelectedWireId(null)
     saveCurrentSheetData()
-    console.log('Wire deleted:', wireId)
+    
+    // Add a check after deletion
+    //setTimeout(() => {
+    //  const { wires: updatedWires } = useModelStore.getState()
+    //  console.log('Wires after delete:', updatedWires.map(w => ({ id: w.id, source: w.sourceBlockId, target: w.targetBlockId })))
+    //}, 100)
   }
 
   const handleSaveAs = async (newName: string) => {

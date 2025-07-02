@@ -61,7 +61,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // If user is not signed in and the current path is protected, redirect to login
-  if (!user && request.nextUrl.pathname.startsWith('/models')) {
+  if (!user && (request.nextUrl.pathname.startsWith('/models') || request.nextUrl.pathname.startsWith('/tokens')) ) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
@@ -69,5 +69,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/models/:path*']
+  matcher: ['/models/:path*', '/tokens/:path*'],
 }
