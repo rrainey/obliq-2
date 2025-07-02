@@ -219,7 +219,7 @@ export class HeaderGenerator {
       }
       
       try {
-        const generator = BlockModuleFactory.getModuleGenerator(block.block.type)
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
         const outputType = this.getBlockOutputType(block)
         const member = generator.generateStructMember(block.block, outputType)
         
@@ -258,7 +258,7 @@ export class HeaderGenerator {
     // Process each block that needs state storage
     for (const block of this.model.blocks) {
       try {
-        const generator = BlockModuleFactory.getModuleGenerator(block.block.type)
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
         
         if (generator.requiresState(block.block)) {
           const outputType = this.getBlockOutputType(block)
@@ -373,7 +373,7 @@ export class HeaderGenerator {
   private hasStatefulBlocks(): boolean {
     return this.model.blocks.some(block => {
       try {
-        const generator = BlockModuleFactory.getModuleGenerator(block.block.type)
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
         return generator.requiresState(block.block)
       } catch {
         return false

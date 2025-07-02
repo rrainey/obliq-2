@@ -393,6 +393,11 @@ export class SimulationEngine {
         return {
           gain: parameters?.gain || 1
         }
+      case 'evaluate':
+        return {
+          numInputs: parameters?.numInputs || 2,
+          expression: parameters?.expression || 'in(0) + in(1)'
+        }
       case 'transfer_function':
         const numerator = parameters?.numerator || [1]
         const denominator = parameters?.denominator || [1, 1]
@@ -459,6 +464,10 @@ export class SimulationEngine {
         return {
           outputCount: parameters?.outputCount || 1,
           inputDimensions: parameters?.inputDimensions || [1]
+        }
+      case 'condition':
+        return {
+          condition: parameters?.condition || '> 0'
         }
       default:
         return {}

@@ -24,6 +24,8 @@ import MuxConfig from '@/components/MuxConfig'
 import SheetLabelSinkConfig from '@/components/SheetLabelSinkConfig'
 import SheetLabelSourceConfig from '@/components/SheetLabelSourceConfig'
 import SumConfig from '@/components/SumConfig'
+import ConditionConfig from '@/components/ConditionConfig'
+import EvaluateConfig from '@/components/EvaluateConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
@@ -653,7 +655,10 @@ const handleExportModel = () => {
       block.type === 'sheet_label_sink' || 
       block.type === 'sheet_label_source' ||
       block.type === 'sum' ||
-      block.type === 'mux'
+      block.type === 'mux' ||
+      block.type === 'trig' ||
+      block.type === 'condition' ||
+      block.type === 'evaluate'
     )) {
       console.log('Setting config block:', block)
       setConfigBlock(block)
@@ -1050,6 +1055,21 @@ const handleExportModel = () => {
       {/* Configuration Modals */}
       {configBlock && (
         <>
+          {configBlock.type === 'condition' && (
+            <ConditionConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+
+          {configBlock.type === 'evaluate' && (
+            <EvaluateConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
           {(configBlock.type === 'input_port' || configBlock.type === 'output_port') && (
             <InputPortConfig
               block={configBlock}
@@ -1145,6 +1165,8 @@ const handleExportModel = () => {
               onClose={() => setConfigBlock(null)}
             />
           )}
+
+          
         </>
       )}
     </div>

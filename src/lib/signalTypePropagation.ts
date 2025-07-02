@@ -70,6 +70,10 @@ function getBlockOutputType(block: BlockData): string | null {
       // These blocks output type depends on their inputs
       // Will be determined during propagation
       return null
+
+    case 'evaluate':
+      // Evaluate block always outputs double
+      return 'double'
     
     case 'mux':  // New: mux output type depends on configuration
       // Mux output type is determined by its configuration

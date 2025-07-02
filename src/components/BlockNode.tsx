@@ -226,6 +226,35 @@ const getBlockSymbol = (data: BlockNodeData) => {
     )
   }
 
+  // Handle evaluate block - show expression with truncation
+  if (data.type === 'evaluate') {
+    const expression = data.parameters?.expression || 'in(0)'
+    const displayExpression = truncateExpression(expression, 30)
+    return (
+      <div 
+        className="text-xs font-mono px-2 text-center"
+        title={expression} // Show full expression on hover
+      >
+        {displayExpression}
+      </div>
+    )
+  }
+
+  // Handle condition block - show condition with truncation
+  if (data.type === 'condition') {
+    const condition = data.parameters?.condition || '> 0'
+    const fullText = `x1 ${condition}`
+    const displayText = truncateExpression(fullText, 20)
+    return (
+      <div 
+        className="text-xs font-mono px-2 text-center"
+        title={fullText}
+      >
+        {displayText}
+      </div>
+    )
+  }
+
   if (data.type === 'trig') {
     type TrigFunc = 'sin' | 'cos' | 'tan' | 'atan' | 'atan2' | 'sincos'
     const func: string = data.parameters?.function || 'sin'
@@ -270,6 +299,8 @@ const getBlockSymbol = (data: BlockNodeData) => {
     'mag': '‖v‖',
     'if': '?:',
     'transpose': 'Aᵀ',
+    'evaluate': 'f(x)', // Fallback if no expression
+    'condition': 'x1?', // Fallback if no condition
   }
 
   return symbols[data.type] || '?'
@@ -371,8 +402,30 @@ const getBlockWidth = (data: BlockNodeData): number => {
   if (data.type === 'mux' || data.type === 'matrix_multiply') {
     return 90 // Slightly wider for dimension info
   }
+
+  // Handle evaluate block - adjust width based on expression length
+  if (data.type === 'evaluate') {
+    const expression = data.parameters?.expression || 'in(0)'
+    // Estimate width based on expression length
+    // Use monospace font metrics: ~7px per character at text-xs
+    const estimatedWidth = expression.length * 7 + 40 // Add padding
+    return Math.max(100, Math.min(300, estimatedWidth)) // Min 100px, max 300px
+  }
+
+  // Handle condition block similarly
+  if (data.type === 'condition') {
+    const condition = data.parameters?.condition || '> 0'
+    const fullText = `x1 ${condition}`
+    const estimatedWidth = fullText.length * 7 + 40
+    return Math.max(80, Math.min(200, estimatedWidth))
+  }
   
   return 80 // Default width
+}
+
+const truncateExpression = (expr: string, maxLength: number = 30): string => {
+  if (expr.length <= maxLength) return expr
+  return expr.substring(0, maxLength - 3) + '...'
 }
 
 // Add this CSS for port signs
@@ -392,6 +445,22 @@ const portSignStyles = `
     color: #555555; /* red */
   }
 `
+
+const getBlockStyle = (data: BlockNodeData, selected: boolean | undefined) => {
+    const baseStyle = `
+      relative rounded-lg border-2 flex items-center justify-center
+      bg-white border-gray-400
+      ${selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}
+      transition-shadow
+    `
+
+    // Add special styling for expression-based blocks
+    if (data.type === 'evaluate' || data.type === 'condition') {
+      return `${baseStyle} overflow-hidden` // Prevent text overflow
+    }
+
+    return baseStyle
+  }
 
 // Custom node component
 export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
@@ -469,6 +538,21 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
     .port-label {
       height: 20px;
       line-height: 20px;
+    }
+  `
+
+  const expressionBlockStyles = `
+    .expression-block {
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    
+    .expression-block:hover {
+      background-color: #f3f4f6;
+      cursor: help;
     }
   `
 
@@ -568,7 +652,9 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
   const oldRender = () => {
     return (
       <>
-        <style>{portSignStyles}</style>
+        <style>
+          {portSignStyles}
+        </style>
         
         {/* Block Name - positioned above the block */}
         <div
@@ -605,6 +691,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           </div>
         )}
 
+        
+
         {/* Main block body */}
         {(data.type === 'input_port' || data.type === 'output_port') ? (
           // Terminator shape for input/output ports
@@ -640,21 +728,16 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             </div>
           </div>
         ) : (
-          // Regular rectangular block
+          /* Regular rectangular block */
           <div
-            className={`
-              relative rounded-lg border-2 flex items-center justify-center
-              bg-white border-gray-400
-              ${selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}
-              transition-shadow
-            `}
+            className={getBlockStyle(data, selected)}
             style={{
               width: blockWidth,
               height: minHeight,
             }}
           >
             {/* Block Symbol */}
-            <div className="text-xl font-bold text-gray-900 pointer-events-none">
+            <div className="text-xl text-gray-900 pointer-events-none flex items-center justify-center w-full h-full">
               {getBlockSymbol(data)}
             </div>
           </div>

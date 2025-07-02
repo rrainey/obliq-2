@@ -7,6 +7,7 @@ import { InputPortBlockModule } from './InputPortBlockModule'
 import { OutputPortBlockModule } from './OutputPortBlockModule'
 import { SourceBlockModule } from './SourceBlockModule'
 import { ScaleBlockModule } from './ScaleBlockModule'
+import { EvaluateBlockModule } from './EvaluateBlockModule'
 import { TransferFunctionBlockModule } from './TransferFunctionBlockModule'
 import { Lookup1DBlockModule } from './Lookup1DBlockModule'
 import { Lookup2DBlockModule } from './Lookup2DBlockModule'
@@ -19,6 +20,7 @@ import { MagnitudeBlockModule } from './MagnitudeBlockModule'
 import { CrossProductBlockModule } from './CrossProductBlockModule'
 import { DotProductBlockModule } from './DotProductBlockModule'
 import { IfBlockModule } from './IfBlockModule'
+import { ConditionBlockModule } from './ConditionBlockModule'
 import { AbsoluteValueBlockModule } from './AbsoluteValueBlockModule'
 import { UnaryMinusBlockModule } from './UnaryMinusBlockModule'
 
@@ -79,6 +81,9 @@ export class BlockModuleFactory {
         
       case 'scale':
         return new ScaleBlockModule()
+
+      case 'evaluate':
+        return new EvaluateBlockModule()
         
       case 'transfer_function':
         return new TransferFunctionBlockModule()
@@ -131,6 +136,9 @@ export class BlockModuleFactory {
       case 'if':
         return new IfBlockModule()
 
+      case 'condition':
+        return new ConditionBlockModule()
+
       case 'abs': 
         return new AbsoluteValueBlockModule()
 
@@ -160,6 +168,7 @@ export class BlockModuleFactory {
       'output_port',
       'source',
       'scale',
+      'evaluate',
       'transfer_function',
       'lookup_1d',
       'lookup_2d',
@@ -173,6 +182,7 @@ export class BlockModuleFactory {
       'signal_display',
       'signal_logger',
       'if',
+      'condition',
       'abs',
       'uminus'
     ]

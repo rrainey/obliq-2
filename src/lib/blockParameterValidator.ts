@@ -417,6 +417,31 @@ export function validateBlockParameters(
       }
       break;
 
+    case BlockTypes.CONDITION:
+      // Validate condition parameter
+      if (parameters.condition !== undefined) {
+        if (typeof parameters.condition !== 'string') {
+          errors.push('condition must be a string');
+        } else {
+          // Validate condition format
+          const operatorMatch = parameters.condition.match(/^\s*(>|<|>=|<=|==|!=)\s*(.+)$/)
+          if (!operatorMatch) {
+            errors.push('condition must be in format: operator value (e.g., "> 10.0")');
+          } else {
+            const value = operatorMatch[2].trim();
+            const valuePattern = /^-?\d+(\.\d+)?([eE][+-]?\d+)?[fFlL]?$/;
+            if (!valuePattern.test(value)) {
+              errors.push('condition value must be a valid numeric constant');
+            } else {
+              sanitized.condition = parameters.condition;
+            }
+          }
+        }
+      } else {
+        sanitized.condition = defaults.condition;
+      }
+      break;
+
     case BlockTypes.TRANSPOSE:
       // Transpose block has no configurable parameters
       break;

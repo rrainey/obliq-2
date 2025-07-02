@@ -26,6 +26,7 @@ export const BlockTypes = {
   SCALE: 'scale',
   ABS: 'abs',
   UMINUS: 'uminus',
+  EVALUATE: 'evaluate',
   
   // Dynamic blocks
   TRANSFER_FUNCTION: 'transfer_function',
@@ -58,6 +59,7 @@ export const BlockTypes = {
 
   // Control blocks
   IF: 'if',
+  CONDITION: 'condition',
   
 
 } as const;
@@ -132,6 +134,22 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [{ name: 'input' }],
     outputs: [{ name: 'output' }],
     description: 'Multiplies input by a scalar constant'
+  },
+
+  [BlockTypes.EVALUATE]: {
+    type: BlockTypes.EVALUATE,
+    displayName: 'Evaluate',
+    category: 'Math',
+    defaultParameters: {
+      numInputs: 2,
+      expression: 'in(0) + in(1)'
+    },
+    inputs: [
+      { name: 'in0' },
+      { name: 'in1' }
+    ],
+    outputs: [{ name: 'output' }],
+    description: 'Evaluate custom C-style expression'
   },
   
   [BlockTypes.TRANSFER_FUNCTION]: {
@@ -382,6 +400,18 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     description: 'Conditional selection: if control is true/nonzero, output = input2, else output = input1'
   },
 
+  [BlockTypes.CONDITION]: {
+    type: BlockTypes.CONDITION,
+    displayName: 'Condition',
+    category: 'Control',
+    defaultParameters: {
+      condition: '> 0'
+    },
+    inputs: [{ name: 'x1' }],
+    outputs: [{ name: 'out' }],
+    description: 'Compares input signal against a constant value'
+  },
+
   [BlockTypes.ABS]: {
     type: BlockTypes.ABS,
     displayName: 'Absolute Value',
@@ -488,6 +518,20 @@ export function generateDynamicPorts(type: BlockType, parameters: any): {
       inputs: baseDefinition.inputs,
       outputs
     };
+  }
+
+  if (type === BlockTypes.EVALUATE) {
+    const numInputs = parameters.numInputs || 2
+    const inputs: PortDefinition[] = []
+    
+    for (let i = 0; i < numInputs; i++) {
+      inputs.push({ name: `in${i}` })
+    }
+    
+    return {
+      inputs,
+      outputs: baseDefinition.outputs
+    }
   }
   
   // For other blocks, return the default ports

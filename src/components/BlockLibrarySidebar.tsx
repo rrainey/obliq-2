@@ -37,6 +37,14 @@ const blockTypes: BlockType[] = [
     icon: 'K',
     vectorSupport: 'full'
   },
+  { 
+    id: 'evaluate', 
+    name: 'Evaluate', 
+    category: 'Math', 
+    description: 'Custom expression evaluator', 
+    icon: 'f(x)',
+    vectorSupport: 'scalar-only'
+  },
    { 
     id: 'abs', 
     name: 'Absolute Value', 
@@ -226,6 +234,14 @@ const blockTypes: BlockType[] = [
     description: 'Conditional signal selection', 
     icon: '?:',
     vectorSupport: 'full'
+  },
+  { 
+    id: 'condition', 
+    name: 'Condition', 
+    category: 'Control', 
+    description: 'Compare signal to constant', 
+    icon: 'x1 ? c',
+    vectorSupport: 'scalar-only'
   },
 
 ]
