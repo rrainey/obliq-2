@@ -2,7 +2,7 @@
 
 A web-based visual modeling and simulation tool that enables users to construct, test, and simulate block diagram models directly in the browser, then generate C code for embedded deployment.
 
-> **Note**: This project was almost entirely generated using Claude Opus LLM.
+> **Note**: This project was almost entirely generated using Claude Opus 4 LLM.
 
 ## Overview
 
@@ -15,17 +15,18 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 ### Visual Modeling
 - **Drag-and-drop interface** for building block diagrams
 - **Multiple block types** including:
-  - Mathematical operations (Sum, Multiply, Matrix Multiply, Scale)
+  - Mathematical operations (Sum, Multiply, Matrix Multiply, Scale, Trig functions, Vector functions, general math expressions)
   - Dynamic systems (Laplace Transfer Functions with RK4 integration)
   - Signal routing (Input/Output Ports, Sheet Labels)
   - Data operations (1D/2D Lookup Tables)
-  - Visualization (Signal Display with real-time plotting)
+  - Visualization (Signal Display with plotting)
   - Signal generation (Source blocks for constants and generators)
   - Hierarchical composition (Subsystem blocks)
+  - Conditional Signal Flow Control
 
 ### Signal Type System
 - Support for C-style data types: `float`, `double`, `long`, `bool`
-- 1D and 2D array support (e.g., `double[3]`, `float[3][3]`)
+- 1D vector and 2D matrix support (e.g., `double[3]`, `float[3][3]`)
 - Automatic type propagation through connections
 - Type validation with visual error indicators
 
@@ -55,12 +56,12 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 
 ## Tech Stack
 
-- **Frontend**: Next.js (App Router), React, TypeScript, Tailwind CSS
+- **Frontend**: Next.js (App Router), React, ReactFlow, TypeScript
 - **Backend**: Next.js API Routes (serverless functions)
 - **Database**: Supabase (PostgreSQL with JSONB for model storage)
 - **Authentication**: Supabase Auth
 - **State Management**: Zustand
-- **Visualization**: Recharts for signal plotting
+- **Visualization**: Recharts for signal charting
 - **Code Generation**: Server-side TypeScript to C transpilation
 
 ## Installation
