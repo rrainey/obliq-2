@@ -2,10 +2,12 @@
 'use client'
 
 import { useUser } from '@/lib/auth'
+import { supabase } from '@/lib/supabaseClient'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Plus, Key, Trash2 } from 'lucide-react'
+import { ApiTokenService } from '@/lib/apiTokenService'
 
 interface ApiToken {
   id: string
@@ -47,19 +49,22 @@ export default function TokensPage() {
 
   const fetchTokens = async () => {
     try {
-      const response = await fetch('/api/tokens', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const { data: tokens, error } = await supabase
+        .from('api_tokens')
+        .select('id, name, created_at, expires_at, last_used_at')
+        .eq('user_id', user!.id)
+        .order('created_at', { ascending: false })
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch tokens')
-      }
+      if (error) throw error
 
-      const data = await response.json()
-      setTokens(data.tokens || [])
+      // Add computed fields
+      const enrichedTokens = (tokens || []).map(token => ({
+        ...token,
+        isExpired: ApiTokenService.isTokenExpired(token.expires_at),
+        expiresInDays: token.expires_at ? calculateDaysUntilExpiry(token.expires_at) : null
+      }))
+
+      setTokens(enrichedTokens)
     } catch (error) {
       console.error('Error fetching tokens:', error)
       setError('Failed to load API tokens')
@@ -80,17 +85,13 @@ export default function TokensPage() {
     setError(null)
     
     try {
-      const response = await fetch(`/api/tokens/${tokenToDelete.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
+      const { error } = await supabase
+        .from('api_tokens')
+        .delete()
+        .eq('id', tokenToDelete.id)
+        .eq('user_id', user!.id) // Extra safety check
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to delete token')
-      }
+      if (error) throw error
 
       // Remove token from list
       setTokens(tokens.filter(token => token.id !== tokenToDelete.id))
@@ -136,53 +137,70 @@ export default function TokensPage() {
       
     } catch (error) {
       console.error('Failed to copy to clipboard:', error)
-      // You could show an error message here
+      setError('Failed to copy to clipboard')
     }
   }
 
   const handleCreateToken = async () => {
-    if (!newTokenName.trim() || creating) return
+    if (!newTokenName.trim() || creating || !user) return
     
     setCreating(true)
     setError(null)
     
     try {
-      const response = await fetch('/api/tokens', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: newTokenName.trim(),
-          expiresInDays: newTokenExpiry,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create token')
+      const sanitizedName = ApiTokenService.sanitizeTokenName(newTokenName.trim())
+      if (!sanitizedName) {
+        throw new Error('Invalid token name')
       }
 
-      const data = await response.json()
-      
+      // Validate expiry
+      const validExpiryOptions = [30, 90, 180, null]
+      if (newTokenExpiry !== undefined && !validExpiryOptions.includes(newTokenExpiry)) {
+        throw new Error('Invalid expiry option')
+      }
+
+      // Generate token and hash
+      const { token, tokenHash } = ApiTokenService.createToken()
+      const expiresAt = ApiTokenService.calculateExpiryDate(newTokenExpiry)
+
+      // Insert into database
+      const { data: newToken, error: insertError } = await supabase
+        .from('api_tokens')
+        .insert({
+          user_id: user.id,
+          name: sanitizedName,
+          token_hash: tokenHash,
+          expires_at: expiresAt ? expiresAt.toISOString() : null
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        // Check for duplicate name
+        if (insertError.code === '23505') {
+          throw new Error('A token with this name already exists')
+        }
+        throw insertError
+      }
+
       // Store the created token for display
       setCreatedToken({
-        token: data.token,
-        name: data.name,
+        token: token,
+        name: newToken.name,
       })
       
       // Add the new token to the list (without the raw token)
-      const newToken: ApiToken = {
-        id: data.id,
-        name: data.name,
-        created_at: data.created_at,
-        expires_at: data.expires_at,
+      const enrichedNewToken: ApiToken = {
+        id: newToken.id,
+        name: newToken.name,
+        created_at: newToken.created_at,
+        expires_at: newToken.expires_at,
         last_used_at: null,
         isExpired: false,
-        expiresInDays: data.expiresInDays,
+        expiresInDays: newTokenExpiry ? calculateDaysUntilExpiry(newToken.expires_at!) : null,
       }
       
-      setTokens([newToken, ...tokens])
+      setTokens([enrichedNewToken, ...tokens])
       
       // Close create dialog
       setShowCreateDialog(false)
@@ -236,6 +254,14 @@ export default function TokensPage() {
       return <span className="text-gray-600">Expires in {token.expiresInDays} days</span>
     }
     return <span className="text-gray-600">{formatDate(token.expires_at)}</span>
+  }
+
+  const calculateDaysUntilExpiry = (expiresAt: string): number => {
+    const now = new Date()
+    const expiry = new Date(expiresAt)
+    const diffMs = expiry.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+    return Math.max(0, diffDays)
   }
 
   if (loading || !user) {
