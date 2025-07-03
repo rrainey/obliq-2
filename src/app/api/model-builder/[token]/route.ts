@@ -1367,7 +1367,6 @@ export async function POST(
               .from('model_versions')
               .select('data')
               .eq('model_id', modelId)
-              .eq('user_id', authResult.userId)
               .eq('version', originalVersion)
               .single();
               
@@ -1450,7 +1449,6 @@ export async function POST(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
-        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -1634,17 +1632,22 @@ export async function POST(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
       );
-      
+
+      console.log('Adding block for user ', authResult.userId)
+      console.log('Adding block to model: ', modelId)
+
       // Get the latest version of the model
       const { data: versionData, error: versionError } = await supabase
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
-        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
         
+      console.log('Version data: ', versionData)
+      console.log('Version error: ', versionError)
+
       if (versionError || !versionData) {
         return ErrorResponses.modelNotFound(modelId);
       }
@@ -1775,7 +1778,6 @@ export async function POST(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
-        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -1952,7 +1954,6 @@ export async function POST(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
-        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -2367,7 +2368,6 @@ export async function PUT(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
-        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -2521,7 +2521,6 @@ export async function PUT(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
-        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -2635,7 +2634,6 @@ export async function PUT(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
-        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
@@ -2735,7 +2733,6 @@ export async function PUT(
         .from('model_versions')
         .select('*')
         .eq('model_id', modelId)
-        .eq('user_id', authResult.userId)
         .order('version', { ascending: false })
         .limit(1)
         .single();
