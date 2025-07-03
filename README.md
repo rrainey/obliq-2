@@ -53,6 +53,7 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 - RESTful API for CI/CD integration
 - Supports automated validation, simulation, and code generation
 - Token-based authentication for external systems
+- per-user API Key management
 
 ## Tech Stack
 
