@@ -9,6 +9,7 @@ import { EnableEvaluator } from './EnableEvaluator'
 import { RK4Generator } from './RK4Generator'
 import { CCodeBuilder } from './CCodeBuilder'
 import { CodeGenerationValidator } from './CodeGenerationValidator'
+import { TypePropagator } from './TypePropagator'
 
 /**
  * Options for code generation
@@ -116,14 +117,18 @@ export class CodeGenerator {
       }
     }
     
-    // Step 3: Generate header file
-    const headerGenerator = new HeaderGenerator(model)
+    // Step 3: Propagate types through the model
+    const typePropagator = new TypePropagator(model)
+    const typeMap = typePropagator.propagate()
+    
+    // Step 4: Generate header file
+    const headerGenerator = new HeaderGenerator(model, typeMap)
     const header = headerGenerator.generate()
     
-    // Step 4: Generate source file
-    const source = this.generateSource(model)
+    // Step 5: Generate source file
+    const source = this.generateSource(model, typeMap)
     
-    // Step 5: Collect statistics
+    // Step 6: Collect statistics
     const stats = {
       blocksProcessed: model.blocks.length,
       connectionsProcessed: model.connections.length,
@@ -143,7 +148,7 @@ export class CodeGenerator {
   /**
    * Generate the source file
    */
-  private generateSource(model: any): string {
+  private generateSource(model: any, typeMap: Map<string, string>): string {
     const modelName = CCodeBuilder.sanitizeIdentifier(model.metadata.modelName)
     let source = ''
     
@@ -196,7 +201,7 @@ export class CodeGenerator {
     }
     
     // Step function
-    const stepGenerator = new StepFunctionGenerator(model)
+    const stepGenerator = new StepFunctionGenerator(model, typeMap)
     let stepCode = stepGenerator.generate()
     
     // Insert RK4 integration into step function

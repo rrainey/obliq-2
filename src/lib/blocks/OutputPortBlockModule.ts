@@ -5,7 +5,7 @@ import { BlockState, SimulationState } from '@/lib/simulationEngine'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class OutputPortBlockModule implements IBlockModule {
-  generateComputation(block: BlockData, inputs: string[]): string {
+  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
     const portName = block.parameters?.portName || 'Output'
     const safeName = BlockModuleUtils.sanitizeIdentifier(portName)
     
@@ -14,23 +14,24 @@ export class OutputPortBlockModule implements IBlockModule {
     }
     
     const inputExpr = inputs[0]
-    const dataType = block.parameters?.dataType || 'double'
-    const typeInfo = BlockModuleUtils.parseType(dataType)
+    
+    // Get the type from inputTypes if available
+    let needsMemcpy = false
+    if (inputTypes && inputTypes.length > 0) {
+      const inputType = inputTypes[0]
+      const typeInfo = BlockModuleUtils.parseType(inputType)
+      needsMemcpy = typeInfo.isArray || typeInfo.isMatrix
+    } else {
+      // Fallback: check if the input expression contains array access syntax
+      // This is a heuristic but should work for most cases
+      needsMemcpy = !inputExpr.includes('[') && inputExpr.includes('model->signals.')
+    }
     
     let code = `    // Output port: ${portName}\n`
     
-    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-      // Copy matrix to outputs
-      code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
-      code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
-      code += `            model->outputs.${safeName}[i][j] = ${inputExpr}[i][j];\n`
-      code += `        }\n`
-      code += `    }\n`
-    } else if (typeInfo.isArray && typeInfo.arraySize) {
-      // Copy array to outputs
-      code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-      code += `        model->outputs.${safeName}[i] = ${inputExpr}[i];\n`
-      code += `    }\n`
+    if (needsMemcpy) {
+      // Use memcpy for array/matrix copy
+      code += `    memcpy(&model->outputs.${safeName}, &${inputExpr}, sizeof(model->outputs.${safeName}));\n`
     } else {
       // Copy scalar to outputs
       code += `    model->outputs.${safeName} = ${inputExpr};\n`
@@ -40,19 +41,22 @@ export class OutputPortBlockModule implements IBlockModule {
   }
 
   getOutputType(block: BlockData, inputTypes: string[]): string {
-    // Output port doesn't have its own output type in the signal flow
-    // It's a sink block
-    return 'void'
+    // Output ports pass through the type of their input for type propagation
+    // Even though they're sinks, we need this for the type system
+    if (inputTypes.length > 0) {
+      return inputTypes[0]
+    }
+    // Default to double if no input type available
+    return 'double'
   }
 
   generateStructMember(block: BlockData, outputType: string): string | null {
-    // Output port blocks don't need signal storage
-    // They write directly to the model outputs struct
+    // Output ports don't need signal storage - they write directly to outputs struct
     return null
   }
 
   requiresState(block: BlockData): boolean {
-    // Output port blocks don't need state variables
+    // Output ports don't have state
     return false
   }
 
@@ -61,43 +65,15 @@ export class OutputPortBlockModule implements IBlockModule {
     return []
   }
 
-  generateInitialization(block: BlockData): string {
-    // No initialization needed
-    return ''
-  }
-
-  /*
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    // Output ports represent external outputs to parent subsystem/model
-    const input = inputs[0]
-    const portName = blockState.internalState?.portName || `Output_${blockState.blockId}`
-
-    console.log(`*** Executing output port: ${portName} with input:`, input)
-    
-    // Store the current input value for external access
-    // Handles both scalar and vector/matrix values
-    blockState.internalState = {
-      ...blockState.internalState,
-      portName,
-      currentValue: input !== undefined ? input : 0,
-      isConnectedToParent: false // Would be true in subsystem context
-    }
-    
-    // Output ports don't produce outputs to other blocks within the same level
-    // They are sink blocks
-  }
-    */
   executeSimulation(
     blockState: BlockState,
     inputs: (number | number[] | boolean | boolean[] | number[][])[],
     simulationState: SimulationState
   ): void {
     const input = inputs[0]
-    const portName = blockState.internalState?.portName || `Output_${blockState.blockId}`
+    const portName = blockState.internalState?.portName || 
+                     blockState.blockData?.parameters?.portName || 
+                     `Output_${blockState.blockId}`
 
     // Ensure internalState exists
     if (!blockState.internalState) {
@@ -107,16 +83,22 @@ export class OutputPortBlockModule implements IBlockModule {
     // Store the current input value for external access
     blockState.internalState.portName = portName
     blockState.internalState.currentValue = input !== undefined ? input : 0
+    blockState.internalState.isConnectedToParent = false // Would be true in subsystem context
+    
+    // Output ports don't produce outputs to other blocks within the same level
+    // They are sink blocks, but we might need to track the value for debugging
+    // or for parent subsystem access
   }
 
   getInputPortCount(block: BlockData): number {
-    // Output port blocks have exactly 1 input
+    // Output ports have exactly 1 input
     return 1
   }
 
   getOutputPortCount(block: BlockData): number {
-    // Output port blocks have no outputs (they are sinks)
-    return 0
+    // Output ports have 0 outputs (they're sinks in the graph)
+    // But for type propagation, we treat them as having 1 output
+    return 1
   }
 
   // No custom port labels needed

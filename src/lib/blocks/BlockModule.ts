@@ -2,6 +2,7 @@
 
 import { BlockData } from '@/components/BlockNode'
 import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { parseType, normalizeType, isValidType } from '@/lib/typeValidator'
 
 /**
  * Interface for block-specific code generation and simulation modules.
@@ -13,9 +14,10 @@ export interface IBlockModule {
    * Generate the C code computation for this block.
    * @param block - The block data containing parameters and configuration
    * @param inputs - Array of C expressions for input values (e.g., "model->signals.Input1")
+   * @param inputTypes - Optional array of C type strings for inputs (e.g., "double", "double[3]")
    * @returns C code that computes the block's output(s)
    */
-  generateComputation(block: BlockData, inputs: string[]): string
+  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string
 
   /**
    * Determine the output type(s) of this block based on input types.
@@ -123,6 +125,7 @@ export class BlockModuleUtils {
 
   /**
    * Parse a C type string to extract base type and dimensions
+   * Now uses the typeValidator for consistent parsing
    */
   static parseType(typeString: string): {
     baseType: string
@@ -132,34 +135,24 @@ export class BlockModuleUtils {
     rows?: number
     cols?: number
   } {
-    // Match matrix type: "type[rows][cols]"
-    const matrixMatch = typeString.match(/^(\w+)\[(\d+)\]\[(\d+)\]$/)
-    if (matrixMatch) {
+    try {
+      const parsed = parseType(typeString)
       return {
-        baseType: matrixMatch[1],
-        isArray: false,
-        isMatrix: true,
-        rows: parseInt(matrixMatch[2]),
-        cols: parseInt(matrixMatch[3])
+        baseType: parsed.baseType,
+        isArray: parsed.isArray,
+        arraySize: parsed.arraySize,
+        isMatrix: parsed.isMatrix || false,
+        rows: parsed.rows,
+        cols: parsed.cols
       }
-    }
-
-    // Match array type: "type[size]"
-    const arrayMatch = typeString.match(/^(\w+)\[(\d+)\]$/)
-    if (arrayMatch) {
+    } catch (error) {
+      console.warn(`Failed to parse type "${typeString}":`, error)
+      // Return default scalar double type
       return {
-        baseType: arrayMatch[1],
-        isArray: true,
-        arraySize: parseInt(arrayMatch[2]),
+        baseType: 'double',
+        isArray: false,
         isMatrix: false
       }
-    }
-
-    // Scalar type
-    return {
-      baseType: typeString,
-      isArray: false,
-      isMatrix: false
     }
   }
 
@@ -168,7 +161,17 @@ export class BlockModuleUtils {
    */
   static generateStructMember(name: string, typeString: string): string {
     const safeName = this.sanitizeIdentifier(name)
-    const parsed = this.parseType(typeString)
+    
+    // Validate and normalize the type
+    let normalizedType: string
+    try {
+      normalizedType = normalizeType(typeString)
+    } catch {
+      console.warn(`Invalid type for struct member ${name}: ${typeString}`)
+      normalizedType = 'double'
+    }
+    
+    const parsed = this.parseType(normalizedType)
     
     if (parsed.isMatrix && parsed.rows && parsed.cols) {
       return `    ${parsed.baseType} ${safeName}[${parsed.rows}][${parsed.cols}];`

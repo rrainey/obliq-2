@@ -5,7 +5,8 @@ import fs from 'fs'
 import path from 'path'
 import { TestModel } from './TestModelBuilder'
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
-import { ModelCodeGenerator } from '@/lib/codeGenerationNew'  // Changed import
+import { ModelCodeGenerator } from '@/lib/codeGenerationNew' 
+import { BlockData } from '@/components/BlockNode'
 import { Sheet } from '@/lib/simulationEngine'
 
 export interface ExecutionResult {
@@ -288,6 +289,12 @@ export class ModelExecutor {
     )
   }
 
+// __tests__/utils/ModelExecutor.ts - Partial update for generateTestProgram method
+
+  private sanitizeIdentifier(name: string): string {
+    return name.replace(/[^a-zA-Z0-9_]/g, '_')
+  }
+
   private generateTestProgram(model: TestModel, modelName: string): string {
     let program = `#include <${modelName}.h>\n`
     program += `#include <stdio.h>\n`
@@ -313,8 +320,8 @@ export class ModelExecutor {
             const cols = (value[0] as number[]).length
             for (let i = 0; i < rows; i++) {
               for (let j = 0; j < cols; j++) {
-                // suspect, but we'll see if it works
-                program += `    model.inputs.${sanitizedName}[${i}][${j}] = ${(value[i])};\n`
+                const row = (value[i] as unknown) as number[]
+                program += `    model.inputs.${sanitizedName}[${i}][${j}] = ${row[j]};\n`
               }
             }
           } else {
@@ -341,20 +348,46 @@ export class ModelExecutor {
     program += `    }\n`
     program += `    \n`
 
-    // Print outputs
+    // Print outputs - need to determine output types
     program += `    // Print final outputs\n`
     program += `    printf("=== OUTPUTS ===\\n");\n`
 
-    // Find output ports
+    // Build a map of output port types based on connections
+    const outputPortTypes = new Map<string, string>()
+    
+    for (const sheet of model.sheets) {
+      for (const block of sheet.blocks) {
+        if (block.type === 'output_port') {
+          const portName = block.parameters?.portName as string
+          if (portName) {
+            // Find the connection to this output port
+            const connection = sheet.connections.find(c => 
+              c.targetBlockId === block.id && c.targetPortIndex === 0
+            )
+            
+            if (connection) {
+              // Find the source block
+              const sourceBlock = sheet.blocks.find(b => b.id === connection.sourceBlockId)
+              if (sourceBlock) {
+                // Determine the output type based on the source block
+                const outputType = this.inferBlockOutputType(sourceBlock, model)
+                outputPortTypes.set(portName, outputType)
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Print outputs with correct handling for arrays
     for (const sheet of model.sheets) {
       for (const block of sheet.blocks) {
         if (block.type === 'output_port') {
           const portName = block.parameters?.portName as string
           if (portName) {
             const sanitizedName = this.sanitizeIdentifier(portName)
+            const outputType = outputPortTypes.get(portName) || 'double'
             
-            // Determine if it's an array output
-            const outputType = this.findOutputType(model, portName)
             if (outputType.includes('[')) {
               // Array output
               const dimensions = this.extractDimensions(outputType)
@@ -373,8 +406,14 @@ export class ModelExecutor {
                 program += `        printf("  [%d]: %.6f\\n", i, model.outputs.${sanitizedName}[i]);\n`
                 program += `    }\n`
               }
+            } else if (outputType === 'bool') {
+              // Boolean output - print as integer (0 or 1)
+              program += `    printf("${portName}: %d\\n", model.outputs.${sanitizedName});\n`
+            } else if (outputType === 'int' || outputType === 'long') {
+              // Integer output
+              program += `    printf("${portName}: %ld\\n", (long)model.outputs.${sanitizedName});\n`
             } else {
-              // Scalar output
+              // Scalar output (double/float)
               program += `    printf("${portName}: %.6f\\n", model.outputs.${sanitizedName});\n`
             }
           }
@@ -388,6 +427,51 @@ export class ModelExecutor {
     program += `}\n`
 
     return program
+  }
+
+  private inferBlockOutputType(block: BlockData, model: TestModel): string {
+    // Infer output type based on block type and parameters
+    switch (block.type) {
+      case 'input_port':
+        return block.parameters?.dataType || 'double'
+      
+      case 'source':
+        return block.parameters?.dataType || 'double'
+      
+      case 'sum':
+      case 'multiply':
+      case 'scale':
+        // These blocks output the same type as their first input
+        // Find the first input connection
+        for (const sheet of model.sheets) {
+          const conn = sheet.connections.find(c => 
+            c.targetBlockId === block.id && c.targetPortIndex === 0
+          )
+          if (conn) {
+            const sourceBlock = sheet.blocks.find(b => b.id === conn.sourceBlockId)
+            if (sourceBlock) {
+              return this.inferBlockOutputType(sourceBlock, model)
+            }
+          }
+        }
+        return 'double'
+      
+      case 'matrix_multiply':
+        // Would need to analyze input dimensions
+        return 'double'
+      
+      default:
+        return 'double'
+    }
+  }
+
+  private extractDimensions(type: string): number[] {
+    const dimensions: number[] = []
+    const matches = type.matchAll(/\[(\d+)\]/g)
+    for (const match of matches) {
+      dimensions.push(parseInt(match[1]))
+    }
+    return dimensions
   }
 
   private generatePlatformIOConfig(modelName: string): string {
@@ -521,23 +605,12 @@ includes=${modelName}.h
     return outputs
   }
 
-  private sanitizeIdentifier(name: string): string {
-    return name.replace(/[^a-zA-Z0-9_]/g, '_')
-  }
 
   private findOutputType(model: TestModel, portName: string): string {
     // This is a simplified version - in reality would trace through the model
     return 'double' // Default
   }
 
-  private extractDimensions(type: string): number[] {
-    const dimensions: number[] = []
-    const matches = type.matchAll(/\[(\d+)\]/g)
-    for (const match of matches) {
-      dimensions.push(parseInt(match[1]))
-    }
-    return dimensions
-  }
 }
 
 /**

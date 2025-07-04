@@ -10,10 +10,12 @@ import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 export class HeaderGenerator {
   private model: FlattenedModel
   private modelName: string
+  private typeMap: Map<string, string>
   
-  constructor(model: FlattenedModel) {
+  constructor(model: FlattenedModel, typeMap: Map<string, string>) {
     this.model = model
     this.modelName = CCodeBuilder.sanitizeIdentifier(model.metadata.modelName)
+    this.typeMap = typeMap
   }
   
   /**
@@ -27,6 +29,11 @@ export class HeaderGenerator {
     header += this.generateIncludes()
     header += '\n'
     
+    // Add extern "C" opening for C++ compatibility
+    header += '#ifdef __cplusplus\n'
+    header += 'extern "C" {\n'
+    header += '#endif\n\n'
+    
     // Add type definitions
     header += this.generateTypeDefinitions()
     header += '\n'
@@ -37,6 +44,11 @@ export class HeaderGenerator {
     
     // Add function prototypes
     header += this.generateFunctionPrototypes()
+    
+    // Close extern "C"
+    header += '\n#ifdef __cplusplus\n'
+    header += '}\n'
+    header += '#endif\n'
     
     header += guard.end
     return header
@@ -214,8 +226,14 @@ export class HeaderGenerator {
     
     // Process each block that needs signal storage
     for (const block of this.model.blocks) {
+      // Skip input/output ports - they don't need signal storage
       if (block.block.type === 'input_port' || block.block.type === 'output_port') {
-        continue // These don't need signal storage
+        continue
+      }
+      
+      // Skip blocks that don't generate code
+      if (block.block.type === 'signal_display' || block.block.type === 'signal_logger') {
+        continue
       }
       
       try {
@@ -385,8 +403,13 @@ export class HeaderGenerator {
    * Helper to get block output type
    */
   private getBlockOutputType(block: typeof this.model.blocks[0]): string {
-    // For now, return a default type
-    // This will be enhanced when type propagation is implemented
+    // First check the type map
+    const mappedType = this.typeMap.get(block.originalId)
+    if (mappedType) {
+      return mappedType
+    }
+    
+    // Fall back to parameter-based type
     const dataType = block.block.parameters?.dataType
     if (dataType) return dataType
     

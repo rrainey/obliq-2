@@ -12,11 +12,13 @@ export class StepFunctionGenerator {
   private model: FlattenedModel
   private modelName: string
   private enableEvaluator: EnableEvaluator
+  private typeMap: Map<string, string>
   
-  constructor(model: FlattenedModel) {
+  constructor(model: FlattenedModel, typeMap: Map<string, string>) {
     this.model = model
     this.modelName = CCodeBuilder.sanitizeIdentifier(model.metadata.modelName)
     this.enableEvaluator = new EnableEvaluator(model)
+    this.typeMap = typeMap
   }
   
   /**
@@ -34,8 +36,7 @@ export class StepFunctionGenerator {
       [`${this.modelName}_t* model`]
     )
     
-    // Copy inputs to signals for input ports
-    code += this.generateInputCopy()
+    // No need to copy inputs - they're used directly from model->inputs
     
     // Compute execution order
     const executionOrder = this.calculateExecutionOrder()
@@ -62,39 +63,6 @@ export class StepFunctionGenerator {
     code += '    model->time += model->dt;\n'
     
     code += '}\n'
-    return code
-  }
-  
-  /**
-   * Generate code to copy inputs to signals
-   */
-  private generateInputCopy(): string {
-    const inputPorts = this.model.blocks.filter(b => b.block.type === 'input_port')
-    
-    if (inputPorts.length === 0) {
-      return ''
-    }
-    
-    let code = '    /* Copy inputs to signals */\n'
-    
-    for (const port of inputPorts) {
-      const portName = port.block.parameters?.portName || port.block.name
-      const dataType = port.block.parameters?.dataType || 'double'
-      const safeName = CCodeBuilder.sanitizeIdentifier(port.block.name)
-      const safePortName = CCodeBuilder.sanitizeIdentifier(portName)
-      
-      // Check if it's an array type
-      if (dataType.includes('[')) {
-        // Array copy
-        const sizeofExpr = `sizeof(model->inputs.${safePortName})`
-        code += `    memcpy(&model->signals.${safeName}, &model->inputs.${safePortName}, ${sizeofExpr});\n`
-      } else {
-        // Scalar copy
-        code += `    model->signals.${safeName} = model->inputs.${safePortName};\n`
-      }
-    }
-    
-    code += '\n'
     return code
   }
   
@@ -157,60 +125,78 @@ export class StepFunctionGenerator {
    * Generate block computation code
    */
   private generateBlockComputations(executionOrder: FlattenedBlock[]): string {
-    let code = '    /* Compute block outputs in dependency order */\n'
-    
-    for (const block of executionOrder) {
-      // Skip input/output ports
-      if (block.block.type === 'input_port' || block.block.type === 'output_port') {
-        continue
-      }
+      let code = '    /* Compute block outputs in dependency order */\n'
       
-      // Skip blocks that don't generate code
-      if (!BlockModuleFactory.isSupported(block.block.type)) {
-        continue
-      }
-      
-      // Get the block's inputs
-      const inputs = this.getBlockInputExpressions(block)
-      
-      // Generate computation
-      try {
-        const generator = BlockModuleFactory.getBlockModule(block.block.type)
-        
-        // Add block comment
-        code += `\n    /* ${block.flattenedName}`
-        if (block.subsystemPath.length > 0) {
-          code += ` (from ${block.subsystemPath.join(' > ')})`
-        }
-        code += ' */\n'
-        
-        // Check if block is in an enable scope
-        const enableCheck = this.enableEvaluator.generateBlockEnableCheck(block.originalId)
-        const needsEnableCheck = enableCheck !== '1' && 
-          generator.requiresState && 
-          generator.requiresState(block.block)
-        
-        if (needsEnableCheck) {
-          // Wrap computation in enable check for stateful blocks
-          code += `    /* State update only if subsystem is enabled */\n`
-          code += `    if (${enableCheck}) {\n`
-          const computation = generator.generateComputation(block.block, inputs)
-          code += CCodeBuilder.indent(computation)
-          code += '\n    } else {\n'
-          code += `        /* Subsystem disabled - output uses frozen state value */\n`
-          code += '    }\n'
-        } else {
-          // No enable check needed
-          code += generator.generateComputation(block.block, inputs)
+      for (const block of executionOrder) {
+        // Skip input ports - they're initialized at the start
+        if (block.block.type === 'input_port') {
+          continue
         }
         
-      } catch (error) {
-        code += `    /* Error generating code for ${block.block.type}: ${error} */\n`
+        // Output ports are included in execution order but handled specially
+        if (block.block.type === 'output_port') {
+          // Output ports will be processed here with their generateComputation
+          // which copies values to the outputs struct
+        }
+        
+        // Skip blocks that don't generate code
+        if (!BlockModuleFactory.isSupported(block.block.type)) {
+          continue
+        }
+        
+        // Get the block's inputs and their types
+        const inputs = this.getBlockInputExpressions(block)
+        const inputTypes = this.getBlockInputTypes(block)
+        
+        // Generate computation
+        try {
+          const generator = BlockModuleFactory.getBlockModule(block.block.type)
+          
+          // Update the block's output type based on input types
+          const outputType = generator.getOutputType(block.block, inputTypes)
+          
+          // Store the output type for this block (for use by downstream blocks)
+          this.typeMap.set(block.originalId, outputType)
+          
+          // Add block comment
+          code += `\n    /* ${block.flattenedName}`
+          if (block.subsystemPath.length > 0) {
+            code += ` (from ${block.subsystemPath.join(' > ')})`
+          }
+          code += ' */\n'
+          
+          // Check if block is in an enable scope (not for output ports)
+          if (block.block.type !== 'output_port') {
+            const enableCheck = this.enableEvaluator.generateBlockEnableCheck(block.originalId)
+            const needsEnableCheck = enableCheck !== '1' && 
+              generator.requiresState && 
+              generator.requiresState(block.block)
+            
+            if (needsEnableCheck) {
+              // Wrap computation in enable check for stateful blocks
+              code += `    /* State update only if subsystem is enabled */\n`
+              code += `    if (${enableCheck}) {\n`
+              const computation = generator.generateComputation(block.block, inputs, inputTypes)
+              code += CCodeBuilder.indent(computation)
+              code += '\n    } else {\n'
+              code += `        /* Subsystem disabled - output uses frozen state value */\n`
+              code += '    }\n'
+            } else {
+              // No enable check needed
+              code += generator.generateComputation(block.block, inputs, inputTypes)
+            }
+          } else {
+            // Output ports always execute (no enable check)
+            code += generator.generateComputation(block.block, inputs, inputTypes)
+          }
+          
+        } catch (error) {
+          code += `    /* Error generating code for ${block.block.type}: ${error} */\n`
+        }
       }
-    }
-    
-    code += '\n'
-    return code
+      
+      code += '\n'
+      return code
   }
   
   /**
@@ -249,8 +235,10 @@ export class StepFunctionGenerator {
     
     switch (block.block.type) {
       case 'input_port':
-        // Already in signals from input copy
-        return `model->signals.${safeName}`
+        // Input ports read directly from model inputs
+        const portName = block.block.parameters?.portName || block.block.name
+        const safePortName = CCodeBuilder.sanitizeIdentifier(portName)
+        return `model->inputs.${safePortName}`
         
       case 'source':
       default:
@@ -329,13 +317,29 @@ export class StepFunctionGenerator {
   }
   
   /**
-   * Get output type for a block (simplified for now)
+   * Get input types for a block
+   */
+  private getBlockInputTypes(block: FlattenedBlock): string[] {
+    const types: string[] = []
+    
+    // Find all connections to this block, sorted by target port index
+    const connections = this.model.connections
+      .filter(c => c.targetBlockId === block.originalId)
+      .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
+    
+    for (const connection of connections) {
+      const sourceType = this.typeMap.get(connection.sourceBlockId) || 'double'
+      types.push(sourceType)
+    }
+    
+    return types
+  }
+  
+  /**
+   * Get output type for a block
    */
   private getBlockOutputType(block: FlattenedBlock): string {
-    // This will be enhanced with proper type propagation
-    const dataType = block.block.parameters?.dataType
-    if (dataType) return dataType
-    
-    return 'double'
+    // Use the type map
+    return this.typeMap.get(block.originalId) || 'double'
   }
 }

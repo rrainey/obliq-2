@@ -3,7 +3,6 @@
 import { BlockData } from '@/components/BlockNode'
 import { BlockState, SimulationState } from '@/lib/simulationEngine'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
-import { parseType, ParsedType } from '@/lib/typeValidator'
 
 export class InputPortBlockModule implements IBlockModule {
   generateComputation(block: BlockData, inputs: string[]): string {
@@ -38,8 +37,12 @@ export class InputPortBlockModule implements IBlockModule {
   }
 
   getOutputType(block: BlockData, inputTypes: string[]): string {
-    // Input port output type is defined by its dataType parameter
-    return block.parameters?.dataType || 'double'
+    // Input ports have their type defined in parameters
+    const dataType = block.parameters?.dataType
+    if (dataType && typeof dataType === 'string') {
+      return dataType
+    }
+    return 'double' // Default
   }
 
   generateStructMember(block: BlockData, outputType: string): string | null {
@@ -48,7 +51,7 @@ export class InputPortBlockModule implements IBlockModule {
   }
 
   requiresState(block: BlockData): boolean {
-    // Input port blocks don't need state variables
+    // Input ports don't have state
     return false
   }
 
@@ -57,78 +60,56 @@ export class InputPortBlockModule implements IBlockModule {
     return []
   }
 
-  generateInitialization(block: BlockData): string {
-    // No initialization needed - values come from external inputs
-    return ''
-  }
-
   executeSimulation(
     blockState: BlockState,
     inputs: (number | number[] | boolean | boolean[] | number[][])[],
     simulationState: SimulationState
   ): void {
-    // Input ports represent external inputs from parent subsystem/model
-    const defaultValue = blockState.internalState?.defaultValue || 0
-    const portName = blockState.internalState?.portName || `Input_${blockState.blockId}`
-    const dataType = blockState.internalState?.dataType || 'double'
+    // Input ports in the modular block system should output their configured value
+    // The actual test input injection happens at a higher level (MultiSheetSimulationEngine)
+    const portName = blockState.blockData?.parameters?.portName || 'Input'
+    const dataType = blockState.blockData?.parameters?.dataType || 'double'
+    const defaultValue = blockState.blockData?.parameters?.defaultValue || 0
     
-    // Parse the data type to check if it's a vector or matrix
-    let parsedType: ParsedType | null = null
-    try {
-      parsedType = parseType(dataType)
-    } catch {
-      parsedType = { baseType: 'double', isArray: false }
-    }
-    
-    // Check if there's an external input value provided
-    // In the context of the modular system, we need to access the simulation engine's
-    // external input provider through the simulation state
-    const externalValue = (simulationState as any).getExternalInput?.(portName) ?? defaultValue
-    
-    // For matrix types, ensure we have an array
-    if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
-      if (Array.isArray(externalValue) && Array.isArray(externalValue[0])) {
-        blockState.outputs[0] = externalValue
-      } else {
-        // Create matrix filled with the default value
+    // For the modular block system, we output the default value
+    // The simulation engine or adapter will override this with test inputs if needed
+    if (dataType.includes('[')) {
+      // For array types, create array filled with default
+      const parsed = BlockModuleUtils.parseType(dataType)
+      if (parsed.isMatrix && parsed.rows && parsed.cols) {
+        // Create matrix
         const matrix: number[][] = []
-        for (let i = 0; i < parsedType.rows; i++) {
-          matrix[i] = new Array(parsedType.cols).fill(
-            typeof externalValue === 'number' ? externalValue : defaultValue
-          )
+        for (let i = 0; i < parsed.rows; i++) {
+          matrix[i] = new Array(parsed.cols).fill(defaultValue)
         }
         blockState.outputs[0] = matrix
-      }
-    } else if (parsedType.isArray && parsedType.arraySize) {
-      // For vector types, ensure we have an array
-      if (Array.isArray(externalValue)) {
-        blockState.outputs[0] = externalValue
+      } else if (parsed.isArray && parsed.arraySize) {
+        // Create vector
+        blockState.outputs[0] = new Array(parsed.arraySize).fill(defaultValue)
       } else {
-        // Create array filled with the scalar value
-        blockState.outputs[0] = new Array(parsedType.arraySize).fill(externalValue)
+        blockState.outputs[0] = defaultValue
       }
     } else {
-      blockState.outputs[0] = externalValue
+      blockState.outputs[0] = defaultValue
     }
     
     // Update internal state for tracking
-    blockState.internalState = {
-      ...blockState.internalState,
-      portName,
-      dataType,
-      defaultValue,
-      isConnectedToParent: false // Would be true in subsystem context
+    if (!blockState.internalState) {
+      blockState.internalState = {}
     }
+    blockState.internalState.portName = portName
+    blockState.internalState.dataType = dataType
+    blockState.internalState.defaultValue = defaultValue
+    blockState.internalState.isConnectedToParent = false
   }
 
   getInputPortCount(block: BlockData): number {
-    // Input port blocks have no input ports (they are sources)
+    // Input ports have 0 inputs (they're sources in the graph)
     return 0
   }
 
   getOutputPortCount(block: BlockData): number {
-    // Input port blocks always have exactly 1 output
+    // Input ports have exactly 1 output
     return 1
   }
-
 }

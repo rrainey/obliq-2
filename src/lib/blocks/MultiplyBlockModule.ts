@@ -5,15 +5,15 @@ import { BlockState, SimulationState } from '@/lib/simulationEngine'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class MultiplyBlockModule implements IBlockModule {
-  generateComputation(block: BlockData, inputs: string[]): string {
+  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     
     if (inputs.length === 0) {
       return `    ${outputName} = 0.0; // No inputs\n`
     }
     
-    // Get the output type to determine if we need loops
-    const outputType = this.getOutputType(block, [])
+    // Get the output type from inputTypes if available
+    const outputType = inputTypes && inputTypes.length > 0 ? inputTypes[0] : 'double'
     const typeInfo = BlockModuleUtils.parseType(outputType)
     
     // Use the utility function for element-wise operations
@@ -138,12 +138,11 @@ export class MultiplyBlockModule implements IBlockModule {
 
   getInputPortCount(block: BlockData): number {
     // Multiply blocks have a configurable number of inputs (default 2)
-    return block.parameters?.inputCount || 2
+    return block.parameters?.inputCount || block.parameters?.inputs || 2
   }
 
   getOutputPortCount(block: BlockData): number {
     // Multiply blocks always have exactly 1 output
     return 1
   }
-
 }
