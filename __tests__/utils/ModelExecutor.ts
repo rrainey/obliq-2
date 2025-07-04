@@ -5,7 +5,7 @@ import fs from 'fs'
 import path from 'path'
 import { TestModel } from './TestModelBuilder'
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
-import { generateCCode } from '@/lib/codeGeneration'
+import { ModelCodeGenerator } from '@/lib/codeGenerationNew'  // Changed import
 import { Sheet } from '@/lib/simulationEngine'
 
 export interface ExecutionResult {
@@ -106,18 +106,23 @@ export class ModelExecutor {
     const startTime = Date.now()
 
     try {
-      // Generate C code
+      // Generate C code using new system
       const modelName = this.sanitizeModelName(model.metadata.description || 'test_model')
-      const codeResult = generateCCode(
-        model.sheets,
-        modelName
-      )
+      const generator = new ModelCodeGenerator({ modelName })
+      const codeResult = generator.generateCode(model.sheets, modelName)
 
       // Write generated files
       const libDir = path.join(this.tempDir, 'lib', modelName)
       fs.mkdirSync(libDir, { recursive: true })
 
-      this.writeGeneratedFiles(libDir, codeResult, modelName)
+      // The new system returns different structure, adapt it
+      const adaptedCodeResult = {
+        fileName: modelName,
+        sourceFile: codeResult.source,
+        headerFile: codeResult.header
+      }
+
+      this.writeGeneratedFiles(libDir, adaptedCodeResult, modelName)
 
       // Generate and write test program
       const testProgram = this.generateTestProgram(model, modelName)
@@ -332,7 +337,7 @@ export class ModelExecutor {
     program += `    \n`
 
     program += `    for (int i = 0; i < steps; i++) {\n`
-    program += `        ${modelName}_time_step(&model, dt);\n`
+    program += `        ${modelName}_step(&model);\n`
     program += `    }\n`
     program += `    \n`
 
