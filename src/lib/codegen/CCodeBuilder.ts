@@ -8,8 +8,13 @@ export class CCodeBuilder {
    * Sanitize a name to be a valid C identifier
    */
   static sanitizeIdentifier(name: string): string {
+
+    if (!name || typeof name !== 'string') {
+      throw new Error('Invalid name provided for sanitization')
+    }
+
     // Replace non-alphanumeric characters with underscores
-    let sanitized = name.replace(/[^a-zA-Z0-9_ ]/g, '_')
+    let sanitized = name.replace(/[^a-zA-Z0-9_]/g, '_')
     
     // Ensure it doesn't start with a number
     if (/^\d/.test(sanitized)) {
@@ -187,7 +192,7 @@ export class CCodeBuilder {
     start: string,
     end: string
   } {
-    const guard = filename.toUpperCase().replace(/[^A-Z0-9]/g, '_') + '_H'
+    const guard = filename.toUpperCase().replace(/[^A-Z0-9]/g, '_') /* + '_H'*/
     
     return {
       start: `#ifndef ${guard}\n#define ${guard}\n`,

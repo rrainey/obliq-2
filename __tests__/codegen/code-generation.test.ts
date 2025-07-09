@@ -4,7 +4,7 @@ import { ModelFlattener } from '@/lib/codegen/ModelFlattener'
 import { CodeGenerator } from '@/lib/codegen/CodeGenerator'
 import { CCodeBuilder } from '@/lib/codegen/CCodeBuilder'
 import { EnableTestModels } from './enable-test-models'
-import { BlockCodeGeneratorFactory } from '@/lib/blocks/BlockCodeGeneratorFactory'
+import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
 
 describe('Code Generation System', () => {
   describe('CCodeBuilder', () => {
@@ -13,7 +13,7 @@ describe('Code Generation System', () => {
       expect(CCodeBuilder.sanitizeIdentifier('123invalid')).toBe('_123invalid')
       expect(CCodeBuilder.sanitizeIdentifier('name-with-dashes')).toBe('name_with_dashes')
       expect(CCodeBuilder.sanitizeIdentifier('int')).toBe('int_') // C keyword
-      expect(CCodeBuilder.sanitizeIdentifier('')).toBe('signal')
+      expect(() => CCodeBuilder.sanitizeIdentifier('')).toThrow('Invalid name provided for sanitization')
     })
 
     test('generates array declarations', () => {
@@ -114,26 +114,26 @@ describe('Code Generation System', () => {
 
   describe('Block Code Generators', () => {
     test('factory returns correct generators', () => {
-      const sumGen = BlockCodeGeneratorFactory.getBlockCodeGenerator('sum')
+      const sumGen = BlockModuleFactory.getBlockModule('sum')
       expect(sumGen).toBeDefined()
 
-      const tfGen = BlockCodeGeneratorFactory.getBlockCodeGenerator('transfer_function')
+      const tfGen = BlockModuleFactory.getBlockModule('transfer_function')
       expect(tfGen).toBeDefined()
       expect(tfGen.requiresState({ type: 'transfer_function', parameters: { denominator: [1, 1] } } as any)).toBe(true)
     })
 
     test('handles unsupported block types', () => {
       expect(() => {
-        BlockCodeGeneratorFactory.getBlockCodeGenerator('unsupported_type')
+        BlockModuleFactory.getBlockModule('unsupported_type')
       }).toThrow('Unsupported block type')
     })
 
     test('sum block generates correct code', () => {
-      const sumGen = BlockCodeGeneratorFactory.getBlockCodeGenerator('sum')
+      const sumGen = BlockModuleFactory.getBlockModule('sum')
       const block = {
         name: 'Sum1',
         type: 'sum',
-        parameters: { inputs: '++' }
+        parameters: { signs: '++' }
       } as any
 
       const code = sumGen.generateComputation(block, ['input1', 'input2'])
@@ -141,7 +141,7 @@ describe('Code Generation System', () => {
     })
 
     test('transfer function with states', () => {
-      const tfGen = BlockCodeGeneratorFactory.getBlockCodeGenerator('transfer_function')
+      const tfGen = BlockModuleFactory.getBlockModule('transfer_function')
       const block = {
         name: 'TF1',
         type: 'transfer_function',

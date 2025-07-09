@@ -646,6 +646,7 @@ export class MultiSheetSimulationEngine {
           }
           
           if (block?.type === 'input_port') {
+            
             // Find if this input port is inside a subsystem
             const subsystemBlock = this.findContainingSubsystem(blockId, allSheets)
             if (subsystemBlock) {
@@ -687,7 +688,13 @@ export class MultiSheetSimulationEngine {
                   }
                 }
               }
+            } else {
+              // Root-level input port - execute normally to output test input values
+              engine.executeBlockById(blockId)
             }
+          } else {
+            // Execute the block normally
+            engine.executeBlockById(blockId)
           }
           
           // Execute the block normally
@@ -1138,11 +1145,10 @@ export class MultiSheetSimulationEngine {
           // Set the value in the block state
           let blockState = state.blockStates.get(block.id)
           if (!blockState) {
-            // Initialize block state if needed
             blockState = {
               blockId: block.id,
               blockType: 'input_port',
-              outputs: [value],
+              outputs: [value],  // Always wrap in array, even for vectors
               internalState: {
                 portName,
                 dataType: block.parameters?.dataType || 'double',
@@ -1153,11 +1159,7 @@ export class MultiSheetSimulationEngine {
             state.blockStates.set(block.id, blockState)
           } else {
             // Update existing state
-            if (Array.isArray(value)) {
-              blockState.outputs = [...value]
-            } else {
-              blockState.outputs[0] = value
-            }
+            blockState.outputs[0] = value  // Always use index 0, even for vectors
           }
           
           // Store in signal values

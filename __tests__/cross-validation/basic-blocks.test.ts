@@ -41,15 +41,10 @@ describe('Basic Block Cross-Validation', () => {
       const results = await executor.executeBoth(model)
       const comparison = comparator.compare(results.simulation, results.compiled, model)
 
-      comparator.generateTextReport(comparison)
-
       expect(comparison.passed).toBe(true)
       expect(results.simulation.outputs.Result).toBeCloseTo(8.0, 5)
       expect(results.compiled.outputs.Result).toBeCloseTo(8.0, 5)
 
-      if (process.env.VERBOSE) {
-        console.log(comparator.generateTextReport(comparison))
-      }
     })
 
     test('should subtract with mixed signs', async () => {
@@ -196,6 +191,8 @@ describe('Basic Block Cross-Validation', () => {
 
       const results = await executor.executeBoth(model)
       const comparison = comparator.compare(results.simulation, results.compiled, model)
+
+      console.log(JSON.stringify(comparison, null, 2))
 
       expect(comparison.passed).toBe(true)
     })
@@ -453,6 +450,8 @@ describe('Basic Block Cross-Validation', () => {
 
       const results = await executor.executeBoth(model)
       const comparison = comparator.compare(results.simulation, results.compiled, model)
+
+      console.log(JSON.stringify(comparison, null, 2))
 
       expect(comparison.passed).toBe(true)
     })

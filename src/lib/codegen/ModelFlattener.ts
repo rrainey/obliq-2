@@ -486,7 +486,44 @@ export class ModelFlattener {
       if (portBlockIds.has(sourceBlockId) || (portBlockIds.has(targetBlockId) && targetPortIndex !== -1)) {
         continue
       }
+
+      // Check if source is a subsystem block with output ports
+      if (sourceBlockId && portMappings.has(sourceBlockId)) {
+        const mapping = portMappings.get(sourceBlockId)!
+        const internalOutputPortId = mapping.outputPorts.get(sourcePortIndex)
+        
+        if (internalOutputPortId) {
+          // Find the wire that connects TO this output port inside the subsystem
+          const internalWire = connections.find(w => 
+            w.targetBlockId === internalOutputPortId && 
+            w.targetPortIndex === 0 // Output ports have single input at index 0
+          )
+          
+          if (internalWire) {
+            // Update source to point to the internal block
+            sourceBlockId = internalWire.sourceBlockId
+            sourcePortIndex = internalWire.sourcePortIndex
+            connectionType = 'subsystem_output'
+            processedWires.add(internalWire.id)
+            // Important: Do NOT continue here - we want to create the remapped connection below
+          } else {
+            this.addWarning(`Output port ${internalOutputPortId} has no internal connection`)
+            continue
+          }
+        }
+      }
       
+      // Check if source is a subsystem output port block
+      const sourceSubsystemId = blockToSubsystem.get(sourceBlockId)
+      if (sourceSubsystemId) {
+        const sourceBlock = flattenedBlocks.find(b => b.originalId === sourceBlockId)
+        if (sourceBlock?.block.type === 'output_port') {
+          // Skip - we don't want connections from output port blocks
+          continue
+        }
+      }
+      
+      /*
       // Check if source is a subsystem output port
       const sourceSubsystemId = blockToSubsystem.get(sourceBlockId)
       if (sourceSubsystemId) {
@@ -509,6 +546,7 @@ export class ModelFlattener {
           }
         }
       }
+      */
       
       // Check if target is a subsystem input
       if (targetBlockId && portMappings.has(targetBlockId)) {
@@ -814,6 +852,14 @@ export class ModelFlattener {
 
     for (const connection of resolvedConnections) {
        list += `Connection: ${connection.id} from ${connection.sourceBlockId} to ${connection.targetBlockId}` + "\n"
+    }
+
+    for (const y of this.enableScopes) {
+       list += `Enable Scope: Block ${y[0]} has enable scope ${y[1]}` + "\n"
+    }   
+
+    for (const x of this.subsystemEnableInfo) {
+       list += `Subsystem Enable Info: ${x.subsystemName} (ID: ${x.subsystemId}), Has Enable Input: ${x.hasEnableInput}, Controlled Blocks: ${x.controlledBlockIds.join(', ')}` + "\n"
     }
     console.log(list)
     

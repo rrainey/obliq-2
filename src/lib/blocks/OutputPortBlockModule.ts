@@ -75,6 +75,8 @@ export class OutputPortBlockModule implements IBlockModule {
                      blockState.blockData?.parameters?.portName || 
                      `Output_${blockState.blockId}`
 
+    //console.log(`OutputPort ${blockState.blockId} received input:`, input)
+
     // Ensure internalState exists
     if (!blockState.internalState) {
       blockState.internalState = {}

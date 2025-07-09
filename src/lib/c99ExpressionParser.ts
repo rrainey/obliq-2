@@ -299,3 +299,9 @@ export class C99ExpressionParser {
     throw new Error(`${message} at position ${this.peek().column}`)
   }
 }
+
+// Export a convenience function for parsing expressions
+export function parseC99Expression(expression: string): Expression {
+  const parser = new C99ExpressionParser(expression)
+  return parser.parse()
+}

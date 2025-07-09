@@ -65,8 +65,22 @@ export class InputPortBlockModule implements IBlockModule {
     inputs: (number | number[] | boolean | boolean[] | number[][])[],
     simulationState: SimulationState
   ): void {
-    // Input ports in the modular block system should output their configured value
-    // The actual test input injection happens at a higher level (MultiSheetSimulationEngine)
+    /*
+    console.log(`InputPort ${blockState.blockId} before execution:`, {
+      outputs: blockState.outputs,
+      portName: blockState.blockData?.parameters?.portName
+    });
+    */
+    
+    // Check if the output has already been set (e.g., by setTestInputs)
+    // If so, we should use that value instead of the default
+    if (blockState.outputs.length > 0 && blockState.outputs[0] !== undefined) {
+      // Value already set, likely by test inputs - keep it
+      //console.log(`InputPort ${blockState.blockId} keeping existing value:`, blockState.outputs[0]);
+      return
+    }
+    
+    // Otherwise, use the default value
     const portName = blockState.blockData?.parameters?.portName || 'Input'
     const dataType = blockState.blockData?.parameters?.dataType || 'double'
     const defaultValue = blockState.blockData?.parameters?.defaultValue || 0

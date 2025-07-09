@@ -618,6 +618,8 @@ export class SimulationEngine {
       const sourceSignalKey = `${wire.sourceBlockId}_output_${wire.sourcePortIndex}`
       const value = this.state.signalValues.get(sourceSignalKey) || 0
 
+      //console.log(`Wire from ${wire.sourceBlockId} to ${blockId}: value =`, value)
+
       inputs[wire.targetPortIndex] = value
     }
 

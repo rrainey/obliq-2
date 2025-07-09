@@ -134,6 +134,8 @@ export class MultiplyBlockModule implements IBlockModule {
       }
       blockState.outputs[0] = product
     }
+
+    //console.log(`MultiplyBlock ${blockState.blockId} output:`, blockState.outputs[0])
   }
 
   getInputPortCount(block: BlockData): number {
