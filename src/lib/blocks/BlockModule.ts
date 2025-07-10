@@ -97,6 +97,18 @@ export interface IBlockModule {
    * @returns Array of port labels or undefined to use default numbering
    */
   getOutputPortLabels?(block: BlockData): string[] | undefined
+
+/**
+   * Is this a direct feedthrough block? (optional; assumed to be 'true' if the 
+   * function is undefined for a given Block).
+   * This indicates that the block's output can be computed directly from its inputs
+   * without needing to store state or perform integration.
+   * This can be called during block execution order analysis to help identify algebraic
+   * loops in a model.
+   * @param block - The block data containing parameters
+   * @returns Array of port labels or undefined to use default numbering
+   */
+  isDirectFeedthrough?(block: BlockData): boolean | undefined
 }
 
 /**

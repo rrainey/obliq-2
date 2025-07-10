@@ -1123,6 +1123,7 @@ export class MultiSheetSimulationEngine {
     return this.sheets[0]?.id || ''
   }
   
+
   /**
    * Set input values for testing
    */
@@ -1145,10 +1146,11 @@ export class MultiSheetSimulationEngine {
           // Set the value in the block state
           let blockState = state.blockStates.get(block.id)
           if (!blockState) {
+            // Initialize block state if needed
             blockState = {
               blockId: block.id,
               blockType: 'input_port',
-              outputs: [value],  // Always wrap in array, even for vectors
+              outputs: [value], // Always store as single output, even for vectors
               internalState: {
                 portName,
                 dataType: block.parameters?.dataType || 'double',
@@ -1159,7 +1161,8 @@ export class MultiSheetSimulationEngine {
             state.blockStates.set(block.id, blockState)
           } else {
             // Update existing state
-            blockState.outputs[0] = value  // Always use index 0, even for vectors
+            // Always store the value (scalar or vector) at index 0
+            blockState.outputs[0] = value
           }
           
           // Store in signal values
@@ -1168,20 +1171,20 @@ export class MultiSheetSimulationEngine {
       }
     }
   }
-  
+    
   /**
- * Get final output values after simulation
- */
-public getFinalOutputs(): { [portName: string]: number | number[] | number[][] | boolean | boolean[] } {
-  const outputs: { [portName: string]: number | number[] | number[][] | boolean | boolean[] } = {}
-  
-  // Get outputs from all sheets using the existing method
-  const outputPortValues = this.getOutputPortValues()
-  
-  for (const [portName, value] of outputPortValues) {
-    outputs[portName] = value
+   * Get final output values after simulation
+   */
+  public getFinalOutputs(): { [portName: string]: number | number[] | number[][] | boolean | boolean[] } {
+    const outputs: { [portName: string]: number | number[] | number[][] | boolean | boolean[] } = {}
+    
+    // Get outputs from all sheets using the existing method
+    const outputPortValues = this.getOutputPortValues()
+    
+    for (const [portName, value] of outputPortValues) {
+      outputs[portName] = value
+    }
+    
+    return outputs
   }
-  
-  return outputs
-}
 }

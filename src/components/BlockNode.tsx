@@ -465,7 +465,12 @@ const getBlockStyle = (data: BlockNodeData, selected: boolean | undefined) => {
 // Custom node component
 export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
   const getPortCounts = () => {
-    return PortCountAdapter.getPortCounts(data)
+    let x = PortCountAdapter.getPortCounts(data)
+    if (data.type === 'output_port' ) {
+      // spacial case: Output Block Node reports that it has an output; override that here.
+      x.outputCount = 0
+    }
+    return x
   }
 
   const getPortLabels = () => {

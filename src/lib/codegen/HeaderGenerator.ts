@@ -86,8 +86,9 @@ export class HeaderGenerator {
     types += this.generateStatesStruct()
     types += '\n'
     
-    // Generate enable states structure if needed
-    if (this.model.subsystemEnableInfo.some(info => info.hasEnableInput)) {
+    // Generate enable states structure if needed OR if we have stateful blocks
+    // This ensures the type is always defined when referenced
+    if (this.hasStatefulBlocks() || this.model.subsystemEnableInfo.some(info => info.hasEnableInput)) {
       types += CCodeBuilder.generateEnableStateStruct(this.model.subsystemEnableInfo)
       types += '\n'
     }
@@ -318,8 +319,8 @@ export class HeaderGenerator {
     members.push(`    ${this.modelName}_signals_t signals;`)
     members.push(`    ${this.modelName}_states_t states;`)
     
-    // Add enable states if needed
-    if (this.model.subsystemEnableInfo.some(info => info.hasEnableInput)) {
+    // Add enable states if needed OR if we have stateful blocks
+    if (this.hasStatefulBlocks() || this.model.subsystemEnableInfo.some(info => info.hasEnableInput)) {
       members.push(`    enable_states_t enable_states;`)
     }
     
@@ -356,23 +357,31 @@ export class HeaderGenerator {
       'Execute one simulation step'
     ) + '\n'
     
-    // Derivatives function (for RK4)
+    // Derivatives function (for RK4) - only if we have stateful blocks
     if (this.hasStatefulBlocks()) {
+      const params = [
+        'double t',
+        `const ${this.modelName}_inputs_t* inputs`,
+        `const ${this.modelName}_signals_t* signals`,  // Add signals parameter
+        `const ${this.modelName}_states_t* current_states`,
+        `${this.modelName}_states_t* state_derivatives`
+      ]
+      
+      // Only add enable_states parameter if we have subsystems with enable inputs
+      const hasEnableSubsystems = this.model.subsystemEnableInfo.some(info => info.hasEnableInput)
+      if (hasEnableSubsystems) {
+        params.push(`const enable_states_t* enable_states`)
+      }
+      
       prototypes += CCodeBuilder.generateFunctionPrototype(
         'void',
         `${this.modelName}_derivatives`,
-        [
-          'double t',
-          `const ${this.modelName}_inputs_t* inputs`,
-          `const ${this.modelName}_states_t* current_states`,
-          `${this.modelName}_states_t* state_derivatives`,
-          `const enable_states_t* enable_states`
-        ],
+        params,
         'Calculate state derivatives for RK4 integration'
       ) + '\n'
     }
     
-    // Enable evaluation function
+    // Enable evaluation function - only if we have subsystems with enable inputs
     if (this.model.subsystemEnableInfo.some(info => info.hasEnableInput)) {
       prototypes += CCodeBuilder.generateFunctionPrototype(
         'void',

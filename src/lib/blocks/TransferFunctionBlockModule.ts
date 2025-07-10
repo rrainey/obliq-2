@@ -277,6 +277,14 @@ export class TransferFunctionBlockModule implements IBlockModule {
     }
   }
 
+  isDirectFeedthrough?(block: BlockData): boolean {
+    // Transfer function blocks are direct feedthrough only if 
+    // the order of the numerator and denominator polynomials are equal.
+    const numerator = block.parameters?.numerator || [1]
+    const denominator = block.parameters?.denominator || [1]
+    return numerator.length === denominator.length
+  }
+
   getInputPortCount(block: BlockData): number {
     // Transfer function blocks have exactly 1 input
     return 1
