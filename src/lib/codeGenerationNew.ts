@@ -99,7 +99,6 @@ export { ModelFlattener } from './codegen/ModelFlattener'
 export { CCodeBuilder } from './codegen/CCodeBuilder'
 export { HeaderGenerator } from './codegen/HeaderGenerator'
 export { InitFunctionGenerator } from './codegen/InitFunctionGenerator'
-export { StepFunctionGenerator } from './codegen/StepFunctionGenerator'
 export { EnableEvaluator } from './codegen/EnableEvaluator'
 export { RK4Generator } from './codegen/RK4Generator'
 
