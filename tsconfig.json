@@ -23,5 +23,5 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "jest.setup.js", "jest.config.js", "__tests__/integration/code-generation/platformio-test/code-compilation-2.test.tsxxx"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "examples"]
 }
