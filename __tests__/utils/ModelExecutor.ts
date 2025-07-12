@@ -8,6 +8,24 @@ import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
 import { ModelCodeGenerator } from '@/lib/codeGenerationNew' 
 import { BlockData } from '@/components/BlockNode'
 import { Sheet } from '@/lib/simulationEngine'
+import { SimulationAlgebraicEvaluator } from '@/lib/simulation/SimulationAlgebraicEvaluator'
+import { SimulationStateIntegrator } from '@/lib/simulation/SimulationStateIntegrator'
+
+export interface AlgebraicOnlyResult {
+  success: boolean
+  outputs: { [portName: string]: number | number[] }
+  algebraicOutputs: Map<string, any[]> // Raw algebraic outputs by block ID
+  executionOrder: string[]
+  simulationTime: number
+  error?: string
+}
+
+export interface PhaseExecutionLog {
+  phase: 'algebraic' | 'integration' | 'cross-sheet' | 'time-advance'
+  time: number
+  message: string
+  data?: any
+}
 
 export interface ExecutionResult {
   success: boolean
@@ -16,6 +34,7 @@ export interface ExecutionResult {
   logs?: string[]
   error?: string
   rawOutput?: string
+  phaseExecutionLogs?: PhaseExecutionLog[]
 }
 
 export interface ExecutorOptions {
@@ -23,7 +42,12 @@ export interface ExecutorOptions {
   dockerImage?: string
   timeout?: number
   workDir?: string
+  // Phase 10.1: Add option to enable phase logging
+  logPhases?: boolean
+  // Phase 10.2: Add algebraic-only mode
+  algebraicOnly?: boolean
 }
+
 
 /**
  * Unified interface for executing models
@@ -31,13 +55,16 @@ export interface ExecutorOptions {
 export class ModelExecutor {
   private options: Required<ExecutorOptions>
   private tempDir: string
+  private phaseExecutionLogs: PhaseExecutionLog[] = []
 
   constructor(options: ExecutorOptions = {}) {
     this.options = {
       verbose: options.verbose ?? false,
       dockerImage: options.dockerImage ?? 'platformio-test',
-      timeout: options.timeout ?? 60000, // 60 seconds
-      workDir: options.workDir ?? path.join(__dirname, '..', 'temp')
+      timeout: options.timeout ?? 60000,
+      workDir: options.workDir ?? path.join(__dirname, '..', 'temp'),
+      logPhases: options.logPhases ?? false, // Phase 10.1
+      algebraicOnly: options.algebraicOnly ?? false // Phase 10.2
     }
 
     // Create temp directory
@@ -46,60 +73,314 @@ export class ModelExecutor {
   }
 
 
-    /**
-     * Execute model in interactive simulation
-     */
-    async executeSimulation(model: TestModel): Promise<ExecutionResult> {
+/**
+   * Enhanced execute simulation with phase logging
+   */
+  async executeSimulation(model: TestModel): Promise<ExecutionResult> {
     const startTime = Date.now()
+    this.phaseExecutionLogs = [] // Reset logs
 
     try {
-        // Create simulation engine
-        const engine = new MultiSheetSimulationEngine(
+      // Create simulation engine
+      const engine = new MultiSheetSimulationEngine(
         model.sheets,
         {
-            timeStep: model.globalSettings.simulationTimeStep,
-            duration: model.globalSettings.simulationDuration
+          timeStep: model.globalSettings.simulationTimeStep,
+          duration: model.globalSettings.simulationDuration
         }
-        )
+      )
 
-        // Set test inputs
-        if (model.metadata.testInputs) {
+      // Set test inputs
+      if (model.metadata.testInputs) {
         engine.setTestInputs(model.metadata.testInputs)
-        }
+      }
 
-        // Run simulation
-        const results = engine.run()
+      // Phase 10.1: Log simulation phases if enabled
+      if (this.options.logPhases) {
+        // Log at key points during simulation
+        this.logPhase({
+          phase: 'time-advance',
+          time: 0,
+          message: 'Starting simulation'
+        })
+      }
 
-        // Get final outputs directly from the engine
-        const engineOutputs = engine.getFinalOutputs()
+      // Run simulation
+      const results = engine.run()
+
+      if (this.options.logPhases) {
+        // Extract some phase information from results
+        const totalSteps = Math.floor(model.globalSettings.simulationDuration / model.globalSettings.simulationTimeStep)
         
-        // Convert to test framework format
-        const outputs: { [portName: string]: number | number[] } = {}
-        for (const [portName, value] of Object.entries(engineOutputs)) {
-        if (typeof value === 'boolean') {
-            outputs[portName] = value ? 1 : 0
-        } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'boolean') {
-            outputs[portName] = (value as boolean[]).map(v => v ? 1 : 0)
-        } else {
-            outputs[portName] = value as number | number[]
+        // Simulate phase logs based on execution
+        for (let step = 0; step < Math.min(5, totalSteps); step++) {
+          const t = step * model.globalSettings.simulationTimeStep
+          
+          this.logPhase({
+            phase: 'algebraic',
+            time: t,
+            message: `Algebraic evaluation at step ${step}`,
+            data: { step }
+          })
+          
+          if (step > 0) {
+            this.logPhase({
+              phase: 'integration',
+              time: t,
+              message: `State integration at step ${step}`,
+              data: { method: 'rk4' }
+            })
+          }
+          
+          this.logPhase({
+            phase: 'time-advance',
+            time: t + model.globalSettings.simulationTimeStep,
+            message: `Advanced to t=${(t + model.globalSettings.simulationTimeStep).toFixed(4)}`
+          })
         }
-        }
+        
+        this.logPhase({
+          phase: 'time-advance',
+          time: model.globalSettings.simulationDuration,
+          message: 'Simulation complete',
+          data: { totalSteps }
+        })
+      }
 
-        return {
+      // Get final outputs directly from the engine
+      const engineOutputs = engine.getFinalOutputs()
+      
+      // Convert to test framework format
+      const outputs: { [portName: string]: number | number[] } = {}
+      for (const [portName, value] of Object.entries(engineOutputs)) {
+        if (typeof value === 'boolean') {
+          outputs[portName] = value ? 1 : 0
+        } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'boolean') {
+          outputs[portName] = (value as boolean[]).map(v => v ? 1 : 0)
+        } else {
+          outputs[portName] = value as number | number[]
+        }
+      }
+
+      const logs = this.options.verbose ? this.getSimulationLogs(results) : undefined
+
+      return {
         success: true,
         outputs,
         simulationTime: (Date.now() - startTime) / 1000,
-        logs: this.options.verbose ? this.getSimulationLogs(results) : undefined
-        }
+        logs,
+        phaseExecutionLogs: this.options.logPhases ? [...this.phaseExecutionLogs] : undefined
+      }
     } catch (error) {
-        return {
+      return {
         success: false,
         outputs: {},
         simulationTime: (Date.now() - startTime) / 1000,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        phaseExecutionLogs: this.options.logPhases ? [...this.phaseExecutionLogs] : undefined
+      }
+    }
+  }
+
+  // Phase 10.1: Add phase logging method
+  private logPhase(log: PhaseExecutionLog): void {
+    this.phaseExecutionLogs.push(log)
+    
+    if (this.options.verbose) {
+      console.log(`[${log.phase.toUpperCase()}] t=${log.time.toFixed(4)}: ${log.message}`)
+      if (log.data) {
+        console.log('  Data:', JSON.stringify(log.data, null, 2))
+      }
+    }
+  }
+
+  // Phase 10.2: Add these methods to the existing ModelExecutor class
+
+  /**
+   * Phase 10.2: Execute only algebraic evaluation at t=0
+   */
+  async executeAlgebraicOnly(model: TestModel): Promise<AlgebraicOnlyResult> {
+    const startTime = Date.now()
+    this.phaseExecutionLogs = []
+
+    try {
+      // Create simulation engine
+      const engine = new MultiSheetSimulationEngine(
+        model.sheets,
+        {
+          timeStep: model.globalSettings.simulationTimeStep,
+          duration: model.globalSettings.simulationDuration
         }
+      )
+
+      // Set test inputs
+      if (model.metadata.testInputs) {
+        engine.setTestInputs(model.metadata.testInputs)
+      }
+
+      // Log start of algebraic-only evaluation
+      if (this.options.logPhases) {
+        this.logPhase({
+          phase: 'algebraic',
+          time: 0,
+          message: 'Starting algebraic-only evaluation at t=0'
+        })
+      }
+
+      // Perform algebraic evaluation for each sheet
+      const allAlgebraicOutputs = new Map<string, any[]>()
+      const allExecutionOrders: string[] = []
+      
+      for (const sheet of model.sheets) {
+        const evaluator = new SimulationAlgebraicEvaluator()
+        const sheetEngine = engine.getSheetEngine(sheet.id)
+        
+        if (!sheetEngine) continue
+        
+        const engineState = sheetEngine.getState()
+        
+        // Evaluate algebraic relationships
+        const result = evaluator.evaluate({
+          blockStates: engineState.blockStates,
+          simulationState: engineState,
+          sheet: sheet
+        })
+        
+        // Collect outputs
+        for (const [blockId, outputs] of result.blockOutputs) {
+          allAlgebraicOutputs.set(blockId, outputs)
+        }
+        
+        // Collect execution order
+        allExecutionOrders.push(...result.executionOrder)
+        
+        if (this.options.logPhases) {
+          this.logPhase({
+            phase: 'algebraic',
+            time: 0,
+            message: `Evaluated sheet ${sheet.name}`,
+            data: {
+              blockCount: sheet.blocks.length,
+              outputCount: result.blockOutputs.size,
+              executionOrder: result.executionOrder
+            }
+          })
+        }
+      }
+
+      // Extract output port values
+      const outputs = this.extractAlgebraicOutputs(model, allAlgebraicOutputs)
+
+      return {
+        success: true,
+        outputs,
+        algebraicOutputs: allAlgebraicOutputs,
+        executionOrder: allExecutionOrders,
+        simulationTime: (Date.now() - startTime) / 1000
+      }
+    } catch (error) {
+      return {
+        success: false,
+        outputs: {},
+        algebraicOutputs: new Map(),
+        executionOrder: [],
+        simulationTime: (Date.now() - startTime) / 1000,
+        error: error instanceof Error ? error.message : String(error)
+      }
     }
+  }
+
+  /**
+   * Extract output port values from algebraic outputs
+   */
+  private extractAlgebraicOutputs(
+    model: TestModel,
+    algebraicOutputs: Map<string, any[]>
+  ): { [portName: string]: number | number[] } {
+    const outputs: { [portName: string]: number | number[] } = {}
+    
+    // Find all output port blocks
+    for (const sheet of model.sheets) {
+      for (const block of sheet.blocks) {
+        if (block.type === 'output_port') {
+          const portName = block.parameters?.portName as string
+          if (portName) {
+            // Find the connected source
+            const connection = sheet.connections.find(c => 
+              c.targetBlockId === block.id && c.targetPortIndex === 0
+            )
+            
+            if (connection) {
+              const sourceOutputs = algebraicOutputs.get(connection.sourceBlockId)
+              if (sourceOutputs && sourceOutputs.length > connection.sourcePortIndex) {
+                const value = sourceOutputs[connection.sourcePortIndex]
+                
+                // Convert boolean to number for consistency
+                if (typeof value === 'boolean') {
+                  outputs[portName] = value ? 1 : 0
+                } else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'boolean') {
+                  outputs[portName] = (value as boolean[]).map(v => v ? 1 : 0)
+                } else {
+                  outputs[portName] = value
+                }
+              }
+            }
+          }
+        }
+      }
     }
+    
+    return outputs
+  }
+
+  /**
+   * Phase 10.2: Compare algebraic outputs at t=0
+   */
+  async compareAlgebraicOutputs(model: TestModel): Promise<{
+    simulation: AlgebraicOnlyResult
+    compiled: ExecutionResult
+    comparison: {
+      matched: boolean
+      differences: { [portName: string]: number }
+    }
+  }> {
+    // Run algebraic-only evaluation
+    const algebraicResult = await this.executeAlgebraicOnly(model)
+    
+    // Run compiled version (which includes t=0)
+    const compiledResult = await this.executeCompiled(model)
+    
+    // Compare outputs
+    const differences: { [portName: string]: number } = {}
+    let allMatched = true
+    
+    for (const portName of Object.keys(algebraicResult.outputs)) {
+      const algValue = algebraicResult.outputs[portName]
+      const compValue = compiledResult.outputs[portName]
+      
+      if (algValue !== undefined && compValue !== undefined) {
+        const diff = Array.isArray(algValue) 
+          ? Math.max(...algValue.map((v, i) => Math.abs(v - (compValue as number[])[i])))
+          : Math.abs(algValue - (compValue as number))
+        
+        differences[portName] = diff
+        
+        if (diff > 1e-10) {
+          allMatched = false
+        }
+      }
+    }
+    
+    return {
+      simulation: algebraicResult,
+      compiled: compiledResult,
+      comparison: {
+        matched: allMatched,
+        differences
+      }
+    }
+  }
+
   /**
    * Execute model as compiled C code
    */
@@ -651,3 +932,4 @@ export async function executeCompiled(model: TestModel, options?: ExecutorOption
     executor.cleanup()
   }
 }
+

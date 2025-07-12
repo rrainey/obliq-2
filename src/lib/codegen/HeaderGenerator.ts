@@ -349,6 +349,20 @@ export class HeaderGenerator {
       'Initialize model with given time step'
     ) + '\n'
     
+    // Algebraic evaluation function - NEW!
+    prototypes += CCodeBuilder.generateFunctionPrototype(
+      'void',
+      `${this.modelName}_evaluate_algebraic`,
+      [
+        `const ${this.modelName}_inputs_t* inputs`,
+        `const ${this.modelName}_states_t* states`,
+        `${this.modelName}_signals_t* signals`,
+        `${this.modelName}_outputs_t* outputs`,
+        `const enable_states_t* enable_states`
+      ],
+      'Evaluate algebraic relationships (pure function, no state changes)'
+    ) + '\n'
+    
     // Step function
     prototypes += CCodeBuilder.generateFunctionPrototype(
       'void',

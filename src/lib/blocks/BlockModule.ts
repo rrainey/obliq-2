@@ -109,6 +109,22 @@ export interface IBlockModule {
    * @returns Array of port labels or undefined to use default numbering
    */
   isDirectFeedthrough?(block: BlockData): boolean | undefined
+
+  /**
+   * Compute state derivatives for this block (optional).
+   * Used for blocks with continuous states that require integration.
+   * This method should compute derivatives WITHOUT updating states.
+   * 
+   * @param blockState - The current state of the block
+   * @param inputs - Array of input values
+   * @param time - Current simulation time
+   * @returns Array of state derivatives, or undefined if block has no states
+   */
+  computeDerivatives?(
+    blockState: BlockState,
+    inputs: (number | number[] | boolean | boolean[] | number[][])[],
+    time: number
+  ): number[] | undefined
 }
 
 /**

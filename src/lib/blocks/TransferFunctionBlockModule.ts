@@ -128,7 +128,7 @@ export class TransferFunctionBlockModule implements IBlockModule {
     return `    memset(model->states.${tfName}_states, 0, sizeof(model->states.${tfName}_states));\n`
   }
 
-  executeSimulation(
+executeSimulation(
     blockState: BlockState,
     inputs: (number | number[] | boolean | boolean[] | number[][])[],
     simulationState: SimulationState
@@ -172,7 +172,7 @@ export class TransferFunctionBlockModule implements IBlockModule {
         }
       }
       
-      // Process each element independently
+      // Compute output for each element
       const output: number[][] = []
       for (let i = 0; i < rows; i++) {
         output[i] = []
@@ -180,24 +180,13 @@ export class TransferFunctionBlockModule implements IBlockModule {
           const elementInput = matrix[i][j]
           const elementStates = blockState.internalState.matrixStates[i][j]
           
-          if (isEnabled) {
-            // Apply transfer function to this element
-            output[i][j] = this.processTransferFunctionElement(
-              elementInput,
-              numerator,
-              denominator,
-              elementStates,
-              simulationState.timeStep
-            )
-          } else {
-            // Subsystem is disabled - use frozen state
-            output[i][j] = this.getTransferFunctionOutputWithoutUpdate(
-              elementInput,
-              numerator,
-              denominator,
-              elementStates
-            )
-          }
+          // Just compute output from current state
+          output[i][j] = this.computeOutputFromState(
+            elementInput,
+            numerator,
+            denominator,
+            elementStates
+          )
         }
       }
       
@@ -217,31 +206,19 @@ export class TransferFunctionBlockModule implements IBlockModule {
         }
       }
       
-      // Process each element independently
+      // Compute output for each element
       const output = new Array(vectorSize)
       
       for (let idx = 0; idx < vectorSize; idx++) {
         const elementInput = typeof input[idx] === 'number' ? input[idx] as number : 0
         const elementStates = blockState.internalState.vectorStates[idx]
         
-        if (isEnabled) {
-          // Apply transfer function to this element
-          output[idx] = this.processTransferFunctionElement(
-            elementInput,
-            numerator,
-            denominator,
-            elementStates,
-            simulationState.timeStep
-          )
-        } else {
-          // Subsystem is disabled - use frozen state
-          output[idx] = this.getTransferFunctionOutputWithoutUpdate(
-            elementInput,
-            numerator,
-            denominator,
-            elementStates
-          )
-        }
+        output[idx] = this.computeOutputFromState(
+          elementInput,
+          numerator,
+          denominator,
+          elementStates
+        )
       }
       
       blockState.outputs[0] = output
@@ -250,23 +227,12 @@ export class TransferFunctionBlockModule implements IBlockModule {
       // Scalar processing
       const states = blockState.internalState.states
       
-      if (isEnabled) {
-        blockState.outputs[0] = this.processTransferFunctionElement(
-          input,
-          numerator,
-          denominator,
-          states,
-          simulationState.timeStep
-        )
-      } else {
-        // Subsystem is disabled - use frozen state
-        blockState.outputs[0] = this.getTransferFunctionOutputWithoutUpdate(
-          input,
-          numerator,
-          denominator,
-          states
-        )
-      }
+      blockState.outputs[0] = this.computeOutputFromState(
+        input,
+        numerator,
+        denominator,
+        states
+      )
     } else {
       blockState.outputs[0] = 0
     }
@@ -275,6 +241,24 @@ export class TransferFunctionBlockModule implements IBlockModule {
     if (isEnabled || blockState.frozenOutputs === undefined) {
       blockState.frozenOutputs = [...blockState.outputs]
     }
+  }
+
+  /**
+   * Compute output from current state (no integration)
+   */
+  private computeOutputFromState(
+    input: number,
+    numerator: number[],
+    denominator: number[],
+    states: number[]
+  ): number {
+    // Pure gain case
+    if (denominator.length === 1) {
+      return input * (numerator[0] || 0) / denominator[0]
+    }
+    
+    // For dynamic systems, output equals the first state
+    return states[0] || 0
   }
 
   isDirectFeedthrough?(block: BlockData): boolean {
@@ -342,6 +326,7 @@ export class TransferFunctionBlockModule implements IBlockModule {
   
   /**
    * Process a single transfer function element
+   * Now only computes output from current state, no integration
    */
   private processTransferFunctionElement(
     input: number,
@@ -350,97 +335,14 @@ export class TransferFunctionBlockModule implements IBlockModule {
     states: number[],
     timeStep: number
   ): number {
-
-    
     // Pure gain case: H(s) = K (only constant term)
     if (denominator.length === 1) {
       return input * (numerator[0] || 0) / denominator[0]
     }
     
-    // First order system: H(s) = b0 / (a1*s + a0)
-    if (denominator.length === 2) {
-      const a1 = denominator[0] // s term coefficient
-      const a0 = denominator[1] // constant term
-      const b0 = numerator[numerator.length - 1] || 0
-      
-      if (a1 === 0) {
-        // Degenerate case - pure gain
-        if (a0 !== 0) {
-          return input * b0 / a0
-        } else {
-          return 0
-        }
-      }
-      
-      const currentState = states[0] || 0
-      const h = timeStep
-      
-      // Define the derivative function
-      const dydt = (y: number, u: number) => (b0 * u - a0 * y) / a1
-      
-      // Runge-Kutta 4th order integration
-      const k1 = dydt(currentState, input)
-      const k2 = dydt(currentState + 0.5 * h * k1, input)
-      const k3 = dydt(currentState + 0.5 * h * k2, input)
-      const k4 = dydt(currentState + h * k3, input)
-      
-      // Update state using RK4
-      states[0] = currentState + (h / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
-      
-      // Output equals the state for first-order systems
-      return states[0]
-    }
-    else if (denominator.length === 3) {
-      // Second order system
-      const a2 = denominator[0] // s^2 coefficient
-      const a1 = denominator[1] // s coefficient
-      const a0 = denominator[2] // constant term
-      const b0 = numerator[numerator.length - 1] || 0
-      
-      if (a2 === 0) {
-        return 0
-      }
-      
-      const x1 = states[0] || 0
-      const x2 = states[1] || 0
-      const h = timeStep
-      
-      // System equations
-      const f1 = (x1: number, x2: number, u: number) => x2
-      const f2 = (x1: number, x2: number, u: number) => (b0 * u - a0 * x1 - a1 * x2) / a2
-      
-      // RK4 integration
-      const k1_1 = f1(x1, x2, input)
-      const k1_2 = f2(x1, x2, input)
-      
-      const k2_1 = f1(x1 + 0.5 * h * k1_1, x2 + 0.5 * h * k1_2, input)
-      const k2_2 = f2(x1 + 0.5 * h * k1_1, x2 + 0.5 * h * k1_2, input)
-      
-      const k3_1 = f1(x1 + 0.5 * h * k2_1, x2 + 0.5 * h * k2_2, input)
-      const k3_2 = f2(x1 + 0.5 * h * k2_1, x2 + 0.5 * h * k2_2, input)
-      
-      const k4_1 = f1(x1 + h * k3_1, x2 + h * k3_2, input)
-      const k4_2 = f2(x1 + h * k3_1, x2 + h * k3_2, input)
-      
-      // Update states
-      states[0] = x1 + (h / 6) * (k1_1 + 2 * k2_1 + 2 * k3_1 + k4_1)
-      states[1] = x2 + (h / 6) * (k1_2 + 2 * k2_2 + 2 * k3_2 + k4_2)
-      
-      return states[0]
-    }
-    else {
-      // Higher order systems - simplified implementation
-      const highestOrderCoeff = denominator[0]
-      const lowestOrderCoeff = denominator[denominator.length - 1]
-      const timeConstant = Math.abs(highestOrderCoeff / lowestOrderCoeff)
-      const gain = (numerator[numerator.length - 1] || 0) / (lowestOrderCoeff || 1)
-      
-      const currentState = states[0] || 0
-      const derivative = (gain * input - currentState) / timeConstant
-      states[0] = currentState + derivative * timeStep
-      
-      return states[0]
-    }
+    // For dynamic systems, output equals the first state
+    // The state integration is now handled externally
+    return states[0] || 0
   }
 
   /**
@@ -458,57 +360,267 @@ export class TransferFunctionBlockModule implements IBlockModule {
     const stateOrder = Math.max(0, denominator.length - 1)
     const typeInfo = BlockModuleUtils.parseType(outputType)
     
-    let code = `    // Transfer function: ${block.name}\n`
+    let code = `    /* State derivatives for ${block.name} */\n`
     
     if (stateOrder === 0) {
-      return '' // No derivatives for zero-order systems
+      return '    /* No derivatives - algebraic block */\n'
     }
     
-    if (stateOrder === 1) {
-      // First-order: dy/dt = (b0*u - a0*y) / a1
+    // Handle different type cases
+    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+      // Matrix transfer function
+      code += `    /* Matrix transfer function (${typeInfo.rows}x${typeInfo.cols}) */\n`
+      code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
+      code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
+      code += this.generateScalarDerivative(
+        tfName,
+        `${inputExpr}[i][j]`,
+        `${stateAccessor}->${tfName}_states[i][j]`,
+        `state_derivatives->${tfName}_states[i][j]`,
+        numerator,
+        denominator,
+        stateOrder,
+        3 // indent level
+      )
+      code += `        }\n`
+      code += `    }\n`
+    } else if (typeInfo.isArray && typeInfo.arraySize) {
+      // Vector transfer function
+      code += `    /* Vector transfer function (size ${typeInfo.arraySize}) */\n`
+      code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
+      code += this.generateScalarDerivative(
+        tfName,
+        `${inputExpr}[i]`,
+        `${stateAccessor}->${tfName}_states[i]`,
+        `state_derivatives->${tfName}_states[i]`,
+        numerator,
+        denominator,
+        stateOrder,
+        2 // indent level
+      )
+      code += `    }\n`
+    } else {
+      // Scalar transfer function
+      code += this.generateScalarDerivative(
+        tfName,
+        inputExpr,
+        `${stateAccessor}->${tfName}_states`,
+        `state_derivatives->${tfName}_states`,
+        numerator,
+        denominator,
+        stateOrder,
+        1 // indent level
+      )
+    }
+    
+    return code
+  }
+  
+  /**
+   * Generate derivative computation for a scalar transfer function
+   */
+  private generateScalarDerivative(
+    tfName: string,
+    inputExpr: string,
+    stateAccessor: string,
+    derivativeAccessor: string,
+    numerator: number[],
+    denominator: number[],
+    stateOrder: number,
+    indentLevel: number
+  ): string {
+    const indent = '    '.repeat(indentLevel)
+    let code = ''
+    
+    // Normalize by leading coefficient
+    const a_n = denominator[0]
+    if (Math.abs(a_n) < 1e-10) {
+      return `${indent}/* Error: Leading denominator coefficient is zero */\n`
+    }
+    
+    // Controllable canonical form:
+    // x'[0] = x[1]
+    // x'[1] = x[2]
+    // ...
+    // x'[n-2] = x[n-1]
+    // x'[n-1] = -a[0]/a[n]*x[0] - a[1]/a[n]*x[1] - ... - a[n-1]/a[n]*x[n-1] + b[0]/a[n]*u
+    
+    for (let i = 0; i < stateOrder; i++) {
+      if (i < stateOrder - 1) {
+        // x'[i] = x[i+1]
+        code += `${indent}${derivativeAccessor}[${i}] = ${stateAccessor}[${i + 1}];\n`
+      } else {
+        // Last state derivative
+        code += `${indent}${derivativeAccessor}[${i}] = `
+        
+        // Input contribution: b[0]/a[n] * u
+        // For transfer functions, we typically only have b[0] (or b[n] depending on notation)
+        const b_0 = numerator[0] || 0
+        if (Math.abs(b_0) > 1e-10) {
+          code += `(${b_0 / a_n}) * ${inputExpr}`
+        } else {
+          code += `0.0`
+        }
+        
+        // Feedback terms: -a[i]/a[n] * x[i]
+        for (let j = 0; j < stateOrder; j++) {
+          const a_j = denominator[denominator.length - 1 - j] || 0
+          if (Math.abs(a_j) > 1e-10) {
+            code += ` - (${a_j / a_n}) * ${stateAccessor}[${j}]`
+          }
+        }
+        
+        code += `;\n`
+      }
+    }
+    
+    return code
+  }
+
+  // lib/blocks/TransferFunctionBlockModule.ts - Add this method to the class
+
+  computeDerivatives(
+    blockState: BlockState,
+    inputs: (number | number[] | boolean | boolean[] | number[][])[],
+    time: number
+  ): number[] | undefined {
+    const input = inputs[0]
+    const { numerator, denominator } = blockState.internalState
+    
+    // Validate coefficients
+    if (!denominator || denominator.length === 0) {
+      return undefined
+    }
+    
+    const stateOrder = Math.max(0, denominator.length - 1)
+    if (stateOrder === 0) {
+      return undefined // No states, no derivatives
+    }
+    
+    // Handle different input types
+    if (Array.isArray(input) && Array.isArray(input[0])) {
+      // Matrix input - compute derivatives for each element
+      const matrix = input as unknown as number[][]
+      const rows = matrix.length
+      const cols = matrix[0]?.length || 0
+      const derivatives: number[] = []
+      
+      // Flatten derivatives for all matrix elements
+      for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < cols; j++) {
+          const elementInput = matrix[i][j]
+          const elementStates = blockState.internalState.matrixStates?.[i]?.[j] || []
+          const elementDerivs = this.computeScalarDerivatives(
+            elementInput,
+            numerator,
+            denominator,
+            elementStates
+          )
+          derivatives.push(...elementDerivs)
+        }
+      }
+      
+      return derivatives
+      
+    } else if (Array.isArray(input)) {
+      // Vector input - compute derivatives for each element
+      const derivatives: number[] = []
+      
+      for (let idx = 0; idx < input.length; idx++) {
+        const elementInput = typeof input[idx] === 'number' ? input[idx] as number : 0
+        const elementStates = blockState.internalState.vectorStates?.[idx] || []
+        const elementDerivs = this.computeScalarDerivatives(
+          elementInput,
+          numerator,
+          denominator,
+          elementStates
+        )
+        derivatives.push(...elementDerivs)
+      }
+      
+      return derivatives
+      
+    } else if (typeof input === 'number') {
+      // Scalar input
+      const states = blockState.internalState.states || []
+      return this.computeScalarDerivatives(input, numerator, denominator, states)
+    }
+    
+    return undefined
+  }
+
+  /**
+   * Compute derivatives for a scalar transfer function
+   */
+  private computeScalarDerivatives(
+    input: number,
+    numerator: number[],
+    denominator: number[],
+    states: number[]
+  ): number[] {
+    const stateOrder = Math.max(0, denominator.length - 1)
+    if (stateOrder === 0) return []
+    
+    const derivatives: number[] = new Array(stateOrder)
+    
+    if (denominator.length === 2) {
+      // First order: dx/dt = (b0*u - a0*x) / a1
       const a1 = denominator[0]
       const a0 = denominator[1]
       const b0 = numerator[numerator.length - 1] || 0
       
-      if (typeInfo.isArray && typeInfo.arraySize) {
-        code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-        code += `        double u = ${inputExpr}[i];\n`
-        code += `        double y = ${stateAccessor}->${tfName}_states[i][0];\n`
-        code += `        state_derivatives->${tfName}_states[i][0] = (${b0} * u - ${a0} * y) / ${a1};\n`
-        code += `    }\n`
-      } else {
-        code += `    {\n`
-        code += `        double u = ${inputExpr};\n`
-        code += `        double y = ${stateAccessor}->${tfName}_states[0];\n`
-        code += `        state_derivatives->${tfName}_states[0] = (${b0} * u - ${a0} * y) / ${a1};\n`
-        code += `    }\n`
-      }
-    } else if (stateOrder === 2) {
-      // Second-order system in controllable canonical form
+      if (a1 === 0) return [0]
+      
+      derivatives[0] = (b0 * input - a0 * (states[0] || 0)) / a1
+      
+    } else if (denominator.length === 3) {
+      // Second order: convert to state space
       const a2 = denominator[0]
       const a1 = denominator[1]
       const a0 = denominator[2]
       const b0 = numerator[numerator.length - 1] || 0
       
-      if (typeInfo.isArray && typeInfo.arraySize) {
-        code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-        code += `        double u = ${inputExpr}[i];\n`
-        code += `        double x1 = ${stateAccessor}->${tfName}_states[i][0];\n`
-        code += `        double x2 = ${stateAccessor}->${tfName}_states[i][1];\n`
-        code += `        state_derivatives->${tfName}_states[i][0] = x2;\n`
-        code += `        state_derivatives->${tfName}_states[i][1] = (${b0} * u - ${a0} * x1 - ${a1} * x2) / ${a2};\n`
-        code += `    }\n`
-      } else {
-        code += `    {\n`
-        code += `        double u = ${inputExpr};\n`
-        code += `        double x1 = ${stateAccessor}->${tfName}_states[0];\n`
-        code += `        double x2 = ${stateAccessor}->${tfName}_states[1];\n`
-        code += `        state_derivatives->${tfName}_states[0] = x2;\n`
-        code += `        state_derivatives->${tfName}_states[1] = (${b0} * u - ${a0} * x1 - ${a1} * x2) / ${a2};\n`
-        code += `    }\n`
+      if (a2 === 0) return [0, 0]
+      
+      // x1' = x2
+      derivatives[0] = states[1] || 0
+      
+      // x2' = (b0*u - a0*x1 - a1*x2) / a2
+      derivatives[1] = (b0 * input - a0 * (states[0] || 0) - a1 * (states[1] || 0)) / a2
+      
+    } else {
+      // Higher order - use controllable canonical form
+      // x'[i] = x[i+1] for i < n-1
+      // x'[n-1] = -sum(a[i]/a[n] * x[i]) + b[0]/a[n] * u
+      
+      const a_n = denominator[0]
+      if (Math.abs(a_n) < 1e-10) return new Array(stateOrder).fill(0)
+      
+      // First n-1 derivatives
+      for (let i = 0; i < stateOrder - 1; i++) {
+        derivatives[i] = states[i + 1] || 0
       }
+      
+      // Last derivative
+      let lastDerivative = 0
+      
+      // Input contribution
+      const b_0 = numerator[0] || 0
+      if (Math.abs(b_0) > 1e-10) {
+        lastDerivative += (b_0 / a_n) * input
+      }
+      
+      // Feedback terms
+      for (let j = 0; j < stateOrder; j++) {
+        const a_j = denominator[denominator.length - 1 - j] || 0
+        if (Math.abs(a_j) > 1e-10) {
+          lastDerivative -= (a_j / a_n) * (states[j] || 0)
+        }
+      }
+      
+      derivatives[stateOrder - 1] = lastDerivative
     }
     
-    return code
+    return derivatives
   }
 }

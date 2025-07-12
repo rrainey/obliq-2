@@ -3,6 +3,9 @@
 import { SimulationEngine, SimulationConfig, SimulationResults, Sheet } from './simulationEngine'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
+import { SimulationAlgebraicEvaluator } from './simulation/SimulationAlgebraicEvaluator'
+import { SimulationStateIntegrator } from './simulation/SimulationStateIntegrator'
+
 
 
 export class MultiSheetSimulationEngine {
@@ -14,6 +17,9 @@ export class MultiSheetSimulationEngine {
   // New: Track subsystem hierarchy globally
   private subsystemHierarchy: Map<string, string | null> = new Map() // subsystemId -> parent subsystemId
   private blockToSubsystem: Map<string, string | null> = new Map() // blockId -> containing subsystemId
+  private algebraicEvaluators: Map<string, SimulationAlgebraicEvaluator> = new Map()
+  private stateIntegrators: Map<string, SimulationStateIntegrator> = new Map()
+  
   
 /**
    * Compute initial outputs for all subsystem blocks
@@ -136,6 +142,12 @@ export class MultiSheetSimulationEngine {
         allSheets
       )
       this.blockEngines.set(sheet.id, engine)
+
+      const algebraicEvaluator = new SimulationAlgebraicEvaluator()
+      const stateIntegrator = new SimulationStateIntegrator('rk4', algebraicEvaluator) 
+      
+      this.algebraicEvaluators.set(sheet.id, algebraicEvaluator)
+      this.stateIntegrators.set(sheet.id, stateIntegrator)
       
       // Track block locations
       for (const block of sheet.blocks) {
@@ -596,7 +608,8 @@ export class MultiSheetSimulationEngine {
     
     return outputValues
   }
-  
+
+
   run(): Map<string, SimulationResults> {
     const results = new Map<string, SimulationResults>()
     const timePoints: number[] = []
@@ -619,203 +632,74 @@ export class MultiSheetSimulationEngine {
     while (time < this.config.duration) {
       timePoints.push(time)
       
-      // Execute blocks in global order
-      for (const { sheetId, blockId } of this.executionOrder) {
-        const engine = this.blockEngines.get(sheetId)
-        if (engine) {
-          const sheet = allSheets.find((s: Sheet) => s.id === sheetId)
-          const block = sheet?.blocks.find((b: BlockData) => b.id === blockId)
-
-          if (block?.type === 'subsystem') {
-            continue // Subsystems are just containers
-          }
-          
-          // Check if block should execute based on enable state
-          if (!this.shouldExecuteBlock(blockId)) {
-            // Skip execution for disabled blocks
-            // But still need to output frozen values for output ports
-            if (block?.type === 'output_port') {
-              const engineState = engine.getState()
-              const blockState = engineState.blockStates.get(blockId)
-              if (blockState && blockState.frozenOutputs) {
-                // Use frozen output value
-                blockState.internalState.currentValue = blockState.frozenOutputs[0] ?? 0
-              }
-            }
-            continue
-          }
-          
-          if (block?.type === 'input_port') {
-            
-            // Find if this input port is inside a subsystem
-            const subsystemBlock = this.findContainingSubsystem(blockId, allSheets)
-            if (subsystemBlock) {
-              // Check if the subsystem is enabled
-              if (!this.isSubsystemEnabled(subsystemBlock.block.id)) {
-                // Skip input processing for disabled subsystem
-                continue
-              }
-              
-              // Find the wire going into the subsystem at the corresponding port
-              const portName = block.parameters?.portName
-              const portIndex = subsystemBlock.block.parameters?.inputPorts?.indexOf(portName) ?? -1
-              
-              if (portIndex >= 0) {
-                // Find wire to this subsystem port
-                const parentSheet = allSheets.find((s: Sheet) => s.id === subsystemBlock.sheetId)
-                const inputWire = parentSheet?.connections.find((w: WireData) => 
-                  w.targetBlockId === subsystemBlock.block.id && 
-                  w.targetPortIndex === portIndex
-                )
-                
-                if (inputWire) {
-                  // Get the value from the source
-                  const sourceEngine = this.blockEngines.get(subsystemBlock.sheetId)
-                  if (sourceEngine) {
-                    const sourceState = sourceEngine.getState()
-                    const signalKey = `${inputWire.sourceBlockId}_output_${inputWire.sourcePortIndex}`
-                    const value = sourceState.signalValues.get(signalKey)
-                    
-                    if (value !== undefined) {
-                      // Set this as the input port's output
-                      const blockState = engine.getState().blockStates.get(blockId)
-                      if (blockState) {
-                        blockState.outputs[0] = value
-                        engine.getState().signalValues.set(`${blockId}_output_0`, value)
-                        continue // Skip normal execution
-                      }
-                    }
-                  }
-                }
-              }
-            } else {
-              // Root-level input port - execute normally to output test input values
-              engine.executeBlockById(blockId)
-            }
-          } else {
-            // Execute the block normally
-            engine.executeBlockById(blockId)
-          }
-          
-          // Execute the block normally
-          engine.executeBlockById(blockId)
-
-          // Handle sheet label value sharing within subsystem scope
-          if (block?.type === 'sheet_label_sink') {
-            const subsystemBlock = this.findContainingSubsystem(blockId, allSheets)
-            const scope = subsystemBlock ? subsystemBlock.block.id : 'root'
-            
-            // Share this value with all engines in the same scope
-            const signalName = block.parameters?.signalName
-            if (signalName) {
-              const blockState = engine.getState().blockStates.get(blockId)
-              const value = blockState?.internalState?.currentValue
-              
-              if (value !== undefined) {
-                // Find all sheet label sources with the same signal name in the same scope
-                for (const sheet of allSheets) {
-                  const sheetSubsystem = this.findContainingSubsystem(sheet.blocks[0]?.id || '', allSheets)
-                  const sheetScope = sheetSubsystem ? sheetSubsystem.block.id : 'root'
-                  
-                  if (sheetScope === scope) {
-                    const sheetEngine = this.blockEngines.get(sheet.id)
-                    if (sheetEngine) {
-                      // Set the value in this engine's sheet label values
-                      sheetEngine.getState().sheetLabelValues.set(signalName, value)
-                    }
-                  }
-                }
-              }
-            }
-          }
-          
-          // After executing, check if this is an output port
-          if (block?.type === 'output_port') {
-            // Find if this output port is inside a subsystem
-            const subsystemBlock = this.findContainingSubsystem(blockId, allSheets)
-            if (subsystemBlock) {
-              // Get the output port's value
-              const engineState = engine.getState()
-              const blockState = engineState.blockStates.get(blockId)
-              const value = blockState?.internalState?.currentValue
-              
-              if (value !== undefined) {
-                // Find which output port this is
-                const portName = block.parameters?.portName
-                const portIndex = subsystemBlock.block.parameters?.outputPorts?.indexOf(portName) ?? -1
-                
-                if (portIndex >= 0) {
-                  // Set this value as the subsystem block's output
-                  const parentEngine = this.blockEngines.get(subsystemBlock.sheetId)
-                  if (parentEngine) {
-                    // Make sure the subsystem block state exists
-                    let subsystemBlockState = parentEngine.getState().blockStates.get(subsystemBlock.block.id)
-                    if (!subsystemBlockState) {
-                      // Initialize subsystem block state if it doesn't exist
-                      const outputCount = subsystemBlock.block.parameters?.outputPorts?.length || 1
-                      subsystemBlockState = {
-                        blockId: subsystemBlock.block.id,
-                        blockType: 'subsystem',
-                        outputs: new Array(outputCount).fill(0),
-                        frozenOutputs: new Array(outputCount).fill(0)
-                      }
-                      parentEngine.getState().blockStates.set(subsystemBlock.block.id, subsystemBlockState)
-                    }
-                    
-                    // Use frozen output if subsystem is disabled
-                    if (this.isSubsystemEnabled(subsystemBlock.block.id)) {
-                      subsystemBlockState.outputs[portIndex] = value
-                      parentEngine.getState().signalValues.set(
-                        `${subsystemBlock.block.id}_output_${portIndex}`, 
-                        value
-                      )
-                    } else {
-                      // Use frozen value
-                      const frozenValue = subsystemBlockState.frozenOutputs?.[portIndex] ?? 0
-                      parentEngine.getState().signalValues.set(
-                        `${subsystemBlock.block.id}_output_${portIndex}`, 
-                        frozenValue
-                      )
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-      
-      // Collect signal data
-      for (const [sheetId, engine] of this.blockEngines) {
-        const engineState = engine.getState()
-        const signalData = sheetSignalData.get(sheetId)!
+      // Phase 1: Algebraic evaluation for each sheet
+      for (const sheet of allSheets) {
+        const engine = this.blockEngines.get(sheet.id)
+        const evaluator = this.algebraicEvaluators.get(sheet.id)
         
-        const sheet = allSheets.find((s: Sheet) => s.id === sheetId)!
-        for (const block of sheet.blocks) {
-          if (block.type === 'signal_display' || block.type === 'signal_logger') {
-            const inputWire = sheet.connections.find((w: WireData) => 
-              w.targetBlockId === block.id && w.targetPortIndex === 0
-            )
-            
-            if (inputWire) {
-              const signalKey = `${inputWire.sourceBlockId}_output_${inputWire.sourcePortIndex}`
-              const signalValue = engineState.signalValues.get(signalKey)
-              
-              if (signalValue !== undefined) {
-                const dataArray = signalData.get(block.id)
-                if (dataArray) {
-                  dataArray.push(signalValue)
-                }
-              }
+        if (engine && evaluator) {
+          // Get current state
+          const engineState = engine.getState()
+          
+          // Perform algebraic evaluation
+          const algebraicResult = evaluator.evaluate({
+            blockStates: engineState.blockStates,
+            simulationState: engineState,
+            sheet: sheet
+          })
+          
+          // Update signal values from algebraic outputs
+          for (const [blockId, outputs] of algebraicResult.blockOutputs) {
+            for (let i = 0; i < outputs.length; i++) {
+              const signalKey = `${blockId}_output_${i}`
+              engineState.signalValues.set(signalKey, outputs[i])
             }
           }
         }
       }
       
-      // Update enable states at end of time step
+      // Phase 2: Handle cross-sheet connections
+      this.handleCrossSheetConnections(allSheets)
+      
+      // Phase 3: Collect signal data for displays and loggers
+      this.collectSignalData(allSheets, sheetSignalData)
+      
+      // Phase 4: Update enable states
       this.updateAllSubsystemEnableStates()
       
-      // Advance time for all engines
+      // Phase 5: State integration for all sheets
+      for (const sheet of allSheets) {
+        const engine = this.blockEngines.get(sheet.id)
+        const integrator = this.stateIntegrators.get(sheet.id)
+        
+        if (engine && integrator) {
+          // Check if subsystem is enabled before integrating
+          const engineState = engine.getState()
+          
+          // Filter blocks based on enable state
+          const enabledBlocks = sheet.blocks.filter(block => {
+            const containingSubsystem = this.blockToSubsystem.get(block.id)
+            if (!containingSubsystem) return true // Root blocks always enabled
+            return this.isSubsystemEnabled(containingSubsystem)
+          })
+          
+          // Create filtered sheet with only enabled blocks
+          const filteredSheet: Sheet = {
+            ...sheet,
+            blocks: enabledBlocks
+          }
+          
+          // Integrate states only for enabled blocks
+          integrator.integrate({
+            blockStates: engineState.blockStates,
+            simulationState: engineState,
+            sheet: filteredSheet,
+            timeStep: this.config.timeStep
+          })
+        }
+      }
+      
+      // Phase 6: Advance time for all engines
       for (const [_, engine] of this.blockEngines) {
         engine.advanceTime(this.config.timeStep)
       }
@@ -833,6 +717,218 @@ export class MultiSheetSimulationEngine {
     }
     
     return results
+  }
+  
+  // New helper method to handle cross-sheet connections
+  private handleCrossSheetConnections(allSheets: Sheet[]): void {
+    // Execute blocks in global order for cross-sheet dependencies
+    for (const { sheetId, blockId } of this.executionOrder) {
+      const engine = this.blockEngines.get(sheetId)
+      if (!engine) continue
+      
+      const sheet = allSheets.find((s: Sheet) => s.id === sheetId)
+      const block = sheet?.blocks.find((b: BlockData) => b.id === blockId)
+      
+      if (!block) continue
+      
+      // Handle special blocks that need cross-sheet communication
+      switch (block.type) {
+        case 'subsystem':
+          // Subsystems are just containers, skip
+          break
+          
+        case 'input_port':
+          this.handleInputPortBlock(block, blockId, engine, allSheets)
+          break
+          
+        case 'output_port':
+          this.handleOutputPortBlock(block, blockId, engine, allSheets)
+          break
+          
+        case 'sheet_label_sink':
+          this.handleSheetLabelSink(block, blockId, engine, allSheets)
+          break
+          
+        case 'sheet_label_source':
+          // Sheet label sources read from shared values set by sinks
+          break
+      }
+    }
+  }
+  
+  // New helper method to collect signal data
+  private collectSignalData(
+    allSheets: Sheet[],
+    sheetSignalData: Map<string, Map<string, any[]>>
+  ): void {
+    for (const [sheetId, engine] of this.blockEngines) {
+      const engineState = engine.getState()
+      const signalData = sheetSignalData.get(sheetId)!
+      
+      const sheet = allSheets.find((s: Sheet) => s.id === sheetId)!
+      for (const block of sheet.blocks) {
+        if (block.type === 'signal_display' || block.type === 'signal_logger') {
+          const inputWire = sheet.connections.find((w: WireData) => 
+            w.targetBlockId === block.id && w.targetPortIndex === 0
+          )
+          
+          if (inputWire) {
+            const signalKey = `${inputWire.sourceBlockId}_output_${inputWire.sourcePortIndex}`
+            const signalValue = engineState.signalValues.get(signalKey)
+            
+            if (signalValue !== undefined) {
+              const dataArray = signalData.get(block.id)
+              if (dataArray) {
+                dataArray.push(signalValue)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // Extract input port handling to separate method
+  private handleInputPortBlock(
+    block: BlockData,
+    blockId: string,
+    engine: SimulationEngine,
+    allSheets: Sheet[]
+  ): void {
+    // Find if this input port is inside a subsystem
+    const subsystemBlock = this.findContainingSubsystem(blockId, allSheets)
+    if (subsystemBlock) {
+      // Check if the subsystem is enabled
+      if (!this.isSubsystemEnabled(subsystemBlock.block.id)) {
+        // Skip input processing for disabled subsystem
+        return
+      }
+      
+      // Find the wire going into the subsystem at the corresponding port
+      const portName = block.parameters?.portName
+      const portIndex = subsystemBlock.block.parameters?.inputPorts?.indexOf(portName) ?? -1
+      
+      if (portIndex >= 0) {
+        // Find wire to this subsystem port
+        const parentSheet = allSheets.find((s: Sheet) => s.id === subsystemBlock.sheetId)
+        const inputWire = parentSheet?.connections.find((w: WireData) => 
+          w.targetBlockId === subsystemBlock.block.id && 
+          w.targetPortIndex === portIndex
+        )
+        
+        if (inputWire) {
+          // Get the value from the source
+          const sourceEngine = this.blockEngines.get(subsystemBlock.sheetId)
+          if (sourceEngine) {
+            const sourceState = sourceEngine.getState()
+            const signalKey = `${inputWire.sourceBlockId}_output_${inputWire.sourcePortIndex}`
+            const value = sourceState.signalValues.get(signalKey)
+            
+            if (value !== undefined) {
+              // Set this as the input port's output
+              const blockState = engine.getState().blockStates.get(blockId)
+              if (blockState) {
+                blockState.outputs[0] = value
+                engine.getState().signalValues.set(`${blockId}_output_0`, value)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // Extract output port handling to separate method
+  private handleOutputPortBlock(
+    block: BlockData,
+    blockId: string,
+    engine: SimulationEngine,
+    allSheets: Sheet[]
+  ): void {
+    // Find if this output port is inside a subsystem
+    const subsystemBlock = this.findContainingSubsystem(blockId, allSheets)
+    if (subsystemBlock) {
+      // Get the output port's value
+      const engineState = engine.getState()
+      const blockState = engineState.blockStates.get(blockId)
+      const value = blockState?.internalState?.currentValue
+      
+      if (value !== undefined) {
+        // Find which output port this is
+        const portName = block.parameters?.portName
+        const portIndex = subsystemBlock.block.parameters?.outputPorts?.indexOf(portName) ?? -1
+        
+        if (portIndex >= 0) {
+          // Set this value as the subsystem block's output
+          const parentEngine = this.blockEngines.get(subsystemBlock.sheetId)
+          if (parentEngine) {
+            // Make sure the subsystem block state exists
+            let subsystemBlockState = parentEngine.getState().blockStates.get(subsystemBlock.block.id)
+            if (!subsystemBlockState) {
+              // Initialize subsystem block state if it doesn't exist
+              const outputCount = subsystemBlock.block.parameters?.outputPorts?.length || 1
+              subsystemBlockState = {
+                blockId: subsystemBlock.block.id,
+                blockType: 'subsystem',
+                outputs: new Array(outputCount).fill(0),
+                frozenOutputs: new Array(outputCount).fill(0)
+              }
+              parentEngine.getState().blockStates.set(subsystemBlock.block.id, subsystemBlockState)
+            }
+            
+            // Use frozen output if subsystem is disabled
+            if (this.isSubsystemEnabled(subsystemBlock.block.id)) {
+              subsystemBlockState.outputs[portIndex] = value
+              parentEngine.getState().signalValues.set(
+                `${subsystemBlock.block.id}_output_${portIndex}`, 
+                value
+              )
+            } else {
+              // Use frozen value
+              const frozenValue = subsystemBlockState.frozenOutputs?.[portIndex] ?? 0
+              parentEngine.getState().signalValues.set(
+                `${subsystemBlock.block.id}_output_${portIndex}`, 
+                frozenValue
+              )
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // Extract sheet label handling to separate method
+  private handleSheetLabelSink(
+    block: BlockData,
+    blockId: string,
+    engine: SimulationEngine,
+    allSheets: Sheet[]
+  ): void {
+    const subsystemBlock = this.findContainingSubsystem(blockId, allSheets)
+    const scope = subsystemBlock ? subsystemBlock.block.id : 'root'
+    
+    // Share this value with all engines in the same scope
+    const signalName = block.parameters?.signalName
+    if (signalName) {
+      const blockState = engine.getState().blockStates.get(blockId)
+      const value = blockState?.internalState?.currentValue
+      
+      if (value !== undefined) {
+        // Find all sheet label sources with the same signal name in the same scope
+        for (const sheet of allSheets) {
+          const sheetSubsystem = this.findContainingSubsystem(sheet.blocks[0]?.id || '', allSheets)
+          const sheetScope = sheetSubsystem ? sheetSubsystem.block.id : 'root'
+          
+          if (sheetScope === scope) {
+            const sheetEngine = this.blockEngines.get(sheet.id)
+            if (sheetEngine) {
+              // Set the value in this engine's sheet label values
+              sheetEngine.getState().sheetLabelValues.set(signalName, value)
+            }
+          }
+        }
+      }
+    }
   }
 
   /**

@@ -227,41 +227,153 @@ These changes refactor the approach to model C-code generation, allowing for mor
 - **End:** Ensure tests still pass with new architecture
 - **Test:** All existing tests pass
 
-## Phase 11: Documentation Updates
+# Phase 11: Refactor Integration to State Integrator
 
-### Task 11.1: Update Code Generation Documentation
+This phase moves integration logic from individual block modules to the SimulationStateIntegrator, enabling runtime selection of integration methods and proper separation of concerns.
+
+## Phase 11: Move Integration Logic to State Integrator
+
+### Task 11.1: Create Derivative Interface for Block Modules
+- **Start:** Add `computeDerivatives` method to IBlockModule interface
+- **End:** Interface includes method signature: `computeDerivatives(blockState: BlockState, inputs: any[], time: number): number[]`
+- **Test:** Interface compiles without errors
+
+### Task 11.2: Implement computeDerivatives in TransferFunctionBlockModule
+- **Start:** Add computeDerivatives method to TransferFunctionBlockModule
+- **End:** Method returns state derivatives without updating states
+- **Test:** Unit test verifies derivatives match expected values
+
+### Task 11.3: Extract State Update Logic from TransferFunctionBlockModule
+- **Start:** Identify state update code in processTransferFunctionElement
+- **End:** Create separate method that only computes derivatives
+- **Test:** Transfer function still produces correct outputs
+
+### Task 11.4: Create State Container Interface
+- **Start:** Design interface for managing block states during integration
+- **End:** Interface supports getting/setting states for all blocks
+- **Test:** Can store and retrieve states for multiple blocks
+
+### Task 11.5: Implement Euler Integration in SimulationStateIntegrator
+- **Start:** In SimulationStateIntegrator.integrateEuler method
+- **End:** Implement proper Euler integration using block derivatives
+- **Test:** Euler produces expected results for test cases
+
+### Task 11.6: Implement RK4 Integration in SimulationStateIntegrator
+- **Start:** In SimulationStateIntegrator.integrateRK4 method
+- **End:** Implement full RK4 using intermediate state evaluations
+- **Test:** RK4 matches current accuracy
+
+### Task 11.7: Create Integration Context for Multi-Stage Methods
+- **Start:** Design structure to hold intermediate states for RK4
+- **End:** Context supports k1, k2, k3, k4 evaluations
+- **Test:** Can perform multi-stage integration correctly
+
+### Task 11.8: Update SimulationAlgebraicEvaluator for Integration Support
+- **Start:** Modify evaluate method to accept temporary states
+- **End:** Can evaluate algebraic relationships at intermediate points
+- **Test:** Produces correct outputs for non-current states
+
+### Task 11.9: Refactor TransferFunctionBlockModule.executeSimulation
+- **Start:** Remove integration code from executeSimulation
+- **End:** Method only computes algebraic output from current state
+- **Test:** Block works correctly with external integration
+
+### Task 11.10: Update MultiSheetSimulationEngine Integration Loop
+- **Start:** Modify run method to use new integration approach
+- **End:** Properly calls state integrator with derivative information
+- **Test:** Multi-sheet models produce same results as before
+
+### Task 11.11: Add Integration Method Selection to SimulationConfig
+- **Start:** Add integrationMethod field to SimulationConfig interface
+- **End:** Can specify 'euler' or 'rk4' in configuration
+- **Test:** Configuration properly propagates to integrators
+
+### Task 11.12: Implement State Rollback for Failed Steps
+- **Start:** Add mechanism to restore previous states
+- **End:** Can rollback states if integration step fails
+- **Test:** System recovers from numerical issues
+
+### Task 11.13: Add Derivative Validation and Error Checking
+- **Start:** Implement checks for NaN/Inf in derivatives
+- **End:** Integration fails gracefully with meaningful errors
+- **Test:** Proper error messages for problematic systems
+
+### Task 11.14: Create Integration Method Comparison Tests
+- **Start:** Update integration-methods.test.ts
+- **End:** Tests actually compare Euler vs RK4 results
+- **Test:** Shows RK4 is more accurate than Euler
+
+### Task 11.15: Update Other Stateful Block Modules
+- **Start:** Identify other blocks that need derivatives (if any)
+- **End:** All stateful blocks implement computeDerivatives
+- **Test:** All block types work with new integration
+
+### Task 11.16: Add Performance Benchmarks
+- **Start:** Create benchmarks comparing integration methods
+- **End:** Measure overhead of new architecture
+- **Test:** Performance is acceptable (within 20% of original)
+
+### Task 11.17: Update Code Generation for Consistency
+- **Start:** Ensure C code generation matches new approach
+- **End:** Generated code uses same integration structure
+- **Test:** Cross-validation tests still pass
+
+### Task 11.18: Document Integration Architecture
+- **Start:** Create integration-architecture.md
+- **End:** Document new derivative-based approach
+- **Test:** Documentation is clear and complete
+
+## Phase 11 - Benefits of This Refactoring
+
+1. **True Integration Method Selection**: Can switch between Euler and RK4 at runtime
+2. **Better Testability**: Can test integration methods in isolation
+3. **Cleaner Architecture**: Algebraic computation separated from integration
+4. **Extensibility**: Easy to add new integration methods (e.g., RK2, adaptive methods)
+5. **Consistency**: Simulation and code generation use same integration approach
+6. **Debugging**: Can inspect derivatives independently of state updates
+
+## Phase 11 - Migration Strategy
+
+- Implement in parallel without breaking existing functionality
+- Use feature flag to switch between old and new integration
+- Gradually migrate block modules one at a time
+- Ensure backward compatibility during transition
+
+## Phase 12: Documentation Updates
+
+### Task 12.1: Update Code Generation Documentation
 - **Start:** Create new file `docs/code-generation-architecture.md`
 - **End:** Document the algebraic/integration split
 - **Test:** Documentation is clear and complete
 
-### Task 11.2: Add Integration Method Documentation
+### Task 12.2: Add Integration Method Documentation
 - **Start:** In architecture docs
 - **End:** Document available integration methods and when to use each
 - **Test:** Includes examples and trade-offs
 
-### Task 11.3: Update API Documentation
+### Task 12.3: Update API Documentation
 - **Start:** In relevant source files
 - **End:** Update JSDoc comments for new architecture
 - **Test:** Generated docs reflect new structure
 
-## Phase 12: Cleanup and Optimization
+## Phase 13: Cleanup and Optimization
 
-### Task 12.1: Remove Old StepFunctionGenerator
+### Task 13.1: Remove Old StepFunctionGenerator
 - **Start:** After confirming all tests pass
 - **End:** Delete `StepFunctionGenerator.ts`
 - **Test:** Project still builds
 
-### Task 12.2: Remove Redundant Code from RK4Generator
+### Task 13.2: Remove Redundant Code from RK4Generator
 - **Start:** Identify code moved to other modules
 - **End:** Remove duplicated functionality
 - **Test:** RK4 generation still works
 
-### Task 12.3: Add Performance Benchmarks
+### Task 13.3: Add Performance Benchmarks
 - **Start:** Create `benchmarks/algebraic-performance.test.ts`
 - **End:** Measure algebraic evaluation performance
 - **Test:** Benchmarks run and produce metrics
 
-### Task 12.4: Optimize Algebraic Evaluation Order
+### Task 13.4: Optimize Algebraic Evaluation Order
 - **Start:** In `AlgebraicEvaluator`
 - **End:** Ensure optimal block execution order
 - **Test:** No change in results, possible performance improvement

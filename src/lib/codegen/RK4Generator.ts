@@ -151,7 +151,7 @@ export class RK4Generator {
     block: FlattenedBlock,
     generator: any
   ): string {
-    // For transfer functions, we need to generate the state derivative calculation
+    // For transfer functions, use the new generateStateDerivative method
     if (block.block.type === 'transfer_function' && generator.generateStateDerivative) {
       // Get block inputs
       const inputConnections = this.model.connections
@@ -182,6 +182,7 @@ export class RK4Generator {
       // Get output type for the block
       const outputType = this.getBlockOutputType(block)
       
+      // Call the module's generateStateDerivative method
       return generator.generateStateDerivative(
         block.block,
         inputExpr,
@@ -190,6 +191,7 @@ export class RK4Generator {
       )
     }
     
+    // For other block types that might have states in the future
     return '/* Derivative computation not implemented for this block type */\n'
   }
   

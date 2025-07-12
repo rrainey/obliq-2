@@ -14,6 +14,13 @@ export interface Sheet {
     width: number
     height: number
   }
+  
+}
+
+export interface SimulationConfig {
+  timeStep: number
+  duration: number
+  integrationMethod?: 'euler' | 'rk4'  // Add this field
 }
 
 

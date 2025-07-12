@@ -363,6 +363,131 @@ execution order of blocks and also for passing Signal data types and calculated 
 
 If we later needed server-side simulation (for example, to offload work or allow long-running simulations to run without keeping the browser open), the architecture can accommodate it. We would implement the `app/api/simulate` route such that it loads the model JSON from the database, runs a simulation using perhaps a Node.js library or a headless version of our simulation engine, and returns the results (likely not as detailed interactive data, but maybe summary or logs). However, for now, the client-side approach is sufficient and simpler.
 
+### Algebraic/Integration Layer Architecture
+
+The application uses a two-layer architecture for both simulation execution and C code generation, separating algebraic computations from time-based integration. This design pattern, common in professional simulation tools, provides better modularity, testability, and support for advanced integration methods.
+
+#### Conceptual Design
+
+The simulation engine is split into two distinct layers:
+
+```
+┌─────────────────────────────────────────────┐
+│          Integration Layer                  │
+│  - Manages time advancement                 │
+│  - Orchestrates RK4/other integrators       │
+│  - Handles enable state transitions         │
+│  - Calls algebraic layer as needed          │
+└─────────────────┬───────────────────────────┘
+                  │ calls
+                  ▼
+┌─────────────────────────────────────────────┐
+│          Algebraic Layer                    │
+│  - Computes all block outputs               │
+│  - No state changes                         │
+│  - No time advancement                      │
+│  - Pure function: (inputs, states) → outputs│
+└─────────────────────────────────────────────┘
+```
+
+#### Rationale for the Two-Layer Approach
+
+**1. Separation of Concerns**
+- **Algebraic Layer**: Focuses solely on computing outputs from current inputs and states. This is a pure function with no side effects, making it easy to test and reason about.
+- **Integration Layer**: Manages the complexity of time advancement, state updates, and integration algorithms. It orchestrates multiple calls to the algebraic layer as needed.
+
+**2. Proper RK4 Implementation**
+Traditional Runge-Kutta 4th order integration requires evaluating the system at multiple intermediate points:
+- k₁ at time t with state y
+- k₂ at time t+h/2 with state y+h/2·k₁
+- k₃ at time t+h/2 with state y+h/2·k₂
+- k₄ at time t+h with state y+h·k₃
+
+With the two-layer architecture, each evaluation is a simple call to the algebraic layer with different states, making the implementation straightforward and correct.
+
+**3. Support for Advanced Features**
+- **Algebraic Loop Detection**: The algebraic layer can iterate to solve implicit equations
+- **Event Detection**: Can efficiently search for zero-crossings by calling the algebraic layer with interpolated states
+- **Variable Step Size**: Integration layer can adapt step size based on error estimates
+- **Mixed Integration Methods**: Different blocks can use different integration schemes
+
+### Implementation in Simulation Engine
+
+The JavaScript/TypeScript simulation engine implements this pattern through:
+- `SimulationAlgebraicEvaluator`: Computes all block outputs given current states
+- `SimulationStateIntegrator`: Manages state updates using various integration methods
+- `SimulationEngine`: Orchestrates the two layers
+
+### Implementation in Code Generation
+
+The C code generator produces two main functions:
+
+**1. Algebraic Evaluation Function**
+```c
+void model_evaluate_algebraic(
+    const model_inputs_t* inputs,
+    const model_states_t* states,
+    model_signals_t* signals,
+    model_outputs_t* outputs,
+    const enable_states_t* enable_states
+);
+```
+
+**2. Time Step Function**
+```c
+void model_step(model_t* model) {
+    // Evaluate algebraic relationships
+    model_evaluate_algebraic(&model->inputs, &model->states, 
+                           &model->signals, &model->outputs,
+                           &model->enable_states);
+    
+    // Perform integration (Euler, RK4, etc.)
+    integrate_states(model);
+    
+    // Update time
+    model->time += model->dt;
+}
+```
+
+#### Benefits
+
+**1. Correctness**
+- Cascaded dynamic systems (e.g., multiple transfer functions in series) are handled correctly
+- Integration methods can access intermediate signal values as needed
+- No circular dependencies between state updates and signal computations
+
+**2. Performance**
+- Algebraic evaluation can be optimized independently
+- Potential for parallelization of independent block computations
+- Avoids redundant calculations
+
+**3. Maintainability**
+- Clear interfaces between components
+- Easier to add new integration methods
+- Simplified debugging (can test algebraic layer in isolation)
+
+**4. Extensibility**
+- New integration methods can be added without changing algebraic code
+- Support for co-simulation standards (FMI)
+- Easy to add features like sensitivity analysis or parameter optimization
+
+#### File Organization
+
+The implementation is organized as follows:
+
+**Simulation Engine:**
+- `/lib/simulation/SimulationAlgebraicEvaluator.ts` - Algebraic computation logic
+- `/lib/simulation/SimulationStateIntegrator.ts` - Integration algorithms
+- `/lib/simulationEngine.ts` - Orchestration layer
+
+**Code Generation:**
+- `/lib/codegen/AlgebraicTypes.ts` - Type definitions for algebraic layer
+- `/lib/codegen/AlgebraicEvaluator.ts` - Generates C code for algebraic evaluation
+- `/lib/codegen/StateIntegrator.ts` - Generates C code for state integration
+- `/lib/codegen/IntegrationOrchestrator.ts` - Generates the main step function
+
+
+
 ## Architecture Update: Modular Block Definition
 
 ### Block Module Architecture
