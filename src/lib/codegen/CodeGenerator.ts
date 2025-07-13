@@ -55,7 +55,7 @@ export interface CodeGenerationResult {
  * Main code generator that coordinates all sub-generators
  */
 export class CodeGenerator {
-  private options: Required<CodeGenerationOptions>
+  public options: Required<CodeGenerationOptions>
   
   constructor(options: CodeGenerationOptions = {}) {
     this.options = {

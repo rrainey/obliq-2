@@ -25,8 +25,16 @@ export class ModelCodeGenerator {
     source: string
     warnings: string[]
   } {
-    // Use the new generator with the provided model name
-    const result = this.generator.generate(sheets)
+    // Pass integration method from metadata if available
+    const options = { 
+      ...this.generator.options,
+      modelName,
+      integrationMethod: (sheets[0] as any)?.metadata?.integrationMethod
+    }
+    
+    // Create new generator with updated options
+    const customGenerator = new CodeGenerator(options)
+    const result = customGenerator.generate(sheets)
     
     // Log any warnings
     if (result.warnings.length > 0) {

@@ -31,13 +31,7 @@ export class AlgebraicEvaluator {
     code += CCodeBuilder.generateFunctionHeader(
       'void',
       `${this.modelName}_evaluate_algebraic`,
-      [
-        `const ${this.modelName}_inputs_t* inputs`,
-        `const ${this.modelName}_states_t* states`,
-        `${this.modelName}_signals_t* signals`,
-        `${this.modelName}_outputs_t* outputs`,
-        `const enable_states_t* enable_states`
-      ]
+      [`${this.modelName}_t* model`]  // Changed to just take model pointer
     )
     
     // Copy inputs to local references for easier access
@@ -55,7 +49,7 @@ export class AlgebraicEvaluator {
     code += '}\n'
     return code
   }
-  
+
   /**
    * Generate code to copy inputs for easier access
    */
@@ -73,9 +67,9 @@ export class AlgebraicEvaluator {
       // Check if it's an array type
       const dataType = port.block.parameters?.dataType || 'double'
       if (dataType.includes('[')) {
-        code += `    memcpy(&signals->${signalName}, &inputs->${safeName}, sizeof(inputs->${safeName}));\n`
+        code += `    memcpy(&model->signals.${signalName}, &model->inputs.${safeName}, sizeof(model->inputs.${safeName}));\n`
       } else {
-        code += `    signals->${signalName} = inputs->${safeName};\n`
+        code += `    model->signals.${signalName} = model->inputs.${safeName};\n`
       }
     }
     
@@ -84,58 +78,104 @@ export class AlgebraicEvaluator {
   }
   
   /**
-   * Calculate execution order using topological sort
+   * Calculate execution order using topological sort with proper algebraic loop detection
    */
   private calculateExecutionOrder(): FlattenedBlock[] {
     const sorted: FlattenedBlock[] = []
     const visited = new Set<string>()
     const visiting = new Set<string>()
-    
-    // Build adjacency list
+
+    // Build adjacency list considering direct feedthrough
     const dependencies = new Map<string, string[]>()
-    
+
     for (const block of this.model.blocks) {
       dependencies.set(block.originalId, [])
     }
-    
+
+    // Only add dependencies for algebraic connections (direct feedthrough)
     for (const connection of this.model.connections) {
-      const deps = dependencies.get(connection.targetBlockId)
-      if (deps && !deps.includes(connection.sourceBlockId)) {
-        deps.push(connection.sourceBlockId)
+      const targetBlock = this.model.blocks.find(b => b.originalId === connection.targetBlockId)
+      const sourceBlock = this.model.blocks.find(b => b.originalId === connection.sourceBlockId)
+
+      if (!targetBlock || !sourceBlock) continue
+
+      // Check if the target block has direct feedthrough
+      if (this.hasDirectFeedthrough(targetBlock)) {
+        const deps = dependencies.get(connection.targetBlockId)
+        if (deps && !deps.includes(connection.sourceBlockId)) {
+          deps.push(connection.sourceBlockId)
+        }
       }
+      // If no direct feedthrough, the connection doesn't create an algebraic dependency
     }
-    
+
     // Topological sort with cycle detection
-    const visit = (blockId: string) => {
+    const visit = (blockId: string, path: string[] = []) => {
       if (visited.has(blockId)) return
-      
+
       if (visiting.has(blockId)) {
-        console.warn(`Cycle detected involving block ${blockId}`)
+        // This is an algebraic loop
+        const block = this.model.blocks.find(b => b.originalId === blockId)
+        console.warn(`Algebraic loop detected involving block ${block?.block.name || blockId}`)
+        console.warn(`Loop path: ${[...path, blockId].join(' -> ')}`)
         return
       }
-      
+
       visiting.add(blockId)
-      
+
       const deps = dependencies.get(blockId) || []
       for (const dep of deps) {
-        visit(dep)
+        visit(dep, [...path, blockId])
       }
-      
+
       visiting.delete(blockId)
       visited.add(blockId)
-      
+
       const block = this.model.blocks.find(b => b.originalId === blockId)
       if (block) {
         sorted.push(block)
       }
     }
-    
+
     // Visit all blocks
     for (const block of this.model.blocks) {
       visit(block.originalId)
     }
-    
+
     return sorted
+  }
+
+  /**
+   * Check if a block has direct feedthrough
+   */
+  private hasDirectFeedthrough(block: FlattenedBlock): boolean {
+    // Special handling for known block types
+    if (block.block.type === 'transfer_function') {
+      // Transfer functions without direct feedthrough can break algebraic loops
+      try {
+        const module = BlockModuleFactory.getBlockModule(block.block.type)
+        if (module.isDirectFeedthrough) {
+          return module.isDirectFeedthrough(block.block) ?? true
+        }
+      } catch {
+        // If module not found, assume direct feedthrough
+      }
+    }
+    
+    // Check if block module implements isDirectFeedthrough
+    if (BlockModuleFactory.isSupported(block.block.type)) {
+      try {
+        const module = BlockModuleFactory.getBlockModule(block.block.type)
+        if (module.isDirectFeedthrough) {
+          return module.isDirectFeedthrough(block.block) ?? true
+        }
+      } catch {
+        // If error, assume direct feedthrough for safety
+      }
+    }
+    
+    // Default: assume direct feedthrough (conservative approach)
+    return true
   }
   
   /**
@@ -149,6 +189,11 @@ export class AlgebraicEvaluator {
       if (block.block.type === 'input_port') {
         continue
       }
+
+      // Skip output ports - they're handled in generateOutputCopy
+      if (block.block.type === 'output_port') {
+        continue
+      }
       
       // Skip blocks that don't generate code
       if (!BlockModuleFactory.isSupported(block.block.type)) {
@@ -156,7 +201,8 @@ export class AlgebraicEvaluator {
       }
       
       // Get the block's inputs and their types
-      const inputs = this.getBlockInputExpressions(block, 'signals', 'states')
+      // FIXED: Pass 'model' instead of 'signals' and 'states'
+      const inputs = this.getBlockInputExpressions(block, 'model', 'model')
       const inputTypes = this.getBlockInputTypes(block)
       
       // Generate computation
@@ -198,8 +244,8 @@ export class AlgebraicEvaluator {
    */
   private getBlockInputExpressions(
     block: FlattenedBlock,
-    signalsVar: string = 'signals',
-    statesVar: string = 'states'
+    signalsVar: string = 'model',  // Changed default
+    statesVar: string = 'model'     // Changed default
   ): string[] {
     const inputs: string[] = []
     
@@ -227,9 +273,8 @@ export class AlgebraicEvaluator {
    */
   private getTransferFunctionInputs(block: FlattenedBlock, inputs: string[]): string[] {
     // Transfer functions need access to their states
-    // We'll pass the state reference as a special parameter
     const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
-    return [...inputs, `states->${safeName}_states`]
+    return [...inputs, `model->states.${safeName}_states`]  // Changed to use model->
   }
   
   /**
@@ -238,59 +283,65 @@ export class AlgebraicEvaluator {
   private generateSignalExpression(
     block: FlattenedBlock,
     portIndex: number,
-    signalsVar: string = 'signals'
+    signalsVar: string = 'model'  // Changed default
   ): string {
     const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
-    return `${signalsVar}->${safeName}`
+    // Updated to append ->signals. when signalsVar is 'model'
+    if (signalsVar === 'model') {
+      return `${signalsVar}->signals.${safeName}`
+    } else {
+      // For backward compatibility with other uses
+      return `${signalsVar}.${safeName}`
+    }
   }
-  
+
   /**
    * Generate code to copy signals to outputs
    */
   private generateOutputCopy(): string {
     const outputPorts = this.model.blocks.filter(b => b.block.type === 'output_port')
-    
+
     if (outputPorts.length === 0) {
       return ''
     }
-    
+
     let code = '    /* Copy signals to outputs */\n'
-    
+
     for (const port of outputPorts) {
       const portName = port.block.parameters?.portName || port.block.name
       const safePortName = CCodeBuilder.sanitizeIdentifier(portName)
-      
+
       // Find the wire connected to this output port
-      const inputWire = this.model.connections.find(c => 
+      const inputWire = this.model.connections.find(c =>
         c.targetBlockId === port.originalId && c.targetPortIndex === 0
       )
-      
+
       if (inputWire) {
-        const sourceBlock = this.model.blocks.find(b => 
+        const sourceBlock = this.model.blocks.find(b =>
           b.originalId === inputWire.sourceBlockId
         )
-        
+
         if (sourceBlock) {
           const sourceExpr = this.generateSignalExpression(sourceBlock, inputWire.sourcePortIndex)
-          
+
           // Determine if it's an array type
           const outputType = this.getBlockOutputType(sourceBlock)
-          
+
           if (outputType.includes('[')) {
             // Array copy
-            code += `    memcpy(&outputs->${safePortName}, &${sourceExpr}, sizeof(outputs->${safePortName}));\n`
+            code += `    memcpy(&model->outputs.${safePortName}, &${sourceExpr}, sizeof(model->outputs.${safePortName}));\n`
           } else {
             // Scalar copy
-            code += `    outputs->${safePortName} = ${sourceExpr};\n`
+            code += `    model->outputs.${safePortName} = ${sourceExpr};\n`
           }
         }
       }
     }
-    
+
     code += '\n'
     return code
   }
-  
+
   /**
    * Get input types for a block
    */

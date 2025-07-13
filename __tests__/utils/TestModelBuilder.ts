@@ -10,6 +10,7 @@ export interface TestModelMetadata {
   expectedOutput?: number // For single output models
   description?: string
   tolerance?: number // Default 0.001 (0.1%)
+  integrationMethod?: 'euler' | 'rk4' 
 }
 
 export interface TestModel {
@@ -74,6 +75,16 @@ export class TestModelBuilder {
   withSimulationParams(duration: number, timeStep: number): this {
     this.simulationDuration = duration
     this.simulationTimeStep = timeStep
+    return this
+  }
+
+  /**
+   * Set integration method (for future use - currently not implemented in simulation)
+   */
+  withIntegrationMethod(method: 'euler' | 'rk4'): this {
+    // Store in metadata for now - will be used when we implement
+    // integration method selection in the simulation engine
+    this.metadata.integrationMethod = method
     return this
   }
 

@@ -113,7 +113,7 @@ export class TypePropagator {
     const visited = new Set<string>()
     const visiting = new Set<string>()
     
-    // Build adjacency list
+    // Build adjacency list considering direct feedthrough
     const dependencies = new Map<string, string[]>()
     
     for (const block of this.model.blocks) {
@@ -121,18 +121,31 @@ export class TypePropagator {
     }
     
     for (const connection of this.model.connections) {
-      const deps = dependencies.get(connection.targetBlockId)
-      if (deps && !deps.includes(connection.sourceBlockId)) {
-        deps.push(connection.sourceBlockId)
+      const targetBlock = this.model.blocks.find(b => b.originalId === connection.targetBlockId)
+      const sourceBlock = this.model.blocks.find(b => b.originalId === connection.sourceBlockId)
+
+      if (!targetBlock || !sourceBlock) continue
+
+      // Check if the target block has direct feedthrough
+      if (this.hasDirectFeedthrough(targetBlock)) {
+
+        const deps = dependencies.get(connection.targetBlockId)
+        if (deps && !deps.includes(connection.sourceBlockId)) {
+          deps.push(connection.sourceBlockId)
+        }
+
       }
     }
     
     // Topological sort with cycle detection
-    const visit = (blockId: string) => {
+    const visit = (blockId: string, path: string[] = []) => {
       if (visited.has(blockId)) return
       
       if (visiting.has(blockId)) {
-        console.warn(`Cycle detected involving block ${blockId}`)
+        // This is an algebraic loop
+        const block = this.model.blocks.find(b => b.originalId === blockId)
+        console.warn(`Algebraic loop detected involving block ${block?.block.name || blockId}`)
+        console.warn(`Loop path: ${[...path, blockId].join(' -> ')}`)
         return
       }
       
@@ -140,7 +153,7 @@ export class TypePropagator {
       
       const deps = dependencies.get(blockId) || []
       for (const dep of deps) {
-        visit(dep)
+        visit(dep, [...path, blockId])
       }
       
       visiting.delete(blockId)
@@ -158,5 +171,38 @@ export class TypePropagator {
     }
     
     return sorted
+  }
+
+  /**
+   * Check if a block has direct feedthrough
+   */
+  private hasDirectFeedthrough(block: FlattenedBlock): boolean {
+    // Special handling for known block types
+    if (block.block.type === 'transfer_function') {
+      // Transfer functions without direct feedthrough can break algebraic loops
+      try {
+        const module = BlockModuleFactory.getBlockModule(block.block.type)
+        if (module.isDirectFeedthrough) {
+          return module.isDirectFeedthrough(block.block) ?? true
+        }
+      } catch {
+        // If module not found, assume direct feedthrough
+      }
+    }
+    
+    // Check if block module implements isDirectFeedthrough
+    if (BlockModuleFactory.isSupported(block.block.type)) {
+      try {
+        const module = BlockModuleFactory.getBlockModule(block.block.type)
+        if (module.isDirectFeedthrough) {
+          return module.isDirectFeedthrough(block.block) ?? true
+        }
+      } catch {
+        // If error, assume direct feedthrough for safety
+      }
+    }
+    
+    // Default: assume direct feedthrough (conservative approach)
+    return true
   }
 }

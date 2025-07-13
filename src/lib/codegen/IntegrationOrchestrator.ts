@@ -64,15 +64,9 @@ export class IntegrationOrchestrator {
       [`${this.modelName}_t* model`]
     )
     
-    // Call algebraic evaluation function
+    // Call algebraic evaluation function - much simpler now!
     code += '    /* Evaluate algebraic relationships */\n'
-    code += `    ${this.modelName}_evaluate_algebraic(\n`
-    code += '        &model->inputs,\n'
-    code += '        &model->states,\n'
-    code += '        &model->signals,\n'
-    code += '        &model->outputs,\n'
-    code += '        &model->enable_states\n'
-    code += '    );\n'
+    code += `    ${this.modelName}_evaluate_algebraic(model);\n`
     code += '\n'
     
     // State integration

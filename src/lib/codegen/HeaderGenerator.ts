@@ -86,14 +86,32 @@ export class HeaderGenerator {
     types += this.generateStatesStruct()
     types += '\n'
     
-    // Generate enable states structure if needed OR if we have stateful blocks
-    // This ensures the type is always defined when referenced
-    if (this.hasStatefulBlocks() || this.model.subsystemEnableInfo.some(info => info.hasEnableInput)) {
-      types += CCodeBuilder.generateEnableStateStruct(this.model.subsystemEnableInfo)
-      types += '\n'
-    }
+    // Always generate enable states structure to match function signatures
+    types += CCodeBuilder.generateEnableStateStruct(this.model.subsystemEnableInfo)
+    types += '\n'
     
     return types
+  }
+
+  private generateModelStructure(): string {
+    const members: string[] = []
+    
+    // Add sub-structures
+    members.push(`    ${this.modelName}_inputs_t inputs;`)
+    members.push(`    ${this.modelName}_outputs_t outputs;`)
+    members.push(`    ${this.modelName}_signals_t signals;`)
+    members.push(`    ${this.modelName}_states_t states;`)
+    members.push(`    enable_states_t enable_states;`) // Always include
+    
+    // Add time tracking
+    members.push(`    double time;`)
+    members.push(`    double dt; /* Time step */`)
+    
+    return CCodeBuilder.generateStruct(
+      this.modelName,
+      members,
+      'Main model structure containing all signals and states'
+    )
   }
   
   /**
@@ -222,13 +240,45 @@ export class HeaderGenerator {
   /**
    * Generate signals structure
    */
+
   private generateSignalsStruct(): string {
     const members: string[] = []
     
     // Process each block that needs signal storage
     for (const block of this.model.blocks) {
-      // Skip input/output ports - they don't need signal storage
-      if (block.block.type === 'input_port' || block.block.type === 'output_port') {
+      // Include input ports in signals struct for internal access
+      if (block.block.type === 'input_port') {
+        const portName = block.block.parameters?.portName || block.block.name
+        const dataType = block.block.parameters?.dataType || 'double'
+        
+        // Generate member for input port signal
+        const typeMatch = dataType.match(/^(\w+)(\[[\d\[\]]+\])?$/)
+        if (typeMatch) {
+          const baseType = typeMatch[1]
+          const dimensions = typeMatch[2]
+          
+          if (dimensions) {
+            const dims = dimensions.match(/\d+/g)?.map((d: string) => parseInt(d)) || []
+            members.push(CCodeBuilder.generateStructMember(
+              baseType,
+              block.block.name, // Use block name, not port name
+              dims,
+              `Signal from input port: ${portName}`
+            ))
+          } else {
+            members.push(CCodeBuilder.generateStructMember(
+              baseType,
+              block.block.name, // Use block name, not port name
+              undefined,
+              `Signal from input port: ${portName}`
+            ))
+          }
+        }
+        continue
+      }
+      
+      // Skip output ports - they don't need signal storage
+      if (block.block.type === 'output_port') {
         continue
       }
       
@@ -307,33 +357,6 @@ export class HeaderGenerator {
     )
   }
   
-  /**
-   * Generate main model structure
-   */
-  private generateModelStructure(): string {
-    const members: string[] = []
-    
-    // Add sub-structures
-    members.push(`    ${this.modelName}_inputs_t inputs;`)
-    members.push(`    ${this.modelName}_outputs_t outputs;`)
-    members.push(`    ${this.modelName}_signals_t signals;`)
-    members.push(`    ${this.modelName}_states_t states;`)
-    
-    // Add enable states if needed OR if we have stateful blocks
-    if (this.hasStatefulBlocks() || this.model.subsystemEnableInfo.some(info => info.hasEnableInput)) {
-      members.push(`    enable_states_t enable_states;`)
-    }
-    
-    // Add time tracking
-    members.push(`    double time;`)
-    members.push(`    double dt; /* Time step */`)
-    
-    return CCodeBuilder.generateStruct(
-      this.modelName,
-      members,
-      'Main model structure containing all signals and states'
-    )
-  }
   
   /**
    * Generate function prototypes
@@ -354,11 +377,7 @@ export class HeaderGenerator {
       'void',
       `${this.modelName}_evaluate_algebraic`,
       [
-        `const ${this.modelName}_inputs_t* inputs`,
-        `const ${this.modelName}_states_t* states`,
-        `${this.modelName}_signals_t* signals`,
-        `${this.modelName}_outputs_t* outputs`,
-        `const enable_states_t* enable_states`
+       `${this.modelName}_t* model`
       ],
       'Evaluate algebraic relationships (pure function, no state changes)'
     ) + '\n'

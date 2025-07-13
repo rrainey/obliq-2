@@ -63,13 +63,29 @@ export class ModelExecutor {
       dockerImage: options.dockerImage ?? 'platformio-test',
       timeout: options.timeout ?? 60000,
       workDir: options.workDir ?? path.join(__dirname, '..', 'temp'),
-      logPhases: options.logPhases ?? false, // Phase 10.1
-      algebraicOnly: options.algebraicOnly ?? false // Phase 10.2
+      logPhases: options.logPhases ?? false,
+      algebraicOnly: options.algebraicOnly ?? false
     }
 
-    // Create temp directory
-    this.tempDir = path.join(this.options.workDir, `model_exec_${Date.now()}`)
+    // Check for TEST_INSPECT_CODE environment variable
+    if (process.env.TEST_INSPECT_CODE) {
+      this.options.verbose = true
+    }
+
+    // Create temp directory with absolute path
+    const timestamp = Date.now()
+    const randomId = Math.random().toString(36).substr(2, 9)
+    const tempName = `model_exec_${timestamp}_${randomId}`
+    
+    // Ensure we have an absolute path
+    const workDir = path.resolve(this.options.workDir)
+    this.tempDir = path.join(workDir, tempName)
+    
     fs.mkdirSync(this.tempDir, { recursive: true })
+    
+    if (process.env.TEST_INSPECT_CODE) {
+      console.log('Created temp directory:', this.tempDir)
+    }
   }
 
 
@@ -406,6 +422,22 @@ export class ModelExecutor {
 
       this.writeGeneratedFiles(libDir, adaptedCodeResult, modelName)
 
+      if (process.env.TEST_INSPECT_CODE) {
+        console.log('\n=== GENERATED CODE INSPECTION ===')
+        console.log(`Model: ${modelName}`)
+        console.log(`Source file: ${path.join(libDir, `${modelName}.c`)}`)
+        console.log(`Header file: ${path.join(libDir, `${modelName}.h`)}`)
+        console.log(`Test program: ${path.join(this.tempDir, 'src', 'main.cpp')}`)
+        console.log(`Working directory: ${this.tempDir}`)
+        
+        // Also print the source code content
+        console.log('\n--- SOURCE CODE ---')
+        console.log(codeResult.source)
+        console.log('\n--- HEADER CODE ---')
+        console.log(codeResult.header)
+        console.log('==================\n')
+      }
+
       // Generate and write test program
       const testProgram = this.generateTestProgram(model, modelName)
       const srcDir = path.join(this.tempDir, 'src')
@@ -420,6 +452,13 @@ export class ModelExecutor {
       const dockerResult = this.runInDocker()
 
       if (!dockerResult.success) {
+        // If TEST_INSPECT_CODE is set, print compilation errors
+        if (process.env.TEST_INSPECT_CODE) {
+          console.log('\n=== COMPILATION ERROR ===')
+          console.log(dockerResult.output)
+          console.log('========================\n')
+        }
+
         return {
           success: false,
           outputs: {},
@@ -446,9 +485,11 @@ export class ModelExecutor {
         error: error instanceof Error ? error.message : String(error)
       }
     } finally {
-      // Cleanup temp directory if not in verbose mode
-      if (!this.options.verbose) {
+      // Cleanup temp directory if not in verbose mode or TEST_INSPECT_CODE
+      if (!this.options.verbose && !process.env.TEST_INSPECT_CODE) {
         this.cleanup()
+      } else if (process.env.TEST_INSPECT_CODE) {
+        console.log(`\nGenerated files preserved in: ${this.tempDir}`)
       }
     }
   }
@@ -472,6 +513,12 @@ export class ModelExecutor {
    * Cleanup temporary files
    */
   cleanup(): void {
+    if (process.env.TEST_INSPECT_CODE) {
+      console.log(`\nPreserving generated files due to TEST_INSPECT_CODE environment variable`)
+      console.log(`Files location: ${this.tempDir}`)
+      return
+    }
+
     if (fs.existsSync(this.tempDir)) {
       fs.rmSync(this.tempDir, { recursive: true, force: true })
     }
@@ -479,7 +526,7 @@ export class ModelExecutor {
 
   // Private helper methods
 
-    private setSimulationInputs(
+  private setSimulationInputs(
     engine: MultiSheetSimulationEngine,
     inputs: { [portName: string]: number | number[] | boolean }
     ): void {
@@ -801,26 +848,65 @@ includes=${modelName}.h
 
   private runInDocker(): { success: boolean; output: string; error?: string } {
     try {
-      const dockerCommand = [
-        'docker', 'run', '--rm',
-        '-v', `${this.tempDir}:/workspace`,
+      // Get absolute path for the temp directory
+      const absolutePath = path.resolve(this.tempDir)
+      
+      // Convert to Docker-compatible path format
+      let dockerPath = absolutePath
+      
+      // On Windows, convert drive letters and backslashes
+      if (process.platform === 'win32') {
+        // Convert C:\path\to\dir to /c/path/to/dir for Docker
+        dockerPath = absolutePath
+          .replace(/^([A-Z]):/i, (match, drive) => `/${drive.toLowerCase()}`)
+          .replace(/\\/g, '/')
+      }
+      
+      // Build the Docker command
+      const dockerArgs = [
+        'run', '--rm',
+        '-v', `${dockerPath}:/workspace`,
         '-w', '/workspace',
         this.options.dockerImage,
         'bash', '-c',
-        '"pio run -e native && .pio/build/native/program"'
-      ].join(' ')
+        'pio run -e native && .pio/build/native/program'
+      ]
 
-      const output = execSync(dockerCommand, {
+      if (process.env.TEST_INSPECT_CODE) {
+        console.log('Docker volume mount:', `${dockerPath}:/workspace`)
+        console.log('Docker command: docker', dockerArgs.join(' '))
+        
+        // List files in the temp directory to verify they exist
+        console.log('\nFiles in temp directory:')
+        const files = fs.readdirSync(this.tempDir, { recursive: true })
+        files.forEach(file => console.log(`  ${file}`))
+      }
+
+      // Use execFileSync for better cross-platform support
+      const { execFileSync } = require('child_process')
+      const output = execFileSync('docker', dockerArgs, {
         encoding: 'utf-8',
-        timeout: this.options.timeout
+        timeout: this.options.timeout,
+        windowsHide: true
       })
 
       return { success: true, output }
     } catch (error: any) {
+      // Extract more detailed error information
+      const errorOutput = error.stdout || error.stderr || ''
+      const errorMessage = error.message || 'Unknown error'
+      
+      if (process.env.TEST_INSPECT_CODE) {
+        console.error('\nDocker command failed')
+        console.error('Exit code:', error.code)
+        console.error('Error output:', errorOutput)
+        console.error('Error message:', errorMessage)
+      }
+      
       return {
         success: false,
-        output: error.stdout || '',
-        error: error.message
+        output: errorOutput,
+        error: errorMessage
       }
     }
   }
@@ -830,9 +916,15 @@ includes=${modelName}.h
     
     // Find the outputs section
     const outputsMatch = output.match(/=== OUTPUTS ===([\s\S]*?)=== END ===/);
-    if (!outputsMatch) return outputs
+    if (!outputsMatch) {
+      if (process.env.TEST_INSPECT_CODE) {
+        console.log('Warning: Could not find OUTPUTS section in:', output)
+      }
+      return outputs
+    }
 
     const outputsSection = outputsMatch[1]
+    console.log('Outputs section found:', outputsSection)
     
     // Parse scalar outputs (e.g., "OutputName: 123.456")
     const scalarMatches = outputsSection.matchAll(/^(\w+):\s*([-\d.]+)\s*$/gm)
@@ -882,6 +974,8 @@ includes=${modelName}.h
         outputs[portName] = arrayValues
       }
     }
+
+    console.log('Parsed outputs:', outputs)
 
     return outputs
   }
