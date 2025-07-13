@@ -48,6 +48,8 @@ build/Release
 node_modules/
 jspm_packages/
 
+model_exec_*
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
