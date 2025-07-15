@@ -36,12 +36,25 @@ The project follows a clean, modular folder structure to organize different conc
   * **`components/Port.tsx`** – A sub-component for an input or output port on a block. Ports are anchor points for connections. This component might handle user interactions for starting or ending a wire connection (e.g., click and drag from an output port to an input port).
   * **`components/Wire.tsx`** – A component (or an SVG path) representing a **wire connection** between blocks. Wires can be drawn as SVG lines or Bezier curves connecting an output port to an input port. This component likely calculates a path based on the positions of the connected ports. It may also handle user interaction (e.g., clicking a wire might highlight it or allow deletion).
   * **`components/BlockLibrarySidebar.tsx`** – A sidebar component that lists all available primitive blocks (Sum, Multiply, Transfer Function, Signal Display, Logger, Input/Output ports, etc.) and possibly user-defined Subsystems. Users can drag new blocks from this palette onto the canvas. This component organizes blocks into categories and provides a search or filter for convenience if the library grows.
+  * **`components/AutoSaveRecoveryDialog.tsx`** – Modal dialog shown when opening a model that has an auto-saved version. Displays timestamps of both the auto-save and last saved version, allowing users to choose which to open. When recovering auto-save, the system loads the auto-saved content but maintains the latest version number to ensure proper UI behavior.
+
+  * **`components/AutoSaveStatusIndicator.tsx`** – Small component that displays the auto-save status in the header, showing when auto-save last ran and providing visual feedback when saves complete.
+
+  * **`components/DirtyStateIndicator.tsx`** – Visual indicator that appears next to the model name when there are unsaved changes, helping users understand when their work needs saving.
+
   * **`components/PropertiesPanel.tsx`** – A panel for editing properties of the currently selected block or subsystem. For instance, if the user selects a Transfer Function block, this panel would show input fields for numerator/denominator coefficients. For an Input/Output port, it may allow naming the signal (which is important because signal names will carry into code generation). The panel writes changes back to the model state.
 
 * **`/lib`**: Utility modules and services (plain TypeScript/JavaScript modules that contain business logic, helpers, or integrations).
 
   * **`lib/supabaseClient.ts`** – A module to initialize and export the Supabase client (with the project URL and anon API key). This is used on the client side to interact with Supabase. It might also handle setting up Supabase authentication state listener and refreshing the JWT as needed.
   * **`lib/auth.tsx`** – (Optional) Utilities for authentication, possibly a React context provider that wraps the Supabase auth functions. This could provide React hooks like `useUser()` or `useSession()` throughout the app. It might also implement route guarding (for example, redirecting to login if no user session).
+
+  * **`lib/modelStore.ts`** – Zustand store managing application state including:
+    - Dirty state tracking with `isDirty` flag and `lastSavedHash`
+    - Auto-save functionality with intelligent change detection
+    - Methods to mark the model as clean after saves
+    - Hash-based comparison to detect actual changes
+
   * **`lib/multiSheetSimulation.ts`** – Implementation of the `MultiSheetSimulationEngine` class that coordinates simulation across multiple sheets with proper subsystem handling and sheet label scoping.
 
   * **`lib/sheetLabelUtils.ts`** – Utilities for handling sheet label connections, validation, and scoping within subsystems.
@@ -50,7 +63,12 @@ The project follows a clean, modular folder structure to organize different conc
   * **`lib/modelSchema.ts`** – Definition of the **Model JSON schema** or TypeScript types for the model. This defines how a model is structured as JSON: e.g., a model object containing metadata and an array of **Sheets**, each Sheet containing a list of **Blocks** (with properties like id, type, position, parameters, etc.) and **Connections** (wires linking block outputs to inputs). It also defines how Subsystems are represented (possibly as a special block type that contains a reference to another list of blocks internally or a child sheet). Defining a clear schema (and perhaps using a validation library like Zod for it) helps maintain consistency between the front-end, simulation, and code generation logic so all interpret the model the same way.
   * **`lib/validation.ts`** – (Optional) If needed, this module could contain functions to validate a model (e.g., to ensure there are no unconnected required ports, no algebraic loops without feedback blocks, etc.). This might be used in the automation API to run model checks.
   * **`lib/types.ts`** – TypeScript types for models and versions, including `Model`, `ModelVersion`, and `ModelWithVersion` interfaces.
-  * **`lib/useAutoSave.ts`** – React hook managing the auto-save timer, with logic to prevent auto-saves during loading or when viewing older versions.
+  * **`lib/useAutoSave.ts`** – React hook managing the auto-save timer with intelligent dirty state checking. The hook:
+    - Monitors the model's dirty state and only saves when changes exist
+    - Calls `saveCurrentSheetData()` before auto-saving to ensure all current edits are included
+    - Handles the `beforeunload` event to attempt saving when the browser closes
+    - Respects the global auto-save setting and current version context
+    - Provides proper cleanup on unmount
 
 * **`/public`**: Static assets such as images or maybe example models.
 
@@ -110,7 +128,13 @@ The database uses a two-table design for versioning:
 * `created_at` (timestamp)
 * Unique constraint on (model_id, version)
 
-Version 0 is reserved for auto-save data, which is automatically deleted when a new version is saved. Regular versions start at 1 and increment monotonically. Each save operation creates a new version, providing a complete history of the model's evolution.
+**Version Management and Auto-save:** Version 0 is reserved for auto-save data, which stores the working state of a model during editing sessions. Auto-save runs every 5 minutes when the model has been modified (tracked via a "dirty" state flag). When opening a model, if an auto-save version exists, users are presented with a recovery dialog showing:
+
+- The timestamp of the auto-saved version
+- The timestamp of the last manually saved version
+- Options to either recover the auto-save or discard it
+
+Upon recovery, the auto-save data is loaded but the UI treats it as continuing work on the latest version (not as editing an older version). The auto-save entry is deleted from the database after successful recovery. Regular versions start at 1 and increment monotonically. Each save operation creates a new version and automatically deletes any existing auto-save, ensuring clean version history.
 
 The model JSON stored in the `data` column contains the full structure of the model (including all sheets, blocks, connections, and any metadata like sheet layouts or signal names). We use a JSONB column type for efficiency in storage and querying. We can query parts of the JSON if needed (e.g., maybe to find all models that use a certain block type, though not a primary requirement). Supabase's row-level security (RLS) is configured such that each user can only select/update their own models (using `user_id = auth.uid()` in policy). This ensures privacy and data integrity.
 
@@ -129,6 +153,12 @@ The application implements lightweight versioning to track the evolution of mode
 **Version Selection:** Users can browse and open any previous version from the model list page. A dropdown on each model tile shows all available versions, with the latest clearly marked. Opening an older version passes the version number as a query parameter.
 
 **Fork on Save:** When saving changes to an older version, users are prompted to create a new model with a new name. This prevents accidental overwrites and maintains clear lineage while allowing experimentation with historical states.
+
+**Auto-save Recovery:** When opening a model, the system checks for the existence of a version 0 (auto-save) entry. If found, before loading any model data, a recovery dialog is presented allowing users to:
+  - **Recover auto-save**: Loads the auto-saved content as if continuing work on the latest version. The version number remains at the latest version (not 0), and `isOlderVersion` is set to false. The auto-save entry is deleted from the database after successful recovery.
+  - **Discard auto-save**: Deletes the auto-save entry and loads the last manually saved version.
+
+This ensures users never lose work due to unexpected browser closures or crashes while maintaining a clean version history.
 
 **API Version Support:** Both the code generation and automation APIs accept version parameters, enabling:
 - Generation of C code from any version
@@ -778,13 +808,51 @@ Throughout the system, careful consideration is given to **where state lives** t
 * **Auth State:** Supabase Auth provides a session JWT which we keep on the client (Supabase JS library handles this, often storing in local storage or memory and refreshing it). We can also propagate the session to Next.js server-side (Next 13 App Router can use cookies or the auth helper library to get the user on the server). For simplicity, the app can rely on client-side checks for auth to protect most pages, but critical actions (like API routes) double-check the Supabase JWT or the automation token.
 * **Simulation State:** Lives in the simulation engine context (client or server depending on mode). It's not stored globally in React state because simulation is more of a transient process; however, some UI components (like a plot) might have internal state for the data points to display. The simulation engine could emit events or call callbacks (e.g., each time step, send new values to displays). This could be done via a simple pub-sub within the engine or by updating a React state that the Signal Display component is subscribed to. Because React re-renders could be expensive for many time steps, often simulation display is done by directly manipulating a canvas or using a chart library that imperatively updates. We might therefore have the Signal Display component just hold a reference to a chart instance and the simulation engine pushes data to it without full React state updates each step, which is a performance consideration.
 * **Unsaved Changes:** To help the user, we will keep track of a "document dirty" flag – whether the model has unsaved edits. This state can be in the editor component, and if the user tries to navigate away, we can prompt them to save. It's a minor detail but important for UX.
-**Auto Save:** every five minutes, the current state of the "dirty" model document shall be "auto-saved" to version 0 in the model_versions table. This special version number is reserved exclusively for auto-save data. Auto-save only runs when viewing the latest version of a model and is disabled when viewing historical versions. The auto-save version is automatically deleted when the user performs an explicit save, ensuring clean version history. Auto-save data is never included in version listings shown to users.
+* **Auto Save and Dirty State Tracking:** The application maintains an `isDirty` flag that tracks whether the model has been modified since the last save. This flag is set to `true` whenever the user:
+- Adds, moves, or deletes blocks
+- Creates or removes connections
+- Modifies block parameters
+- Changes simulation settings
+- Renames sheets
+
+Auto-save runs every five minutes but only persists to the database if `isDirty` is true, preventing unnecessary database writes. The system creates a hash of the model state to detect changes accurately. When auto-saving:
+1. The current sheet data is synchronized to the model's sheet array
+2. If changes exist, the model is saved to version 0
+3. The model is marked as clean after successful auto-save
+
+Auto-save only runs when viewing the latest version of a model and is disabled when viewing historical versions. A visual indicator shows users when they have unsaved changes and the time of the last auto-save.
 
 The separation of concerns in state ensures that each part of the app deals with the appropriate form of data:
 
 1. **UI Components** – operate on in-memory state for speed.
 2. **Persistent Model Storage** – only updated occasionally, which also minimizes conflict potential (since no concurrent edits).
 3. **Computation (Simulation/Codegen)** – operates on a snapshot of the model state (we might pass a copy of the model JSON to the simulation engine or code generator to avoid any mutations affecting the UI state). They produce results that are either displayed or downloaded, not directly modifying the model (except maybe adding some meta info like simulation results if we choose).
+
+## User Experience Enhancements
+
+### Auto-save and Recovery User Experience
+
+The application provides a seamless auto-save experience that protects users' work without interrupting their workflow:
+
+**Visual Feedback:**
+- A small indicator next to the model name shows when there are unsaved changes
+- The auto-save status appears in the header, showing the time since last auto-save
+- Brief confirmation appears when auto-save completes successfully
+
+**Recovery Flow:**
+1. When opening a model with auto-saved changes, a clear dialog appears before any data loads
+2. The dialog shows human-readable timestamps for both versions
+3. Users can make an informed choice about which version to use
+4. After recovery, a subtle notification confirms the auto-save was restored
+5. The UI behaves exactly as if the user never left - no special "editing older version" warnings
+
+**Intelligent Saving:**
+- Auto-save only runs when actual changes exist, verified by content hashing
+- Manual saves clear both the dirty flag and any auto-save entries
+- The system attempts to save when the browser window closes if changes exist
+- All user actions that modify the model immediately update the dirty state
+
+This design ensures that auto-save is truly transparent - it's a safety net that catches unsaved work without adding complexity to the user's workflow.
 
 ## Hybrid Simulation and Code Generation Architecture
 
@@ -861,7 +929,13 @@ We also consider **performance** in the architecture:
 * We ensure that each service is used appropriately: the database is not doing computation, the client is not doing secure data storage, etc. This clear separation means each part can be optimized or replaced if needed (for instance, if we needed to support extremely heavy simulations, we could introduce a dedicated simulation microservice or WebAssembly module without restructuring the whole app).
 * **Matrix Performance**: Matrix operations are optimized for reasonable sizes (up to 100×100). Larger matrices may impact simulation performance. The UI provides warnings for matrices exceeding 1000×1000 elements. Memory usage scales with the square of matrix dimensions, so appropriate limits are enforced.
 * **Version Performance:** The versioning system uses a two-table design to optimize common operations. Model listings only query the lightweight models table, while version data is fetched on-demand. The unique index on (model_id, version) ensures fast version lookups.
-* **Auto-save Efficiency:** Auto-save operations use version 0 with upsert semantics, preventing version table bloat. The system validates model state before auto-saving to prevent errors during the save cycle.
+* **Auto-save Efficiency:** 
+  - Auto-save operations only occur when the model is marked as dirty, preventing unnecessary database writes
+  - The dirty state is tracked using a lightweight hash comparison of the model structure
+  - Change detection happens at the action level - any modification immediately sets the dirty flag
+  - Auto-save data uses version 0 with upsert semantics, preventing version table bloat
+  - The system validates model state before auto-saving to prevent errors during the save cycle
+  - Visual indicators for dirty state and auto-save status have minimal performance impact
 
 ### MCP Integration Benefits
 

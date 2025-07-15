@@ -422,7 +422,6 @@ const handleEdgesChange = useCallback((changes: any[]) => {
     [project, onDrop]
   )
 
-  /*
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -446,6 +445,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         }
 
         if (selectedEdges.length > 0 && onWireDelete) {
+          console.log('Deleting selected edges:', selectedEdges.map(e => e.id))
           selectedEdges.forEach((edge: Edge) => onWireDelete(edge.id))
         }
       }
@@ -454,7 +454,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [nodes, edges, onBlockDelete, onWireDelete])
-  */
+  
 
   // Get the block data for context menu
   const contextMenuBlock = contextMenu ? blocks.find(b => b.id === contextMenu.nodeId) : null
@@ -485,11 +485,11 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         onNodeContextMenu={onNodeContextMenu}
         onDragOver={onDragOver}
         onDrop={onDropHandler}
+
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
-        deleteKeyCode={['Delete', 'Backspace']}
         multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
         fitView
         attributionPosition="top-right"

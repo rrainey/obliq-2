@@ -8,6 +8,8 @@ import { WireData } from '@/components/Wire'
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
 import SaveAsDialog from '@/components/SaveAsDialog'
+import AutoSaveRecoveryDialog from '@/components/AutoSaveRecoveryDialog'
+import AutoSaveStatusIndicator from '@/components/AutoSaveStatusIndicator'
 import CanvasReactFlow from '@/components/CanvasReactFlow'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SimulationSettingsPanel, { validateSimulationSettings } from '@/components/SimulationSettingsPanel'
@@ -32,6 +34,7 @@ import ModelValidationButton from '@/components/ModelValidationButton'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
 import { getSheetPath } from '@/lib/navigationUtils'
 import { parseType } from '@/lib/typeValidator'
+import { migrateToHierarchicalSheets } from '@/lib/modelStore'
 import { useModelStore } from '@/lib/modelStore'
 
 import { useAutoSave } from '@/lib/useAutoSave'
@@ -51,8 +54,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const searchParams = useSearchParams()
   
   // Zustand store
-  const {
- // State
+const {
   model, sheets, activeSheetId, blocks, wires,
   selectedBlockId, selectedWireId, configBlock,
   simulationResults, currentSheetSimulationResults, isSimulating, simulationEngine, outputPortValues,
@@ -67,13 +69,30 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
   setGlobalSimulationResults, clearGlobalSimulationResults, 
   updateCurrentSheet, saveCurrentSheetData, initializeFromModel, saveAsNewModel,
-  } = useModelStore()
+  
+  // Auto-save specific
+  deleteAutoSave, enableAutoSave, setIsDirty, markAsClean,
+  
+  // New actions needed for auto-save recovery
+  setSheets, setActiveSheetId, setBlocks, setWires,
+  setCurrentVersion, setIsOlderVersion,
+
+} = useModelStore()
 
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false)
   const [simulationSettings, setSimulationSettings] = useState({
     duration: '10.0',
     timeStep: '0.01'
   })
+
+  const [showAutoSaveDialog, setShowAutoSaveDialog] = useState(false)
+  const [autoSaveInfo, setAutoSaveInfo] = useState<{
+    autoSaveDate: string
+    lastSavedVersion: number
+    lastSavedDate: string
+  } | null>(null)
+
+
   
   // Unwrap the params Promise
   const { id } = use(params)
@@ -131,6 +150,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
   const fetchModel = async () => {
     try {
+      setModelLoading(true)
+      
       // Fetch model metadata
       const { data: modelData, error: modelError } = await supabase
         .from('models')
@@ -144,43 +165,202 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         } else {
           throw modelError
         }
+        setModelLoading(false)
         return
       }
+
+      // Store the model data in state first
+      setModel(modelData)
 
       // Determine which version to load
       const versionToLoad = requestedVersion 
         ? parseInt(requestedVersion) 
         : modelData.latest_version || 1
 
+      // Check for auto-save (version 0) only if we're loading the latest version
+      // and no specific version was requested
+      if (!requestedVersion && versionToLoad === (modelData.latest_version || 1)) {
+        const { data: autoSaveData, error: autoSaveError } = await supabase
+          .from('model_versions')
+          .select('*')
+          .eq('model_id', id)
+          .eq('version', 0)
+          .maybeSingle()
+
+        if (autoSaveData && !autoSaveError) {
+          // Get the last saved version info for comparison
+          const { data: lastSavedVersion, error: lastSavedError } = await supabase
+            .from('model_versions')
+            .select('*')
+            .eq('model_id', id)
+            .eq('version', versionToLoad)
+            .single()
+
+          if (!lastSavedError && lastSavedVersion) {
+            // Show auto-save recovery dialog
+            setAutoSaveInfo({
+              autoSaveDate: autoSaveData.created_at,
+              lastSavedVersion: versionToLoad,
+              lastSavedDate: lastSavedVersion.created_at
+            })
+            setShowAutoSaveDialog(true)
+            setModelLoading(false)
+            return // Don't load any version yet - wait for user choice
+          }
+        }
+      }
+
+      // No auto-save dialog needed, proceed to load the requested version
+      await loadModelVersion(modelData, versionToLoad)
+      
+    } catch (error) {
+      console.error('Error fetching model:', error)
+      setError('Failed to load model')
+      setModelLoading(false)
+    }
+  }
+
+  // Helper function to load a specific version
+  const loadModelVersion = async (modelData: any, versionToLoad: number) => {
+    try {
       // Fetch the specific version
       const { data: versionData, error: versionError } = await supabase
         .from('model_versions')
         .select('*')
-        .eq('model_id', id)
+        .eq('model_id', modelData.id)
         .eq('version', versionToLoad)
         .single()
 
       if (versionError) {
         console.error('Error fetching version:', versionError)
         setError(`Version ${versionToLoad} not found`)
+        setModelLoading(false)
         return
       }
 
+      // Initialize the model with the version data
       initializeFromModel(modelData, versionData)
-
+      
+      // Load simulation settings if present
       if (versionData.data?.globalSettings) {
         setSimulationSettings({
           duration: versionData.data.globalSettings.simulationDuration?.toString() || '10.0',
           timeStep: versionData.data.globalSettings.simulationTimeStep?.toString() || '0.01'
         })
       }
+      
+      // Enable auto-save for this session
+      enableAutoSave()
+      
     } catch (error) {
-      console.error('Error fetching model:', error)
-      setError('Failed to load model')
+      console.error('Error loading model version:', error)
+      setError('Failed to load model version')
     } finally {
       setModelLoading(false)
     }
   }
+
+
+  const handleRecoverAutoSave = async () => {
+    if (!model || !autoSaveInfo) return
+
+    try {
+      // Fetch the auto-save version
+      const { data: autoSaveData, error } = await supabase
+        .from('model_versions')
+        .select('*')
+        .eq('model_id', id)
+        .eq('version', 0)
+        .single()
+
+      if (error) throw error
+
+      // Key difference: We're recovering auto-save but treating it as the current version
+      // This is fundamentally different from opening an older version
+      
+      // Manually set up the state instead of using initializeFromModel
+      // which would set isOlderVersion based on version comparison
+      if (autoSaveData?.data?.sheets) {
+        const hierarchicalData = migrateToHierarchicalSheets(autoSaveData.data)
+        const sheets = hierarchicalData.sheets
+        
+        if (sheets.length === 0) {
+          throw new Error('Invalid auto-save: No sheets found')
+        }
+        
+        // Load the auto-save data but maintain the latest version number
+        setSheets(sheets)
+        setActiveSheetId(sheets[0].id)
+        setBlocks(sheets[0]?.blocks || [])
+        setWires(sheets[0]?.connections || [])
+        
+        // Critical: Set version tracking to indicate we're on the latest version
+        setCurrentVersion(model.latest_version || 1)
+        setIsOlderVersion(false)
+        
+        // Reset selection state
+        setSelectedBlockId(null)
+        setSelectedWireId(null)
+        
+        // Load simulation settings if present
+        if (autoSaveData.data?.globalSettings) {
+          setSimulationSettings({
+            duration: autoSaveData.data.globalSettings.simulationDuration?.toString() || '10.0',
+            timeStep: autoSaveData.data.globalSettings.simulationTimeStep?.toString() || '0.01'
+          })
+        }
+      }
+
+      setShowAutoSaveDialog(false)
+      setAutoSaveInfo(null)
+      setModelLoading(false)
+      
+      // Delete the auto-save from database since we've recovered it
+      try {
+        await deleteAutoSave()
+        console.log('Auto-save removed from database after recovery')
+      } catch (error) {
+        console.error('Warning: Failed to delete auto-save after recovery:', error)
+        // Continue anyway - the auto-save will be overwritten on next save
+      }
+      
+      // Enable auto-save for this session
+      enableAutoSave()
+      
+      // Mark the model as clean since we just loaded it
+      markAsClean()
+      
+      // Optional: Add a subtle notification (could be a toast component)
+      // For now, just log it
+      console.log('Auto-saved work has been recovered. You can continue editing.')
+      
+    } catch (error) {
+      console.error('Error recovering auto-save:', error)
+      alert('Failed to recover auto-save. Opening last saved version instead.')
+      handleDiscardAutoSave()
+    }
+  }
+
+const handleDiscardAutoSave = async () => {
+  if (!model || !autoSaveInfo) return
+
+  try {
+    // Delete the auto-save
+    await deleteAutoSave()
+    
+    // Load the last saved version
+    await loadModelVersion(model, autoSaveInfo.lastSavedVersion)
+    
+    setShowAutoSaveDialog(false)
+    setAutoSaveInfo(null)
+    
+    // Enable auto-save for this session
+    enableAutoSave()
+  } catch (error) {
+    console.error('Error discarding auto-save:', error)
+    alert('Error occurred while loading the saved version.')
+  }
+}
 
   const validateAndGetSimulationSettings = (): { 
     isValid: boolean; 
@@ -381,6 +561,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const handleBlockMove = (blockId: string, position: { x: number; y: number }) => {
     updateBlock(blockId, { position })
     saveCurrentSheetData()
+    // Position changes should also mark as dirty
+    setIsDirty(true)
   }
 
   const handleBlockDelete = (blockId: string) => {
@@ -454,9 +636,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleWireDelete = (wireId: string) => {
-    //console.log('=== handleWireDelete called ===')
-    //console.log('Deleting wire:', wireId)
-    //console.log('Wires before delete:', wires.map(w => ({ id: w.id, source: w.sourceBlockId, target: w.targetBlockId })))
+    console.log('=== handleWireDelete called ===')
+    console.log('Deleting wire:', wireId)
+    console.log('Wires before delete:', wires.map(w => ({ id: w.id, source: w.sourceBlockId, target: w.targetBlockId })))
     
     deleteWire(wireId)
     setSelectedWireId(null)
@@ -743,6 +925,8 @@ const handleExportModel = () => {
     if (configBlock) {
       updateBlock(configBlock.id, { parameters })
       saveCurrentSheetData()
+      // updateBlock already sets isDirty, but ensure it's set
+      setIsDirty(true)
     }
   }
 
@@ -1131,6 +1315,18 @@ const handleExportModel = () => {
           currentName={model.name}
           onSave={handleSaveAs}
           onClose={() => setShowSaveAsDialog(false)}
+        />
+      )}
+
+      {/* Add Auto-save Recovery Dialog */}
+      {showAutoSaveDialog && model && autoSaveInfo && (
+        <AutoSaveRecoveryDialog
+          modelName={model.name}
+          autoSaveDate={autoSaveInfo.autoSaveDate}
+          lastSavedVersion={autoSaveInfo.lastSavedVersion}
+          lastSavedDate={autoSaveInfo.lastSavedDate}
+          onRecover={handleRecoverAutoSave}
+          onDiscard={handleDiscardAutoSave}
         />
       )}
 

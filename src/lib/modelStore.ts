@@ -51,6 +51,10 @@ export interface ModelState {
   // Auto-save state
   autoSaveEnabled: boolean
   lastAutoSave: string | null
+
+  // Dirty state tracking
+  isDirty: boolean
+  lastSavedHash: string | null  // Store a hash of the last saved state for comparison
 }
 
 export interface ModelActions {
@@ -104,6 +108,12 @@ export interface ModelActions {
   initializeFromModel: (model: Model, versionData: ModelVersion) => void
   saveCurrentSheetData: () => void
   updateSubsystemSheets: (subsystemId: string, sheets: Sheet[]) => void
+
+  // Dirty state actions
+  setIsDirty: (dirty: boolean) => void
+  markAsClean: () => void
+  checkIfDirty: () => boolean
+  
 }
 
 export type ModelStore = ModelState & ModelActions
@@ -132,6 +142,8 @@ export const useModelStore = create<ModelStore>()(
     lastAutoSave: null,
     globalSimulationResults: null,
     currentSheetSimulationResults: null,
+    isDirty: false,
+    lastSavedHash: null,
 
     // Model actions
     setModel: (model) => set({ model }),
@@ -236,6 +248,8 @@ export const useModelStore = create<ModelStore>()(
         // Delete auto-save after successful save
         await get().deleteAutoSave()
 
+        get().markAsClean()
+
         // Update the model with the new version
         set({ 
           model: {
@@ -336,9 +350,16 @@ export const useModelStore = create<ModelStore>()(
     
     saveAutoSave: async () => {
       const state = get()
-      
+  
       if (!state.model || !state.autoSaveEnabled) {
         return false
+      }
+
+      // Check if the model is dirty before saving
+      const isDirty = get().checkIfDirty()
+      if (!isDirty) {
+        console.log('Skipping auto-save: no changes detected')
+        return true // Return true as there's nothing to save
       }
 
       // Don't auto-save if we're still loading or if model doesn't have an ID
@@ -421,6 +442,7 @@ export const useModelStore = create<ModelStore>()(
 
         set({ lastAutoSave: new Date().toISOString() })
         console.log('Auto-save completed')
+        get().markAsClean() // Mark as clean after successful auto-save
         return true
 
       } catch (error) {
@@ -550,7 +572,8 @@ export const useModelStore = create<ModelStore>()(
     renameSheet: (sheetId, newName) => set((state) => ({
       sheets: state.sheets.map(sheet =>
         sheet.id === sheetId ? { ...sheet, name: newName } : sheet
-      )
+      ),
+      isDirty: true
     })),
 
     getParentSheetId: (sheetId: string) => {
@@ -564,30 +587,35 @@ export const useModelStore = create<ModelStore>()(
     setWires: (wires) => set({ wires }),
     
     addBlock: (block) => set((state) => ({ 
-      blocks: [...state.blocks, block] 
+      blocks: [...state.blocks, block],
+      isDirty: true 
     })),
-    
+
     updateBlock: (blockId, updates) => set((state) => ({
       blocks: state.blocks.map(block =>
         block.id === blockId ? { ...block, ...updates } : block
-      )
+      ),
+      isDirty: true
     })),
-    
+
     deleteBlock: (blockId) => set((state) => ({
       blocks: state.blocks.filter(block => block.id !== blockId),
-      // Also remove any wires connected to this block
       wires: state.wires.filter(wire => 
         wire.sourceBlockId !== blockId && wire.targetBlockId !== blockId
-      )
+      ),
+      isDirty: true
     })),
-    
+
     addWire: (wire) => set((state) => ({ 
-      wires: [...state.wires, wire] 
+      wires: [...state.wires, wire],
+      isDirty: true 
     })),
-    
+
     deleteWire: (wireId) => set((state) => ({
-      wires: state.wires.filter(wire => wire.id !== wireId)
+      wires: state.wires.filter(wire => wire.id !== wireId),
+      isDirty: true
     })),
+
 
     // Selection actions
     setSelectedBlockId: (selectedBlockId) => set({ selectedBlockId }),
@@ -765,6 +793,33 @@ export const useModelStore = create<ModelStore>()(
         sheets: updateSheetsInHierarchy(state.sheets)
       }
     }),
+
+    setIsDirty: (isDirty) => set({ isDirty }),
+
+    markAsClean: () => {
+      const state = get()
+      // Create a hash of the current model state
+      const currentStateHash = createModelHash(state.sheets)
+      set({ 
+        isDirty: false,
+        lastSavedHash: currentStateHash 
+      })
+    },
+
+    checkIfDirty: () => {
+      const state = get()
+      if (!state.lastSavedHash) return state.isDirty
+      
+      const currentStateHash = createModelHash(state.sheets)
+      const isDirty = currentStateHash !== state.lastSavedHash
+      
+      // Update the isDirty flag if it's different
+      if (isDirty !== state.isDirty) {
+        set({ isDirty })
+      }
+      
+      return isDirty
+    },
     
     initializeFromModel: (model, versionData) => {
       if (versionData?.data?.sheets) {
@@ -798,6 +853,9 @@ export const useModelStore = create<ModelStore>()(
           error: null,
           modelLoading: false
         })
+
+        get().markAsClean()
+        
       } else {
         set({
           error: 'Invalid model: No sheet data found.',
@@ -807,6 +865,33 @@ export const useModelStore = create<ModelStore>()(
     }
   }))
 )
+
+function createModelHash(sheets: Sheet[]): string {
+  // Create a deterministic string representation of the model
+  const modelString = JSON.stringify({
+    sheets: sheets.map(sheet => ({
+      id: sheet.id,
+      name: sheet.name,
+      blocks: sheet.blocks.map(block => ({
+        id: block.id,
+        type: block.type,
+        name: block.name,
+        position: block.position,
+        parameters: block.parameters
+      })),
+      connections: sheet.connections
+    }))
+  })
+  
+  // Simple hash function (TODO: use a proper hash library for better performance)
+  let hash = 0
+  for (let i = 0; i < modelString.length; i++) {
+    const char = modelString.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32bit integer
+  }
+  return hash.toString(36)
+}
 
 function getParentSheet(sheets: Sheet[], targetSheetId: string): Sheet | null {
   for (const sheet of sheets) {
