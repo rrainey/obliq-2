@@ -60,8 +60,8 @@ export interface ModelActions {
   setIsOlderVersion: (isOlder: boolean) => void
   setError: (error: string | null) => void
   setModelLoading: (loading: boolean) => void
-  saveModel: () => Promise<boolean>
-  saveAsNewModel: (newName: string) => Promise<string | null>
+  saveModel: (globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => Promise<boolean>
+  saveAsNewModel: (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => Promise<string | null>
   saveAutoSave: () => Promise<boolean>
   deleteAutoSave: () => Promise<void>
   enableAutoSave: () => void
