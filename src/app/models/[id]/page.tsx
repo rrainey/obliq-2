@@ -38,9 +38,46 @@ import { migrateToHierarchicalSheets } from '@/lib/modelStore'
 import { useModelStore } from '@/lib/modelStore'
 
 import { useAutoSave } from '@/lib/useAutoSave'
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+
+import {
+  AppShell,
+  Container,
+  Group,
+  Button,
+  Title,
+  Text,
+  Loader,
+  Center,
+  Stack,
+  Box,
+  Paper,
+  ScrollArea,
+  Divider,
+  Badge,
+  Alert,
+  Flex,
+  ActionIcon,
+  Tooltip,
+  Space,
+  Card,
+  Anchor
+} from '@mantine/core'
+import {
+  IconArrowLeft,
+  IconDeviceFloppy,
+  IconPlayerPlay,
+  IconCode,
+  IconFileExport,
+  IconAlertCircle,
+  IconCircleCheck,
+  IconAlertTriangle,
+  IconDownload,
+  IconClock
+} from '@tabler/icons-react'
+import { notifications } from '@mantine/notifications'
 
 interface ModelEditorPageProps {
   params: Promise<{
@@ -54,30 +91,30 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const searchParams = useSearchParams()
   
   // Zustand store
-const {
-  model, sheets, activeSheetId, blocks, wires,
-  selectedBlockId, selectedWireId, configBlock,
-  simulationResults, currentSheetSimulationResults, isSimulating, simulationEngine, outputPortValues,
-  modelLoading, saving, error, currentVersion, isOlderVersion,
-  globalSimulationResults, 
-  
-  // Actions
-  setModel, setError, setModelLoading, saveModel,
-  switchToSheet, addSheet, renameSheet, deleteSheet,
-  addBlock, updateBlock, deleteBlock, addWire, deleteWire,
-  setSelectedBlockId, setSelectedWireId, setConfigBlock,
-  setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
-  setGlobalSimulationResults, clearGlobalSimulationResults, 
-  updateCurrentSheet, saveCurrentSheetData, initializeFromModel, saveAsNewModel,
-  
-  // Auto-save specific
-  deleteAutoSave, enableAutoSave, setIsDirty, markAsClean,
-  
-  // New actions needed for auto-save recovery
-  setSheets, setActiveSheetId, setBlocks, setWires,
-  setCurrentVersion, setIsOlderVersion,
+  const {
+    model, sheets, activeSheetId, blocks, wires,
+    selectedBlockId, selectedWireId, configBlock,
+    simulationResults, currentSheetSimulationResults, isSimulating, simulationEngine, outputPortValues,
+    modelLoading, saving, error, currentVersion, isOlderVersion,
+    globalSimulationResults, 
+    
+    // Actions
+    setModel, setError, setModelLoading, saveModel,
+    switchToSheet, addSheet, renameSheet, deleteSheet,
+    addBlock, updateBlock, deleteBlock, addWire, deleteWire,
+    setSelectedBlockId, setSelectedWireId, setConfigBlock,
+    setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
+    setGlobalSimulationResults, clearGlobalSimulationResults, 
+    updateCurrentSheet, saveCurrentSheetData, initializeFromModel, saveAsNewModel,
+    
+    // Auto-save specific
+    deleteAutoSave, enableAutoSave, setIsDirty, markAsClean,
+    
+    // New actions needed for auto-save recovery
+    setSheets, setActiveSheetId, setBlocks, setWires,
+    setCurrentVersion, setIsOlderVersion,
 
-} = useModelStore()
+  } = useModelStore()
 
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false)
   const [simulationSettings, setSimulationSettings] = useState({
@@ -91,7 +128,6 @@ const {
     lastSavedVersion: number
     lastSavedDate: string
   } | null>(null)
-
 
   
   // Unwrap the params Promise
@@ -112,41 +148,6 @@ const {
       fetchModel()
     }
   }, [user, id, requestedVersion])
-
-  /*
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Check if user is typing in an input field
-      const target = e.target as HTMLElement
-      if (target.tagName === 'INPUT' || 
-          target.tagName === 'TEXTAREA' || 
-          target.isContentEditable) {
-        return
-      }
-
-      // Check if any configuration dialog is open
-      if (configBlock) {
-        return // Don't handle delete/backspace when config dialog is open
-      }
-
-      // Handle delete/backspace for selected items
-      if (e.key === 'Delete' || (e.key === 'Backspace' && !e.metaKey && !e.ctrlKey)) {
-        e.preventDefault()
-        
-        if (selectedBlockId) {
-          handleBlockDelete(selectedBlockId)
-        } else if (selectedWireId) {
-          handleWireDelete(selectedWireId)
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [selectedBlockId, selectedWireId, blocks, wires, configBlock])
-  */
 
   const fetchModel = async () => {
     try {
@@ -260,7 +261,6 @@ const {
     }
   }
 
-
   const handleRecoverAutoSave = async () => {
     if (!model || !autoSaveInfo) return
 
@@ -330,37 +330,51 @@ const {
       // Mark the model as clean since we just loaded it
       markAsClean()
       
-      // Optional: Add a subtle notification (could be a toast component)
-      // For now, just log it
-      console.log('Auto-saved work has been recovered. You can continue editing.')
+      // Show notification
+      notifications.show({
+        title: 'Auto-save recovered',
+        message: 'Your unsaved work has been restored',
+        color: 'green',
+        icon: <IconCircleCheck size={20} />
+      })
       
     } catch (error) {
       console.error('Error recovering auto-save:', error)
-      alert('Failed to recover auto-save. Opening last saved version instead.')
+      notifications.show({
+        title: 'Recovery failed',
+        message: 'Failed to recover auto-save. Opening last saved version instead.',
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
       handleDiscardAutoSave()
     }
   }
 
-const handleDiscardAutoSave = async () => {
-  if (!model || !autoSaveInfo) return
+  const handleDiscardAutoSave = async () => {
+    if (!model || !autoSaveInfo) return
 
-  try {
-    // Delete the auto-save
-    await deleteAutoSave()
-    
-    // Load the last saved version
-    await loadModelVersion(model, autoSaveInfo.lastSavedVersion)
-    
-    setShowAutoSaveDialog(false)
-    setAutoSaveInfo(null)
-    
-    // Enable auto-save for this session
-    enableAutoSave()
-  } catch (error) {
-    console.error('Error discarding auto-save:', error)
-    alert('Error occurred while loading the saved version.')
+    try {
+      // Delete the auto-save
+      await deleteAutoSave()
+      
+      // Load the last saved version
+      await loadModelVersion(model, autoSaveInfo.lastSavedVersion)
+      
+      setShowAutoSaveDialog(false)
+      setAutoSaveInfo(null)
+      
+      // Enable auto-save for this session
+      enableAutoSave()
+    } catch (error) {
+      console.error('Error discarding auto-save:', error)
+      notifications.show({
+        title: 'Error',
+        message: 'Error occurred while loading the saved version.',
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
+    }
   }
-}
 
   const validateAndGetSimulationSettings = (): { 
     isValid: boolean; 
@@ -371,7 +385,12 @@ const handleDiscardAutoSave = async () => {
     const validation = validateSimulationSettings(simulationSettings.duration, simulationSettings.timeStep)
     
     if (!validation.isValid) {
-      alert(`Invalid simulation settings:\n\n${validation.errors.join('\n')}`)
+      notifications.show({
+        title: 'Invalid simulation settings',
+        message: validation.errors.join('\n'),
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
       return { isValid: false, duration: 0, timeStep: 0, errors: validation.errors }
     }
     
@@ -491,7 +510,6 @@ const handleDiscardAutoSave = async () => {
         return {}
     }
   }
-
 
   const handleCanvasDrop = (x: number, y: number, blockType: string) => {
     const newBlock: BlockData = {
@@ -613,7 +631,12 @@ const handleDiscardAutoSave = async () => {
           const parsed = parseType(sourceType)
           if (parsed.isArray) {
             // Show error message and prevent connection
-            alert(`${targetBlock.name} requires scalar inputs but ${sourceBlock.name} outputs an array type: ${sourceType}`)
+            notifications.show({
+              title: 'Invalid connection',
+              message: `${targetBlock.name} requires scalar inputs but ${sourceBlock.name} outputs an array type: ${sourceType}`,
+              color: 'red',
+              icon: <IconAlertCircle size={20} />
+            })
             return
           }
         } catch (error) {
@@ -643,12 +666,6 @@ const handleDiscardAutoSave = async () => {
     deleteWire(wireId)
     setSelectedWireId(null)
     saveCurrentSheetData()
-    
-    // Add a check after deletion
-    //setTimeout(() => {
-    //  const { wires: updatedWires } = useModelStore.getState()
-    //  console.log('Wires after delete:', updatedWires.map(w => ({ id: w.id, source: w.sourceBlockId, target: w.targetBlockId })))
-    //}, 100)
   }
 
   const handleSaveAs = async (newName: string) => {
@@ -669,49 +686,54 @@ const handleDiscardAutoSave = async () => {
     }
   }
 
-const handleExportModel = () => {
-  if (!model) {
-    alert('No model to export')
-    return
-  }
-  
-  // Save current sheet data first
-  saveCurrentSheetData()
-  
-  // Create the model data structure
-  const exportData = {
-    name: model.name,
-    version: currentVersion,
-    created: model.created_at,
-    updated: model.updated_at,
-    data: {
-      version: '2.0',
-      metadata: {
-        created: new Date().toISOString(),
-        description: `Exported from obliq-2 on ${new Date().toLocaleDateString()}`
-      },
-      sheets,
-      globalSettings: {
-        simulationTimeStep: 0.01,
-        simulationDuration: 10
+  const handleExportModel = () => {
+    if (!model) {
+      notifications.show({
+        title: 'Export failed',
+        message: 'No model to export',
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
+      return
+    }
+    
+    // Save current sheet data first
+    saveCurrentSheetData()
+    
+    // Create the model data structure
+    const exportData = {
+      name: model.name,
+      version: currentVersion,
+      created: model.created_at,
+      updated: model.updated_at,
+      data: {
+        version: '2.0',
+        metadata: {
+          created: new Date().toISOString(),
+          description: `Exported from obliq-2 on ${new Date().toLocaleDateString()}`
+        },
+        sheets,
+        globalSettings: {
+          simulationTimeStep: 0.01,
+          simulationDuration: 10
+        }
       }
     }
+    
+    // Pretty print the JSON
+    const jsonString = JSON.stringify(exportData, null, 2)
+    
+    // Create blob and download
+    const blob = new Blob([jsonString], { type: 'application/json' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${model.name}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
   }
-  
-  // Pretty print the JSON
-  const jsonString = JSON.stringify(exportData, null, 2)
-  
-  // Create blob and download
-  const blob = new Blob([jsonString], { type: 'application/json' })
-  const url = window.URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `${model.name}.json`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  window.URL.revokeObjectURL(url)
-}
 
   const handleRunSimulation = async () => {
     const settingsValidation = validateAndGetSimulationSettings()
@@ -722,7 +744,12 @@ const handleExportModel = () => {
     // Check if any sheet has blocks
     const totalBlocks = sheets.reduce((sum, sheet) => sum + sheet.blocks.length, 0)
     if (totalBlocks === 0) {
-      alert('No blocks to simulate')
+      notifications.show({
+        title: 'Simulation failed',
+        message: 'No blocks to simulate',
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
       return
     }
 
@@ -746,11 +773,19 @@ const handleExportModel = () => {
         return `• [${sheetName}] ${e.message}`
       }).join('\n')
       
-      alert(
-        `Cannot run simulation due to ${errors.length} type compatibility error${errors.length > 1 ? 's' : ''}:\n\n` +
-        `${errorMessages}${errors.length > 5 ? `\n\n...and ${errors.length - 5} more errors` : ''}\n\n` +
-        'Please fix these errors before running the simulation. Use the "Validate Model" button to see all issues.'
-      )
+      notifications.show({
+        title: `Cannot run simulation due to ${errors.length} type compatibility error${errors.length > 1 ? 's' : ''}`,
+        message: (
+          <div>
+            {errorMessages}
+            {errors.length > 5 && <div>...and {errors.length - 5} more errors</div>}
+            <div style={{ marginTop: 8 }}>Please fix these errors before running the simulation. Use the "Validate Model" button to see all issues.</div>
+          </div>
+        ),
+        color: 'red',
+        icon: <IconAlertCircle size={20} />,
+        autoClose: false
+      })
       return
     }
 
@@ -806,9 +841,21 @@ const handleExportModel = () => {
         })
       }
       
+      notifications.show({
+        title: 'Simulation completed',
+        message: 'Simulation ran successfully across all sheets',
+        color: 'green',
+        icon: <IconCircleCheck size={20} />
+      })
+      
     } catch (error) {
       console.error('Simulation error:', error)
-      alert('Simulation failed. Check console for details.')
+      notifications.show({
+        title: 'Simulation failed',
+        message: 'Check console for details',
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
     } finally {
       setIsSimulating(false)
     }
@@ -816,14 +863,24 @@ const handleExportModel = () => {
 
   const handleExportCSV = () => {
     if (!simulationEngine) {
-      alert('No simulation data to export')
+      notifications.show({
+        title: 'Export failed',
+        message: 'No simulation data to export',
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
       return
     }
 
     try {
       const csvContent = simulationEngine.exportAllLoggedDataAsCSV()
       if (!csvContent) {
-        alert('No logger blocks found or no data to export')
+        notifications.show({
+          title: 'Export failed',
+          message: 'No logger blocks found or no data to export',
+          color: 'red',
+          icon: <IconAlertCircle size={20} />
+        })
         return
       }
 
@@ -838,13 +895,23 @@ const handleExportModel = () => {
       window.URL.revokeObjectURL(url)
     } catch (error) {
       console.error('Export error:', error)
-      alert('Failed to export CSV. Check console for details.')
+      notifications.show({
+        title: 'Export failed',
+        message: 'Failed to export CSV. Check console for details.',
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
     }
   }
 
   const handleGenerateCode = async () => {
     if (!model) {
-      alert('No model loaded')
+      notifications.show({
+        title: 'Code generation failed',
+        message: 'No model loaded',
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
       return
     }
 
@@ -884,10 +951,20 @@ const handleExportModel = () => {
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
 
-      console.log('Code generation completed successfully')
+      notifications.show({
+        title: 'Code generated',
+        message: 'C code library downloaded successfully',
+        color: 'green',
+        icon: <IconCircleCheck size={20} />
+      })
     } catch (error) {
       console.error('Code generation error:', error)
-      alert(`Code generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      notifications.show({
+        title: 'Code generation failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
     }
   }
 
@@ -930,6 +1007,10 @@ const handleExportModel = () => {
     }
   }
 
+  const handleSimulationSettingsChange = useCallback((settings: { duration: string; timeStep: string }) => {
+    setSimulationSettings(settings)
+  }, [])
+
   const handleAddSheet = () => {
     saveCurrentSheetData()
     const newSheetId = `sheet_${Date.now()}`
@@ -969,346 +1050,346 @@ const handleExportModel = () => {
     }
   }
 
-
   if (loading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
-      </div>
+      <Center h="100vh">
+        <Loader size="lg" />
+      </Center>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Error</h1>
-          <p className="text-gray-600 mb-6">{error}</p>
-          <Link
-            href="/models"
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-          >
+      <Center h="100vh">
+        <Stack align="center">
+          <Title order={2}>Error</Title>
+          <Text c="dimmed" mb="md">{error}</Text>
+          <Button component={Link} href="/models" leftSection={<IconArrowLeft size={16} />}>
             Back to Models
-          </Link>
-        </div>
-      </div>
+          </Button>
+        </Stack>
+      </Center>
     )
   }
 
   if (modelLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading model...</div>
-      </div>
+      <Center h="100vh">
+        <Stack align="center">
+          <Loader size="lg" />
+          <Text>Loading model...</Text>
+        </Stack>
+      </Center>
     )
   }
 
   if (!model) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Model Not Found</h1>
-          <Link
-            href="/models"
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
-          >
+      <Center h="100vh">
+        <Stack align="center">
+          <Title order={2}>Model Not Found</Title>
+          <Button component={Link} href="/models" leftSection={<IconArrowLeft size={16} />}>
             Back to Models
-          </Link>
-        </div>
-      </div>
+          </Button>
+        </Stack>
+      </Center>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
-              <Link
-                href="/models"
-                className="text-blue-600 hover:text-blue-800"
-              >
-                ← Back to Models
-              </Link>
-              <h1 className="text-xl font-semibold text-gray-900">
-                {model.name}
-                {isOlderVersion && (
-                  <span className="ml-2 text-sm text-amber-600 font-normal">
-                    (Version {currentVersion} of {model.latest_version})
-                  </span>
-                )}
-                {error && (
-                  <span className="ml-2 text-sm text-red-600 font-normal">
-                    ({error})
-                  </span>
-                )}
-              </h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <button 
-                className={`px-4 py-2 rounded-md font-medium border ${
-                  saving
-                    ? 'bg-gray-500 text-white cursor-not-allowed border-gray-400'
-                    : 'bg-green-700 text-white hover:bg-green-800 border-green-600'
-                }`}
-                onClick={handleSave}
-                disabled={saving}
-              >
-                {saving ? 'Saving...' : (isOlderVersion ? 'Save as New Model' : 'Save')}
-              </button>
+    <AppShell
+      header={{ height: 60 }}
+      navbar={{ width: 300, breakpoint: 'sm' }}
+      aside={{ width: 320, breakpoint: 'md' }}
+    >
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between">
+          <Group>
+            <Anchor component={Link} href="/models" c="blue">
+              <Group gap="xs">
+                <IconArrowLeft size={16} />
+                <Text size="sm">Back to Models</Text>
+              </Group>
+            </Anchor>
+            <Title order={3}>{model.name}</Title>
+            {isOlderVersion && (
+              <Badge color="yellow" variant="filled">
+                Version {currentVersion} of {model.latest_version}
+              </Badge>
+            )}
+            {error && (
+              <Badge color="red" variant="filled">
+                {error}
+              </Badge>
+            )}
+          </Group>
+          
+          <Group>
+            <AutoSaveStatusIndicator />
+            
+            <Button
+              onClick={handleSave}
+              loading={saving}
+              leftSection={<IconDeviceFloppy size={16} />}
+              color="green"
+            >
+              {isOlderVersion ? 'Save as New Model' : 'Save'}
+            </Button>
+            
+            <Button
+              onClick={() => setShowSaveAsDialog(true)}
+              variant="outline"
+              color="green"
+            >
+              Save as...
+            </Button>
+            
+            <ModelValidationButton
+              blocks={blocks}
+              wires={wires}
+              onSelectBlock={setSelectedBlockId}
+              onSelectWire={setSelectedWireId}
+            />
+            
+            <Button
+              onClick={handleRunSimulation}
+              loading={isSimulating}
+              leftSection={<IconPlayerPlay size={16} />}
+            >
+              Run Simulation
+            </Button>
+            
+            <Button
+              onClick={handleGenerateCode}
+              leftSection={<IconCode size={16} />}
+              color="violet"
+            >
+              Generate Code
+            </Button>
+            
+            <Button
+              onClick={handleExportModel}
+              leftSection={<IconFileExport size={16} />}
+              color="indigo"
+            >
+              Export
+            </Button>
+          </Group>
+        </Group>
+      </AppShell.Header>
 
-              <button 
-                className="px-4 py-2 rounded-md font-medium border bg-green-600 text-white hover:bg-green-700 border-green-500"
-                onClick={() => setShowSaveAsDialog(true)}
-              >
-                Save as...
-              </button>
-              
-              {/* Validation Button */}
-              <ModelValidationButton
-                blocks={blocks}
-                wires={wires}
-                onSelectBlock={setSelectedBlockId}
-                onSelectWire={setSelectedWireId}
-              />
-              
-              <button 
-                className={`px-4 py-2 rounded-md text-white font-medium border ${
-                  isSimulating 
-                    ? 'bg-gray-500 cursor-not-allowed border-gray-400' 
-                    : 'bg-blue-700 hover:bg-blue-800 border-blue-600'
-                }`}
-                onClick={handleRunSimulation}
-                disabled={isSimulating}
-              >
-                {isSimulating ? 'Running...' : 'Run Simulation'}
-              </button>
-              <button 
-                className="px-4 py-2 bg-purple-700 text-white rounded-md hover:bg-purple-800 border border-purple-600 font-medium"
-                onClick={handleGenerateCode}
-              >
-                Generate Code
-              </button>
+      <AppShell.Navbar>
+        <BlockLibrarySidebar />
+      </AppShell.Navbar>
 
-              <button 
-                className="px-4 py-2 bg-indigo-700 text-white rounded-md hover:bg-indigo-800 border border-indigo-600 font-medium"
-                onClick={handleExportModel}
-              >
-                Export
-              </button>
+      <AppShell.Main>
+        <Box h="100vh" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Sheet Tabs */}
+          <SheetTabs
+            sheets={sheets}
+            activeSheetId={activeSheetId}
+            onSheetChange={switchToSheet}
+            onAddSheet={handleAddSheet}
+            onRenameSheet={renameSheet}
+            onDeleteSheet={deleteSheet}
+            isInSubsystem={isCurrentSheetInSubsystem()}
+            parentSheetId={getParentSheetIdForCurrent()}
+            onNavigateToParent={handleNavigateToParent}
+          />
 
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Editor Area */}
-      <div className="flex flex-col h-screen">
-        {/* Sheet Tabs */}
-        <SheetTabs
-          sheets={sheets}
-          activeSheetId={activeSheetId}
-          onSheetChange={switchToSheet}
-          onAddSheet={handleAddSheet}
-          onRenameSheet={renameSheet}
-          onDeleteSheet={deleteSheet}
-          isInSubsystem={isCurrentSheetInSubsystem()}
-          parentSheetId={getParentSheetIdForCurrent()}
-          onNavigateToParent={handleNavigateToParent}
-        />
-
-        {/* Breadcrumbs - Add this section */}
-        <SheetBreadcrumbs
-          breadcrumbs={getSheetPath(sheets, activeSheetId)}
-          onNavigate={switchToSheet}
-        />
-
-        {/* Canvas and Sidebar Container */}
-        <div className="flex flex-1">
-          {/* Block Library Sidebar */}
-          <BlockLibrarySidebar />
+          {/* Breadcrumbs */}
+          <SheetBreadcrumbs
+            breadcrumbs={getSheetPath(sheets, activeSheetId)}
+            onNavigate={switchToSheet}
+          />
 
           {/* Canvas Area */}
-          <div className="flex-1 relative">
-          <CanvasReactFlow
-            blocks={blocks}
-            wires={wires}
-            selectedBlockId={selectedBlockId}
-            selectedWireId={selectedWireId}
-            onDrop={handleCanvasDrop}
-            onBlockMove={handleBlockMove}
-            onBlockSelect={setSelectedBlockId}
-            onBlockDoubleClick={handleBlockDoubleClick}
-            onBlockDelete={handleBlockDelete}
-            onWireCreate={handleWireCreate}
-            onWireSelect={setSelectedWireId}
-            onWireDelete={handleWireDelete}
-            onSheetNavigate={switchToSheet}
-          />
-          </div>
-
-          {/* Properties Panel */}
-          <div className="w-80 bg-white shadow-sm border-l flex flex-col">
-            <div className="p-4 border-b">
-              <h2 className="text-lg font-medium text-gray-900">Properties</h2>
-              <div className="text-sm text-gray-500 mt-1">
-                Active Sheet: {sheets.find(s => s.id === activeSheetId)?.name || 'Unknown'}
-              </div>
-              {isOlderVersion && (
-                <div className="text-sm text-amber-600 mt-1">
-                  Viewing older version - changes will create new model
-                </div>
-              )}
-            </div>
-
-            {/* Simulation Settings Panel */}
-            <SimulationSettingsPanel
-              initialDuration={parseFloat(simulationSettings.duration) || 10.0}
-              initialTimeStep={parseFloat(simulationSettings.timeStep) || 0.01}
-              onChange={(settings) => setSimulationSettings(settings)}
+          <Box className="canvas-container" style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+            <CanvasReactFlow
+              blocks={blocks}
+              wires={wires}
+              selectedBlockId={selectedBlockId}
+              selectedWireId={selectedWireId}
+              onDrop={handleCanvasDrop}
+              onBlockMove={handleBlockMove}
+              onBlockSelect={setSelectedBlockId}
+              onBlockDoubleClick={handleBlockDoubleClick}
+              onBlockDelete={handleBlockDelete}
+              onWireCreate={handleWireCreate}
+              onWireSelect={setSelectedWireId}
+              onWireDelete={handleWireDelete}
+              onSheetNavigate={switchToSheet}
             />
+          </Box>
+        </Box>
+      </AppShell.Main>
 
-            <div className="flex-1 overflow-y-auto">
-              {currentSheetSimulationResults ? (
-                <div className="p-4">
-                  <h3 className="font-medium mb-3">Simulation Results</h3>
-                  <div className="text-sm text-gray-600 space-y-1 mb-4">
-                    <div>Duration: {currentSheetSimulationResults.finalTime.toFixed(2)}s</div>
-                    <div>Time Points: {currentSheetSimulationResults.timePoints.length}</div>
-                    <div>Display Blocks: {currentSheetSimulationResults.signalData.size}</div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      Sheet: {sheets.find(s => s.id === activeSheetId)?.name}
-                    </div>
-                  </div>
+      <AppShell.Aside p="md">
+        <Stack h="100%" gap="md">
+          <Paper p="sm" withBorder>
+            <Group justify="space-between" mb="xs">
+              <Text fw={600}>Properties</Text>
+              <Badge variant="light" color="gray">
+                {sheets.find(s => s.id === activeSheetId)?.name || 'Unknown'}
+              </Badge>
+            </Group>
+            {isOlderVersion && (
+              <Alert color="yellow" variant="light" mt="xs">
+                <Text size="sm">
+                  Viewing older version - changes will create new model
+                </Text>
+              </Alert>
+            )}
+          </Paper>
+
+          {/* Simulation Settings Panel */}
+          <SimulationSettingsPanel
+            initialDuration={parseFloat(simulationSettings.duration) || 10.0}
+            initialTimeStep={parseFloat(simulationSettings.timeStep) || 0.01}
+            onChange={handleSimulationSettingsChange}
+          />
+
+          <ScrollArea style={{ flex: 1 }} offsetScrollbars>
+            {currentSheetSimulationResults ? (
+              <Stack gap="md" p="md">
+                <Text fw={600}>Simulation Results</Text>
+                <Stack gap="xs">
+                  <Text size="sm" c="dimmed">
+                    Duration: {currentSheetSimulationResults.finalTime.toFixed(2)}s
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    Time Points: {currentSheetSimulationResults.timePoints.length}
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    Display Blocks: {currentSheetSimulationResults.signalData.size}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Sheet: {sheets.find(s => s.id === activeSheetId)?.name}
+                  </Text>
+                </Stack>
+                
+                <Divider />
+                
+                {/* Display Signal Charts */}
+                {Array.from(currentSheetSimulationResults.signalData.entries()).map(([blockId, data]: [string, any[]]) => {
+                  const block = blocks.find(b => b.id === blockId && b.type === 'signal_display')
+                  if (!block) return null
                   
-                  {/* Display Signal Charts */}
-                  {Array.from(currentSheetSimulationResults.signalData.entries()).map(([blockId, data]: [string, any[]]) => {
-                    const block = blocks.find(b => b.id === blockId && b.type === 'signal_display')
-                    if (!block) return null
-                    
-                    // Transform the data to match SignalDisplay's expected format
-                    const signalData = currentSheetSimulationResults.timePoints.map((time: number, index: number) => ({
-                      time,
-                      value: data[index]
-                    }))
-                    
-                    return (
-                      <div key={blockId} className="mb-6">
-                        <SignalDisplay
-                          block={block}
-                          signalData={signalData}
-                          isRunning={false}
-                        />
-                      </div>
-                    )
-                  })}
+                  // Transform the data to match SignalDisplay's expected format
+                  const signalData = currentSheetSimulationResults.timePoints.map((time: number, index: number) => ({
+                    time,
+                    value: data[index]
+                  }))
                   
-                  {/* Logger Block Data Summary */}
-                  {Array.from(currentSheetSimulationResults.signalData.entries()).map(([blockId, data]: [string, any[]]) => {
-                    const block = blocks.find(b => b.id === blockId && b.type === 'signal_logger')
-                    if (!block) return null
-                    
-                    // Get the last value for display
-                    const lastValue = data[data.length - 1]
-                    const displayValue = (() => {
-                      if (typeof lastValue === 'number') {
-                        return lastValue.toFixed(3)
-                      } else if (typeof lastValue === 'boolean') {
-                        return lastValue.toString()
-                      } else if (Array.isArray(lastValue)) {
-                        return `[${lastValue.map((v: any) => 
-                          typeof v === 'number' ? v.toFixed(3) : v
-                        ).join(', ')}]`
-                      }
-                      return 'N/A'
-                    })()
-                    
-                    // Calculate min/max only for numeric data
-                    const numericData = data.filter((d: any) => typeof d === 'number') as number[]
-                    const minValue = numericData.length > 0 ? Math.min(...numericData).toFixed(3) : 'N/A'
-                    const maxValue = numericData.length > 0 ? Math.max(...numericData).toFixed(3) : 'N/A'
-                    
-                    return (
-                      <div key={blockId} className="mb-4">
-                        <div className="bg-gray-50 p-3 rounded">
-                          <h4 className="font-medium text-sm mb-2">{block.name} (Logger)</h4>
-                          <div className="text-xs text-gray-600 space-y-1">
-                            <div>Final value: {displayValue}</div>
-                            <div>Samples: {data.length}</div>
-                            <div>Min: {minValue}</div>
-                            <div>Max: {maxValue}</div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-
-                  {/* Output Port Values */}
-                  {outputPortValues && outputPortValues.size > 0 && (
-                    <div className="mt-4">
-                      <h4 className="font-medium mb-2">Output Port Values</h4>
-                      {Array.from(outputPortValues.entries()).map(([portName, value]) => {
-                        const displayValue = (() => {
-                          if (typeof value === 'number') {
-                            return value.toFixed(3)
-                          } else if (typeof value === 'boolean') {
-                            return value.toString()
-                          } else if (Array.isArray(value)) {
-                            return `[${value.map((v: any) => 
-                              typeof v === 'number' ? v.toFixed(3) : v
-                            ).join(', ')}]`
-                          }
-                          return 'N/A'
-                        })()
-                        
-                        return (
-                          <div key={portName} className="bg-amber-50 p-3 rounded mb-2">
-                            <div className="text-sm font-medium text-amber-800">{portName}</div>
-                            <div className="text-lg font-mono text-amber-900">{displayValue}</div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {/* CSV Export Button */}
-                  {Array.from(currentSheetSimulationResults.signalData.entries()).some(([blockId]: [string, any]) => 
-                    blocks.find(b => b.id === blockId && b.type === 'signal_logger')
-                  ) && (
-                    <div className="mt-4">
-                      <button
-                        onClick={handleExportCSV}
-                        className="w-full px-4 py-2 bg-green-700 text-white text-sm rounded-md hover:bg-green-800 border border-green-600 font-medium"
-                      >
-                        Export Logger Data as CSV
-                      </button>
-                    </div>
-                  )}
+                  return (
+                    <Box key={blockId}>
+                      <SignalDisplay
+                        block={block}
+                        signalData={signalData}
+                        isRunning={false}
+                      />
+                    </Box>
+                  )
+                })}
+                
+                {/* Logger Block Data Summary */}
+                {Array.from(currentSheetSimulationResults.signalData.entries()).map(([blockId, data]: [string, any[]]) => {
+                  const block = blocks.find(b => b.id === blockId && b.type === 'signal_logger')
+                  if (!block) return null
                   
-                  {/* Show note if other sheets have results */}
-                  {globalSimulationResults && globalSimulationResults.size > 1 && (
-                    <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                      <p className="text-sm text-blue-700">
-                        Simulation data available for {globalSimulationResults.size} sheets. 
-                        Switch sheets to view their results.
-                      </p>
-                    </div>
-                  )}
+                  // Get the last value for display
+                  const lastValue = data[data.length - 1]
+                  const displayValue = (() => {
+                    if (typeof lastValue === 'number') {
+                      return lastValue.toFixed(3)
+                    } else if (typeof lastValue === 'boolean') {
+                      return lastValue.toString()
+                    } else if (Array.isArray(lastValue)) {
+                      return `[${lastValue.map((v: any) => 
+                        typeof v === 'number' ? v.toFixed(3) : v
+                      ).join(', ')}]`
+                    }
+                    return 'N/A'
+                  })()
+                  
+                  // Calculate min/max only for numeric data
+                  const numericData = data.filter((d: any) => typeof d === 'number') as number[]
+                  const minValue = numericData.length > 0 ? Math.min(...numericData).toFixed(3) : 'N/A'
+                  const maxValue = numericData.length > 0 ? Math.max(...numericData).toFixed(3) : 'N/A'
+                  
+                  return (
+                    <Paper key={blockId} p="sm" withBorder>
+                      <Text fw={600} size="sm" mb="xs">{block.name} (Logger)</Text>
+                      <Stack gap={4}>
+                        <Text size="xs" c="dimmed">Final value: {displayValue}</Text>
+                        <Text size="xs" c="dimmed">Samples: {data.length}</Text>
+                        <Text size="xs" c="dimmed">Min: {minValue}</Text>
+                        <Text size="xs" c="dimmed">Max: {maxValue}</Text>
+                      </Stack>
+                    </Paper>
+                  )
+                })}
 
-                </div>
-              ) : (
-                <div className="p-4">
-                  <p className="text-sm text-gray-500">
-                    Run simulation to see signal displays and results
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+                {/* Output Port Values */}
+                {outputPortValues && outputPortValues.size > 0 && (
+                  <>
+                    <Text fw={600} mt="md">Output Port Values</Text>
+                    {Array.from(outputPortValues.entries()).map(([portName, value]) => {
+                      const displayValue = (() => {
+                        if (typeof value === 'number') {
+                          return value.toFixed(3)
+                        } else if (typeof value === 'boolean') {
+                          return value.toString()
+                        } else if (Array.isArray(value)) {
+                          return `[${value.map((v: any) => 
+                            typeof v === 'number' ? v.toFixed(3) : v
+                          ).join(', ')}]`
+                        }
+                        return 'N/A'
+                      })()
+                      
+                      return (
+                        <Paper key={portName} p="sm" withBorder bg="yellow.1">
+                          <Text size="sm" fw={600} c="yellow.9">{portName}</Text>
+                          <Text size="lg" fw="mono" c="yellow.9">{displayValue}</Text>
+                        </Paper>
+                      )
+                    })}
+                  </>
+                )}
+
+                {/* CSV Export Button */}
+                {Array.from(currentSheetSimulationResults.signalData.entries()).some(([blockId]: [string, any]) => 
+                  blocks.find(b => b.id === blockId && b.type === 'signal_logger')
+                ) && (
+                  <Button
+                    onClick={handleExportCSV}
+                    fullWidth
+                    color="green"
+                    leftSection={<IconDownload size={16} />}
+                  >
+                    Export Logger Data as CSV
+                  </Button>
+                )}
+                
+                {/* Show note if other sheets have results */}
+                {globalSimulationResults && globalSimulationResults.size > 1 && (
+                  <Alert color="blue" variant="light">
+                    <Text size="sm">
+                      Simulation data available for {globalSimulationResults.size} sheets. 
+                      Switch sheets to view their results.
+                    </Text>
+                  </Alert>
+                )}
+              </Stack>
+            ) : (
+              <Text size="sm" c="dimmed">
+                Run simulation to see signal displays and results
+              </Text>
+            )}
+          </ScrollArea>
+        </Stack>
+      </AppShell.Aside>
 
       {showSaveAsDialog && (
         <SaveAsDialog
@@ -1443,10 +1524,8 @@ const handleExportModel = () => {
               onClose={() => setConfigBlock(null)}
             />
           )}
-
-          
         </>
       )}
-    </div>
+    </AppShell>
   )
 }

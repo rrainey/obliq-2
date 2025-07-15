@@ -3,6 +3,8 @@
 
 import { useEffect, useState } from 'react'
 import { useModelStore } from '@/lib/modelStore'
+import { Group, Text, Transition } from '@mantine/core'
+import { IconClock, IconCircleCheck } from '@tabler/icons-react'
 
 export default function AutoSaveStatusIndicator() {
   const { autoSaveEnabled, lastAutoSave } = useModelStore()
@@ -39,24 +41,36 @@ export default function AutoSaveStatusIndicator() {
   }
 
   return (
-    <div className="flex items-center text-xs text-gray-500">
-      {showSaved ? (
-        <div className="flex items-center text-green-600">
-          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-          Auto-saved
-        </div>
-      ) : (
-        <div className="flex items-center">
-          <svg className="w-4 h-4 mr-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" 
-            />
-          </svg>
-          <span>Auto-save: {formatTime(lastAutoSave)}</span>
-        </div>
-      )}
+    <div style={{ position: 'relative', width: 120 }}>
+      <Transition
+        mounted={showSaved}
+        transition="fade"
+        duration={200}
+        timingFunction="ease"
+      >
+        {(styles) => (
+          <Group gap={4} style={{ ...styles, position: 'absolute' }}>
+            <IconCircleCheck size={16} color="var(--mantine-color-green-6)" />
+            <Text size="xs" c="green.6">Auto-saved</Text>
+          </Group>
+        )}
+      </Transition>
+      
+      <Transition
+        mounted={!showSaved}
+        transition="fade"
+        duration={200}
+        timingFunction="ease"
+      >
+        {(styles) => (
+          <Group gap={4} style={styles}>
+            <IconClock size={16} color="var(--mantine-color-gray-6)" />
+            <Text size="xs" c="dimmed">
+              Auto-save: {formatTime(lastAutoSave)}
+            </Text>
+          </Group>
+        )}
+      </Transition>
     </div>
   )
 }

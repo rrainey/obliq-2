@@ -1,130 +1,113 @@
 // components/SimulationSettingsPanel.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
-
-interface SimulationSettings {
-  duration: string
-  timeStep: string
-}
+import { useState, useEffect, useCallback } from 'react'
+import { Paper, Text, NumberInput, Stack } from '@mantine/core'
 
 interface SimulationSettingsPanelProps {
-  initialDuration?: number
-  initialTimeStep?: number
+  initialDuration: number
+  initialTimeStep: number
   onChange: (settings: { duration: string; timeStep: string }) => void
 }
 
-export default function SimulationSettingsPanel({
-  initialDuration = 10.0,
-  initialTimeStep = 0.01,
-  onChange
-}: SimulationSettingsPanelProps) {
-  const [settings, setSettings] = useState<SimulationSettings>({
-    duration: initialDuration.toString(),
-    timeStep: initialTimeStep.toString()
-  })
-
-  // Update local state when props change
-  useEffect(() => {
-    setSettings({
-      duration: initialDuration.toString(),
-      timeStep: initialTimeStep.toString()
-    })
-  }, [initialDuration, initialTimeStep])
-
-  const handleDurationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newSettings = { ...settings, duration: e.target.value }
-    setSettings(newSettings)
-    onChange(newSettings)
-  }
-
-  const handleTimeStepChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newSettings = { ...settings, timeStep: e.target.value }
-    setSettings(newSettings)
-    onChange(newSettings)
-  }
-
-  return (
-    <div className="p-4 border-b">
-      <h3 className="font-medium mb-3 text-gray-900">Simulation Settings</h3>
-      
-      <div className="space-y-3">
-        <div>
-          <label 
-            htmlFor="sim-duration" 
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Duration (seconds)
-          </label>
-          <input
-            id="sim-duration"
-            type="text"
-            value={settings.duration}
-            onChange={handleDurationChange}
-            className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm 
-                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="10.0"
-          />
-        </div>
-
-        <div>
-          <label 
-            htmlFor="sim-timestep" 
-            className="block text-sm font-medium text-gray-700 mb-1"
-          >
-            Time Step (seconds)
-          </label>
-          <input
-            id="sim-timestep"
-            type="text"
-            value={settings.timeStep}
-            onChange={handleTimeStepChange}
-            className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm 
-                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="0.01"
-          />
-        </div>
-
-        <div className="text-xs text-gray-500 mt-2">
-          Settings will be validated when you save or run simulation
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Validation utility function
-export function validateSimulationSettings(duration: string, timeStep: string): {
-  isValid: boolean
-  errors: string[]
-} {
+export function validateSimulationSettings(duration: string, timeStep: string) {
   const errors: string[] = []
   
-  // Parse values
   const durationNum = parseFloat(duration)
   const timeStepNum = parseFloat(timeStep)
   
-  // Validate duration
-  if (isNaN(durationNum)) {
-    errors.push('Duration must be a valid number')
-  } else if (durationNum <= 0) {
-    errors.push('Duration must be greater than 0')
+  if (isNaN(durationNum) || durationNum <= 0) {
+    errors.push('Duration must be a positive number')
   }
   
-  // Validate time step
-  if (isNaN(timeStepNum)) {
-    errors.push('Time Step must be a valid number')
-  } else if (timeStepNum <= 0) {
-    errors.push('Time Step must be greater than 0')
+  if (isNaN(timeStepNum) || timeStepNum <= 0) {
+    errors.push('Time step must be a positive number')
   }
   
-  // Validate relationship
-  if (!isNaN(durationNum) && !isNaN(timeStepNum) && timeStepNum > durationNum) {
-    errors.push('Time Step must be less than or equal to Duration')
+  if (!isNaN(durationNum) && !isNaN(timeStepNum)) {
+    if (timeStepNum > durationNum) {
+      errors.push('Time step cannot be larger than duration')
+    }
+    
+    const steps = durationNum / timeStepNum
+    if (steps > 1000000) {
+      errors.push('Too many simulation steps (>1,000,000). Increase time step or decrease duration.')
+    }
   }
   
   return {
     isValid: errors.length === 0,
     errors
   }
+}
+
+export default function SimulationSettingsPanel({ 
+  initialDuration, 
+  initialTimeStep, 
+  onChange 
+}: SimulationSettingsPanelProps) {
+  const [duration, setDuration] = useState<number | string>(initialDuration)
+  const [timeStep, setTimeStep] = useState<number | string>(initialTimeStep)
+  
+  // Use useCallback to prevent onChange from being recreated
+  const debouncedOnChange = useCallback((newDuration: number | string, newTimeStep: number | string) => {
+    const timer = setTimeout(() => {
+      onChange({
+        duration: newDuration.toString(),
+        timeStep: newTimeStep.toString()
+      })
+    }, 100)
+    
+    return () => clearTimeout(timer)
+  }, [onChange])
+  
+  // Handle duration change
+  const handleDurationChange = useCallback((value: number | string) => {
+    setDuration(value)
+    debouncedOnChange(value, timeStep)
+  }, [timeStep, debouncedOnChange])
+  
+  // Handle time step change
+  const handleTimeStepChange = useCallback((value: number | string) => {
+    setTimeStep(value)
+    debouncedOnChange(duration, value)
+  }, [duration, debouncedOnChange])
+  
+  return (
+    <Paper p="sm" withBorder>
+      <Text fw={600} mb="sm">Simulation Settings</Text>
+      <Stack gap="sm">
+        <NumberInput
+          label="Duration (seconds)"
+          value={duration}
+          onChange={handleDurationChange}
+          min={0.001}
+          max={10000}
+          step={1}
+          decimalScale={3}
+          size="sm"
+          description="Total simulation time"
+        />
+        
+        <NumberInput
+          label="Time Step (seconds)"
+          value={timeStep}
+          onChange={handleTimeStepChange}
+          min={0.0001}
+          max={1}
+          step={0.001}
+          decimalScale={4}
+          size="sm"
+          description="Integration time step"
+        />
+        
+        {/* Show calculated steps */}
+        {typeof duration === 'number' && typeof timeStep === 'number' && timeStep > 0 && (
+          <Text size="xs" c="dimmed">
+            Steps: {Math.ceil(duration / timeStep).toLocaleString()}
+          </Text>
+        )}
+      </Stack>
+    </Paper>
+  )
 }

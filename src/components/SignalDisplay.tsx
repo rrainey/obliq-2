@@ -141,9 +141,9 @@ console.log('First few data points:', chartData.slice(0, 5))
 console.log('Last few data points:', chartData.slice(-5))
   
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md dark:shadow-gray-900 p-4">
+    <div className="bg-white rounded-lg shadow-md  p-4">
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">{displayName}</h3>
+        <h3 className="text-sm font-medium text-gray-300 dark:text-gray-800">{displayName}</h3>
         <div className="flex items-center gap-2">
           {isRunning && (
             <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
@@ -264,7 +264,7 @@ export function SignalDisplayConfig({ block, onUpdate, onClose }: SignalDisplayC
         
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-900 mb-1">
               Maximum Samples
             </label>
             <input

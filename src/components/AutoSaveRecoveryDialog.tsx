@@ -2,6 +2,8 @@
 'use client'
 
 import { useState } from 'react'
+import { Modal, Text, Group, Button, Stack, Paper, Alert } from '@mantine/core'
+import { IconAlertTriangle } from '@tabler/icons-react'
 
 interface AutoSaveRecoveryDialogProps {
   modelName: string
@@ -46,76 +48,72 @@ export default function AutoSaveRecoveryDialog({
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-[500px] max-w-[90vw]">
-        <div className="flex items-start mb-4">
-          <div className="flex-shrink-0">
-            <svg className="w-6 h-6 text-amber-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" 
-              />
-            </svg>
-          </div>
-          
-          <div className="ml-3 flex-1">
-            <h3 className="text-lg font-medium text-gray-900">
-              Auto-saved Version Found
-            </h3>
-            <p className="mt-2 text-sm text-gray-600">
-              An auto-saved version of <span className="font-medium">"{modelName}"</span> was found. 
-              This may contain unsaved changes from a previous session.
-            </p>
-          </div>
-        </div>
+    <Modal
+      opened={true}
+      onClose={() => {}} // Prevent closing by clicking outside
+      title={
+        <Group gap="xs">
+          <IconAlertTriangle size={24} color="var(--mantine-color-yellow-6)" />
+          <Text fw={600}>Auto-saved Version Found</Text>
+        </Group>
+      }
+      centered
+      closeOnClickOutside={false}
+      closeOnEscape={false}
+      withCloseButton={false}
+      size="md"
+    >
+      <Stack>
+        <Text size="sm">
+          An auto-saved version of <Text span fw={600}>"{modelName}"</Text> was found. 
+          This may contain unsaved changes from a previous session.
+        </Text>
 
-        <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-3">
-          <div>
-            <div className="text-sm font-medium text-gray-700">Auto-saved version:</div>
-            <div className="text-sm text-gray-600">{formatDate(autoSaveDate)}</div>
-          </div>
-          
-          <div className="border-t pt-3">
-            <div className="text-sm font-medium text-gray-700">Last saved version:</div>
-            <div className="text-sm text-gray-600">
-              Version {lastSavedVersion} - {formatDate(lastSavedDate)}
+        <Paper p="md" bg="gray.0" withBorder>
+          <Stack gap="sm">
+            <div>
+              <Text size="sm" fw={600} c="gray.7">Auto-saved version:</Text>
+              <Text size="sm">{formatDate(autoSaveDate)}</Text>
             </div>
-          </div>
-        </div>
+            
+            <div>
+              <Text size="sm" fw={600} c="gray.7">Last saved version:</Text>
+              <Text size="sm">
+                Version {lastSavedVersion} - {formatDate(lastSavedDate)}
+              </Text>
+            </div>
+          </Stack>
+        </Paper>
 
-        <div className="text-sm text-gray-600 mb-6">
-          <p className="mb-2">Choose which version to open:</p>
-          <ul className="list-disc list-inside space-y-1 text-xs">
-            <li><strong>Recover auto-save:</strong> Open the auto-saved version with your unsaved changes</li>
-            <li><strong>Open saved version:</strong> Discard the auto-save and open the last saved version</li>
-          </ul>
-        </div>
+        <Alert variant="light" color="blue" p="sm">
+          <Text size="xs" fw={500} mb="xs">Choose which version to open:</Text>
+          <Stack gap={4}>
+            <Text size="xs">
+              <Text span fw={600}>• Recover auto-save:</Text> Open the auto-saved version with your unsaved changes
+            </Text>
+            <Text size="xs">
+              <Text span fw={600}>• Open saved version:</Text> Discard the auto-save and open the last saved version
+            </Text>
+          </Stack>
+        </Alert>
 
-        <div className="flex justify-end space-x-3">
-          <button
+        <Group justify="flex-end">
+          <Button
+            variant="default"
             onClick={handleDiscard}
             disabled={isProcessing}
-            className={`px-4 py-2 border border-gray-300 rounded-md text-sm font-medium 
-              ${isProcessing 
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                : 'bg-white text-gray-700 hover:bg-gray-50'
-              }`}
           >
             Open Saved Version
-          </button>
+          </Button>
           
-          <button
+          <Button
             onClick={handleRecover}
-            disabled={isProcessing}
-            className={`px-4 py-2 rounded-md text-sm font-medium text-white
-              ${isProcessing
-                ? 'bg-blue-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700'
-              }`}
+            loading={isProcessing}
           >
-            {isProcessing ? 'Loading...' : 'Recover Auto-save'}
-          </button>
-        </div>
-      </div>
-    </div>
+            Recover Auto-save
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   )
 }

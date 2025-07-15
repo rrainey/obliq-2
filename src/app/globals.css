@@ -19,7 +19,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
@@ -42,3 +42,24 @@ select {
   color: var(--default-input-color);
 }
 
+/* Ensure ReactFlow container has proper dimensions */
+.react-flow-drop-target {
+  width: 100%;
+  height: 100%;
+}
+
+/* Fix for Mantine AppShell with ReactFlow */
+.mantine-AppShell-main {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Ensure the canvas container fills available space */
+.canvas-container {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
