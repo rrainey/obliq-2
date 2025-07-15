@@ -346,7 +346,7 @@ export const edgeTypes = {
   animated: AnimatedEdge,
   step: StepEdge,
   smart: SmartEdge,
-}
+} as const
 
 // Helper function to create edge with custom data
 export const createCustomEdge = (

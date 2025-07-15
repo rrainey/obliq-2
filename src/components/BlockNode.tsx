@@ -861,7 +861,7 @@ export default BlockNode
 // Export node types configuration for ReactFlow
 export const nodeTypes = {
   customBlock: BlockNode,
-}
+} as const
 
 // Helper function to convert BlockData to ReactFlow node format
 export const blockDataToNode = (block: BlockData) => {
