@@ -140,7 +140,7 @@ export const useModelStore = create<ModelStore>()(
     setError: (error) => set({ error }),
     setModelLoading: (modelLoading) => set({ modelLoading }),
     
-    saveModel: async () => {
+    saveModel: async (globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => {
       const state = get()
 
       if (!state.model) {
@@ -170,7 +170,6 @@ export const useModelStore = create<ModelStore>()(
         // Ensure current sheet data is saved before persisting to database
         get().saveCurrentSheetData()
         
-        // Get the updated state after saving current sheet
         const updatedState = get()
         
         if (!updatedState.model) {
@@ -178,15 +177,15 @@ export const useModelStore = create<ModelStore>()(
           return false
         }
         
-        // Collect all sheets hierarchically - sheets are already stored in subsystem blocks
+        // Use provided globalSettings or defaults
         const modelData = {
           version: "2.0",
           metadata: {
             created: updatedState.model.created_at,
             description: `Model ${updatedState.model.name}`
           },
-          sheets: updatedState.sheets, // This now includes all subsystem sheets embedded in their blocks
-          globalSettings: {
+          sheets: updatedState.sheets,
+          globalSettings: globalSettings || {
             simulationTimeStep: 0.01,
             simulationDuration: 10.0
           }
@@ -263,7 +262,7 @@ export const useModelStore = create<ModelStore>()(
       }
     },
 
-    saveAsNewModel: async (newName: string) => {
+    saveAsNewModel: async (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => {
       const state = get()
       
       if (!state.model) {
@@ -284,13 +283,13 @@ export const useModelStore = create<ModelStore>()(
         }
         
         const modelData = {
-          version: "1.0",
+          version: "2.0",
           metadata: {
             created: new Date().toISOString(),
             description: `Model ${newName}`
           },
           sheets: updatedState.sheets,
-          globalSettings: {
+          globalSettings: globalSettings || {
             simulationTimeStep: 0.01,
             simulationDuration: 10.0
           }

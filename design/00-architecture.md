@@ -347,9 +347,9 @@ The type validation system (`lib/typeValidator.ts`) has been extended to support
 
 ## Simulation Engine Design
 
-The simulation capability allows users to run their model and see how signals change over time. Simulations will be executed on the **server** (via an API route) and return the results to the UI via APIs.
+The simulation capability allows users to run their model and see how signals change over time. 
 
-The **simulation engine** (implemented in `lib/simulationEngine.ts`) works as follows:
+The **simulation engine** (implemented principally in `lib/multiSheetSimulation.ts` and `lib/simulationEngine.ts`) works as follows:
 
 1. It takes a model (likely as a JavaScript object parsed from the JSON) and an optional simulation configuration (time step, total simulation time, etc. – possibly specified by the user in the UI). This simulations treats all blocks across all sheets as a
 single consolidated sheet for simulation purposes. It follows that Sheet Labels are essential to establishing the correct

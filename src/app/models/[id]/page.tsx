@@ -10,6 +10,7 @@ import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidat
 import SaveAsDialog from '@/components/SaveAsDialog'
 import CanvasReactFlow from '@/components/CanvasReactFlow'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
+import SimulationSettingsPanel, { validateSimulationSettings } from '@/components/SimulationSettingsPanel'
 import SignalDisplay from '@/components/SignalDisplay'
 import SheetTabs, { Sheet } from '@/components/SheetTabs'
 import InputPortConfig from '@/components/InputPortConfig'
@@ -69,6 +70,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   } = useModelStore()
 
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false)
+  const [simulationSettings, setSimulationSettings] = useState({
+    duration: '10.0',
+    timeStep: '0.01'
+  })
   
   // Unwrap the params Promise
   const { id } = use(params)
@@ -162,6 +167,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       }
 
       initializeFromModel(modelData, versionData)
+
+      if (versionData.data?.globalSettings) {
+        setSimulationSettings({
+          duration: versionData.data.globalSettings.simulationDuration?.toString() || '10.0',
+          timeStep: versionData.data.globalSettings.simulationTimeStep?.toString() || '0.01'
+        })
+      }
     } catch (error) {
       console.error('Error fetching model:', error)
       setError('Failed to load model')
@@ -170,8 +182,39 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }
 
+  const validateAndGetSimulationSettings = (): { 
+    isValid: boolean; 
+    duration: number; 
+    timeStep: number; 
+    errors: string[] 
+  } => {
+    const validation = validateSimulationSettings(simulationSettings.duration, simulationSettings.timeStep)
+    
+    if (!validation.isValid) {
+      alert(`Invalid simulation settings:\n\n${validation.errors.join('\n')}`)
+      return { isValid: false, duration: 0, timeStep: 0, errors: validation.errors }
+    }
+    
+    return {
+      isValid: true,
+      duration: parseFloat(simulationSettings.duration),
+      timeStep: parseFloat(simulationSettings.timeStep),
+      errors: []
+    }
+  }
+
   const handleSave = async () => {
-    const success = await saveModel()
+    const settingsValidation = validateAndGetSimulationSettings()
+    if (!settingsValidation.isValid) {
+      return
+    }
+    
+    const globalSettings = {
+      simulationTimeStep: settingsValidation.timeStep,
+      simulationDuration: settingsValidation.duration
+    }
+
+    const success = await saveModel(globalSettings)
     if (success && isOlderVersion) {
       // If we saved an older version as a new model, we should have navigated away
       // This is handled in the saveModel function
@@ -427,7 +470,17 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleSaveAs = async (newName: string) => {
-    const success = await saveAsNewModel(newName)
+    const settingsValidation = validateAndGetSimulationSettings()
+    if (!settingsValidation.isValid) {
+      return
+    }
+    
+    const globalSettings = {
+      simulationTimeStep: settingsValidation.timeStep,
+      simulationDuration: settingsValidation.duration
+    }
+
+    const success = await saveAsNewModel(newName, globalSettings)
     if (success) {
       setShowSaveAsDialog(false)
       // Navigation is handled in the store
@@ -479,6 +532,11 @@ const handleExportModel = () => {
 }
 
   const handleRunSimulation = async () => {
+    const settingsValidation = validateAndGetSimulationSettings()
+    if (!settingsValidation.isValid) {
+      return
+    }
+
     // Check if any sheet has blocks
     const totalBlocks = sheets.reduce((sum, sheet) => sum + sheet.blocks.length, 0)
     if (totalBlocks === 0) {
@@ -532,8 +590,8 @@ const handleExportModel = () => {
     setIsSimulating(true)
     try {
       const config = {
-        timeStep: 0.01,
-        duration: 10.0
+        timeStep: settingsValidation.timeStep,
+        duration: settingsValidation.duration
       }
       
       // Create multi-sheet simulation engine
@@ -605,6 +663,11 @@ const handleExportModel = () => {
   const handleGenerateCode = async () => {
     if (!model) {
       alert('No model loaded')
+      return
+    }
+
+    const settingsValidation = validateAndGetSimulationSettings()
+    if (!settingsValidation.isValid) {
       return
     }
 
@@ -915,6 +978,14 @@ const handleExportModel = () => {
                 </div>
               )}
             </div>
+
+            {/* Simulation Settings Panel */}
+            <SimulationSettingsPanel
+              initialDuration={parseFloat(simulationSettings.duration) || 10.0}
+              initialTimeStep={parseFloat(simulationSettings.timeStep) || 0.01}
+              onChange={(settings) => setSimulationSettings(settings)}
+            />
+
             <div className="flex-1 overflow-y-auto">
               {currentSheetSimulationResults ? (
                 <div className="p-4">
