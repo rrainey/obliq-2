@@ -87,11 +87,13 @@ describe('SimulationAlgebraicEvaluator', () => {
     const blockStates = new Map<string, BlockState>([
       ['block1', {
         blockId: 'block1',
+        blockType: 'source',
         outputs: [5],
         internalState: {}
       }],
       ['block2', {
         blockId: 'block2',
+        blockType: 'sum',
         outputs: [0],
         internalState: {}
       }]
