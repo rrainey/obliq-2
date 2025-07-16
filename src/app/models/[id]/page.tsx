@@ -1099,8 +1099,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   return (
     <AppShell
       header={{ height: 60 }}
-      navbar={{ width: 300, breakpoint: 'sm' }}
-      aside={{ width: 320, breakpoint: 'md' }}
+      navbar={{ width: 340, breakpoint: 'sm' }}
+      aside={{ width: 400, breakpoint: 'md' }}
     >
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
