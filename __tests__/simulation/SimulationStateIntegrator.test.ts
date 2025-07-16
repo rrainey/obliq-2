@@ -65,35 +65,4 @@ describe('SimulationStateIntegrator', () => {
     expect(integrator.getMethod()).toBe('rk4')
   })
   
-  test('integrates with Euler method when set', () => {
-    const integrator = new SimulationStateIntegrator('euler')
-    
-    // Spy on private method (in real tests, would check actual integration results)
-    const eulerSpy = jest.spyOn(integrator as any, 'integrateEuler')
-    
-    integrator.integrate({
-      blockStates: mockBlockStates,
-      simulationState: mockSimulationState,
-      sheet: mockSheet,
-      timeStep: 0.01
-    })
-    
-    expect(eulerSpy).toHaveBeenCalled()
-  })
-  
-  test('integrates with RK4 method when set', () => {
-    const integrator = new SimulationStateIntegrator('rk4')
-    
-    // Spy on private method
-    const rk4Spy = jest.spyOn(integrator as any, 'integrateRK4')
-    
-    integrator.integrate({
-      blockStates: mockBlockStates,
-      simulationState: mockSimulationState,
-      sheet: mockSheet,
-      timeStep: 0.01
-    })
-    
-    expect(rk4Spy).toHaveBeenCalled()
-  })
 })

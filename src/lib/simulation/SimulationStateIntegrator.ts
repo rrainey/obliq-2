@@ -87,6 +87,17 @@ export class SimulationStateIntegrator {
     this.integrationMethod = method
     this.algebraicEvaluator = algebraicEvaluator
   }
+
+  getMethod(): IntegrationMethod {
+    return this.integrationMethod
+  }
+
+  setMethod(method: IntegrationMethod): void {
+    if (method !== 'euler' && method !== 'rk4') {
+      throw new Error(`Unsupported integration method: ${method}`)
+    }
+    this.integrationMethod = method
+  }
   
   /**
    * Integrate states for all stateful blocks
