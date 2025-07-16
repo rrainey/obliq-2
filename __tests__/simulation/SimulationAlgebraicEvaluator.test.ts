@@ -1,6 +1,6 @@
 // __tests__/simulation/SimulationAlgebraicEvaluator.test.ts
 
-import { SimulationAlgebraicEvaluator } from '@lib/simulation/SimulationAlgebraicEvaluator'
+import { SimulationAlgebraicEvaluator } from '@/lib/simulation/SimulationAlgebraicEvaluator'
 import { BlockState, SimulationState, Sheet } from '@/lib/simulationEngine'
 import { BlockData } from '@/components/BlockNode'
 import { SignalValue } from '@/lib/modelSchema'
@@ -11,7 +11,7 @@ describe('SimulationAlgebraicEvaluator', () => {
     name: 'Main',
     blocks: [],
     connections: [],
-     extents: {
+    extents: {
       width: 0,
       height: 0
     }
@@ -77,19 +77,21 @@ describe('SimulationAlgebraicEvaluator', () => {
         sourcePortIndex: 0,
         targetBlockId: 'block2',
         targetPortIndex: 0
-      }]
+      }],
+      extents: {
+        width: 0,
+        height: 0
+      }
     }
     
     const blockStates = new Map<string, BlockState>([
       ['block1', {
         blockId: 'block1',
-        inputs: [],
         outputs: [5],
         internalState: {}
       }],
       ['block2', {
         blockId: 'block2',
-        inputs: [],
         outputs: [0],
         internalState: {}
       }]
@@ -130,7 +132,11 @@ describe('SimulationAlgebraicEvaluator', () => {
           targetBlockId: 'block1',
           targetPortIndex: 0
         }
-      ]
+      ],
+      extents: {
+        width: 100,
+        height: 100
+      }
     }
     
     const blockStates = new Map<string, BlockState>()
