@@ -128,13 +128,48 @@ export class TransferFunctionBlockModule implements IBlockModule {
     return `    memset(model->states.${tfName}_states, 0, sizeof(model->states.${tfName}_states));\n`
   }
 
-executeSimulation(
+  executeSimulation(
     blockState: BlockState,
     inputs: (number | number[] | boolean | boolean[] | number[][])[],
     simulationState: SimulationState
   ): void {
     const input = inputs[0]
     const { numerator, denominator } = blockState.internalState
+    
+    // Initialize vector/matrix states if needed based on input type
+    const stateOrder = Math.max(0, denominator.length - 1)
+    
+    if (stateOrder > 0) {
+      if (Array.isArray(input) && Array.isArray(input[0])) {
+        // Matrix input - ensure matrix states are initialized
+        const matrix = input as unknown as number[][]
+        const rows = matrix.length
+        const cols = matrix[0]?.length || 0
+        
+        if (!blockState.internalState.matrixStates || 
+            blockState.internalState.matrixStates.length !== rows ||
+            blockState.internalState.matrixStates[0]?.length !== cols) {
+          blockState.internalState.matrixStates = []
+          for (let i = 0; i < rows; i++) {
+            blockState.internalState.matrixStates[i] = []
+            for (let j = 0; j < cols; j++) {
+              blockState.internalState.matrixStates[i][j] = new Array(stateOrder).fill(0)
+            }
+          }
+        }
+      } else if (Array.isArray(input)) {
+        // Vector input - ensure vector states are initialized
+        const vectorSize = input.length
+        
+        if (!blockState.internalState.vectorStates || 
+            blockState.internalState.vectorStates.length !== vectorSize) {
+          blockState.internalState.vectorStates = []
+          for (let i = 0; i < vectorSize; i++) {
+            blockState.internalState.vectorStates.push(new Array(stateOrder).fill(0))
+          }
+        }
+      }
+    }
     
     // Check if this block is in an enabled subsystem
     const containingSubsystem = this.getContainingSubsystem(blockState.blockId, simulationState)

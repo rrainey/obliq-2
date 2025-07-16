@@ -397,7 +397,44 @@ export class SimulationStateIntegrator {
         )
         
         if (blockDerivatives) {
-          derivatives.set(block.id, blockDerivatives)
+          // For transfer functions with vector/matrix states, we need to distribute
+          // the flattened derivatives to the appropriate state containers
+          if (block.type === 'transfer_function') {
+            const { vectorStates, matrixStates, states } = blockState.internalState || {}
+            
+            let derivIndex = 0
+            
+            // Scalar states
+            if (states && states.length > 0) {
+              const scalarDerivs = blockDerivatives.slice(derivIndex, derivIndex + states.length)
+              derivatives.set(block.id, scalarDerivs)
+              derivIndex += states.length
+            }
+            
+            // Vector states
+            if (vectorStates) {
+              for (let i = 0; i < vectorStates.length; i++) {
+                const vecStateLength = vectorStates[i].length
+                const vecDerivs = blockDerivatives.slice(derivIndex, derivIndex + vecStateLength)
+                derivatives.set(`${block.id}_vec_${i}`, vecDerivs)
+                derivIndex += vecStateLength
+              }
+            }
+            
+            // Matrix states
+            if (matrixStates) {
+              for (let i = 0; i < matrixStates.length; i++) {
+                for (let j = 0; j < matrixStates[i].length; j++) {
+                  const matStateLength = matrixStates[i][j].length
+                  const matDerivs = blockDerivatives.slice(derivIndex, derivIndex + matStateLength)
+                  derivatives.set(`${block.id}_mat_${i}_${j}`, matDerivs)
+                  derivIndex += matStateLength
+                }
+              }
+            }
+          } else {
+            derivatives.set(block.id, blockDerivatives)
+          }
         }
       }
     }
