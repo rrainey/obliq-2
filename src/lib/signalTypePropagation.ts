@@ -205,6 +205,7 @@ function determineProcessingBlockOutputType(
         // Vector × Matrix: [1×n] × [n×m] = [1×m]
         if (input1.arraySize === input2.rows) {
           return `${input1.baseType}[${input2.cols}]`
+
         }
         return null // Dimension mismatch
       }
@@ -367,6 +368,63 @@ export function propagateSignalTypes(
           message: `Sheet Label Source "${currentBlock.name}" references non-existent signal "${signalName}"`,
           severity: 'error'
         })
+      }
+      continue
+    }
+
+    if (currentBlock.type === 'subsystem') {
+      const outputPorts = currentBlock.parameters?.outputPorts || []
+      
+      for (let portIndex = 0; portIndex < outputPorts.length; portIndex++) {
+        const outputPortName = outputPorts[portIndex]
+        const outputKey = `${currentBlockId}:${portIndex}`
+        
+        // Find the output type by looking inside the subsystem
+        const subsystemOutputType = getSubsystemOutputType(
+          currentBlock,
+          outputPortName,
+          blockOutputTypes
+        )
+        
+        if (subsystemOutputType) {
+          blockOutputTypes.set(outputKey, subsystemOutputType)
+          
+          // Propagate to connected wires
+          const connectedWires = wiresBySource.get(outputKey) || []
+          for (const wire of connectedWires) {
+            try {
+              const parsedType = parseType(subsystemOutputType)
+              signalTypes.set(wire.id, {
+                wireId: wire.id,
+                sourceBlockId: wire.sourceBlockId,
+                sourcePortIndex: wire.sourcePortIndex,
+                targetBlockId: wire.targetBlockId,
+                targetPortIndex: wire.targetPortIndex,
+                type: subsystemOutputType,
+                parsedType
+              })
+              
+              // Add target block to processing queue
+              const targetBlock = blockMap.get(wire.targetBlockId)
+              if (targetBlock && !processedBlocks.has(wire.targetBlockId)) {
+                processingQueue.push(wire.targetBlockId)
+                processedBlocks.add(wire.targetBlockId)
+              }
+            } catch (error) {
+              errors.push({
+                wireId: wire.id,
+                message: `Invalid signal type from subsystem: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                severity: 'error'
+              })
+            }
+          }
+        } else {
+          errors.push({
+            blockId: currentBlock.id,
+            message: `Cannot determine output type for ${currentBlock.name} port ${outputPortName}`,
+            severity: 'error'
+          })
+        }
       }
       continue
     }
@@ -674,6 +732,55 @@ export function propagateSignalTypes(
     blockOutputTypes,
     errors
   }
+}
+
+function getSubsystemOutputType(
+  subsystemBlock: BlockData,
+  outputPortName: string,
+  blockOutputTypes: BlockOutputTypes
+): string | null {
+  if (!subsystemBlock.parameters?.sheets) return null
+  
+  // Search through subsystem sheets for the output port block
+  for (const sheet of subsystemBlock.parameters.sheets) {
+    for (const block of sheet.blocks) {
+      if (block.type === 'output_port' && 
+          block.parameters?.portName === outputPortName) {
+        
+        // Find what connects to this output port
+        const inputWire = sheet.connections.find((w : any) => 
+          w.targetBlockId === block.id && w.targetPortIndex === 0
+        )
+        
+        if (inputWire) {
+          const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
+          const sourceType = blockOutputTypes.get(sourceKey)
+          
+          if (sourceType) {
+            return sourceType
+          } else {
+            // Need to propagate types within the subsystem first
+            // This is where it gets complex - you need recursive propagation
+            const subsystemResult = propagateSignalTypes(
+              sheet.blocks,
+              sheet.connections
+            )
+            
+            const internalSourceType = subsystemResult.blockOutputTypes.get(sourceKey)
+            if (internalSourceType) {
+              // Copy internal types to main type map with prefixed keys
+              for (const [key, type] of subsystemResult.blockOutputTypes) {
+                blockOutputTypes.set(`${subsystemBlock.id}:${key}`, type)
+              }
+              return internalSourceType
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return null
 }
 
 export function propagateSignalTypesMultiSheet(
