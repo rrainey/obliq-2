@@ -170,11 +170,11 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
     )
   }
 
-  console.log('CodeGenerator instantiated successfully')
+  //console.log('CodeGenerator instantiated successfully')
 
   const result = codeGenerator.generateCode(sheets, model.name)
 
-  console.log('generateCode result:', result)
+  //console.log('generateCode result:', result)
 
   const safeName = sanitizeFilename(model.name)
 
