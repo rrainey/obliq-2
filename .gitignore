@@ -13,6 +13,11 @@ __tests__/integration/code-generation/platformio-test/src/main.cpp
 __tests__/integration/code-generation/platformio-test/lib/
 __tests__/integration/code-generation/docker/
 
+# WASM test artifacts
+__tests__/wasm/fixtures/hello.js
+__tests__/wasm/fixtures/hello.wasm
+__tests__/wasm/fixtures/model-output/
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
@@ -86,6 +91,7 @@ web_modules/
 .env.test.local
 .env.production.local
 .env.local
+.env-details.txt
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
