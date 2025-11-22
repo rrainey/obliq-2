@@ -7,6 +7,7 @@ import { BlockData, PortInfo } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
+import { createSimulationEngine, getWasmPreference } from '@/lib/simulation/SimulationEngineFactory'
 import SaveAsDialog from '@/components/SaveAsDialog'
 import AutoSaveRecoveryDialog from '@/components/AutoSaveRecoveryDialog'
 import AutoSaveStatusIndicator from '@/components/AutoSaveStatusIndicator'
@@ -121,6 +122,11 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     duration: '10.0',
     timeStep: '0.01'
   })
+
+  // WASM compilation state
+  const [isCompiling, setIsCompiling] = useState(false)
+  const [compilationTime, setCompilationTime] = useState<number | null>(null)
+  const [compilationError, setCompilationError] = useState<string | null>(null)
 
   const [showAutoSaveDialog, setShowAutoSaveDialog] = useState(false)
   const [autoSaveInfo, setAutoSaveInfo] = useState<{
@@ -772,7 +778,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         const sheetName = sheets.find(s => s.id === e.sheetId)?.name || 'Unknown Sheet'
         return `• [${sheetName}] ${e.message}`
       }).join('\n')
-      
+
       notifications.show({
         title: `Cannot run simulation due to ${errors.length} type compatibility error${errors.length > 1 ? 's' : ''}`,
         message: (
@@ -795,7 +801,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         const sheetName = sheets.find(s => s.id === w.sheetId)?.name || 'Unknown Sheet'
         return `• [${sheetName}] ${w.message}`
       }).join('\n')
-      
+
       const proceed = window.confirm(
         `Found ${warnings.length} warning${warnings.length > 1 ? 's' : ''}:\n\n` +
         `${warningMessages}${warnings.length > 3 ? `\n\n...and ${warnings.length - 3} more warnings` : ''}\n\n` +
@@ -805,33 +811,60 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
 
     setIsSimulating(true)
+    setCompilationError(null)
+
+    const useWasm = getWasmPreference()
+
     try {
       const config = {
         timeStep: settingsValidation.timeStep,
         duration: settingsValidation.duration
       }
-      
-      // Create multi-sheet simulation engine
+
+      if (useWasm) {
+        // WASM path - currently using JavaScript until full WASM multi-sheet support is implemented
+        // For now, show notification that WASM is enabled but using JavaScript
+        notifications.show({
+          title: 'WASM mode active',
+          message: 'WASM compilation support coming soon. Using JavaScript engine for multi-sheet models.',
+          color: 'blue',
+          icon: <IconAlertCircle size={20} />,
+          autoClose: 3000
+        })
+
+        // TODO: Implement WASM path
+        // const compilationStart = performance.now()
+        // setIsCompiling(true)
+        // const wasmEngine = await createSimulationEngine({
+        //   modelId: model.id,
+        //   useWasm: true,
+        //   config
+        // })
+        // setCompilationTime(Math.round(performance.now() - compilationStart))
+        // setIsCompiling(false)
+      }
+
+      // JavaScript path (current implementation)
       const multiEngine = new MultiSheetSimulationEngine(sheets, config)
-      
+
       // Run simulation across ALL sheets - this returns results for all sheets
       const allResults = multiEngine.run()
-      
+
       // Store ALL results globally
       setGlobalSimulationResults(allResults)
-      
+
       // Also set the current sheet's engine for CSV export and other operations
       const currentSheetEngine = multiEngine.getSheetEngine(activeSheetId)
       if (currentSheetEngine) {
         setSimulationEngine(currentSheetEngine)
         setOutputPortValues(multiEngine.getOutputPortValues(activeSheetId) || new Map())
       }
-      
+
       console.log('Simulation completed for all sheets:', {
         totalSheets: allResults.size,
         sheetsWithData: Array.from(allResults.keys())
       })
-      
+
       // Log summary of results for debugging
       for (const [sheetId, results] of allResults) {
         const sheet = sheets.find(s => s.id === sheetId)
@@ -840,24 +873,26 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           timePoints: results.timePoints.length
         })
       }
-      
+
       notifications.show({
         title: 'Simulation completed',
-        message: 'Simulation ran successfully across all sheets',
+        message: `Simulation ran successfully across all sheets${useWasm ? ' (JavaScript engine)' : ''}`,
         color: 'green',
         icon: <IconCircleCheck size={20} />
       })
-      
+
     } catch (error) {
       console.error('Simulation error:', error)
+      setCompilationError(error instanceof Error ? error.message : 'Unknown error')
       notifications.show({
         title: 'Simulation failed',
-        message: 'Check console for details',
+        message: error instanceof Error ? error.message : 'Check console for details',
         color: 'red',
         icon: <IconAlertCircle size={20} />
       })
     } finally {
       setIsSimulating(false)
+      setIsCompiling(false)
     }
   }
 
@@ -1126,7 +1161,32 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           
           <Group>
             <AutoSaveStatusIndicator />
-            
+
+            {/* WASM Status Indicator */}
+            {getWasmPreference() && (
+              <Tooltip label="WebAssembly acceleration enabled">
+                <Badge
+                  variant="light"
+                  color="blue"
+                  leftSection={
+                    <Box component="span" style={{ display: 'flex', alignItems: 'center' }}>
+                      ⚡
+                    </Box>
+                  }
+                >
+                  WASM
+                </Badge>
+              </Tooltip>
+            )}
+
+            {compilationTime !== null && (
+              <Tooltip label={`Last compilation: ${compilationTime}ms`}>
+                <Badge variant="light" color="gray" leftSection={<IconClock size={12} />}>
+                  {compilationTime}ms
+                </Badge>
+              </Tooltip>
+            )}
+
             <Button
               onClick={handleSave}
               loading={saving}
@@ -1153,10 +1213,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             
             <Button
               onClick={handleRunSimulation}
-              loading={isSimulating}
+              loading={isSimulating || isCompiling}
               leftSection={<IconPlayerPlay size={16} />}
             >
-              Run Simulation
+              {isCompiling ? 'Compiling...' : isSimulating ? 'Running...' : 'Run Simulation'}
             </Button>
             
             <Button
@@ -1248,6 +1308,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             initialTimeStep={parseFloat(simulationSettings.timeStep) || 0.01}
             onChange={handleSimulationSettingsChange}
           />
+
+          {/* WASM Compilation Error */}
+          {compilationError && (
+            <Alert color="red" variant="light" title="Compilation Error">
+              <Text size="sm">{compilationError}</Text>
+            </Alert>
+          )}
 
           <ScrollArea style={{ flex: 1 }} offsetScrollbars>
             {currentSheetSimulationResults ? (
