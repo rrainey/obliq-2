@@ -428,6 +428,57 @@ export class WasmSimulationEngine {
   }
 
   /**
+   * Get all signal logger (scope) data names
+   *
+   * @returns Array of logger names (with 'logger_' prefix)
+   */
+  getLoggerNames(): string[] {
+    if (!this.metadata) {
+      return []
+    }
+
+    const loggerNames: string[] = []
+    for (const [name] of this.metadata.outputMap) {
+      if (name.startsWith('logger_')) {
+        loggerNames.push(name)
+      }
+    }
+
+    return loggerNames
+  }
+
+  /**
+   * Get current value from a signal logger
+   *
+   * @param loggerName - Logger name (with or without 'logger_' prefix)
+   * @returns Current signal value at this logger
+   */
+  getLoggerValue(loggerName: string): SignalValue {
+    // Add prefix if not already present
+    const fullName = loggerName.startsWith('logger_') ? loggerName : `logger_${loggerName}`
+
+    return this.getOutput(fullName)
+  }
+
+  /**
+   * Get all signal logger values
+   *
+   * @returns Object mapping logger names (without prefix) to current values
+   */
+  getLoggerValues(): Record<string, SignalValue> {
+    const loggerValues: Record<string, SignalValue> = {}
+    const loggerNames = this.getLoggerNames()
+
+    for (const fullName of loggerNames) {
+      // Remove 'logger_' prefix for cleaner keys
+      const shortName = fullName.substring(7) // Remove 'logger_'
+      loggerValues[shortName] = this.state.outputs[fullName]
+    }
+
+    return loggerValues
+  }
+
+  /**
    * Get current simulation time
    *
    * @returns Current time (seconds)

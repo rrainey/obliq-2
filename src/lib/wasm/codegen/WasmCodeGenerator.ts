@@ -78,6 +78,11 @@ export class WasmCodeGenerator extends CodeGenerator {
 
   /**
    * Extract input and output port mappings for index-based access
+   *
+   * Includes:
+   * - input_port blocks as inputs
+   * - output_port blocks as outputs
+   * - signal_logger blocks as outputs (for scope data retrieval)
    */
   private extractPortMappings(sheets: Sheet[]): {
     inputMap: Map<string, number>
@@ -91,7 +96,7 @@ export class WasmCodeGenerator extends CodeGenerator {
     let inputIndex = 0
     let outputIndex = 0
 
-    // Process all sheets to find input/output ports
+    // Process all sheets to find input/output ports and signal loggers
     for (const sheet of sheets) {
       for (const block of sheet.blocks) {
         if (block.type === 'input_port') {
@@ -102,11 +107,25 @@ export class WasmCodeGenerator extends CodeGenerator {
           outputMap.set(portName, outputIndex++)
 
           // Find the connection that feeds this output port
-          const feedingConnection = sheet.connections.find(conn => conn.target === block.id)
+          const feedingConnection = sheet.connections.find(conn => conn.targetBlockId === block.id)
           if (feedingConnection) {
-            const sourceBlock = sheet.blocks.find(b => b.id === feedingConnection.source)
+            const sourceBlock = sheet.blocks.find(b => b.id === feedingConnection.sourceBlockId)
             if (sourceBlock) {
               outputSourceMap.set(portName, sourceBlock.name)
+            }
+          }
+        } else if (block.type === 'signal_logger') {
+          // Treat signal loggers as outputs for scope data access
+          // Use block name as the logger identifier
+          const loggerName = `logger_${block.name}`
+          outputMap.set(loggerName, outputIndex++)
+
+          // Find the connection that feeds this signal logger
+          const feedingConnection = sheet.connections.find(conn => conn.targetBlockId === block.id)
+          if (feedingConnection) {
+            const sourceBlock = sheet.blocks.find(b => b.id === feedingConnection.sourceBlockId)
+            if (sourceBlock) {
+              outputSourceMap.set(loggerName, sourceBlock.name)
             }
           }
         }
