@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebAssembly Hello World Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+        }
+        .result {
+            font-family: monospace;
+            background: #263238;
+            color: #aed581;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { color: #4CAF50; font-weight: bold; }
+        .error { color: #f44336; font-weight: bold; }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebAssembly Hello World Test</h1>
+
+        <div id="status">Loading WebAssembly module...</div>
+
+        <div class="test-section">
+            <h2>Manual Tests</h2>
+            <button onclick="testAdd()">Test Addition (2 + 3)</button>
+            <button onclick="testMultiply()">Test Multiplication (2 * 3)</button>
+            <button onclick="testSin()">Test Sin(π/2)</button>
+            <button onclick="runAllTests()">Run All Tests</button>
+        </div>
+
+        <div class="test-section">
+            <h2>Test Results</h2>
+            <div id="results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Module Information</h2>
+            <div id="module-info"></div>
+        </div>
+    </div>
+
+    <script>
+        let wasmModule = null;
+
+        // Load the WebAssembly module
+        async function loadWasm() {
+            try {
+                const module = await createModule();
+                wasmModule = module;
+
+                document.getElementById('status').innerHTML =
+                    '<span class="success">✓ WebAssembly module loaded successfully!</span>';
+
+                // Display module information
+                displayModuleInfo();
+
+                // Run automatic tests
+                runAllTests();
+
+            } catch (error) {
+                document.getElementById('status').innerHTML =
+                    `<span class="error">✗ Failed to load WebAssembly module: ${error.message}</span>`;
+                console.error('WASM load error:', error);
+            }
+        }
+
+        function displayModuleInfo() {
+            const info = document.getElementById('module-info');
+            const exportedFunctions = [
+                '_add',
+                '_multiply',
+                '_compute_sin',
+                '_main'
+            ];
+
+            let html = '<div class="result">';
+            html += '<strong>Exported Functions:</strong><br>';
+            exportedFunctions.forEach(func => {
+                const exists = typeof wasmModule[func] === 'function';
+                html += `${exists ? '✓' : '✗'} ${func}<br>`;
+            });
+            html += '</div>';
+
+            info.innerHTML = html;
+        }
+
+        function logResult(test, value, expected = null) {
+            const results = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'result';
+
+            let html = `<strong>${test}:</strong> ${value}`;
+
+            if (expected !== null) {
+                const match = Math.abs(value - expected) < 0.0001;
+                html += ` (expected: ${expected}) `;
+                html += match ? '<span class="success">✓ PASS</span>' : '<span class="error">✗ FAIL</span>';
+            }
+
+            resultDiv.innerHTML = html;
+            results.appendChild(resultDiv);
+        }
+
+        function testAdd() {
+            if (!wasmModule) {
+                alert('WASM module not loaded yet');
+                return;
+            }
+
+            const result = wasmModule._add(2.0, 3.0);
+            logResult('add(2, 3)', result, 5.0);
+        }
+
+        function testMultiply() {
+            if (!wasmModule) {
+                alert('WASM module not loaded yet');
+                return;
+            }
+
+            const result = wasmModule._multiply(2.0, 3.0);
+            logResult('multiply(2, 3)', result, 6.0);
+        }
+
+        function testSin() {
+            if (!wasmModule) {
+                alert('WASM module not loaded yet');
+                return;
+            }
+
+            const result = wasmModule._compute_sin(Math.PI / 2);
+            logResult('sin(π/2)', result, 1.0);
+        }
+
+        function runAllTests() {
+            if (!wasmModule) {
+                alert('WASM module not loaded yet');
+                return;
+            }
+
+            // Clear previous results
+            document.getElementById('results').innerHTML = '';
+
+            // Run all tests
+            testAdd();
+            testMultiply();
+            testSin();
+
+            // Additional edge cases
+            logResult('add(0, 0)', wasmModule._add(0.0, 0.0), 0.0);
+            logResult('add(-1, 1)', wasmModule._add(-1.0, 1.0), 0.0);
+            logResult('multiply(0, 5)', wasmModule._multiply(0.0, 5.0), 0.0);
+            logResult('multiply(-2, 3)', wasmModule._multiply(-2.0, 3.0), -6.0);
+            logResult('sin(0)', wasmModule._compute_sin(0.0), 0.0);
+        }
+
+        // Load the module when the page loads
+        // Note: The createModule function is provided by the Emscripten-generated JS file (hello.js)
+        window.addEventListener('load', () => {
+            if (typeof createModule === 'undefined') {
+                document.getElementById('status').innerHTML =
+                    '<span class="error">✗ Error: hello.js not loaded. Make sure both hello.js and hello.wasm are in the same directory.</span>';
+            } else {
+                loadWasm();
+            }
+        });
+    </script>
+
+    <!-- This will be the Emscripten-generated JavaScript file -->
+    <script src="hello.js"></script>
+</body>
+</html>

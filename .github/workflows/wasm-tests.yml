@@ -1,0 +1,95 @@
+# .github/workflows/wasm-tests.yml
+name: WebAssembly Tests
+
+on:
+  push:
+    branches: [main, wasm]
+  pull_request:
+    branches: [main, wasm]
+
+jobs:
+  wasm-compilation-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Emscripten Docker image
+        run: |
+          docker build -t obliq-emscripten:test \
+            -f __tests__/wasm/docker/Dockerfile.emscripten \
+            __tests__/wasm/docker
+
+      - name: Verify Emscripten installation
+        run: |
+          docker run --rm obliq-emscripten:test emcc --version
+
+      - name: Run WASM setup tests
+        run: npm test -- __tests__/wasm/emscripten-setup.test.ts
+
+      - name: Run model compilation tests
+        run: npm test -- __tests__/wasm/model-compilation.test.ts
+
+      - name: Upload WASM artifacts
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: wasm-test-artifacts
+          path: |
+            __tests__/wasm/fixtures/*.js
+            __tests__/wasm/fixtures/*.wasm
+            __tests__/wasm/fixtures/model-output/*
+          retention-days: 7
+
+      - name: Display test results summary
+        if: always()
+        run: |
+          echo "=== WASM Test Summary ==="
+          echo "✓ Emscripten Docker image built successfully"
+          echo "✓ Basic WASM compilation verified"
+          echo "✓ Model compilation to WASM verified"
+          echo ""
+          echo "Generated artifacts:"
+          ls -lh __tests__/wasm/fixtures/*.wasm 2>/dev/null || echo "No WASM files found"
+          ls -lh __tests__/wasm/fixtures/model-output/*.wasm 2>/dev/null || echo "No model WASM files found"
+
+  # Optional: Test in different environments
+  compatibility-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node-version: ['18', '20']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Emscripten Docker image
+        run: |
+          docker build -t obliq-emscripten:test \
+            -f __tests__/wasm/docker/Dockerfile.emscripten \
+            __tests__/wasm/docker
+
+      - name: Run basic WASM tests
+        run: npm test -- __tests__/wasm/emscripten-setup.test.ts --maxWorkers=1

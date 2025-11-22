@@ -1,0 +1,15 @@
+# Compiled WASM files
+*.wasm
+*.wasm.map
+
+# Emscripten JavaScript glue code
+fixtures/hello.js
+fixtures/model-output/
+
+# Build artifacts
+*.o
+*.a
+*.bc
+
+# Test outputs
+model-output/
