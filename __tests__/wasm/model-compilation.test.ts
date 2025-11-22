@@ -13,8 +13,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { CodeGenerator } from '@/lib/codegen/CodeGenerator';
-import { ModelFlattener } from '@/lib/codegen/ModelFlattener';
+import { WasmCodeGenerator } from '@/lib/wasm/codegen/WasmCodeGenerator';
 import type { Sheet } from '@/types/canvas';
 
 const execAsync = promisify(exec);
@@ -131,18 +130,19 @@ describe('Model to WASM Compilation', () => {
   }
 
   describe('C Code Generation', () => {
-    let generatedCode: { header: string; source: string };
+    let generatedCode: { header: string; source: string; wasmWrapper: string };
 
-    it('should generate C code from test model', () => {
+    it('should generate C code from test model using WasmCodeGenerator', () => {
       const model = createSimpleTestModel();
 
-      // Use CodeGenerator.generate() which handles flattening internally
-      const generator = new CodeGenerator();
-      const result = generator.generate(model);
+      // Use WasmCodeGenerator which includes WASM wrapper generation
+      const generator = new WasmCodeGenerator({ modelName: 'model' });
+      const result = generator.generateWasm(model);
 
       // Code generation should succeed (warnings are okay)
       expect(result.header).toBeTruthy();
       expect(result.source).toBeTruthy();
+      expect(result.wasmWrapper).toBeTruthy();
 
       // Verify key structures are present
       expect(result.header).toContain('typedef struct');
@@ -150,24 +150,41 @@ describe('Model to WASM Compilation', () => {
       expect(result.header).toContain('model_outputs_t');
       expect(result.source).toContain('void model_evaluate_algebraic');
 
+      // Verify WASM wrapper includes expected functions
+      expect(result.wasmWrapper).toContain('wasm_init');
+      expect(result.wasmWrapper).toContain('wasm_set_input');
+      expect(result.wasmWrapper).toContain('wasm_get_output');
+      expect(result.wasmWrapper).toContain('wasm_step');
+      expect(result.wasmWrapper).toContain('EMSCRIPTEN_KEEPALIVE');
+
+      // Verify input/output mappings
+      expect(result.inputMap.get('a')).toBe(0);
+      expect(result.inputMap.get('b')).toBe(1);
+      expect(result.outputMap.get('result')).toBe(0);
+
       generatedCode = result;
 
       console.log('Generated header length:', result.header.length);
       console.log('Generated source length:', result.source.length);
+      console.log('Generated WASM wrapper length:', result.wasmWrapper.length);
     });
 
     it('should write generated C files to disk', async () => {
       const headerPath = path.join(outputDir, 'model.h');
       const sourcePath = path.join(outputDir, 'model.c');
+      const wrapperPath = path.join(outputDir, 'model_wasm.c');
 
       await fs.writeFile(headerPath, generatedCode.header);
       await fs.writeFile(sourcePath, generatedCode.source);
+      await fs.writeFile(wrapperPath, generatedCode.wasmWrapper);
 
       const headerExists = await fs.access(headerPath).then(() => true).catch(() => false);
       const sourceExists = await fs.access(sourcePath).then(() => true).catch(() => false);
+      const wrapperExists = await fs.access(wrapperPath).then(() => true).catch(() => false);
 
       expect(headerExists).toBe(true);
       expect(sourceExists).toBe(true);
+      expect(wrapperExists).toBe(true);
     });
   });
 
@@ -175,64 +192,12 @@ describe('Model to WASM Compilation', () => {
     it('should compile generated C code to WASM', async () => {
       console.log('Compiling model to WebAssembly...');
 
-      // First, create a WASM wrapper file with exported functions
-      const wasmWrapper = `
-#include "model.h"
-
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#else
-#define EMSCRIPTEN_KEEPALIVE
-#endif
-
-// Global model instance
-static model_t model_instance = {0};
-
-// Initialize the model
-EMSCRIPTEN_KEEPALIVE
-void wasm_init() {
-    model_init(&model_instance, 0.01); // Initialize with 10ms timestep
-}
-
-// Set an input value by index
-EMSCRIPTEN_KEEPALIVE
-void wasm_set_input(int index, double value) {
-    switch(index) {
-        case 0: model_instance.inputs.a = value; break;
-        case 1: model_instance.inputs.b = value; break;
-    }
-}
-
-// Get an output value by index
-EMSCRIPTEN_KEEPALIVE
-double wasm_get_output(int index) {
-    // This model has no output ports, so return internal signals
-    switch(index) {
-        case 0: return model_instance.signals.Gain1; // Final result after gain
-        default: return 0.0;
-    }
-}
-
-// Step the simulation
-EMSCRIPTEN_KEEPALIVE
-void wasm_step(double dt) {
-    model_step(&model_instance);
-}
-
-// Get simulation time
-EMSCRIPTEN_KEEPALIVE
-double wasm_get_time() {
-    return model_instance.time;
-}
-`;
-
-      await fs.writeFile(path.join(outputDir, 'wasm_wrapper.c'), wasmWrapper);
-
-      // Compile with Emscripten using Docker
+      // The WASM wrapper is already generated by WasmCodeGenerator and written to disk
+      // Now compile with Emscripten using Docker
       const isWindows = process.platform === 'win32';
       const compileCmd = isWindows
         ? `docker run --rm -v "${outputDir}:/workspace" ${dockerImage} ` +
-          `emcc /workspace/model.c /workspace/wasm_wrapper.c ` +
+          `emcc /workspace/model.c /workspace/model_wasm.c ` +
           `-I/workspace -o /workspace/model.js ` +
           `-s WASM=1 ` +
           `-s "EXPORTED_FUNCTIONS=[\\"_wasm_init\\",\\"_wasm_set_input\\",\\"_wasm_get_output\\",\\"_wasm_step\\",\\"_wasm_get_time\\",\\"_malloc\\",\\"_free\\"]" ` +
@@ -243,7 +208,7 @@ double wasm_get_time() {
           `-s INITIAL_MEMORY=16MB ` +
           `-O2 -lm`
         : `docker run --rm -v "${outputDir}:/workspace" ${dockerImage} ` +
-          `emcc /workspace/model.c /workspace/wasm_wrapper.c ` +
+          `emcc /workspace/model.c /workspace/model_wasm.c ` +
           `-I/workspace -o /workspace/model.js ` +
           `-s WASM=1 ` +
           `-s 'EXPORTED_FUNCTIONS=["_wasm_init","_wasm_set_input","_wasm_get_output","_wasm_step","_wasm_get_time","_malloc","_free"]' ` +
@@ -292,8 +257,8 @@ double wasm_get_time() {
       expect(typeof module._wasm_get_output).toBe('function');
       expect(typeof module._wasm_step).toBe('function');
 
-      // Initialize model
-      module._wasm_init();
+      // Initialize model with dt=0.01 (10ms timestep)
+      module._wasm_init(0.01);
 
       // Test 1: a=2, b=3 => sum=5 => gain(2.0) => result=10
       module._wasm_set_input(0, 2.0); // a = 2
@@ -330,7 +295,7 @@ double wasm_get_time() {
       const createModule = require(modelJsPath);
       const module = await createModule();
 
-      module._wasm_init();
+      module._wasm_init(0.01);
 
       // Run multiple steps and verify time progression
       module._wasm_set_input(0, 1.0);
