@@ -18,6 +18,8 @@
     "test:wasm": "jest __tests__/wasm --runInBand",
     "test:wasm:setup": "jest __tests__/wasm/emscripten-setup.test.ts",
     "test:wasm:model": "jest __tests__/wasm/model-compilation.test.ts",
+    "test:wasm:cache": "jest __tests__/wasm/cache/cacheKey.test.ts",
+    "test:wasm:cache:integration": "jest __tests__/wasm/cache/SupabaseCacheManager.integration.test.ts",
     "wasm:build-docker": "docker build -t obliq-emscripten:latest -f __tests__/wasm/docker/Dockerfile.emscripten __tests__/wasm/docker"
   },
   "dependencies": {
