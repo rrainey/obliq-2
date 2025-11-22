@@ -131,6 +131,48 @@ interface WasmModule {
 
   /** Memory deallocation (from Emscripten) */
   _free(ptr: number): void
+
+  /** Access to HEAP memory views */
+  HEAP8: Int8Array
+  HEAPU8: Uint8Array
+  HEAP16: Int16Array
+  HEAPU16: Uint16Array
+  HEAP32: Int32Array
+  HEAPU32: Uint32Array
+  HEAPF32: Float32Array
+  HEAPF64: Float64Array
+}
+
+/**
+ * Memory allocation tracking entry
+ */
+interface MemoryAllocation {
+  /** Pointer address */
+  ptr: number
+  /** Size in bytes */
+  size: number
+  /** Allocation timestamp */
+  timestamp: number
+  /** Stack trace (dev mode only) */
+  stack?: string
+}
+
+/**
+ * Memory usage statistics
+ */
+export interface MemoryStats {
+  /** Number of active allocations */
+  activeAllocations: number
+  /** Total bytes allocated */
+  totalAllocated: number
+  /** Peak memory usage */
+  peakMemory: number
+  /** Total allocations made */
+  totalAllocationsCount: number
+  /** Total deallocations made */
+  totalDeallocationsCount: number
+  /** Potential memory leaks (allocations without corresponding frees) */
+  potentialLeaks: number
 }
 
 /**
@@ -145,7 +187,20 @@ export class WasmSimulationEngine {
   private state: WasmSimulationState
   private moduleUrl: string | null = null
 
-  constructor(modelId: string) {
+  // Memory management
+  private allocations: Map<number, MemoryAllocation> = new Map()
+  private memoryStats: MemoryStats = {
+    activeAllocations: 0,
+    totalAllocated: 0,
+    peakMemory: 0,
+    totalAllocationsCount: 0,
+    totalDeallocationsCount: 0,
+    potentialLeaks: 0
+  }
+  private enableLeakDetection: boolean = false
+  private memoryLimit: number = 100 * 1024 * 1024 // 100 MB default
+
+  constructor(modelId: string, options?: { enableLeakDetection?: boolean; memoryLimit?: number }) {
     this.modelId = modelId
 
     this.state = {
@@ -155,6 +210,14 @@ export class WasmSimulationEngine {
       isRunning: false,
       inputs: {},
       outputs: {}
+    }
+
+    // Development mode options
+    if (options?.enableLeakDetection !== undefined) {
+      this.enableLeakDetection = options.enableLeakDetection
+    }
+    if (options?.memoryLimit !== undefined) {
+      this.memoryLimit = options.memoryLimit
     }
   }
 
@@ -480,11 +543,285 @@ export class WasmSimulationEngine {
   }
 
   /**
+   * Allocate WASM memory
+   *
+   * @param size - Number of bytes to allocate
+   * @returns Pointer to allocated memory
+   */
+  malloc(size: number): number {
+    if (!this.state.isInitialized || !this.module) {
+      throw new Error('WasmSimulationEngine not initialized')
+    }
+
+    // Check memory limit
+    if (this.memoryStats.totalAllocated + size > this.memoryLimit) {
+      throw new Error(
+        `Memory limit exceeded: ${this.memoryStats.totalAllocated + size} bytes > ${this.memoryLimit} bytes`
+      )
+    }
+
+    const ptr = this.module._malloc(size)
+
+    if (ptr === 0) {
+      throw new Error(`Failed to allocate ${size} bytes of WASM memory`)
+    }
+
+    // Track allocation
+    const allocation: MemoryAllocation = {
+      ptr,
+      size,
+      timestamp: Date.now()
+    }
+
+    if (this.enableLeakDetection) {
+      allocation.stack = new Error().stack
+    }
+
+    this.allocations.set(ptr, allocation)
+
+    // Update stats
+    this.memoryStats.activeAllocations++
+    this.memoryStats.totalAllocated += size
+    this.memoryStats.totalAllocationsCount++
+
+    if (this.memoryStats.totalAllocated > this.memoryStats.peakMemory) {
+      this.memoryStats.peakMemory = this.memoryStats.totalAllocated
+    }
+
+    return ptr
+  }
+
+  /**
+   * Free WASM memory
+   *
+   * @param ptr - Pointer to free
+   */
+  free(ptr: number): void {
+    if (!this.state.isInitialized || !this.module) {
+      throw new Error('WasmSimulationEngine not initialized')
+    }
+
+    if (ptr === 0) {
+      console.warn('[WasmSimulationEngine] Attempting to free null pointer')
+      return
+    }
+
+    const allocation = this.allocations.get(ptr)
+
+    if (!allocation) {
+      console.warn(`[WasmSimulationEngine] Attempting to free untracked pointer: ${ptr}`)
+      // Still try to free it
+      this.module._free(ptr)
+      return
+    }
+
+    // Free memory
+    this.module._free(ptr)
+
+    // Update tracking
+    this.allocations.delete(ptr)
+
+    // Update stats
+    this.memoryStats.activeAllocations--
+    this.memoryStats.totalAllocated -= allocation.size
+    this.memoryStats.totalDeallocationsCount++
+  }
+
+  /**
+   * Write Float32Array to WASM memory
+   *
+   * @param data - Data to write
+   * @returns Pointer to allocated memory
+   */
+  writeFloat32Array(data: Float32Array): number {
+    const byteLength = data.byteLength
+    const ptr = this.malloc(byteLength)
+
+    if (!this.module) {
+      throw new Error('WasmSimulationEngine not initialized')
+    }
+
+    // Copy data to WASM heap
+    this.module.HEAPF32.set(data, ptr / 4) // Divide by 4 because HEAPF32 is 32-bit indexed
+
+    return ptr
+  }
+
+  /**
+   * Read Float32Array from WASM memory
+   *
+   * @param ptr - Pointer to read from
+   * @param length - Number of float32 elements
+   * @returns Float32Array with copied data
+   */
+  readFloat32Array(ptr: number, length: number): Float32Array {
+    if (!this.module) {
+      throw new Error('WasmSimulationEngine not initialized')
+    }
+
+    const offset = ptr / 4 // Divide by 4 for 32-bit indexing
+    const slice = this.module.HEAPF32.slice(offset, offset + length)
+    return new Float32Array(slice)
+  }
+
+  /**
+   * Write Float64Array to WASM memory
+   *
+   * @param data - Data to write
+   * @returns Pointer to allocated memory
+   */
+  writeFloat64Array(data: Float64Array): number {
+    const byteLength = data.byteLength
+    const ptr = this.malloc(byteLength)
+
+    if (!this.module) {
+      throw new Error('WasmSimulationEngine not initialized')
+    }
+
+    // Copy data to WASM heap
+    this.module.HEAPF64.set(data, ptr / 8) // Divide by 8 because HEAPF64 is 64-bit indexed
+
+    return ptr
+  }
+
+  /**
+   * Read Float64Array from WASM memory
+   *
+   * @param ptr - Pointer to read from
+   * @param length - Number of float64 elements
+   * @returns Float64Array with copied data
+   */
+  readFloat64Array(ptr: number, length: number): Float64Array {
+    if (!this.module) {
+      throw new Error('WasmSimulationEngine not initialized')
+    }
+
+    const offset = ptr / 8 // Divide by 8 for 64-bit indexing
+    const slice = this.module.HEAPF64.slice(offset, offset + length)
+    return new Float64Array(slice)
+  }
+
+  /**
+   * Write Uint8Array to WASM memory
+   *
+   * @param data - Data to write
+   * @returns Pointer to allocated memory
+   */
+  writeUint8Array(data: Uint8Array): number {
+    const byteLength = data.byteLength
+    const ptr = this.malloc(byteLength)
+
+    if (!this.module) {
+      throw new Error('WasmSimulationEngine not initialized')
+    }
+
+    // Copy data to WASM heap
+    this.module.HEAPU8.set(data, ptr)
+
+    return ptr
+  }
+
+  /**
+   * Read Uint8Array from WASM memory
+   *
+   * @param ptr - Pointer to read from
+   * @param length - Number of bytes
+   * @returns Uint8Array with copied data
+   */
+  readUint8Array(ptr: number, length: number): Uint8Array {
+    if (!this.module) {
+      throw new Error('WasmSimulationEngine not initialized')
+    }
+
+    const slice = this.module.HEAPU8.slice(ptr, ptr + length)
+    return new Uint8Array(slice)
+  }
+
+  /**
+   * Get memory usage statistics
+   *
+   * @returns Current memory statistics
+   */
+  getMemoryStats(): Readonly<MemoryStats> {
+    // Update potential leaks count
+    this.memoryStats.potentialLeaks = this.allocations.size
+
+    return { ...this.memoryStats }
+  }
+
+  /**
+   * Check for memory leaks (development mode)
+   *
+   * @param logLeaks - Whether to log leak details to console
+   * @returns Number of potential leaks found
+   */
+  checkForLeaks(logLeaks: boolean = true): number {
+    if (!this.enableLeakDetection) {
+      console.warn(
+        '[WasmSimulationEngine] Leak detection disabled. Enable with enableLeakDetection option.'
+      )
+      return 0
+    }
+
+    const leaks = Array.from(this.allocations.values())
+
+    if (leaks.length > 0 && logLeaks) {
+      console.warn(`[WasmSimulationEngine] Detected ${leaks.length} potential memory leak(s):`)
+
+      leaks.forEach((leak, index) => {
+        console.warn(`  Leak ${index + 1}:`)
+        console.warn(`    Pointer: 0x${leak.ptr.toString(16)}`)
+        console.warn(`    Size: ${leak.size} bytes`)
+        console.warn(`    Age: ${Date.now() - leak.timestamp}ms`)
+        if (leak.stack) {
+          console.warn(`    Stack trace:\n${leak.stack}`)
+        }
+      })
+    }
+
+    return leaks.length
+  }
+
+  /**
+   * Free all tracked allocations (emergency cleanup)
+   */
+  freeAll(): void {
+    if (!this.module) {
+      console.warn('[WasmSimulationEngine] Cannot free allocations: module not initialized')
+      return
+    }
+
+    const count = this.allocations.size
+
+    if (count > 0) {
+      console.warn(`[WasmSimulationEngine] Freeing ${count} tracked allocation(s)`)
+
+      this.allocations.forEach((allocation, ptr) => {
+        this.module!._free(ptr)
+      })
+
+      this.allocations.clear()
+      this.memoryStats.activeAllocations = 0
+      this.memoryStats.totalAllocated = 0
+    }
+  }
+
+  /**
    * Clean up resources
    *
    * IMPORTANT: Always call this when done with the engine to prevent memory leaks.
    */
   destroy(): void {
+    // Check for memory leaks before cleanup
+    if (this.enableLeakDetection && this.allocations.size > 0) {
+      this.checkForLeaks(true)
+    }
+
+    // Free any remaining allocations
+    if (this.allocations.size > 0) {
+      this.freeAll()
+    }
+
     // Revoke Blob URL to free memory
     if (this.moduleUrl) {
       URL.revokeObjectURL(this.moduleUrl)
@@ -497,6 +834,17 @@ export class WasmSimulationEngine {
 
     this.state.isInitialized = false
     this.state.isRunning = false
+
+    // Reset memory stats
+    this.allocations.clear()
+    this.memoryStats = {
+      activeAllocations: 0,
+      totalAllocated: 0,
+      peakMemory: 0,
+      totalAllocationsCount: 0,
+      totalDeallocationsCount: 0,
+      potentialLeaks: 0
+    }
 
     console.log(`[WasmSimulationEngine] Destroyed`)
   }

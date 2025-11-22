@@ -36,34 +36,9 @@ describe('WasmSimulationEngine', () => {
     it('should throw error if already initialized', async () => {
       const engine = new WasmSimulationEngine('test-model-id')
 
-      // Mock successful compilation
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          wasmData: btoa('fake-wasm'),
-          jsData: btoa('export default () => ({ _wasm_init: () => {} })'),
-          metadata: {
-            modelName: 'Test',
-            version: 1,
-            cacheKey: 'test-key',
-            cacheHit: false,
-            compilationTime: 100,
-            wasmSize: 1000,
-            jsSize: 500,
-            optimizationLevel: 'O2',
-            blockCount: 5,
-            inputMap: [],
-            outputMap: []
-          }
-        })
-      } as Response)
-
-      // First initialization should succeed (but will fail on module load in this test)
-      try {
-        await engine.initialize(0.01)
-      } catch (e) {
-        // Expected to fail on module load in test environment
-      }
+      // Manually set initialized flag to simulate successful initialization
+      // This avoids the complexity of mocking the full module loading
+      ;(engine as any).state.isInitialized = true
 
       // Second initialization should throw
       await expect(engine.initialize(0.01)).rejects.toThrow('already initialized')
