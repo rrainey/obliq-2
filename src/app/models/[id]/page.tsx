@@ -16,6 +16,7 @@ import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SimulationSettingsPanel, { validateSimulationSettings } from '@/components/SimulationSettingsPanel'
 import SignalDisplay from '@/components/SignalDisplay'
 import SheetTabs, { Sheet } from '@/components/SheetTabs'
+import CompilationProgress from '@/components/CompilationProgress'
 import InputPortConfig from '@/components/InputPortConfig'
 import SourceConfig from '@/components/SourceConfig'
 import ScaleConfig from '@/components/ScaleConfig'
@@ -1309,8 +1310,26 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             onChange={handleSimulationSettingsChange}
           />
 
+          {/* WASM Compilation Progress */}
+          {isCompiling && model && (
+            <CompilationProgress
+              modelId={model.id}
+              optimizationLevel="O2"
+              onComplete={(result) => {
+                console.log('Compilation complete:', result)
+                setCompilationTime(result.metadata.compilationTime || 0)
+                setIsCompiling(false)
+                // TODO: Use compiled WASM for simulation
+              }}
+              onError={(error) => {
+                setCompilationError(error)
+                setIsCompiling(false)
+              }}
+            />
+          )}
+
           {/* WASM Compilation Error */}
-          {compilationError && (
+          {compilationError && !isCompiling && (
             <Alert color="red" variant="light" title="Compilation Error">
               <Text size="sm">{compilationError}</Text>
             </Alert>
