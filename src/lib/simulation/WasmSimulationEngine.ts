@@ -222,69 +222,39 @@ export class WasmSimulationEngine {
   }
 
   /**
-   * Initialize the WASM simulation engine
+   * Load a pre-compiled WASM module
    *
-   * @param timeStep - Time step for simulation (seconds)
-   * @param config - Additional configuration options
+   * @param wasmDataBase64 - Base64-encoded WASM binary
+   * @param jsDataBase64 - Base64-encoded JS glue code
+   * @param metadata - Module metadata
    */
-  async initialize(timeStep: number, config: Partial<WasmSimulationConfig> = {}): Promise<void> {
+  async loadCompiledModule(wasmDataBase64: string, jsDataBase64: string, metadata: any): Promise<void> {
     if (this.state.isInitialized) {
       throw new Error('WasmSimulationEngine already initialized')
     }
 
-    this.state.timeStep = timeStep
-
-    const apiEndpoint = config.apiEndpoint || '/api/compile-wasm'
-    const optimizationLevel = config.optimizationLevel || 'O2'
-
-    console.log(`[WasmSimulationEngine] Compiling model ${this.modelId}...`)
-    const compileStart = Date.now()
-
-    // Fetch compiled WASM from API
-    const response = await fetch(apiEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        modelId: this.modelId,
-        optimizationLevel
-      })
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(`Failed to compile WASM: ${error.error || 'Unknown error'}`)
-    }
-
-    const data = await response.json()
-    const compileTime = Date.now() - compileStart
-
-    console.log(
-      `[WasmSimulationEngine] Compilation ${data.metadata.cacheHit ? 'cache hit' : 'completed'} (${compileTime}ms)`
-    )
+    console.log(`[WasmSimulationEngine] Loading pre-compiled module...`)
 
     // Decode base64 to binary
-    const wasmBinary = Uint8Array.from(atob(data.wasmData), c => c.charCodeAt(0)).buffer
-    const jsCode = atob(data.jsData)
+    const wasmBinary = Uint8Array.from(atob(wasmDataBase64), c => c.charCodeAt(0)).buffer
+    const jsCode = atob(jsDataBase64)
 
     // Store metadata
     this.metadata = {
-      modelName: data.metadata.modelName,
-      version: data.metadata.version,
-      cacheKey: data.metadata.cacheKey,
-      cacheHit: data.metadata.cacheHit,
-      time: data.metadata.compilationTime || data.metadata.retrievalTime,
-      wasmSize: data.metadata.wasmSize,
-      jsSize: data.metadata.jsSize,
-      optimizationLevel: data.metadata.optimizationLevel,
-      blockCount: data.metadata.blockCount,
-      inputMap: new Map(data.metadata.inputMap),
-      outputMap: new Map(data.metadata.outputMap)
+      modelName: metadata.modelName,
+      version: metadata.version,
+      cacheKey: metadata.cacheKey,
+      cacheHit: metadata.cacheHit,
+      time: metadata.compilationTime || metadata.retrievalTime,
+      wasmSize: metadata.wasmSize,
+      jsSize: metadata.jsSize,
+      optimizationLevel: metadata.optimizationLevel,
+      blockCount: metadata.blockCount,
+      inputMap: new Map(metadata.inputMap),
+      outputMap: new Map(metadata.outputMap)
     }
 
     // Load WASM module
-    console.log(`[WasmSimulationEngine] Loading WASM module...`)
     const loadStart = Date.now()
 
     // Create Blob URL for JS glue code
@@ -307,24 +277,8 @@ export class WasmSimulationEngine {
       const loadTime = Date.now() - loadStart
       console.log(`[WasmSimulationEngine] Module loaded (${loadTime}ms)`)
 
-      // Initialize model
-      this.module._wasm_init(timeStep)
-
-      this.state.isInitialized = true
-      this.state.time = 0
-
-      // Initialize input/output state from metadata
-      this.metadata.inputMap.forEach((index, name) => {
-        this.state.inputs[name] = 0
-      })
-
-      this.metadata.outputMap.forEach((index, name) => {
-        this.state.outputs[name] = 0
-      })
-
-      console.log(
-        `[WasmSimulationEngine] Initialized: ${this.metadata.inputMap.size} inputs, ${this.metadata.outputMap.size} outputs`
-      )
+      // Mark as ready for initialization
+      // Note: initialize() must still be called to set timestep
     } catch (error) {
       // Clean up on error
       if (this.moduleUrl) {
@@ -335,6 +289,129 @@ export class WasmSimulationEngine {
         `Failed to load WASM module: ${error instanceof Error ? error.message : 'Unknown error'}`
       )
     }
+  }
+
+  /**
+   * Initialize the WASM simulation engine
+   *
+   * @param timeStep - Time step for simulation (seconds)
+   * @param config - Additional configuration options
+   */
+  async initialize(timeStep: number, config: Partial<WasmSimulationConfig> = {}): Promise<void> {
+    if (this.state.isInitialized) {
+      throw new Error('WasmSimulationEngine already initialized')
+    }
+
+    this.state.timeStep = timeStep
+
+    // If module was already loaded via loadCompiledModule, skip fetch/load
+    if (!this.module || !this.metadata) {
+      const apiEndpoint = config.apiEndpoint || '/api/compile-wasm'
+      const optimizationLevel = config.optimizationLevel || 'O2'
+
+      console.log(`[WasmSimulationEngine] Compiling model ${this.modelId}...`)
+      const compileStart = Date.now()
+
+      // Fetch compiled WASM from API
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          modelId: this.modelId,
+          optimizationLevel
+        })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(`Failed to compile WASM: ${error.error || 'Unknown error'}`)
+      }
+
+      const data = await response.json()
+      const compileTime = Date.now() - compileStart
+
+      console.log(
+        `[WasmSimulationEngine] Compilation ${data.metadata.cacheHit ? 'cache hit' : 'completed'} (${compileTime}ms)`
+      )
+
+      // Decode base64 to binary
+      const wasmBinary = Uint8Array.from(atob(data.wasmData), c => c.charCodeAt(0)).buffer
+      const jsCode = atob(data.jsData)
+
+      // Store metadata
+      this.metadata = {
+        modelName: data.metadata.modelName,
+        version: data.metadata.version,
+        cacheKey: data.metadata.cacheKey,
+        cacheHit: data.metadata.cacheHit,
+        time: data.metadata.compilationTime || data.metadata.retrievalTime,
+        wasmSize: data.metadata.wasmSize,
+        jsSize: data.metadata.jsSize,
+        optimizationLevel: data.metadata.optimizationLevel,
+        blockCount: data.metadata.blockCount,
+        inputMap: new Map(data.metadata.inputMap),
+        outputMap: new Map(data.metadata.outputMap)
+      }
+
+      // Load WASM module
+      console.log(`[WasmSimulationEngine] Loading WASM module...`)
+      const loadStart = Date.now()
+
+      // Create Blob URL for JS glue code
+      const jsBlob = new Blob([jsCode], { type: 'application/javascript' })
+      this.moduleUrl = URL.createObjectURL(jsBlob)
+
+      try {
+        // Dynamically import the module
+        const moduleFactory = await import(/* webpackIgnore: true */ this.moduleUrl)
+        const createModule = moduleFactory.default || moduleFactory
+
+        // Instantiate with WASM binary
+        this.module = await createModule({
+          wasmBinary,
+          // Suppress Emscripten output
+          print: () => {},
+          printErr: () => {}
+        })
+
+        const loadTime = Date.now() - loadStart
+        console.log(`[WasmSimulationEngine] Module loaded (${loadTime}ms)`)
+      } catch (error) {
+        // Clean up on error
+        if (this.moduleUrl) {
+          URL.revokeObjectURL(this.moduleUrl)
+          this.moduleUrl = null
+        }
+        throw new Error(
+          `Failed to load WASM module: ${error instanceof Error ? error.message : 'Unknown error'}`
+        )
+      }
+    }
+
+    // Initialize model with timestep
+    if (!this.module || !this.metadata) {
+      throw new Error('WASM module not loaded')
+    }
+
+    this.module._wasm_init(timeStep)
+
+    this.state.isInitialized = true
+    this.state.time = 0
+
+    // Initialize input/output state from metadata
+    this.metadata.inputMap.forEach((index, name) => {
+      this.state.inputs[name] = 0
+    })
+
+    this.metadata.outputMap.forEach((index, name) => {
+      this.state.outputs[name] = 0
+    })
+
+    console.log(
+      `[WasmSimulationEngine] Initialized: ${this.metadata.inputMap.size} inputs, ${this.metadata.outputMap.size} outputs`
+    )
   }
 
   /**
@@ -503,6 +580,15 @@ export class WasmSimulationEngine {
       inputs: { ...this.state.inputs },
       outputs: { ...this.state.outputs }
     }
+  }
+
+  /**
+   * Check if the engine is initialized
+   *
+   * @returns True if initialized, false otherwise
+   */
+  isInitialized(): boolean {
+    return this.state.isInitialized
   }
 
   /**

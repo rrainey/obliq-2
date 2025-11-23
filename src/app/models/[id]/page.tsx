@@ -8,6 +8,8 @@ import { WireData } from '@/components/Wire'
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
 import { createSimulationEngine, getWasmPreference } from '@/lib/simulation/SimulationEngineFactory'
+import { WasmSimulationEngine } from '@/lib/simulation/WasmSimulationEngine'
+import { convertWasmToUIFormat, WasmDataCollector } from '@/lib/simulation/WasmResultConverter'
 import SaveAsDialog from '@/components/SaveAsDialog'
 import AutoSaveRecoveryDialog from '@/components/AutoSaveRecoveryDialog'
 import AutoSaveStatusIndicator from '@/components/AutoSaveStatusIndicator'
@@ -128,6 +130,11 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const [isCompiling, setIsCompiling] = useState(false)
   const [compilationTime, setCompilationTime] = useState<number | null>(null)
   const [compilationError, setCompilationError] = useState<string | null>(null)
+  const [compiledWasmData, setCompiledWasmData] = useState<{
+    wasmData: string
+    jsData: string
+    metadata: any
+  } | null>(null)
 
   const [showAutoSaveDialog, setShowAutoSaveDialog] = useState(false)
   const [autoSaveInfo, setAutoSaveInfo] = useState<{
@@ -822,43 +829,113 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         duration: settingsValidation.duration
       }
 
-      if (useWasm) {
-        // WASM path - currently using JavaScript until full WASM multi-sheet support is implemented
-        // For now, show notification that WASM is enabled but using JavaScript
-        notifications.show({
-          title: 'WASM mode active',
-          message: 'WASM compilation support coming soon. Using JavaScript engine for multi-sheet models.',
-          color: 'blue',
-          icon: <IconAlertCircle size={20} />,
-          autoClose: 3000
-        })
+      let allResults: Map<string, any>
+      let multiEngine: MultiSheetSimulationEngine | null = null
 
-        // TODO: Implement WASM path
-        // const compilationStart = performance.now()
-        // setIsCompiling(true)
-        // const wasmEngine = await createSimulationEngine({
-        //   modelId: model.id,
-        //   useWasm: true,
-        //   config
-        // })
-        // setCompilationTime(Math.round(performance.now() - compilationStart))
-        // setIsCompiling(false)
+      if (useWasm && model) {
+        // WASM execution path
+        if (!compiledWasmData) {
+          // No compiled WASM yet - trigger compilation via CompilationProgress
+          notifications.show({
+            title: 'WASM compilation starting',
+            message: 'Compiling model to WebAssembly...',
+            color: 'blue',
+            icon: <IconAlertCircle size={20} />,
+            autoClose: 3000
+          })
+          setIsCompiling(true)
+          setIsSimulating(false)
+          return
+        }
+
+        // Execute WASM simulation
+        const wasmEngine = new WasmSimulationEngine(model.id)
+
+        try {
+          // Load compiled WASM module
+          await wasmEngine.loadCompiledModule(
+            compiledWasmData.wasmData,
+            compiledWasmData.jsData,
+            compiledWasmData.metadata
+          )
+
+          await wasmEngine.initialize(config.timeStep)
+
+          // Create data collector for time-series data
+          const dataCollector = new WasmDataCollector()
+
+          // Run simulation
+          const numSteps = Math.floor(config.duration / config.timeStep)
+          for (let i = 0; i < numSteps; i++) {
+            wasmEngine.step()
+            const currentTime = wasmEngine.getTime()
+            const loggerValues = wasmEngine.getLoggerValues()
+            dataCollector.collect(currentTime, loggerValues)
+          }
+
+          // Extract results
+          const loggerNames = wasmEngine.getLoggerNames()
+          const loggerValues = wasmEngine.getLoggerValues()
+          const loggerHistory = dataCollector.getHistory()
+          const timePoints = dataCollector.getTimePoints()
+
+          // Convert to UI format
+          allResults = convertWasmToUIFormat(
+            loggerNames,
+            loggerValues,
+            sheets,
+            config.timeStep,
+            config.duration,
+            timePoints,
+            loggerHistory
+          )
+
+          // Cleanup
+          wasmEngine.destroy()
+
+          console.log('WASM simulation completed:', {
+            totalSheets: allResults.size,
+            sheetsWithData: Array.from(allResults.keys()),
+            loggerCount: loggerNames.length,
+            timePoints: timePoints.length
+          })
+
+        } catch (error) {
+          console.error('WASM simulation error:', error)
+          wasmEngine.destroy()
+
+          // Fallback to JavaScript
+          notifications.show({
+            title: 'WASM execution failed',
+            message: 'Falling back to JavaScript engine',
+            color: 'orange',
+            icon: <IconAlertCircle size={20} />,
+            autoClose: 5000
+          })
+
+          multiEngine = new MultiSheetSimulationEngine(sheets, config)
+          allResults = multiEngine.run()
+        }
+
+      } else {
+        // JavaScript path (current implementation)
+        multiEngine = new MultiSheetSimulationEngine(sheets, config)
+
+        // Run simulation across ALL sheets - this returns results for all sheets
+        allResults = multiEngine.run()
       }
-
-      // JavaScript path (current implementation)
-      const multiEngine = new MultiSheetSimulationEngine(sheets, config)
-
-      // Run simulation across ALL sheets - this returns results for all sheets
-      const allResults = multiEngine.run()
 
       // Store ALL results globally
       setGlobalSimulationResults(allResults)
 
       // Also set the current sheet's engine for CSV export and other operations
-      const currentSheetEngine = multiEngine.getSheetEngine(activeSheetId)
-      if (currentSheetEngine) {
-        setSimulationEngine(currentSheetEngine)
-        setOutputPortValues(multiEngine.getOutputPortValues(activeSheetId) || new Map())
+      // (only available when using JavaScript engine)
+      if (multiEngine) {
+        const currentSheetEngine = multiEngine.getSheetEngine(activeSheetId)
+        if (currentSheetEngine) {
+          setSimulationEngine(currentSheetEngine)
+          setOutputPortValues(multiEngine.getOutputPortValues(activeSheetId) || new Map())
+        }
       }
 
       console.log('Simulation completed for all sheets:', {
@@ -877,7 +954,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
       notifications.show({
         title: 'Simulation completed',
-        message: `Simulation ran successfully across all sheets${useWasm ? ' (JavaScript engine)' : ''}`,
+        message: `Simulation ran successfully across all sheets${useWasm && compiledWasmData ? ' (WASM)' : ''}`,
         color: 'green',
         icon: <IconCircleCheck size={20} />
       })
@@ -1318,8 +1395,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onComplete={(result) => {
                 console.log('Compilation complete:', result)
                 setCompilationTime(result.metadata.compilationTime || 0)
+                setCompiledWasmData(result)
                 setIsCompiling(false)
-                // TODO: Use compiled WASM for simulation
               }}
               onError={(error) => {
                 setCompilationError(error)
