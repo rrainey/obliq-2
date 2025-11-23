@@ -79,7 +79,8 @@ import {
   IconCircleCheck,
   IconAlertTriangle,
   IconDownload,
-  IconClock
+  IconClock,
+  IconCheck
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 
@@ -162,6 +163,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       fetchModel()
     }
   }, [user, id, requestedVersion])
+
+  // Pre-warming: Compile WASM in background when model loads
+  useEffect(() => {
+    if (model && getWasmPreference() && !compiledWasmData && !isCompiling) {
+      // Start background compilation
+      console.log('[Pre-warming] Starting background WASM compilation...')
+      setIsCompiling(true)
+    }
+  }, [model, compiledWasmData, isCompiling])
 
   const fetchModel = async () => {
     try {
@@ -1393,14 +1403,37 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               modelId={model.id}
               optimizationLevel="O2"
               onComplete={(result) => {
-                console.log('Compilation complete:', result)
-                setCompilationTime(result.metadata.compilationTime || 0)
+                console.log('[Pre-warming] Compilation complete:', result)
+                setCompilationTime(result.metadata.compilationTime || result.metadata.retrievalTime || 0)
                 setCompiledWasmData(result)
                 setIsCompiling(false)
+
+                // Show subtle notification for background pre-warming
+                if (!isSimulating) {
+                  notifications.show({
+                    title: 'WASM Ready',
+                    message: result.metadata.cacheHit
+                      ? `Loaded from cache (${result.metadata.retrievalTime || 0}ms)`
+                      : `Compiled in ${result.metadata.compilationTime || 0}ms`,
+                    color: 'green',
+                    icon: <IconCheck size={20} />,
+                    autoClose: 3000
+                  })
+                }
               }}
               onError={(error) => {
+                console.error('[Pre-warming] Compilation error:', error)
                 setCompilationError(error)
                 setIsCompiling(false)
+
+                // Show error notification
+                notifications.show({
+                  title: 'WASM Compilation Failed',
+                  message: 'Will use JavaScript engine instead',
+                  color: 'orange',
+                  icon: <IconAlertCircle size={20} />,
+                  autoClose: 5000
+                })
               }}
             />
           )}
