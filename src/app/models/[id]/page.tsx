@@ -19,6 +19,7 @@ import SimulationSettingsPanel, { validateSimulationSettings } from '@/component
 import SignalDisplay from '@/components/SignalDisplay'
 import SheetTabs, { Sheet } from '@/components/SheetTabs'
 import CompilationProgress from '@/components/CompilationProgress'
+import WasmErrorDisplay from '@/components/WasmErrorDisplay'
 import InputPortConfig from '@/components/InputPortConfig'
 import SourceConfig from '@/components/SourceConfig'
 import ScaleConfig from '@/components/ScaleConfig'
@@ -131,6 +132,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const [isCompiling, setIsCompiling] = useState(false)
   const [compilationTime, setCompilationTime] = useState<number | null>(null)
   const [compilationError, setCompilationError] = useState<string | null>(null)
+  const [compilationErrorDetails, setCompilationErrorDetails] = useState<string | null>(null)
   const [compiledWasmData, setCompiledWasmData] = useState<{
     wasmData: string
     jsData: string
@@ -1421,9 +1423,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                   })
                 }
               }}
-              onError={(error) => {
-                console.error('[Pre-warming] Compilation error:', error)
+              onError={(error, details) => {
+                console.error('[Pre-warming] Compilation error:', error, details)
                 setCompilationError(error)
+                setCompilationErrorDetails(details || null)
                 setIsCompiling(false)
 
                 // Show error notification
@@ -1440,9 +1443,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
           {/* WASM Compilation Error */}
           {compilationError && !isCompiling && (
-            <Alert color="red" variant="light" title="Compilation Error">
-              <Text size="sm">{compilationError}</Text>
-            </Alert>
+            <WasmErrorDisplay
+              error={compilationError}
+              details={compilationErrorDetails || undefined}
+              onDismiss={() => {
+                setCompilationError(null)
+                setCompilationErrorDetails(null)
+              }}
+            />
           )}
 
           <ScrollArea style={{ flex: 1 }} offsetScrollbars>

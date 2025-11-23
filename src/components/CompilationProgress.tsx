@@ -14,7 +14,7 @@ interface CompilationProgressProps {
   modelId: string
   optimizationLevel?: 'O0' | 'O1' | 'O2' | 'O3'
   onComplete?: (result: { wasmData: string; jsData: string; metadata: any }) => void
-  onError?: (error: string) => void
+  onError?: (error: string, details?: string) => void
 }
 
 interface ProgressEvent {
@@ -162,7 +162,7 @@ export default function CompilationProgress({
       setMessage(`Error: ${data.error}`)
 
       if (onError) {
-        onError(data.error)
+        onError(data.error, data.details)
       }
     }
 
