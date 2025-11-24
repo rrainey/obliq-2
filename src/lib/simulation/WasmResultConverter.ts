@@ -10,19 +10,27 @@ import type { SignalValue } from '@/lib/modelSchema'
 import { Sheet } from '@/components/SheetTabs'
 
 /**
- * Convert WASM logger outputs to UI SimulationResults format
+ * Convert WASM logger/display outputs to UI SimulationResults format (new internal storage API)
  *
- * WASM provides:
- * - loggerNames: ['logger_Temperature', 'logger_Pressure', ...]
- * - loggerValues: { Temperature: 23.5, Pressure: 101.3, ... }
+ * @param sampleData - Map of collector name (without prefix) to sample arrays
+ * @param sheets - Model sheets to map loggers/displays back to blocks
+ * @param timeStep - Simulation time step
+ * @param duration - Simulation duration
+ * @returns Map of sheet IDs to SimulationResults
+ */
+export function convertWasmToUIFormat(
+  sampleData: Map<string, SignalValue[]>,
+  sheets: Sheet[],
+  timeStep: number,
+  duration: number
+): Map<string, SimulationResults>
+
+/**
+ * Convert WASM logger/display outputs to UI SimulationResults format (legacy external collection API)
  *
- * UI expects:
- * - Map<sheetId, SimulationResults>
- * - SimulationResults contains signalData per block ID
- *
- * @param loggerNames - Array of logger names from WASM (with 'logger_' prefix)
- * @param loggerValues - Object of logger values (without prefix)
- * @param sheets - Model sheets to map loggers back to blocks
+ * @param loggerNames - Array of logger/display names from WASM (with 'logger_' or 'display_' prefix)
+ * @param loggerValues - Object of logger/display values (without prefix)
+ * @param sheets - Model sheets to map loggers/displays back to blocks
  * @param timeStep - Simulation time step
  * @param duration - Simulation duration
  * @param timePoints - Array of time points from simulation
@@ -30,6 +38,110 @@ import { Sheet } from '@/components/SheetTabs'
  * @returns Map of sheet IDs to SimulationResults
  */
 export function convertWasmToUIFormat(
+  loggerNames: string[],
+  loggerValues: Record<string, SignalValue>,
+  sheets: Sheet[],
+  timeStep: number,
+  duration: number,
+  timePoints?: number[],
+  loggerHistory?: Map<string, SignalValue[]>
+): Map<string, SimulationResults>
+
+/**
+ * Implementation
+ */
+export function convertWasmToUIFormat(
+  arg1: Map<string, SignalValue[]> | string[],
+  arg2: Sheet[] | Record<string, SignalValue>,
+  arg3: Sheet[] | number,
+  arg4: number,
+  arg5?: number,
+  arg6?: number[],
+  arg7?: Map<string, SignalValue[]>
+): Map<string, SimulationResults> {
+  // Detect which overload is being used
+  if (arg1 instanceof Map) {
+    // New internal storage API
+    const sampleData = arg1
+    const sheets = arg2 as Sheet[]
+    const timeStep = arg3 as number
+    const duration = arg4
+    return convertWasmToUIFormatInternal(sampleData, sheets, timeStep, duration)
+  } else {
+    // Legacy external collection API
+    const loggerNames = arg1
+    const loggerValues = arg2 as Record<string, SignalValue>
+    const sheets = arg3 as Sheet[]
+    const timeStep = arg4
+    const duration = arg5!
+    const timePoints = arg6
+    const loggerHistory = arg7
+    return convertWasmToUIFormatLegacy(
+      loggerNames,
+      loggerValues,
+      sheets,
+      timeStep,
+      duration,
+      timePoints,
+      loggerHistory
+    )
+  }
+}
+
+/**
+ * Internal storage implementation (new)
+ */
+function convertWasmToUIFormatInternal(
+  sampleData: Map<string, SignalValue[]>,
+  sheets: Sheet[],
+  timeStep: number,
+  duration: number
+): Map<string, SimulationResults> {
+  const results = new Map<string, SimulationResults>()
+  const timePoints = generateTimePoints(timeStep, duration)
+
+  // Build collector name to block mapping
+  const collectorToBlockMap = buildLoggerToBlockMap(sheets)
+
+  // Get collector names from sample data
+  const collectorNames = Array.from(sampleData.keys()).map(name => {
+    // Add prefix back for mapping lookup
+    const prefix = name.startsWith('Signal_display') ? 'display_' : 'logger_'
+    return `${prefix}${name}`
+  })
+
+  // Group collectors by sheet
+  const collectorsBySheet = groupLoggersBySheet(collectorNames, collectorToBlockMap, sheets)
+
+  // Create SimulationResults for each sheet
+  for (const [sheetId, collectors] of collectorsBySheet) {
+    const signalData = new Map<string, SignalValue[]>()
+
+    for (const { blockId, loggerName } of collectors) {
+      // Remove prefix to get short name
+      const shortName = loggerName.replace(/^(logger_|display_)/, '')
+
+      // Get historical data from sample data
+      const data = sampleData.get(shortName)
+      if (data) {
+        signalData.set(blockId, data)
+      }
+    }
+
+    results.set(sheetId, {
+      timePoints,
+      finalTime: duration,
+      signalData
+    })
+  }
+
+  return results
+}
+
+/**
+ * External collection implementation (legacy)
+ */
+function convertWasmToUIFormatLegacy(
   loggerNames: string[],
   loggerValues: Record<string, SignalValue>,
   sheets: Sheet[],
@@ -55,7 +167,8 @@ export function convertWasmToUIFormat(
 
     for (const loggerInfo of sheetLoggers) {
       const { blockId, loggerName } = loggerInfo
-      const shortName = loggerName.replace('logger_', '')
+      // Remove prefix (either 'logger_' or 'display_')
+      const shortName = loggerName.replace(/^(logger_|display_)/, '')
 
       // Get historical data if available, otherwise create array of final values
       let data: SignalValue[]
@@ -97,9 +210,9 @@ function generateTimePoints(timeStep: number, duration: number): number[] {
 }
 
 /**
- * Build mapping from logger names to block IDs
+ * Build mapping from logger/display names to block IDs
  *
- * Searches all sheets for signal_logger blocks and maps their names
+ * Searches all sheets for signal_logger and signal_display blocks and maps their names
  * to their block IDs and containing sheet IDs.
  */
 function buildLoggerToBlockMap(
@@ -111,9 +224,21 @@ function buildLoggerToBlockMap(
   function searchSheet(sheet: Sheet) {
     for (const block of sheet.blocks) {
       if (block.type === 'signal_logger') {
-        // Logger name in WASM will be 'logger_<blockName>'
-        const loggerName = `logger_${block.name}`
+        // Logger name in WASM will be 'logger_<sanitizedBlockName>'
+        // Block names are sanitized to replace spaces with underscores
+        const sanitizedName = block.name.replace(/[^a-zA-Z0-9_]/g, '_')
+        const loggerName = `logger_${sanitizedName}`
         map.set(loggerName, {
+          blockId: block.id,
+          sheetId: sheet.id,
+          blockName: block.name
+        })
+      } else if (block.type === 'signal_display') {
+        // Display name in WASM will be 'display_<sanitizedBlockName>'
+        // Block names are sanitized to replace spaces with underscores
+        const sanitizedName = block.name.replace(/[^a-zA-Z0-9_]/g, '_')
+        const displayName = `display_${sanitizedName}`
+        map.set(displayName, {
           blockId: block.id,
           sheetId: sheet.id,
           blockName: block.name

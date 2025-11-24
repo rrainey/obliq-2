@@ -170,10 +170,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   useEffect(() => {
     if (model && getWasmPreference() && !compiledWasmData && !isCompiling) {
       // Start background compilation
-      console.log('[Pre-warming] Starting background WASM compilation...')
+      console.log('[Pre-warming] Starting background WASM compilation for model:', model.id, model.name)
       setIsCompiling(true)
     }
-  }, [model, compiledWasmData, isCompiling])
+  }, [model, compiledWasmData]) // Don't include isCompiling to avoid re-triggering when it changes
 
   const fetchModel = async () => {
     try {
@@ -873,43 +873,32 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
           await wasmEngine.initialize(config.timeStep)
 
-          // Create data collector for time-series data
-          const dataCollector = new WasmDataCollector()
-
-          // Run simulation
+          // Run simulation (no data collection during steps)
           const numSteps = Math.floor(config.duration / config.timeStep)
           for (let i = 0; i < numSteps; i++) {
             wasmEngine.step()
-            const currentTime = wasmEngine.getTime()
-            const loggerValues = wasmEngine.getLoggerValues()
-            dataCollector.collect(currentTime, loggerValues)
           }
 
-          // Extract results
-          const loggerNames = wasmEngine.getLoggerNames()
-          const loggerValues = wasmEngine.getLoggerValues()
-          const loggerHistory = dataCollector.getHistory()
-          const timePoints = dataCollector.getTimePoints()
+          // Retrieve all sample data at once from internal buffers
+          const sampleData = wasmEngine.getSampleData()
 
           // Convert to UI format
           allResults = convertWasmToUIFormat(
-            loggerNames,
-            loggerValues,
+            sampleData,
             sheets,
             config.timeStep,
-            config.duration,
-            timePoints,
-            loggerHistory
+            config.duration
           )
 
-          // Cleanup
+          // Cleanup allocated memory
+          wasmEngine.cleanup()
           wasmEngine.destroy()
 
           console.log('WASM simulation completed:', {
             totalSheets: allResults.size,
             sheetsWithData: Array.from(allResults.keys()),
-            loggerCount: loggerNames.length,
-            timePoints: timePoints.length
+            collectorCount: sampleData.size,
+            samplesPerCollector: Array.from(sampleData.values()).map(arr => arr.length)
           })
 
         } catch (error) {
@@ -1405,6 +1394,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               modelId={model.id}
               optimizationLevel="O2"
               onComplete={(result) => {
+                console.log('[Pre-warming] model.id being passed:', model.id)
                 console.log('[Pre-warming] Compilation complete:', result)
                 setCompilationTime(result.metadata.compilationTime || result.metadata.retrievalTime || 0)
                 setCompiledWasmData(result)

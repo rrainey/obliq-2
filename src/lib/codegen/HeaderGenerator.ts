@@ -60,6 +60,7 @@ export class HeaderGenerator {
   private generateIncludes(): string {
     return `#include <stdint.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>\n`
   }
@@ -95,18 +96,40 @@ export class HeaderGenerator {
 
   private generateModelStructure(): string {
     const members: string[] = []
-    
+
     // Add sub-structures
     members.push(`    ${this.modelName}_inputs_t inputs;`)
     members.push(`    ${this.modelName}_outputs_t outputs;`)
     members.push(`    ${this.modelName}_signals_t signals;`)
     members.push(`    ${this.modelName}_states_t states;`)
     members.push(`    enable_states_t enable_states;`) // Always include
-    
+
+    // Add data collection members for logger/display blocks
+    for (const block of this.model.blocks) {
+      try {
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
+
+        // Check if block employs data collection
+        if (generator.employsDataCollection && generator.employsDataCollection(block.block)) {
+          // Get input type for this block
+          const inputType = this.getBlockInputType(block)
+
+          // Generate data collection struct members
+          if (generator.generateDataCollectionStructMembers) {
+            const dataMembers = generator.generateDataCollectionStructMembers(block.block, inputType)
+            members.push(...dataMembers)
+          }
+        }
+      } catch (error) {
+        // Block type not supported or doesn't use data collection
+        continue
+      }
+    }
+
     // Add time tracking
     members.push(`    double time;`)
     members.push(`    double dt; /* Time step */`)
-    
+
     return CCodeBuilder.generateStruct(
       this.modelName,
       members,
@@ -423,7 +446,20 @@ export class HeaderGenerator {
         'Update enable states based on enable inputs'
       ) + '\n'
     }
-    
+
+    // Cleanup function - only if we have data collection blocks
+    const hasDataCollBlocks = this.hasDataCollectionBlocks()
+    console.log(`[HeaderGenerator] Model: ${this.modelName}, hasDataCollectionBlocks: ${hasDataCollBlocks}`)
+    if (hasDataCollBlocks) {
+      console.log('[HeaderGenerator] Adding cleanup function prototype to header')
+      prototypes += CCodeBuilder.generateFunctionPrototype(
+        'void',
+        `${this.modelName}_cleanup`,
+        [`${this.modelName}_t* model`],
+        'Free allocated memory for data collection'
+      ) + '\n'
+    }
+
     return prototypes
   }
   
@@ -440,6 +476,27 @@ export class HeaderGenerator {
       }
     })
   }
+
+  /**
+   * Helper to determine if the model has data collection blocks
+   */
+  private hasDataCollectionBlocks(): boolean {
+    console.log(`[HeaderGenerator] Checking ${this.model.blocks.length} blocks for data collection`)
+    const result = this.model.blocks.some(block => {
+      try {
+        console.log(`[HeaderGenerator] Checking block type: ${block.block.type}, name: ${block.block.name}`)
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
+        const employs = generator.employsDataCollection && generator.employsDataCollection(block.block)
+        console.log(`[HeaderGenerator] Block ${block.block.name} employs data collection: ${employs}`)
+        return employs
+      } catch (error) {
+        console.log(`[HeaderGenerator] Error checking block ${block.block.name}: ${error}`)
+        return false
+      }
+    })
+    console.log(`[HeaderGenerator] Final result: ${result}`)
+    return result
+  }
   
   /**
    * Helper to get block output type
@@ -450,11 +507,11 @@ export class HeaderGenerator {
     if (mappedType) {
       return mappedType
     }
-    
+
     // Fall back to parameter-based type
     const dataType = block.block.parameters?.dataType
     if (dataType) return dataType
-    
+
     // Default types by block type
     switch (block.block.type) {
       case 'source':
@@ -463,5 +520,28 @@ export class HeaderGenerator {
       default:
         return 'double'
     }
+  }
+
+  /**
+   * Helper to get block input type
+   * For data collection blocks, we need to find the type of the signal connected to their input
+   */
+  private getBlockInputType(block: typeof this.model.blocks[0]): string {
+    // Find the connection to the first input port of this block
+    const inputConnection = this.model.connections.find(c =>
+      c.targetBlockId === block.originalId && c.targetPortIndex === 0
+    )
+
+    if (inputConnection) {
+      // Get the source block
+      const sourceBlock = this.model.blocks.find(b => b.originalId === inputConnection.sourceBlockId)
+      if (sourceBlock) {
+        // Return the output type of the source block
+        return this.getBlockOutputType(sourceBlock)
+      }
+    }
+
+    // Default to double if no connection found
+    return 'double'
   }
 }

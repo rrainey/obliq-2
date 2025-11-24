@@ -4,6 +4,7 @@ import { Sheet } from '@/lib/simulationEngine'
 import { ModelFlattener } from './ModelFlattener'
 import { HeaderGenerator } from './HeaderGenerator'
 import { InitFunctionGenerator } from './InitFunctionGenerator'
+import { CleanupFunctionGenerator } from './CleanupFunctionGenerator'
 import { AlgebraicEvaluator } from './AlgebraicEvaluator'
 import { IntegrationOrchestrator } from './IntegrationOrchestrator'
 import { EnableEvaluator } from './EnableEvaluator'
@@ -209,13 +210,21 @@ export class CodeGenerator {
       includeComments: this.options.includeDebugComments
     })
     source += integrationOrchestrator.generate()
-    
+
+    // Cleanup function (if needed)
+    const cleanupGenerator = new CleanupFunctionGenerator(model)
+    const cleanupCode = cleanupGenerator.generate()
+    if (cleanupCode) {
+      source += '\n'
+      source += cleanupCode
+    }
+
     // Optional main function
     if (this.options.generateMain) {
       source += '\n'
       source += this.generateMainFunction(model)
     }
-    
+
     return source
   }
   

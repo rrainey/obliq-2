@@ -8,6 +8,24 @@
 import crypto from 'crypto'
 import type { Sheet } from '@/types/canvas'
 
+/**
+ * Code generation version - increment this to invalidate all cached WASM modules
+ * when code generation logic changes in a way that affects the output.
+ *
+ * History:
+ * - v1: Initial implementation
+ * - v2: Added Signal Display block support to output mapping
+ * - v3: Fixed block name sanitization for logger/display outputs
+ * - v4: Internal data collection with malloc/free for Signal Logger and Display blocks
+ * - v5: Fixed cleanup function generation (conditional based on data collectors)
+ * - v6: Fixed cleanup function synchronization by checking actual generated header
+ * - v7: Added data collection functions and wasm_cleanup to EXPORTED_FUNCTIONS
+ * - v8: Added debug logging to diagnose cleanup function generation mismatch
+ * - v9: Added detailed block-level logging to identify mismatch cause
+ * - v10: Fixed CleanupFunctionGenerator to use correct BlockModuleFactory.getBlockModule() method
+ */
+const CODEGEN_VERSION = 'v10'
+
 export interface ModelStructure {
   sheets: Sheet[]
 }
@@ -35,7 +53,7 @@ export function generateCacheKey(
   const hash = hashModel(model)
   const debugSuffix = includeDebugInfo ? '-debug' : ''
 
-  return `${modelId}-${hash}-${optimizationLevel}${debugSuffix}`
+  return `${CODEGEN_VERSION}-${modelId}-${hash}-${optimizationLevel}${debugSuffix}`
 }
 
 /**
@@ -110,10 +128,10 @@ export function hashModel(model: ModelStructure): string {
  * @returns True if the cache key has valid format
  */
 export function isValidCacheKey(cacheKey: string): boolean {
-  // Format: {modelId}-{hash}-{opt}[-debug]
-  // Example: 550e8400-e29b-41d4-a716-446655440000-a1b2c3d4e5f67890-O2
-  // Example: test-model-id-0123456789abcdef-O0
-  const pattern = /^.+-[a-f0-9]{16}-O[0-3](-debug)?$/
+  // Format: {version}-{modelId}-{hash}-{opt}[-debug]
+  // Example: v2-550e8400-e29b-41d4-a716-446655440000-a1b2c3d4e5f67890-O2
+  // Example: v2-test-model-id-0123456789abcdef-O0
+  const pattern = /^v\d+-.+-[a-f0-9]{16}-O[0-3](-debug)?$/
   return pattern.test(cacheKey)
 }
 
@@ -124,6 +142,7 @@ export function isValidCacheKey(cacheKey: string): boolean {
  * @returns Parsed components or null if invalid
  */
 export function parseCacheKey(cacheKey: string): {
+  version: string
   modelId: string
   hash: string
   optimizationLevel: string
@@ -135,19 +154,20 @@ export function parseCacheKey(cacheKey: string): {
 
   const parts = cacheKey.split('-')
   const debugInfo = cacheKey.endsWith('-debug')
+  const version = parts[0] // v1, v2, etc.
 
-  // Format with debug: modelId-hash-opt-debug
-  // Format without: modelId-hash-opt
+  // Format with debug: version-modelId-hash-opt-debug
+  // Format without: version-modelId-hash-opt
   if (debugInfo) {
     const optLevel = parts[parts.length - 2] // O2, O3, etc.
     const hash = parts[parts.length - 3] // 16-char hex
-    const modelId = parts.slice(0, -3).join('-')
-    return { modelId, hash, optimizationLevel: optLevel, debugInfo: true }
+    const modelId = parts.slice(1, -3).join('-')
+    return { version, modelId, hash, optimizationLevel: optLevel, debugInfo: true }
   } else {
     const optLevel = parts[parts.length - 1]
     const hash = parts[parts.length - 2]
-    const modelId = parts.slice(0, -2).join('-')
-    return { modelId, hash, optimizationLevel: optLevel, debugInfo: false }
+    const modelId = parts.slice(1, -2).join('-')
+    return { version, modelId, hash, optimizationLevel: optLevel, debugInfo: false }
   }
 }
 

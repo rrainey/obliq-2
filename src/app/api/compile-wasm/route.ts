@@ -238,7 +238,7 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
       `emcc /workspace/${safeName}.c /workspace/${safeName}_wasm.c ` +
       `-I/workspace -o /workspace/${safeName}.js ` +
       `-s WASM=1 ` +
-      `-s "EXPORTED_FUNCTIONS=[\\"_wasm_init\\",\\"_wasm_set_input\\",\\"_wasm_get_output\\",\\"_wasm_step\\",\\"_wasm_get_time\\",\\"_malloc\\",\\"_free\\"]" ` +
+      `-s "EXPORTED_FUNCTIONS=[\\"_wasm_init\\",\\"_wasm_set_input\\",\\"_wasm_get_output\\",\\"_wasm_step\\",\\"_wasm_get_time\\",\\"_wasm_get_collector_count\\",\\"_wasm_get_collector_name\\",\\"_wasm_get_sample_count\\",\\"_wasm_get_samples\\",\\"_wasm_cleanup\\",\\"_malloc\\",\\"_free\\"]" ` +
       `-s "EXPORTED_RUNTIME_METHODS=[\\"ccall\\",\\"cwrap\\"]" ` +
       `-s MODULARIZE=1 ` +
       `-s "EXPORT_NAME=createModule" ` +

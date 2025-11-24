@@ -44,10 +44,13 @@ export class InitFunctionGenerator {
     
     // Initialize block-specific states
     code += this.generateBlockSpecificInit()
-    
+
+    // Initialize data collection buffers
+    code += this.generateDataCollectionInit()
+
     // Initialize constants and source blocks
     code += this.generateConstantInit()
-    
+
     code += '}\n'
     return code
   }
@@ -130,7 +133,90 @@ export class InitFunctionGenerator {
     
     return code
   }
-  
+
+  /**
+   * Generate data collection buffer initialization
+   */
+  private generateDataCollectionInit(): string {
+    let code = ''
+    let hasDataCollection = false
+
+    for (const block of this.model.blocks) {
+      try {
+        const generator = BlockModuleFactory.getModuleGenerator(block.block.type)
+
+        // Check if this block employs data collection
+        if (generator.employsDataCollection && generator.employsDataCollection(block.block)) {
+          // Get input type for this block
+          const inputType = this.getBlockInputType(block)
+
+          // Generate data collection initialization
+          if (generator.generateDataCollectionInit) {
+            const initCode = generator.generateDataCollectionInit(block.block, inputType)
+            if (initCode && initCode.trim()) {
+              if (!hasDataCollection) {
+                code += '    /* Initialize data collection buffers */\n'
+                hasDataCollection = true
+              }
+
+              code += initCode
+              code += '\n'
+            }
+          }
+        }
+      } catch (error) {
+        // Block type not supported for data collection
+        continue
+      }
+    }
+
+    if (hasDataCollection) {
+      code += '\n'
+    }
+
+    return code
+  }
+
+  /**
+   * Get input type for a block by finding the type of the signal connected to its first input
+   */
+  private getBlockInputType(block: typeof this.model.blocks[0]): string {
+    // Find the connection to the first input port of this block
+    const inputConnection = this.model.connections.find(c =>
+      c.targetBlockId === block.originalId && c.targetPortIndex === 0
+    )
+
+    if (inputConnection) {
+      // Get the source block
+      const sourceBlock = this.model.blocks.find(b => b.originalId === inputConnection.sourceBlockId)
+      if (sourceBlock) {
+        // Return the output type of the source block
+        return this.getBlockOutputType(sourceBlock)
+      }
+    }
+
+    // Default to double if no connection found
+    return 'double'
+  }
+
+  /**
+   * Get output type for a block
+   */
+  private getBlockOutputType(block: typeof this.model.blocks[0]): string {
+    // Check block parameters for explicit type
+    const dataType = block.block.parameters?.dataType
+    if (dataType) return dataType
+
+    // Default types by block type
+    switch (block.block.type) {
+      case 'source':
+      case 'input_port':
+        return block.block.parameters?.dataType || 'double'
+      default:
+        return 'double'
+    }
+  }
+
   /**
    * Generate initialization for constant sources
    */

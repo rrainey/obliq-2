@@ -185,7 +185,6 @@ export class WasmSimulationEngine {
   private module: WasmModule | null = null
   private metadata: WasmModuleMetadata | null = null
   private state: WasmSimulationState
-  private moduleUrl: string | null = null
 
   // Memory management
   private allocations: Map<number, MemoryAllocation> = new Map()
@@ -257,14 +256,16 @@ export class WasmSimulationEngine {
     // Load WASM module
     const loadStart = Date.now()
 
-    // Create Blob URL for JS glue code
-    const jsBlob = new Blob([jsCode], { type: 'application/javascript' })
-    this.moduleUrl = URL.createObjectURL(jsBlob)
-
     try {
-      // Dynamically import the module
-      const moduleFactory = await import(/* webpackIgnore: true */ this.moduleUrl)
-      const createModule = moduleFactory.default || moduleFactory
+      // Evaluate JS code in a way that returns the module factory
+      // We use Function constructor instead of eval for better scoping
+      // and to avoid issues with strict mode
+      const moduleFactoryCode = `${jsCode}\nreturn createModule;`
+      const createModule = new Function(moduleFactoryCode)()
+
+      if (typeof createModule !== 'function') {
+        throw new Error('createModule is not a function')
+      }
 
       // Instantiate with WASM binary
       this.module = await createModule({
@@ -280,11 +281,6 @@ export class WasmSimulationEngine {
       // Mark as ready for initialization
       // Note: initialize() must still be called to set timestep
     } catch (error) {
-      // Clean up on error
-      if (this.moduleUrl) {
-        URL.revokeObjectURL(this.moduleUrl)
-        this.moduleUrl = null
-      }
       throw new Error(
         `Failed to load WASM module: ${error instanceof Error ? error.message : 'Unknown error'}`
       )
@@ -359,14 +355,16 @@ export class WasmSimulationEngine {
       console.log(`[WasmSimulationEngine] Loading WASM module...`)
       const loadStart = Date.now()
 
-      // Create Blob URL for JS glue code
-      const jsBlob = new Blob([jsCode], { type: 'application/javascript' })
-      this.moduleUrl = URL.createObjectURL(jsBlob)
-
       try {
-        // Dynamically import the module
-        const moduleFactory = await import(/* webpackIgnore: true */ this.moduleUrl)
-        const createModule = moduleFactory.default || moduleFactory
+        // Evaluate JS code in a way that returns the module factory
+        // We use Function constructor instead of eval for better scoping
+        // and to avoid issues with strict mode
+        const moduleFactoryCode = `${jsCode}\nreturn createModule;`
+        const createModule = new Function(moduleFactoryCode)()
+
+        if (typeof createModule !== 'function') {
+          throw new Error('createModule is not a function')
+        }
 
         // Instantiate with WASM binary
         this.module = await createModule({
@@ -379,11 +377,6 @@ export class WasmSimulationEngine {
         const loadTime = Date.now() - loadStart
         console.log(`[WasmSimulationEngine] Module loaded (${loadTime}ms)`)
       } catch (error) {
-        // Clean up on error
-        if (this.moduleUrl) {
-          URL.revokeObjectURL(this.moduleUrl)
-          this.moduleUrl = null
-        }
         throw new Error(
           `Failed to load WASM module: ${error instanceof Error ? error.message : 'Unknown error'}`
         )
@@ -505,9 +498,9 @@ export class WasmSimulationEngine {
   }
 
   /**
-   * Get all signal logger (scope) data names
+   * Get all signal logger and display (scope) data names
    *
-   * @returns Array of logger names (with 'logger_' prefix)
+   * @returns Array of logger/display names (with 'logger_' or 'display_' prefix)
    */
   getLoggerNames(): string[] {
     if (!this.metadata) {
@@ -516,7 +509,7 @@ export class WasmSimulationEngine {
 
     const loggerNames: string[] = []
     for (const [name] of this.metadata.outputMap) {
-      if (name.startsWith('logger_')) {
+      if (name.startsWith('logger_') || name.startsWith('display_')) {
         loggerNames.push(name)
       }
     }
@@ -525,34 +518,81 @@ export class WasmSimulationEngine {
   }
 
   /**
-   * Get current value from a signal logger
+   * Get current value from a signal logger or display
    *
-   * @param loggerName - Logger name (with or without 'logger_' prefix)
-   * @returns Current signal value at this logger
+   * @param loggerName - Logger/display name (with or without 'logger_'/'display_' prefix)
+   * @returns Current signal value at this logger/display
    */
   getLoggerValue(loggerName: string): SignalValue {
     // Add prefix if not already present
-    const fullName = loggerName.startsWith('logger_') ? loggerName : `logger_${loggerName}`
+    const fullName = (loggerName.startsWith('logger_') || loggerName.startsWith('display_'))
+      ? loggerName
+      : `logger_${loggerName}`
 
     return this.getOutput(fullName)
   }
 
   /**
-   * Get all signal logger values
+   * Get all signal logger and display values
    *
-   * @returns Object mapping logger names (without prefix) to current values
+   * @returns Object mapping logger/display names (without prefix) to current values
    */
   getLoggerValues(): Record<string, SignalValue> {
     const loggerValues: Record<string, SignalValue> = {}
     const loggerNames = this.getLoggerNames()
 
     for (const fullName of loggerNames) {
-      // Remove 'logger_' prefix for cleaner keys
-      const shortName = fullName.substring(7) // Remove 'logger_'
+      // Remove 'logger_' or 'display_' prefix for cleaner keys
+      const shortName = fullName.replace(/^(logger_|display_)/, '')
       loggerValues[shortName] = this.state.outputs[fullName]
     }
 
     return loggerValues
+  }
+
+  /**
+   * Get all sample data from loggers and displays (internal buffer retrieval)
+   *
+   * This retrieves the complete historical data collected during simulation,
+   * stored internally by the WASM module in malloc'd buffers.
+   *
+   * @returns Map of collector name (without prefix) to sample array
+   */
+  getSampleData(): Map<string, SignalValue[]> {
+    if (!this.module || !this.metadata) {
+      return new Map()
+    }
+
+    const sampleData = new Map<string, SignalValue[]>()
+
+    // Check if collector functions are available
+    if (!this.module._wasm_get_collector_count) {
+      console.warn('WASM module does not support data collection functions')
+      return sampleData
+    }
+
+    const collectorCount = this.module._wasm_get_collector_count()
+
+    for (let i = 0; i < collectorCount; i++) {
+      const namePtr = this.module._wasm_get_collector_name(i)
+      const name = this.module.UTF8ToString(namePtr)
+      const sampleCount = this.module._wasm_get_sample_count(i)
+      const samplesPtr = this.module._wasm_get_samples(i)
+
+      // Copy samples from WASM memory to JavaScript array
+      const samples: number[] = []
+      for (let j = 0; j < sampleCount; j++) {
+        // HEAPF64 is a typed array view of the WASM memory as doubles
+        // Divide by 8 because each double is 8 bytes
+        samples.push(this.module.HEAPF64[samplesPtr / 8 + j])
+      }
+
+      // Remove prefix for cleaner keys
+      const shortName = name.replace(/^(logger_|display_)/, '')
+      sampleData.set(shortName, samples)
+    }
+
+    return sampleData
   }
 
   /**
@@ -677,6 +717,23 @@ export class WasmSimulationEngine {
 
     // Update outputs
     this.updateOutputs()
+  }
+
+  /**
+   * Cleanup WASM resources
+   *
+   * Frees all allocated memory for data collection buffers.
+   * Should be called when the simulation engine is no longer needed.
+   */
+  cleanup(): void {
+    if (!this.module) {
+      return
+    }
+
+    // Call cleanup function if available
+    if (this.module._wasm_cleanup) {
+      this.module._wasm_cleanup()
+    }
   }
 
   /**
@@ -957,12 +1014,6 @@ export class WasmSimulationEngine {
     // Free any remaining allocations
     if (this.allocations.size > 0) {
       this.freeAll()
-    }
-
-    // Revoke Blob URL to free memory
-    if (this.moduleUrl) {
-      URL.revokeObjectURL(this.moduleUrl)
-      this.moduleUrl = null
     }
 
     // Clear module reference
