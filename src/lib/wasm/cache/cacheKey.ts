@@ -23,8 +23,10 @@ import type { Sheet } from '@/types/canvas'
  * - v8: Added debug logging to diagnose cleanup function generation mismatch
  * - v9: Added detailed block-level logging to identify mismatch cause
  * - v10: Fixed CleanupFunctionGenerator to use correct BlockModuleFactory.getBlockModule() method
+ * - v11: Added vector/matrix support - wasm_get_element_size function for non-scalar signals
+ * - v12: Fixed wasm_get_samples() pointer cast and wasm_get_output() to work with vectors
  */
-const CODEGEN_VERSION = 'v10'
+const CODEGEN_VERSION = 'v12'
 
 export interface ModelStructure {
   sheets: Sheet[]

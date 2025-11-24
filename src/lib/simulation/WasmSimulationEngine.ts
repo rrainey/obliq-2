@@ -579,12 +579,29 @@ export class WasmSimulationEngine {
       const sampleCount = this.module._wasm_get_sample_count(i)
       const samplesPtr = this.module._wasm_get_samples(i)
 
+      // Get element size (1 for scalar, N for vector, M*N for matrix)
+      const elementSize = this.module._wasm_get_element_size
+        ? this.module._wasm_get_element_size(i)
+        : 1
+
       // Copy samples from WASM memory to JavaScript array
-      const samples: number[] = []
-      for (let j = 0; j < sampleCount; j++) {
-        // HEAPF64 is a typed array view of the WASM memory as doubles
-        // Divide by 8 because each double is 8 bytes
-        samples.push(this.module.HEAPF64[samplesPtr / 8 + j])
+      const samples: SignalValue[] = []
+
+      if (elementSize === 1) {
+        // Scalar signal - return flat array of numbers
+        for (let j = 0; j < sampleCount; j++) {
+          samples.push(this.module.HEAPF64[samplesPtr / 8 + j])
+        }
+      } else {
+        // Vector or matrix signal - return array of arrays
+        // Each sample is an array of elementSize elements
+        for (let j = 0; j < sampleCount; j++) {
+          const sample: number[] = []
+          for (let k = 0; k < elementSize; k++) {
+            sample.push(this.module.HEAPF64[samplesPtr / 8 + j * elementSize + k])
+          }
+          samples.push(sample)
+        }
       }
 
       // Remove prefix for cleaner keys
