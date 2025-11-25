@@ -23,13 +23,16 @@ export class StateIntegrator {
   private model: FlattenedModel
   private modelName: string
   private options: Required<StateIntegratorOptions>
-  
+  private typeMap: Map<string, string>
+
   constructor(
     model: FlattenedModel,
+    typeMap: Map<string, string>,
     options: StateIntegratorOptions = {}
   ) {
     this.model = model
     this.modelName = CCodeBuilder.sanitizeIdentifier(model.metadata.modelName)
+    this.typeMap = typeMap
     this.options = {
       includeComments: options.includeComments ?? true,
       checkEnableStates: options.checkEnableStates ?? true
@@ -512,10 +515,16 @@ export class StateIntegrator {
    * Get output type for a block
    */
   private getBlockOutputType(block: FlattenedBlock): string {
-    // This should ideally come from a type map
+    // First check the type map from type propagation
+    const mappedType = this.typeMap.get(block.originalId)
+    if (mappedType) {
+      return mappedType
+    }
+
+    // Fall back to parameter-based type
     const dataType = block.block.parameters?.dataType
     if (dataType) return dataType
-    
+
     return 'double'
   }
   

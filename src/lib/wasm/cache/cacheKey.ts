@@ -25,8 +25,12 @@ import type { Sheet } from '@/types/canvas'
  * - v10: Fixed CleanupFunctionGenerator to use correct BlockModuleFactory.getBlockModule() method
  * - v11: Added vector/matrix support - wasm_get_element_size function for non-scalar signals
  * - v12: Fixed wasm_get_samples() pointer cast and wasm_get_output() to work with vectors
+ * - v13: Fixed TransferFunctionBlockModule to use inputTypes parameter for vector/matrix support
+ * - v14: Fixed RK4Generator to use typeMap for correct vector/matrix type propagation in derivatives
+ * - v15: Fixed StateIntegrator to use typeMap for correct vector/matrix RK4 integration
+ * - v16: Fixed wasm_get_output() to filter out vector/matrix outputs (only supports scalars)
  */
-const CODEGEN_VERSION = 'v12'
+const CODEGEN_VERSION = 'v16'
 
 export interface ModelStructure {
   sheets: Sheet[]

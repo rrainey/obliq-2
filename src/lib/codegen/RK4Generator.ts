@@ -14,12 +14,14 @@ export class RK4Generator {
   private modelName: string
   private enableEvaluator: EnableEvaluator
   private hasEnableSubsystems: boolean
-  
-  constructor(model: FlattenedModel) {
+  private typeMap: Map<string, string>
+
+  constructor(model: FlattenedModel, typeMap: Map<string, string>) {
     this.model = model
     this.modelName = CCodeBuilder.sanitizeIdentifier(model.metadata.modelName)
     this.enableEvaluator = new EnableEvaluator(model)
     this.hasEnableSubsystems = model.subsystemEnableInfo.some(info => info.hasEnableInput)
+    this.typeMap = typeMap
   }
   
   /**
@@ -207,10 +209,16 @@ export class RK4Generator {
    * Get output type for a block
    */
   private getBlockOutputType(block: FlattenedBlock): string {
-    // This should use the type map from type propagation
+    // First check the type map from type propagation
+    const mappedType = this.typeMap.get(block.originalId)
+    if (mappedType) {
+      return mappedType
+    }
+
+    // Fall back to parameter-based type
     const dataType = block.block.parameters?.dataType
     if (dataType) return dataType
-    
+
     return 'double'
   }
 }
