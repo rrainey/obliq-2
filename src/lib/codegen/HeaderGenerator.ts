@@ -129,6 +129,7 @@ export class HeaderGenerator {
     // Add time tracking
     members.push(`    double time;`)
     members.push(`    double dt; /* Time step */`)
+    members.push(`    int use_rk4; /* Integration method: 1=RK4, 0=Euler */`)
 
     return CCodeBuilder.generateStruct(
       this.modelName,

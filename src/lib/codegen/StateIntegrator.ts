@@ -209,8 +209,6 @@ export class StateIntegrator {
     code += '    /* RK4 temporary variables */\n'
     code += `    ${this.modelName}_states_t k1, k2, k3, k4;\n`
     code += `    ${this.modelName}_states_t temp_states;\n`
-    code += `    ${this.modelName}_signals_t temp_signals;\n`
-    code += `    ${this.modelName}_outputs_t temp_outputs;\n`
     code += '    double h = model->dt;\n'
     code += '    double half_h = h * 0.5;\n\n'
     
@@ -233,12 +231,10 @@ export class StateIntegrator {
     code += '    /* Calculate k2 = f(t + h/2, y + h/2 * k1) */\n'
     code += this.generateStateUpdate('temp_states', 'model->states', 'k1', 'half_h')
     code += '\n'
-    code += '    /* Re-evaluate algebraic relationships with updated states */\n'
-    code += `    ${this.modelName}_evaluate_algebraic(model);\n`
     code += `    ${this.modelName}_derivatives(\n`
     code += '        model->time + half_h,\n'
     code += '        &model->inputs,\n'
-    code += '        &temp_signals,\n'
+    code += '        &model->signals,\n'
     code += '        &temp_states,\n'
     code += '        &k2'
     
@@ -252,12 +248,10 @@ export class StateIntegrator {
     code += '    /* Calculate k3 = f(t + h/2, y + h/2 * k2) */\n'
     code += this.generateStateUpdate('temp_states', 'model->states', 'k2', 'half_h')
     code += '\n'
-    code += '    /* Re-evaluate algebraic relationships with updated states */\n'
-    code += `    ${this.modelName}_evaluate_algebraic(model);\n`
     code += `    ${this.modelName}_derivatives(\n`
     code += '        model->time + half_h,\n'
     code += '        &model->inputs,\n'
-    code += '        &temp_signals,\n'
+    code += '        &model->signals,\n'
     code += '        &temp_states,\n'
     code += '        &k3'
     
@@ -271,12 +265,10 @@ export class StateIntegrator {
     code += '    /* Calculate k4 = f(t + h, y + h * k3) */\n'
     code += this.generateStateUpdate('temp_states', 'model->states', 'k3', 'h')
     code += '\n'
-    code += '    /* Re-evaluate algebraic relationships with updated states */\n'
-    code += `    ${this.modelName}_evaluate_algebraic(model);\n`
     code += `    ${this.modelName}_derivatives(\n`
     code += '        model->time + h,\n'
     code += '        &model->inputs,\n'
-    code += '        &temp_signals,\n'
+    code += '        &model->signals,\n'
     code += '        &temp_states,\n'
     code += '        &k4'
     

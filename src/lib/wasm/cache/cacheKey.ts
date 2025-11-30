@@ -6,7 +6,7 @@
  */
 
 import crypto from 'crypto'
-import type { Sheet } from '@/types/canvas'
+import type { Sheet } from '@/lib/simulationEngine'
 
 /**
  * Code generation version - increment this to invalidate all cached WASM modules
@@ -29,8 +29,19 @@ import type { Sheet } from '@/types/canvas'
  * - v14: Fixed RK4Generator to use typeMap for correct vector/matrix type propagation in derivatives
  * - v15: Fixed StateIntegrator to use typeMap for correct vector/matrix RK4 integration
  * - v16: Fixed wasm_get_output() to filter out vector/matrix outputs (only supports scalars)
+ * - v17: Phase 3 Performance Optimizations (reverted due to breaking data collection)
+ * - v18: Fixed UTF8ToString export for collector name string conversion
+ * - v19: Reverted Phase 3 optimization flags that broke data collection
+ * - v20: Debug fresh compile to investigate zeros in vector sample collection
+ * - v21: Fixed InitFunctionGenerator to use typeMap for correct vector buffer allocation
+ * - v22: Added debug logging to InitFunctionGenerator to verify typeMap usage
+ * - v23: Force fresh compile after server restart
+ * - v24: Added generate() entry point logging to InitFunctionGenerator
+ * - v25: Fixed getModuleGenerator -> getBlockModule typo in InitFunctionGenerator
+ * - v26: Added use_rk4 field to model struct and initialized it to 1 (RK4)
+ * - v27: Removed spurious evaluate_algebraic calls from RK4 substeps that caused extra sample storage
  */
-const CODEGEN_VERSION = 'v16'
+const CODEGEN_VERSION = 'v27'
 
 export interface ModelStructure {
   sheets: Sheet[]
@@ -89,9 +100,9 @@ export function hashModel(model: ModelStructure): string {
     connections: model.sheets.flatMap(sheet =>
       sheet.connections.map(conn => ({
         id: conn.id,
-        source: conn.source,
+        sourceBlockId: conn.sourceBlockId,
         sourcePortIndex: conn.sourcePortIndex,
-        target: conn.target,
+        targetBlockId: conn.targetBlockId,
         targetPortIndex: conn.targetPortIndex
       }))
     )

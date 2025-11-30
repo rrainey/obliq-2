@@ -577,9 +577,12 @@ ${keepalive}double* wasm_get_samples(int collector_index) {
 ${keepalive}int wasm_get_element_size(int collector_index) {
     switch(collector_index) {\n`
 
+    console.log(`[WasmCodeGenerator] collectorTypeMap entries:`, Array.from(collectorTypeMap.entries()))
+
     collectors.forEach(([name], idx) => {
       const signalType = collectorTypeMap.get(name) || 'double'
       const elementSize = this.calculateElementSize(signalType)
+      console.log(`[WasmCodeGenerator] Collector ${name}: signalType=${signalType}, elementSize=${elementSize}`)
       code += `        case ${idx}: return ${elementSize};\n`
     })
 

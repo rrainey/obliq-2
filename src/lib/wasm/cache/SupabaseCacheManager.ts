@@ -295,6 +295,98 @@ export class SupabaseCacheManager {
   }
 
   /**
+   * Evict least recently used cache entries to keep cache size under limit
+   * Uses LRU (Least Recently Used) eviction strategy
+   *
+   * @param maxEntries - Maximum number of cache entries to keep (default: 1000)
+   * @param maxSizeMB - Maximum total cache size in MB (default: 500MB)
+   * @returns Number of entries evicted
+   */
+  async evictLRU(maxEntries: number = 1000, maxSizeMB: number = 500): Promise<number> {
+    try {
+      let evictedCount = 0
+
+      // 1. Evict by entry count
+      const { data: countData, error: countError } = await this.supabase
+        .from('wasm_cache_metadata')
+        .select('cache_key')
+        .order('last_accessed_at', { ascending: true, nullsFirst: true })
+        .order('created_at', { ascending: true })
+
+      if (countError) throw countError
+
+      if (countData && countData.length > maxEntries) {
+        const toEvict = countData.slice(0, countData.length - maxEntries)
+
+        for (const entry of toEvict) {
+          await this.delete(entry.cache_key)
+          evictedCount++
+        }
+
+        console.log(`[LRU] Evicted ${evictedCount} entries to maintain max count of ${maxEntries}`)
+      }
+
+      // 2. Evict by total size
+      const { data: sizeData, error: sizeError } = await this.supabase
+        .from('wasm_cache_metadata')
+        .select('cache_key, wasm_size_bytes, js_size_bytes')
+        .order('last_accessed_at', { ascending: true, nullsFirst: true })
+        .order('created_at', { ascending: true })
+
+      if (sizeError) throw sizeError
+
+      if (sizeData) {
+        let totalSize = sizeData.reduce(
+          (sum, entry) => sum + entry.wasm_size_bytes + entry.js_size_bytes,
+          0
+        )
+        const maxSizeBytes = maxSizeMB * 1024 * 1024
+
+        let sizeEvictedCount = 0
+        for (const entry of sizeData) {
+          if (totalSize <= maxSizeBytes) break
+
+          await this.delete(entry.cache_key)
+          totalSize -= entry.wasm_size_bytes + entry.js_size_bytes
+          sizeEvictedCount++
+        }
+
+        if (sizeEvictedCount > 0) {
+          console.log(`[LRU] Evicted ${sizeEvictedCount} entries to maintain max size of ${maxSizeMB}MB`)
+          evictedCount += sizeEvictedCount
+        }
+      }
+
+      return evictedCount
+    } catch (error) {
+      console.error('LRU eviction error:', error)
+      return 0
+    }
+  }
+
+  /**
+   * Delete a cache entry and its associated files
+   *
+   * @param cacheKey - The cache key to delete
+   */
+  async delete(cacheKey: string): Promise<void> {
+    try {
+      // 1. Delete files from storage
+      await this.supabase.storage
+        .from(this.bucket)
+        .remove([`${cacheKey}.wasm`, `${cacheKey}.js`])
+
+      // 2. Delete metadata
+      await this.supabase
+        .from('wasm_cache_metadata')
+        .delete()
+        .eq('cache_key', cacheKey)
+    } catch (error) {
+      console.warn(`Failed to delete cache entry ${cacheKey}:`, error)
+    }
+  }
+
+  /**
    * Get cache statistics
    *
    * @returns Aggregated cache statistics

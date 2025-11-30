@@ -1,0 +1,143 @@
+{
+  "name": "Test03",
+  "version": 4,
+  "created": "2025-11-24T20:35:13.415039+00:00",
+  "updated": "2025-11-25T02:31:26.171466+00:00",
+  "data": {
+    "version": "2.0",
+    "metadata": {
+      "created": "2025-11-30T20:42:34.536Z",
+      "description": "Exported from obliq-2 on 11/30/2025"
+    },
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "source_1764016520178",
+            "name": "Source1",
+            "type": "source",
+            "position": {
+              "x": 90,
+              "y": 411.703125
+            },
+            "parameters": {
+              "f0": 0.1,
+              "f1": 10,
+              "mean": 0,
+              "phase": 0,
+              "slope": 1,
+              "value": [
+                1,
+                2,
+                3
+              ],
+              "offset": 0,
+              "dataType": "double[3]",
+              "duration": 10,
+              "stepTime": 1,
+              "amplitude": 1,
+              "frequency": 1,
+              "startTime": 0,
+              "stepValue": 1,
+              "signalType": "constant"
+            }
+          },
+          {
+            "id": "transfer_function_1764016556916",
+            "name": "Transfer function2",
+            "type": "transfer_function",
+            "position": {
+              "x": 259.75,
+              "y": 411.5546875
+            },
+            "parameters": {
+              "numerator": [
+                1
+              ],
+              "denominator": [
+                1,
+                0
+              ]
+            }
+          },
+          {
+            "id": "signal_display_1764016568506",
+            "name": "Signal display3",
+            "type": "signal_display",
+            "position": {
+              "x": 447.25,
+              "y": 411.0546875
+            },
+            "parameters": {
+              "maxSamples": 1000
+            }
+          },
+          {
+            "id": "output_port_1764016603104",
+            "name": "Output port4",
+            "type": "output_port",
+            "position": {
+              "x": 447.75,
+              "y": 334.5546875
+            },
+            "parameters": {
+              "portName": "Output"
+            }
+          },
+          {
+            "id": "signal_logger_1764031404117",
+            "name": "Signal logger5",
+            "type": "signal_logger",
+            "position": {
+              "x": 449.875,
+              "y": 503.48046875
+            },
+            "parameters": {
+              "maxSamples": 1000
+            }
+          }
+        ],
+        "extents": {
+          "width": 1000,
+          "height": 800
+        },
+        "connections": [
+          {
+            "id": "wire_1764016558494",
+            "sourceBlockId": "source_1764016520178",
+            "targetBlockId": "transfer_function_1764016556916",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1764016569951",
+            "sourceBlockId": "transfer_function_1764016556916",
+            "targetBlockId": "signal_display_1764016568506",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1764016604516",
+            "sourceBlockId": "transfer_function_1764016556916",
+            "targetBlockId": "output_port_1764016603104",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1764031407137",
+            "sourceBlockId": "transfer_function_1764016556916",
+            "targetBlockId": "signal_logger_1764031404117",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          }
+        ]
+      }
+    ],
+    "globalSettings": {
+      "simulationTimeStep": 0.01,
+      "simulationDuration": 10
+    }
+  }
+}

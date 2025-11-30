@@ -392,17 +392,18 @@ export class AlgebraicEvaluator {
    */
   private getBlockInputTypes(block: FlattenedBlock): string[] {
     const types: string[] = []
-    
+
     // Find all connections to this block, sorted by target port index
     const connections = this.model.connections
       .filter(c => c.targetBlockId === block.originalId)
       .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
-    
+
     for (const connection of connections) {
       const sourceType = this.typeMap.get(connection.sourceBlockId) || 'double'
+      console.log(`[AlgebraicEvaluator] getBlockInputTypes for ${block.block.name}: sourceBlockId=${connection.sourceBlockId}, sourceType=${sourceType}`)
       types.push(sourceType)
     }
-    
+
     return types
   }
   

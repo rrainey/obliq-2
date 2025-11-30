@@ -9,7 +9,7 @@ import {
   parseCacheKey,
   shortCacheKey
 } from '@/lib/wasm/cache/cacheKey'
-import type { Sheet } from '@/types/canvas'
+import type { Sheet } from '@/lib/simulationEngine'
 
 describe('Cache Key Generation', () => {
   const createSimpleModel = (): Sheet[] => [
@@ -35,9 +35,9 @@ describe('Cache Key Generation', () => {
       connections: [
         {
           id: 'wire1',
-          source: 'input1',
+          sourceBlockId: 'input1',
           sourcePortIndex: 0,
-          target: 'gain1',
+          targetBlockId: 'gain1',
           targetPortIndex: 0
         }
       ],

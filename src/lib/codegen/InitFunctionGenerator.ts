@@ -10,16 +10,19 @@ import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 export class InitFunctionGenerator {
   private model: FlattenedModel
   private modelName: string
-  
-  constructor(model: FlattenedModel) {
+  private typeMap: Map<string, string>
+
+  constructor(model: FlattenedModel, typeMap: Map<string, string> = new Map()) {
     this.model = model
     this.modelName = CCodeBuilder.sanitizeIdentifier(model.metadata.modelName)
+    this.typeMap = typeMap
   }
   
   /**
    * Generate the complete initialization function
    */
   generate(): string {
+    console.log(`[InitFunctionGenerator] generate() called for model: ${this.modelName}, typeMap size: ${this.typeMap.size}`)
     let code = CCodeBuilder.generateCommentBlock([
       'Initialize model with given time step',
       'Sets all states and signals to their initial values'
@@ -62,7 +65,8 @@ export class InitFunctionGenerator {
     return `    /* Initialize time tracking */
     model->time = 0.0;
     model->dt = dt;
-    
+    model->use_rk4 = 1; /* Default to RK4 integration */
+
 `
   }
   
@@ -99,7 +103,7 @@ export class InitFunctionGenerator {
     
     for (const block of this.model.blocks) {
       try {
-        const generator = BlockModuleFactory.getModuleGenerator(block.block.type)
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
         
         // Check if this block type has initialization
         if (generator.generateInitialization) {
@@ -138,21 +142,27 @@ export class InitFunctionGenerator {
    * Generate data collection buffer initialization
    */
   private generateDataCollectionInit(): string {
+    console.log(`[InitFunctionGenerator] generateDataCollectionInit called, ${this.model.blocks.length} blocks to check`)
     let code = ''
     let hasDataCollection = false
 
     for (const block of this.model.blocks) {
+      console.log(`[InitFunctionGenerator] Checking block: ${block.block.name} (${block.block.type})`)
       try {
-        const generator = BlockModuleFactory.getModuleGenerator(block.block.type)
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
+        const employs = generator.employsDataCollection ? generator.employsDataCollection(block.block) : false
+        console.log(`[InitFunctionGenerator] Block ${block.block.name}: employsDataCollection=${employs}`)
 
         // Check if this block employs data collection
         if (generator.employsDataCollection && generator.employsDataCollection(block.block)) {
           // Get input type for this block
           const inputType = this.getBlockInputType(block)
+          console.log(`[InitFunctionGenerator] Data collection block ${block.block.name}: inputType=${inputType}`)
 
           // Generate data collection initialization
           if (generator.generateDataCollectionInit) {
             const initCode = generator.generateDataCollectionInit(block.block, inputType)
+            console.log(`[InitFunctionGenerator] Generated init code for ${block.block.name}:`, initCode?.substring(0, 200))
             if (initCode && initCode.trim()) {
               if (!hasDataCollection) {
                 code += '    /* Initialize data collection buffers */\n'
@@ -166,6 +176,7 @@ export class InitFunctionGenerator {
         }
       } catch (error) {
         // Block type not supported for data collection
+        console.log(`[InitFunctionGenerator] Error processing block ${block.block.name}:`, error)
         continue
       }
     }
@@ -179,6 +190,7 @@ export class InitFunctionGenerator {
 
   /**
    * Get input type for a block by finding the type of the signal connected to its first input
+   * Uses typeMap for accurate type propagation (e.g., Transfer Functions inherit input type)
    */
   private getBlockInputType(block: typeof this.model.blocks[0]): string {
     // Find the connection to the first input port of this block
@@ -187,10 +199,15 @@ export class InitFunctionGenerator {
     )
 
     if (inputConnection) {
-      // Get the source block
+      // First, check the typeMap for the source block's propagated type
+      const propagatedType = this.typeMap.get(inputConnection.sourceBlockId)
+      if (propagatedType) {
+        return propagatedType
+      }
+
+      // Fall back to checking block parameters
       const sourceBlock = this.model.blocks.find(b => b.originalId === inputConnection.sourceBlockId)
       if (sourceBlock) {
-        // Return the output type of the source block
         return this.getBlockOutputType(sourceBlock)
       }
     }
@@ -203,6 +220,10 @@ export class InitFunctionGenerator {
    * Get output type for a block
    */
   private getBlockOutputType(block: typeof this.model.blocks[0]): string {
+    // First, check the typeMap for propagated type
+    const propagatedType = this.typeMap.get(block.originalId)
+    if (propagatedType) return propagatedType
+
     // Check block parameters for explicit type
     const dataType = block.block.parameters?.dataType
     if (dataType) return dataType

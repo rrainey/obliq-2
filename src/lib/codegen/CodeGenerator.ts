@@ -178,9 +178,9 @@ export class CodeGenerator {
     
     // Static lookup tables and constants
     source += this.generateStaticData(model)
-    
-    // Init function
-    const initGenerator = new InitFunctionGenerator(model)
+
+    // Init function (pass typeMap for correct data collection buffer sizing)
+    const initGenerator = new InitFunctionGenerator(model, typeMap)
     source += initGenerator.generate()
     source += '\n'
     
