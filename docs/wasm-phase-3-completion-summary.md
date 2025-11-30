@@ -4,9 +4,9 @@
 
 Phase 3 of the WebAssembly implementation roadmap focused on optimizing compilation performance and implementing intelligent cache management. This phase builds upon the solid foundation established in Phases 0-2.
 
-**Status:** ✅ Completed
+**Status:** ✅ Completed (Updated November 30, 2025)
 **Date:** November 24, 2025
-**Cache Version:** v17
+**Cache Version:** v27 (updated from v17)
 
 ## Tasks Completed
 
@@ -108,12 +108,17 @@ curl -X POST http://localhost:3000/api/cache-maintenance \
 
 ## Cache Version Update
 
-**Version:** v16 → v17
+**Version:** v17 → v27
 
-**Reason:** Performance optimizations change compilation output:
-- New Emscripten flags produce different binaries
-- Need to invalidate old cache entries
-- Ensure all users get optimized builds
+**Version History:**
+- v17: Initial Phase 3 performance optimizations
+- v18-v23: Vector/matrix support iterations
+- v24: RK4 state integration fixes
+- v25: Fixed `getModuleGenerator` → `getBlockModule` typo in InitFunctionGenerator
+- v26: Added `use_rk4` field to model struct and initialization
+- v27: Removed spurious `evaluate_algebraic` calls from RK4 substeps (fixed extra sample storage bug)
+
+**Note:** Optimization flags were reverted to standard settings due to Docker container compatibility issues. Some advanced flags (`-flto`, `-s ELIMINATE_DUPLICATE_FUNCTIONS=1`) caused compilation failures in certain environments.
 
 ## Performance Impact
 

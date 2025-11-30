@@ -449,10 +449,7 @@ export class HeaderGenerator {
     }
 
     // Cleanup function - only if we have data collection blocks
-    const hasDataCollBlocks = this.hasDataCollectionBlocks()
-    console.log(`[HeaderGenerator] Model: ${this.modelName}, hasDataCollectionBlocks: ${hasDataCollBlocks}`)
-    if (hasDataCollBlocks) {
-      console.log('[HeaderGenerator] Adding cleanup function prototype to header')
+    if (this.hasDataCollectionBlocks()) {
       prototypes += CCodeBuilder.generateFunctionPrototype(
         'void',
         `${this.modelName}_cleanup`,
@@ -482,21 +479,14 @@ export class HeaderGenerator {
    * Helper to determine if the model has data collection blocks
    */
   private hasDataCollectionBlocks(): boolean {
-    console.log(`[HeaderGenerator] Checking ${this.model.blocks.length} blocks for data collection`)
-    const result = this.model.blocks.some(block => {
+    return this.model.blocks.some(block => {
       try {
-        console.log(`[HeaderGenerator] Checking block type: ${block.block.type}, name: ${block.block.name}`)
         const generator = BlockModuleFactory.getBlockModule(block.block.type)
-        const employs = generator.employsDataCollection && generator.employsDataCollection(block.block)
-        console.log(`[HeaderGenerator] Block ${block.block.name} employs data collection: ${employs}`)
-        return employs
-      } catch (error) {
-        console.log(`[HeaderGenerator] Error checking block ${block.block.name}: ${error}`)
+        return generator.employsDataCollection && generator.employsDataCollection(block.block)
+      } catch {
         return false
       }
     })
-    console.log(`[HeaderGenerator] Final result: ${result}`)
-    return result
   }
   
   /**

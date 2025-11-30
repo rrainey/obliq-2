@@ -400,7 +400,6 @@ export class AlgebraicEvaluator {
 
     for (const connection of connections) {
       const sourceType = this.typeMap.get(connection.sourceBlockId) || 'double'
-      console.log(`[AlgebraicEvaluator] getBlockInputTypes for ${block.block.name}: sourceBlockId=${connection.sourceBlockId}, sourceType=${sourceType}`)
       types.push(sourceType)
     }
 

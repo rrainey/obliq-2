@@ -22,7 +22,6 @@ export class InitFunctionGenerator {
    * Generate the complete initialization function
    */
   generate(): string {
-    console.log(`[InitFunctionGenerator] generate() called for model: ${this.modelName}, typeMap size: ${this.typeMap.size}`)
     let code = CCodeBuilder.generateCommentBlock([
       'Initialize model with given time step',
       'Sets all states and signals to their initial values'
@@ -142,27 +141,21 @@ export class InitFunctionGenerator {
    * Generate data collection buffer initialization
    */
   private generateDataCollectionInit(): string {
-    console.log(`[InitFunctionGenerator] generateDataCollectionInit called, ${this.model.blocks.length} blocks to check`)
     let code = ''
     let hasDataCollection = false
 
     for (const block of this.model.blocks) {
-      console.log(`[InitFunctionGenerator] Checking block: ${block.block.name} (${block.block.type})`)
       try {
         const generator = BlockModuleFactory.getBlockModule(block.block.type)
-        const employs = generator.employsDataCollection ? generator.employsDataCollection(block.block) : false
-        console.log(`[InitFunctionGenerator] Block ${block.block.name}: employsDataCollection=${employs}`)
 
         // Check if this block employs data collection
         if (generator.employsDataCollection && generator.employsDataCollection(block.block)) {
           // Get input type for this block
           const inputType = this.getBlockInputType(block)
-          console.log(`[InitFunctionGenerator] Data collection block ${block.block.name}: inputType=${inputType}`)
 
           // Generate data collection initialization
           if (generator.generateDataCollectionInit) {
             const initCode = generator.generateDataCollectionInit(block.block, inputType)
-            console.log(`[InitFunctionGenerator] Generated init code for ${block.block.name}:`, initCode?.substring(0, 200))
             if (initCode && initCode.trim()) {
               if (!hasDataCollection) {
                 code += '    /* Initialize data collection buffers */\n'
@@ -176,7 +169,6 @@ export class InitFunctionGenerator {
         }
       } catch (error) {
         // Block type not supported for data collection
-        console.log(`[InitFunctionGenerator] Error processing block ${block.block.name}:`, error)
         continue
       }
     }
