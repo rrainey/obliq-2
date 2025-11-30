@@ -338,11 +338,7 @@ This document outlines a phased approach to migrating from JavaScript-based simu
 **Objective:** Document Wasm architecture
 
 **Steps:**
-1. Update architecture document
-2. Add Wasm compilation guide
-3. Document troubleshooting steps
-4. Create developer guide
-5. Add performance tuning tips
+1. Review and update architecture document (`design/00-architecture.md`); add a `design/11-Unifying-simulation-with-Wasm.md` document
 
 **Deliverable:** Complete documentation
 **Test:** New developer can set up and use system
@@ -378,33 +374,7 @@ This document outlines a phased approach to migrating from JavaScript-based simu
 
 ## Phase 6: Migration & Rollout (Week 8)
 
-### Task 6.1: Beta Testing
-**Objective:** Test with real users
-
-**Steps:**
-1. Enable Wasm for 10% of users
-2. Monitor error rates
-3. Collect user feedback
-4. Fix reported issues
-5. Gradually increase to 50%, then 100%
-
-**Deliverable:** Stable Wasm engine in production
-**Test:** <1% error rate, positive user feedback
-
-### Task 6.2: Performance Monitoring
-**Objective:** Ensure production performance
-
-**Steps:**
-1. Monitor compilation times
-2. Track cache hit rates
-3. Watch for memory leaks
-4. Identify slow models
-5. Optimize problematic cases
-
-**Deliverable:** Production metrics dashboard
-**Test:** P95 compilation time <2s, cache hit rate >85%
-
-### Task 6.3: Deprecate JavaScript Engine
+### Task 6.1: Deprecate JavaScript Engine
 **Objective:** Remove old simulation code
 
 **Timeline:** After 2 weeks of successful Wasm usage
@@ -413,8 +383,9 @@ This document outlines a phased approach to migrating from JavaScript-based simu
 1. Make Wasm the only option
 2. Remove JavaScript simulation code
 3. Remove toggle flag
-4. Update tests
+4. Update all tests
 5. Archive old code
+5. Update `design/00-architecture.md` to reflect removal of JavaScript Engine
 
 **Deliverable:** Simplified codebase
 **Test:** All tests pass without JavaScript engine
