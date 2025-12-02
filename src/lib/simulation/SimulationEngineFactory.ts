@@ -1,33 +1,27 @@
 /**
  * Simulation Engine Factory
  *
- * Provides a unified interface for creating simulation engines with support
- * for toggling between JavaScript and WASM implementations via feature flags.
+ * Provides a unified interface for creating WASM simulation engines.
+ * As of Phase 6, WASM is the only supported simulation engine.
  *
  * Usage:
  * ```typescript
  * const engine = await createSimulationEngine({
  *   modelId: 'uuid',
- *   useWasm: true,  // or false for JavaScript engine
  *   config: { timeStep: 0.01 }
  * })
  * ```
  */
 
-import { SimulationEngine, Sheet, SimulationConfig } from '@/lib/simulationEngine'
+import { SimulationConfig } from '@/lib/simulationEngine'
 import { WasmSimulationEngine } from '@/lib/simulation/WasmSimulationEngine'
 
 /**
  * Options for creating a simulation engine
  */
 export interface CreateEngineOptions {
-  /** Model ID (for WASM engine) or sheets (for JS engine) */
-  modelId?: string
-  sheets?: Sheet[]
-  connections?: any[]
-
-  /** Feature flag: use WASM engine instead of JavaScript */
-  useWasm?: boolean
+  /** Model ID for WASM engine */
+  modelId: string
 
   /** Simulation configuration */
   config?: SimulationConfig
@@ -43,7 +37,7 @@ export interface CreateEngineOptions {
 /**
  * Unified simulation engine interface
  *
- * Both SimulationEngine and WasmSimulationEngine implement these core methods
+ * WasmSimulationEngine implements these core methods
  */
 export interface ISimulationEngine {
   step(dt?: number): void
@@ -53,118 +47,53 @@ export interface ISimulationEngine {
 }
 
 /**
- * Feature flag storage key
- */
-const FEATURE_FLAG_KEY = 'obliq_useWasmSimulation'
-
-/**
- * Get the current WASM feature flag preference from localStorage
- *
- * @returns true if WASM is enabled, false otherwise
+ * @deprecated WASM is now always enabled. This function always returns true.
+ * Kept for backward compatibility during migration.
  */
 export function getWasmPreference(): boolean {
-  if (typeof window === 'undefined') {
-    return false // Server-side: default to JavaScript
-  }
-
-  try {
-    const stored = localStorage.getItem(FEATURE_FLAG_KEY)
-    if (stored === null) {
-      return false // Default to JavaScript engine
-    }
-    return stored === 'true'
-  } catch (error) {
-    console.warn('[SimulationEngineFactory] Failed to read WASM preference:', error)
-    return false
-  }
+  return true
 }
 
 /**
- * Set the WASM feature flag preference in localStorage
- *
- * @param enabled - Whether to enable WASM simulation
+ * @deprecated WASM is now always enabled. This function is a no-op.
+ * Kept for backward compatibility during migration.
  */
-export function setWasmPreference(enabled: boolean): void {
-  if (typeof window === 'undefined') {
-    console.warn('[SimulationEngineFactory] Cannot set preference on server-side')
-    return
-  }
-
-  try {
-    localStorage.setItem(FEATURE_FLAG_KEY, enabled.toString())
-    console.log(`[SimulationEngineFactory] WASM preference set to: ${enabled}`)
-  } catch (error) {
-    console.error('[SimulationEngineFactory] Failed to save WASM preference:', error)
-  }
+export function setWasmPreference(_enabled: boolean): void {
+  // No-op: WASM is always enabled as of Phase 6
+  console.log('[SimulationEngineFactory] WASM is now the only simulation engine')
 }
 
 /**
- * Create a simulation engine based on feature flags
+ * Create a WASM simulation engine
  *
- * This factory function provides a unified interface for creating either
- * a JavaScript SimulationEngine or a WASM WasmSimulationEngine.
+ * As of Phase 6, this factory always creates a WASM engine.
  *
  * @param options - Engine creation options
- * @returns Simulation engine instance (may be async if WASM)
+ * @returns WASM simulation engine instance
  *
  * @example
- * // Create with explicit flag
- * const wasmEngine = await createSimulationEngine({
- *   modelId: 'uuid',
- *   useWasm: true,
- *   config: { timeStep: 0.01 }
- * })
- *
- * @example
- * // Use stored preference
  * const engine = await createSimulationEngine({
  *   modelId: 'uuid',
- *   sheets: [...],
  *   config: { timeStep: 0.01 }
  * })
  */
 export async function createSimulationEngine(
   options: CreateEngineOptions
-): Promise<SimulationEngine | WasmSimulationEngine> {
-  // Determine whether to use WASM
-  const useWasm = options.useWasm ?? getWasmPreference()
+): Promise<WasmSimulationEngine> {
+  console.log(`[SimulationEngineFactory] Creating WASM engine for model: ${options.modelId}`)
 
-  if (useWasm) {
-    // Create WASM engine
-    if (!options.modelId) {
-      throw new Error('modelId is required for WASM simulation engine')
-    }
+  const engine = new WasmSimulationEngine(options.modelId, {
+    enableLeakDetection: options.wasmOptions?.enableLeakDetection,
+    memoryLimit: options.wasmOptions?.memoryLimit
+  })
 
-    console.log(`[SimulationEngineFactory] Creating WASM engine for model: ${options.modelId}`)
+  // Initialize the engine
+  const timeStep = options.config?.timeStep ?? 0.01
+  await engine.initialize(timeStep, {
+    optimizationLevel: options.wasmOptions?.optimizationLevel
+  })
 
-    const engine = new WasmSimulationEngine(options.modelId, {
-      enableLeakDetection: options.wasmOptions?.enableLeakDetection,
-      memoryLimit: options.wasmOptions?.memoryLimit
-    })
-
-    // Initialize the engine
-    const timeStep = options.config?.timeStep ?? 0.01
-    await engine.initialize(timeStep, {
-      optimizationLevel: options.wasmOptions?.optimizationLevel
-    })
-
-    return engine
-  } else {
-    // Create JavaScript engine
-    if (!options.sheets || !options.connections) {
-      throw new Error('sheets and connections are required for JavaScript simulation engine')
-    }
-
-    console.log('[SimulationEngineFactory] Creating JavaScript engine')
-
-    const engine = new SimulationEngine(
-      options.sheets,
-      options.connections,
-      options.config ?? {}
-    )
-
-    return engine
-  }
+  return engine
 }
 
 /**
@@ -190,10 +119,10 @@ export function isWasmAvailable(): boolean {
  * Get engine type from an engine instance
  *
  * @param engine - Simulation engine instance
- * @returns 'wasm' or 'javascript'
+ * @returns 'wasm' (always, as of Phase 6)
  */
-export function getEngineType(engine: SimulationEngine | WasmSimulationEngine): 'wasm' | 'javascript' {
-  return engine instanceof WasmSimulationEngine ? 'wasm' : 'javascript'
+export function getEngineType(engine: WasmSimulationEngine): 'wasm' {
+  return 'wasm'
 }
 
 /**
@@ -201,16 +130,15 @@ export function getEngineType(engine: SimulationEngine | WasmSimulationEngine): 
  *
  * Call this when an engine is successfully created to track usage patterns.
  *
- * @param engineType - Type of engine created
- * @param modelId - Model ID (if available)
+ * @param modelId - Model ID
  */
-export function trackEngineUsage(engineType: 'wasm' | 'javascript', modelId?: string): void {
+export function trackEngineUsage(modelId?: string): void {
   // This is a placeholder for telemetry integration
   // In production, this would send data to your analytics service
 
   const event = {
     type: 'simulation_engine_created',
-    engineType,
+    engineType: 'wasm',
     modelId,
     timestamp: new Date().toISOString(),
     userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
