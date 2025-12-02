@@ -7,8 +7,9 @@ import { BlockData, PortInfo } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
-import { createSimulationEngine, getWasmPreference } from '@/lib/simulation/SimulationEngineFactory'
+import { createSimulationEngine, getWasmPreference, createWorkerSimulation, isWorkerSimulationAvailable, type SimulationProgress } from '@/lib/simulation/SimulationEngineFactory'
 import { WasmSimulationEngine } from '@/lib/simulation/WasmSimulationEngine'
+import type { SimulationWorkerManager } from '@/lib/simulation/SimulationWorkerManager'
 import { convertWasmToUIFormat, WasmDataCollector } from '@/lib/simulation/WasmResultConverter'
 import SaveAsDialog from '@/components/SaveAsDialog'
 import AutoSaveRecoveryDialog from '@/components/AutoSaveRecoveryDialog'
@@ -74,6 +75,7 @@ import {
   IconArrowLeft,
   IconDeviceFloppy,
   IconPlayerPlay,
+  IconPlayerStop,
   IconCode,
   IconFileExport,
   IconAlertCircle,
@@ -139,6 +141,11 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     metadata: any
   } | null>(null)
 
+  // Simulation progress state (for worker-based simulation)
+  const [simulationProgress, setSimulationProgress] = useState<SimulationProgress | null>(null)
+  const [workerManager, setWorkerManager] = useState<SimulationWorkerManager | null>(null)
+  const [useWorker, setUseWorker] = useState<boolean>(false) // Temporarily disabled - worker needs Next.js config
+
   const [showAutoSaveDialog, setShowAutoSaveDialog] = useState(false)
   const [autoSaveInfo, setAutoSaveInfo] = useState<{
     autoSaveDate: string
@@ -153,6 +160,22 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
   // Enable auto-save only for latest version and when model is fully loaded
   useAutoSave(!isOlderVersion && !modelLoading && !!model)
+
+  // Detect and enable Web Worker support if available
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const workersAvailable = isWorkerSimulationAvailable()
+      console.log('[Worker Detection]', workersAvailable ? 'Web Workers available' : 'Web Workers not available')
+
+      // Enable workers if available (opt-in for now due to Next.js config requirements)
+      // Users can enable via browser settings or future UI toggle
+      const userPreference = localStorage.getItem('obliq-use-workers')
+      if (userPreference === 'true' && workersAvailable) {
+        setUseWorker(true)
+        console.log('[Worker Detection] Enabling worker-based simulation (user preference)')
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!loading && !user) {
@@ -860,62 +883,172 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           return
         }
 
-        // Execute WASM simulation
-        const wasmEngine = new WasmSimulationEngine(model.id)
+        // Try worker-based simulation first (non-blocking)
+        const useWorkerSim = useWorker && isWorkerSimulationAvailable()
 
-        try {
-          // Load compiled WASM module
-          await wasmEngine.loadCompiledModule(
-            compiledWasmData.wasmData,
-            compiledWasmData.jsData,
-            compiledWasmData.metadata
-          )
+        if (useWorkerSim) {
+          // Worker-based simulation (recommended)
+          let worker: SimulationWorkerManager | null = null
 
-          await wasmEngine.initialize(config.timeStep)
+          try {
+            worker = createWorkerSimulation()
+            if (!worker) {
+              throw new Error('Failed to create simulation worker')
+            }
 
-          // Run simulation (no data collection during steps)
-          const numSteps = Math.floor(config.duration / config.timeStep)
-          for (let i = 0; i < numSteps; i++) {
-            wasmEngine.step()
+            setWorkerManager(worker)
+
+            // Initialize worker with WASM module
+            await worker.initialize(
+              compiledWasmData.wasmData,
+              compiledWasmData.jsData,
+              compiledWasmData.metadata
+            )
+
+            // Run with progress updates
+            setSimulationProgress({ step: 0, totalSteps: 0, progress: 0, time: 0 })
+
+            const result = await worker.run(
+              { timeStep: config.timeStep, duration: config.duration },
+              (progress) => setSimulationProgress(progress)
+            )
+
+            if (result.wasStopped) {
+              console.log('Simulation was stopped by user')
+              notifications.show({
+                title: 'Simulation stopped',
+                message: 'Simulation was cancelled',
+                color: 'yellow',
+                icon: <IconAlertCircle size={20} />,
+                autoClose: 3000
+              })
+              return
+            }
+
+            // Retrieve results
+            const sampleData = await worker.getResults()
+
+            // Convert to UI format
+            allResults = convertWasmToUIFormat(
+              sampleData,
+              sheets,
+              config.timeStep,
+              config.duration
+            )
+
+            // Cleanup
+            await worker.cleanup()
+            worker.terminate()
+            setWorkerManager(null)
+            setSimulationProgress(null)
+
+            console.log('Worker WASM simulation completed:', {
+              totalSheets: allResults.size,
+              sheetsWithData: Array.from(allResults.keys()),
+              collectorCount: sampleData.size,
+              samplesPerCollector: Array.from(sampleData.values()).map(arr => arr.length)
+            })
+
+          } catch (error) {
+            console.error('Worker simulation error:', error)
+            if (worker) {
+              worker.terminate()
+              setWorkerManager(null)
+            }
+            setSimulationProgress(null)
+
+            // Fall back to main thread WASM execution
+            notifications.show({
+              title: 'Worker simulation failed',
+              message: 'Falling back to main thread execution',
+              color: 'orange',
+              icon: <IconAlertCircle size={20} />,
+              autoClose: 5000
+            })
+
+            // Execute on main thread
+            const wasmEngine = new WasmSimulationEngine(model.id)
+            try {
+              await wasmEngine.loadCompiledModule(
+                compiledWasmData.wasmData,
+                compiledWasmData.jsData,
+                compiledWasmData.metadata
+              )
+              await wasmEngine.initialize(config.timeStep)
+              const numSteps = Math.floor(config.duration / config.timeStep)
+              for (let i = 0; i < numSteps; i++) {
+                wasmEngine.step()
+              }
+              const sampleData = wasmEngine.getSampleData()
+              allResults = convertWasmToUIFormat(sampleData, sheets, config.timeStep, config.duration)
+              wasmEngine.cleanup()
+              wasmEngine.destroy()
+            } catch (mainThreadError) {
+              console.error('Main thread WASM error:', mainThreadError)
+              wasmEngine.destroy()
+              multiEngine = new MultiSheetSimulationEngine(sheets, config)
+              allResults = multiEngine.run()
+            }
           }
 
-          // Retrieve all sample data at once from internal buffers
-          const sampleData = wasmEngine.getSampleData()
+        } else {
+          // Main thread WASM execution (fallback)
+          const wasmEngine = new WasmSimulationEngine(model.id)
 
-          // Convert to UI format
-          allResults = convertWasmToUIFormat(
-            sampleData,
-            sheets,
-            config.timeStep,
-            config.duration
-          )
+          try {
+            // Load compiled WASM module
+            await wasmEngine.loadCompiledModule(
+              compiledWasmData.wasmData,
+              compiledWasmData.jsData,
+              compiledWasmData.metadata
+            )
 
-          // Cleanup allocated memory
-          wasmEngine.cleanup()
-          wasmEngine.destroy()
+            await wasmEngine.initialize(config.timeStep)
 
-          console.log('WASM simulation completed:', {
-            totalSheets: allResults.size,
-            sheetsWithData: Array.from(allResults.keys()),
-            collectorCount: sampleData.size,
-            samplesPerCollector: Array.from(sampleData.values()).map(arr => arr.length)
-          })
+            // Run simulation (no data collection during steps)
+            const numSteps = Math.floor(config.duration / config.timeStep)
+            for (let i = 0; i < numSteps; i++) {
+              wasmEngine.step()
+            }
 
-        } catch (error) {
-          console.error('WASM simulation error:', error)
-          wasmEngine.destroy()
+            // Retrieve all sample data at once from internal buffers
+            const sampleData = wasmEngine.getSampleData()
 
-          // Fallback to JavaScript
-          notifications.show({
-            title: 'WASM execution failed',
-            message: 'Falling back to JavaScript engine',
-            color: 'orange',
-            icon: <IconAlertCircle size={20} />,
-            autoClose: 5000
-          })
+            // Convert to UI format
+            allResults = convertWasmToUIFormat(
+              sampleData,
+              sheets,
+              config.timeStep,
+              config.duration
+            )
 
-          multiEngine = new MultiSheetSimulationEngine(sheets, config)
-          allResults = multiEngine.run()
+            // Cleanup allocated memory
+            wasmEngine.cleanup()
+            wasmEngine.destroy()
+
+            console.log('WASM simulation completed:', {
+              totalSheets: allResults.size,
+              sheetsWithData: Array.from(allResults.keys()),
+              collectorCount: sampleData.size,
+              samplesPerCollector: Array.from(sampleData.values()).map(arr => arr.length)
+            })
+
+          } catch (error) {
+            console.error('WASM simulation error:', error)
+            wasmEngine.destroy()
+
+            // Fallback to JavaScript
+            notifications.show({
+              title: 'WASM execution failed',
+              message: 'Falling back to JavaScript engine',
+              color: 'orange',
+              icon: <IconAlertCircle size={20} />,
+              autoClose: 5000
+            })
+
+            multiEngine = new MultiSheetSimulationEngine(sheets, config)
+            allResults = multiEngine.run()
+          }
         }
 
       } else {
@@ -972,6 +1105,19 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     } finally {
       setIsSimulating(false)
       setIsCompiling(false)
+    }
+  }
+
+  /**
+   * Stop a running worker-based simulation
+   */
+  const handleStopSimulation = async () => {
+    if (workerManager) {
+      try {
+        await workerManager.stop()
+      } catch (error) {
+        console.error('Error stopping simulation:', error)
+      }
     }
   }
 
@@ -1290,13 +1436,26 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onSelectWire={setSelectedWireId}
             />
             
-            <Button
-              onClick={handleRunSimulation}
-              loading={isSimulating || isCompiling}
-              leftSection={<IconPlayerPlay size={16} />}
-            >
-              {isCompiling ? 'Compiling...' : isSimulating ? 'Running...' : 'Run Simulation'}
-            </Button>
+            {/* Run/Stop Simulation buttons with progress indicator */}
+            {isSimulating && simulationProgress && workerManager ? (
+              <Group gap="xs">
+                <Button
+                  onClick={handleStopSimulation}
+                  color="red"
+                  leftSection={<IconPlayerStop size={16} />}
+                >
+                  Stop ({simulationProgress.progress.toFixed(0)}%)
+                </Button>
+              </Group>
+            ) : (
+              <Button
+                onClick={handleRunSimulation}
+                loading={isSimulating || isCompiling}
+                leftSection={<IconPlayerPlay size={16} />}
+              >
+                {isCompiling ? 'Compiling...' : isSimulating ? 'Running...' : 'Run Simulation'}
+              </Button>
+            )}
             
             <Button
               onClick={handleGenerateCode}
@@ -1386,6 +1545,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             initialDuration={parseFloat(simulationSettings.duration) || 10.0}
             initialTimeStep={parseFloat(simulationSettings.timeStep) || 0.01}
             onChange={handleSimulationSettingsChange}
+            useWorker={useWorker}
+            onWorkerChange={setUseWorker}
+            workerAvailable={isWorkerSimulationAvailable()}
           />
 
           {/* WASM Compilation Progress */}

@@ -361,11 +361,71 @@ When SIMD is enabled:
 - Safari 16.4+
 - Edge 91+
 
+### Web Worker Simulation (Implemented)
+
+The simulation can run in a Web Worker to keep the UI responsive during long-running simulations.
+
+**Setup**:
+
+The Next.js webpack configuration has been updated to support Web Workers:
+```javascript
+// next.config.js
+webpack: (config, { isServer }) => {
+  if (!isServer) {
+    config.experiments = {
+      asyncWebAssembly: true,
+      layers: true,
+      topLevelAwait: true
+    }
+    config.output.globalObject = 'self'
+  }
+}
+```
+
+**Usage**:
+
+```typescript
+// Programmatic usage
+import { createWorkerSimulation, isWorkerSimulationAvailable } from '@/lib/simulation/SimulationEngineFactory'
+
+if (isWorkerSimulationAvailable()) {
+  const worker = createWorkerSimulation()
+  await worker.initialize(wasmData, jsData, metadata)
+
+  // Run with progress updates
+  await worker.run(
+    { timeStep: 0.01, duration: 10 },
+    (progress) => console.log(`${progress.progress}%`)
+  )
+
+  const results = await worker.getResults()
+  worker.terminate()
+}
+```
+
+**UI Toggle**:
+
+Users can enable Web Worker simulation through the Simulation Settings panel. The preference is stored in `localStorage` as `obliq-use-workers`.
+
+**Features**:
+- Non-blocking simulation execution
+- Real-time progress updates (shown in Run button)
+- Stop/cancel support (Stop button appears during execution)
+- Automatic fallback to main thread if workers unavailable
+- User preference persistence across sessions
+
+**Files**:
+- `lib/simulation/SimulationWorker.ts` - Web Worker script
+- `lib/simulation/SimulationWorkerManager.ts` - Manager class
+- `components/SimulationSettingsPanel.tsx` - UI toggle
+- `next.config.js` - Webpack configuration
+
+**Current Status**: Opt-in (disabled by default). Users must enable via UI checkbox.
+
 ### Planned Features
 
-1. **Threading** - Web Workers for parallel block execution
-2. **Streaming Compilation** - Progressive module loading
-3. **Adaptive Optimization** - Auto-select O0 vs O3 based on model complexity
+1. **Streaming Compilation** - Progressive module loading
+2. **Adaptive Optimization** - Auto-select O0 vs O3 based on model complexity
 
 ### Potential Improvements
 
@@ -388,6 +448,8 @@ When SIMD is enabled:
 | `lib/wasm/cache/cacheKey.ts` | Cache key generation |
 | `lib/wasm/cache/SupabaseCacheManager.ts` | Cache storage |
 | `lib/simulation/WasmSimulationEngine.ts` | WASM execution |
+| `lib/simulation/SimulationWorker.ts` | Web Worker script |
+| `lib/simulation/SimulationWorkerManager.ts` | Worker lifecycle management |
 
 ### API Routes
 
@@ -410,6 +472,7 @@ When SIMD is enabled:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v29 | Dec 2, 2025 | Added Web Worker support for non-blocking simulation (SimulationWorker, SimulationWorkerManager) |
 | v28 | Dec 2, 2025 | Added SIMD optimization support (-msimd128), full MatrixMultiplyBlockModule implementation |
 | v27 | Nov 30, 2025 | Fixed RK4 evaluate_algebraic calls, vector support |
 | v26 | Nov 30, 2025 | Added use_rk4 field |

@@ -2,12 +2,16 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Paper, Text, NumberInput, Stack } from '@mantine/core'
+import { Paper, Text, NumberInput, Stack, Checkbox, Tooltip } from '@mantine/core'
+import { IconInfoCircle } from '@tabler/icons-react'
 
 interface SimulationSettingsPanelProps {
   initialDuration: number
   initialTimeStep: number
   onChange: (settings: { duration: string; timeStep: string }) => void
+  useWorker?: boolean
+  onWorkerChange?: (useWorker: boolean) => void
+  workerAvailable?: boolean
 }
 
 export function validateSimulationSettings(duration: string, timeStep: string) {
@@ -41,10 +45,13 @@ export function validateSimulationSettings(duration: string, timeStep: string) {
   }
 }
 
-export default function SimulationSettingsPanel({ 
-  initialDuration, 
-  initialTimeStep, 
-  onChange 
+export default function SimulationSettingsPanel({
+  initialDuration,
+  initialTimeStep,
+  onChange,
+  useWorker = false,
+  onWorkerChange,
+  workerAvailable = false
 }: SimulationSettingsPanelProps) {
   const [duration, setDuration] = useState<number | string>(initialDuration)
   const [timeStep, setTimeStep] = useState<number | string>(initialTimeStep)
@@ -106,6 +113,38 @@ export default function SimulationSettingsPanel({
           <Text size="xs" c="dimmed">
             Steps: {Math.ceil(duration / timeStep).toLocaleString()}
           </Text>
+        )}
+
+        {/* Web Worker toggle */}
+        {onWorkerChange && (
+          <Tooltip
+            label={
+              workerAvailable
+                ? 'Run simulation in background thread for responsive UI (experimental)'
+                : 'Web Workers not available in this browser'
+            }
+            withArrow
+          >
+            <Checkbox
+              label={
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  Use Web Worker
+                  <IconInfoCircle size={14} style={{ opacity: 0.6 }} />
+                </span>
+              }
+              checked={useWorker}
+              onChange={(e) => {
+                const newValue = e.currentTarget.checked
+                onWorkerChange(newValue)
+                // Store preference in localStorage
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('obliq-use-workers', String(newValue))
+                }
+              }}
+              disabled={!workerAvailable}
+              size="sm"
+            />
+          </Tooltip>
         )}
       </Stack>
     </Paper>
