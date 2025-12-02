@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        const { modelId, version, optimizationLevel = 'O2' } = requestBody
+        const { modelId, version, optimizationLevel = 'O2', enableSimd = false } = requestBody
 
         // Validate optimization level
         if (!['O0', 'O1', 'O2', 'O3'].includes(optimizationLevel)) {
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
           message: 'Checking compilation cache...'
         })
 
-        const cacheKey = generateCacheKey(modelId, { sheets }, { optimizationLevel })
+        const cacheKey = generateCacheKey(modelId, { sheets }, { optimizationLevel, enableSimd })
         const cacheManager = new SupabaseCacheManager()
         const cachedResult = await cacheManager.get(cacheKey)
 
@@ -282,10 +282,11 @@ export async function POST(request: NextRequest) {
           await fs.writeFile(wrapperPath, generatedCode.wasmWrapper)
 
           // Step 5: Compile with Emscripten
+          const simdLabel = enableSimd ? ', SIMD enabled' : ''
           sendEvent(controller, 'progress', {
             step: 'compile',
             progress: 60,
-            message: `Compiling to WebAssembly (${optimizationLevel})...`
+            message: `Compiling to WebAssembly (${optimizationLevel}${simdLabel})...`
           })
 
           const outputPath = path.join(tempDir, `${safeName}.js`)
@@ -295,6 +296,9 @@ export async function POST(request: NextRequest) {
           const volumeMount = isWindows
             ? tempDir.replace(/\\/g, '/')
             : tempDir
+
+          // Build SIMD flag if enabled
+          const simdFlag = enableSimd ? '-msimd128 ' : ''
 
           const emccCmd = `docker run --rm -v "${volumeMount}:/workspace" ${DOCKER_IMAGE} ` +
             `emcc /workspace/${safeName}.c /workspace/${safeName}_wasm.c ` +
@@ -306,7 +310,7 @@ export async function POST(request: NextRequest) {
             `-s "EXPORT_NAME=createModule" ` +
             `-s ALLOW_MEMORY_GROWTH=1 ` +
             `-s INITIAL_MEMORY=16MB ` +
-            `-${optimizationLevel} -lm`
+            `${simdFlag}-${optimizationLevel} -lm`
 
           try {
             const result = await execAsync(emccCmd, { timeout: COMPILATION_TIMEOUT })
@@ -363,6 +367,7 @@ export async function POST(request: NextRequest) {
               modelHash,
               compilationTime,
               optimizationLevel,
+              enableSimd,
               wasmSize: wasmData.length,
               jsSize: jsData.length,
               blockCount: sheets.flatMap((s: any) => s.blocks).length
@@ -400,6 +405,7 @@ export async function POST(request: NextRequest) {
               wasmSize: wasmData.length,
               jsSize: jsData.length,
               optimizationLevel,
+              enableSimd,
               blockCount: sheets.flatMap((s: any) => s.blocks).length,
               inputMap: Array.from(generatedCode.inputMap.entries()),
               outputMap: Array.from(generatedCode.outputMap.entries())

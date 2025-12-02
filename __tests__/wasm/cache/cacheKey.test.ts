@@ -89,6 +89,40 @@ describe('Cache Key Generation', () => {
       expect(keyWithoutDebug).not.toContain('-debug')
     })
 
+    it('should include simd flag when specified', () => {
+      const model = createSimpleModel()
+      const modelId = 'test-model-id'
+
+      const keyWithSimd = generateCacheKey(
+        modelId,
+        { sheets: model },
+        { enableSimd: true }
+      )
+      const keyWithoutSimd = generateCacheKey(
+        modelId,
+        { sheets: model },
+        { enableSimd: false }
+      )
+
+      expect(keyWithSimd).toContain('-simd')
+      expect(keyWithoutSimd).not.toContain('-simd')
+    })
+
+    it('should include both simd and debug flags when specified', () => {
+      const model = createSimpleModel()
+      const modelId = 'test-model-id'
+
+      const key = generateCacheKey(
+        modelId,
+        { sheets: model },
+        { enableSimd: true, includeDebugInfo: true }
+      )
+
+      expect(key).toContain('-simd')
+      expect(key).toContain('-debug')
+      expect(key).toMatch(/-simd-debug$/)
+    })
+
     it('should generate different keys for different models', () => {
       const model1 = createSimpleModel()
       const model2 = createSimpleModel()
@@ -185,9 +219,11 @@ describe('Cache Key Generation', () => {
   describe('isValidCacheKey', () => {
     it('should validate correct cache keys', () => {
       const validKeys = [
-        '550e8400-e29b-41d4-a716-446655440000-a1b2c3d4e5f67890-O2',
-        'test-model-id-0123456789abcdef-O0',
-        'model-id-fedcba9876543210-O3-debug'
+        'v28-550e8400-e29b-41d4-a716-446655440000-a1b2c3d4e5f67890-O2',
+        'v28-test-model-id-0123456789abcdef-O0',
+        'v28-model-id-fedcba9876543210-O3-debug',
+        'v28-model-id-fedcba9876543210-O2-simd',
+        'v28-model-id-fedcba9876543210-O3-simd-debug'
       ]
 
       validKeys.forEach(key => {
@@ -213,24 +249,54 @@ describe('Cache Key Generation', () => {
 
   describe('parseCacheKey', () => {
     it('should parse a valid cache key', () => {
-      const cacheKey = '550e8400-e29b-41d4-a716-446655440000-0123456789abcdef-O2'
+      const cacheKey = 'v28-550e8400-e29b-41d4-a716-446655440000-0123456789abcdef-O2'
       const parsed = parseCacheKey(cacheKey)
 
       expect(parsed).not.toBeNull()
+      expect(parsed!.version).toBe('v28')
       expect(parsed!.modelId).toBe('550e8400-e29b-41d4-a716-446655440000')
       expect(parsed!.hash).toBe('0123456789abcdef')
       expect(parsed!.optimizationLevel).toBe('O2')
+      expect(parsed!.enableSimd).toBe(false)
       expect(parsed!.debugInfo).toBe(false)
     })
 
     it('should parse cache key with debug flag', () => {
-      const cacheKey = 'test-model-fedcba9876543210-O3-debug'
+      const cacheKey = 'v28-test-model-fedcba9876543210-O3-debug'
       const parsed = parseCacheKey(cacheKey)
 
       expect(parsed).not.toBeNull()
+      expect(parsed!.version).toBe('v28')
       expect(parsed!.modelId).toBe('test-model')
       expect(parsed!.hash).toBe('fedcba9876543210')
       expect(parsed!.optimizationLevel).toBe('O3')
+      expect(parsed!.enableSimd).toBe(false)
+      expect(parsed!.debugInfo).toBe(true)
+    })
+
+    it('should parse cache key with simd flag', () => {
+      const cacheKey = 'v28-test-model-fedcba9876543210-O2-simd'
+      const parsed = parseCacheKey(cacheKey)
+
+      expect(parsed).not.toBeNull()
+      expect(parsed!.version).toBe('v28')
+      expect(parsed!.modelId).toBe('test-model')
+      expect(parsed!.hash).toBe('fedcba9876543210')
+      expect(parsed!.optimizationLevel).toBe('O2')
+      expect(parsed!.enableSimd).toBe(true)
+      expect(parsed!.debugInfo).toBe(false)
+    })
+
+    it('should parse cache key with simd and debug flags', () => {
+      const cacheKey = 'v28-test-model-fedcba9876543210-O3-simd-debug'
+      const parsed = parseCacheKey(cacheKey)
+
+      expect(parsed).not.toBeNull()
+      expect(parsed!.version).toBe('v28')
+      expect(parsed!.modelId).toBe('test-model')
+      expect(parsed!.hash).toBe('fedcba9876543210')
+      expect(parsed!.optimizationLevel).toBe('O3')
+      expect(parsed!.enableSimd).toBe(true)
       expect(parsed!.debugInfo).toBe(true)
     })
 
@@ -242,7 +308,7 @@ describe('Cache Key Generation', () => {
 
   describe('shortCacheKey', () => {
     it('should create shortened version of cache key', () => {
-      const cacheKey = '550e8400-e29b-41d4-a716-446655440000-0123456789abcdef-O2'
+      const cacheKey = 'v28-550e8400-e29b-41d4-a716-446655440000-0123456789abcdef-O2'
       const short = shortCacheKey(cacheKey)
 
       expect(short).toContain('01234567') // First 8 chars of hash

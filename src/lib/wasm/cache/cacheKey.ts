@@ -40,8 +40,9 @@ import type { Sheet } from '@/lib/simulationEngine'
  * - v25: Fixed getModuleGenerator -> getBlockModule typo in InitFunctionGenerator
  * - v26: Added use_rk4 field to model struct and initialized it to 1 (RK4)
  * - v27: Removed spurious evaluate_algebraic calls from RK4 substeps that caused extra sample storage
+ * - v28: Added SIMD optimization support (-msimd128 flag)
  */
-const CODEGEN_VERSION = 'v27'
+const CODEGEN_VERSION = 'v28'
 
 export interface ModelStructure {
   sheets: Sheet[]
@@ -50,6 +51,7 @@ export interface ModelStructure {
 export interface CacheKeyOptions {
   optimizationLevel?: 'O0' | 'O1' | 'O2' | 'O3'
   includeDebugInfo?: boolean
+  enableSimd?: boolean
 }
 
 /**
@@ -65,12 +67,13 @@ export function generateCacheKey(
   model: ModelStructure,
   options: CacheKeyOptions = {}
 ): string {
-  const { optimizationLevel = 'O2', includeDebugInfo = false } = options
+  const { optimizationLevel = 'O2', includeDebugInfo = false, enableSimd = false } = options
 
   const hash = hashModel(model)
   const debugSuffix = includeDebugInfo ? '-debug' : ''
+  const simdSuffix = enableSimd ? '-simd' : ''
 
-  return `${CODEGEN_VERSION}-${modelId}-${hash}-${optimizationLevel}${debugSuffix}`
+  return `${CODEGEN_VERSION}-${modelId}-${hash}-${optimizationLevel}${simdSuffix}${debugSuffix}`
 }
 
 /**
@@ -145,10 +148,11 @@ export function hashModel(model: ModelStructure): string {
  * @returns True if the cache key has valid format
  */
 export function isValidCacheKey(cacheKey: string): boolean {
-  // Format: {version}-{modelId}-{hash}-{opt}[-debug]
-  // Example: v2-550e8400-e29b-41d4-a716-446655440000-a1b2c3d4e5f67890-O2
-  // Example: v2-test-model-id-0123456789abcdef-O0
-  const pattern = /^v\d+-.+-[a-f0-9]{16}-O[0-3](-debug)?$/
+  // Format: {version}-{modelId}-{hash}-{opt}[-simd][-debug]
+  // Example: v28-550e8400-e29b-41d4-a716-446655440000-a1b2c3d4e5f67890-O2
+  // Example: v28-test-model-id-0123456789abcdef-O2-simd
+  // Example: v28-test-model-id-0123456789abcdef-O0-simd-debug
+  const pattern = /^v\d+-.+-[a-f0-9]{16}-O[0-3](-simd)?(-debug)?$/
   return pattern.test(cacheKey)
 }
 
@@ -163,6 +167,7 @@ export function parseCacheKey(cacheKey: string): {
   modelId: string
   hash: string
   optimizationLevel: string
+  enableSimd: boolean
   debugInfo: boolean
 } | null {
   if (!isValidCacheKey(cacheKey)) {
@@ -171,21 +176,20 @@ export function parseCacheKey(cacheKey: string): {
 
   const parts = cacheKey.split('-')
   const debugInfo = cacheKey.endsWith('-debug')
+  const enableSimd = cacheKey.includes('-simd')
   const version = parts[0] // v1, v2, etc.
 
-  // Format with debug: version-modelId-hash-opt-debug
-  // Format without: version-modelId-hash-opt
-  if (debugInfo) {
-    const optLevel = parts[parts.length - 2] // O2, O3, etc.
-    const hash = parts[parts.length - 3] // 16-char hex
-    const modelId = parts.slice(1, -3).join('-')
-    return { version, modelId, hash, optimizationLevel: optLevel, debugInfo: true }
-  } else {
-    const optLevel = parts[parts.length - 1]
-    const hash = parts[parts.length - 2]
-    const modelId = parts.slice(1, -2).join('-')
-    return { version, modelId, hash, optimizationLevel: optLevel, debugInfo: false }
-  }
+  // Calculate suffix count to determine where modelId ends
+  let suffixCount = 2 // hash, opt level
+  if (enableSimd) suffixCount++
+  if (debugInfo) suffixCount++
+
+  // Extract components from the end
+  const hash = parts[parts.length - suffixCount]
+  const optLevel = parts[parts.length - suffixCount + 1]
+  const modelId = parts.slice(1, parts.length - suffixCount).join('-')
+
+  return { version, modelId, hash, optimizationLevel: optLevel, enableSimd, debugInfo }
 }
 
 /**

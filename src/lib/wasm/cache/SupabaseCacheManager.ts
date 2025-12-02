@@ -11,6 +11,7 @@ export interface CacheMetadata {
   modelHash: string
   compilationTime: number
   optimizationLevel: string
+  enableSimd?: boolean
   wasmSize: number
   jsSize: number
   blockCount: number

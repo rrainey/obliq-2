@@ -335,13 +335,37 @@ WASM runtime errors are caught and reported:
 - Memory usage monitoring
 - Long-duration stability tests
 
-## Future Enhancements
+## Advanced Features (Phase 7)
 
-### Phase 7 (Planned)
+### SIMD Optimization (Implemented)
 
-1. **SIMD Optimization** - Use `-msimd128` for vector operations
-2. **Threading** - Web Workers for parallel block execution
-3. **Streaming Compilation** - Progressive module loading
+The compilation API supports SIMD optimization via the `-msimd128` Emscripten flag:
+
+```typescript
+// Request body with SIMD enabled
+{
+  modelId: 'uuid',
+  optimizationLevel: 'O2',
+  enableSimd: true
+}
+```
+
+When SIMD is enabled:
+- The `-msimd128` flag is added to the emcc command
+- Cache keys include `-simd` suffix for separate caching
+- Matrix and vector operations can benefit from SIMD instructions
+
+**Browser Support**: SIMD is supported in:
+- Chrome 91+
+- Firefox 89+
+- Safari 16.4+
+- Edge 91+
+
+### Planned Features
+
+1. **Threading** - Web Workers for parallel block execution
+2. **Streaming Compilation** - Progressive module loading
+3. **Adaptive Optimization** - Auto-select O0 vs O3 based on model complexity
 
 ### Potential Improvements
 
@@ -386,6 +410,7 @@ WASM runtime errors are caught and reported:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| v28 | Dec 2, 2025 | Added SIMD optimization support (-msimd128), full MatrixMultiplyBlockModule implementation |
 | v27 | Nov 30, 2025 | Fixed RK4 evaluate_algebraic calls, vector support |
 | v26 | Nov 30, 2025 | Added use_rk4 field |
 | v25 | Nov 30, 2025 | Fixed getBlockModule typo |
