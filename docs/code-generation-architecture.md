@@ -5,6 +5,14 @@
 
 The obliq-2 code generation system uses a two-layer architecture that separates algebraic computations from time-based integration. This design pattern, common in professional simulation tools like Simulink and Modelica, provides better modularity, testability, and support for advanced integration methods.
 
+The system supports **two distinct usage modes**:
+1. **Embedded/Standalone**: Generate pure C code for embedded systems or external simulations
+2. **Browser WASM**: Compile to WebAssembly for in-browser simulation with optional Web Worker threading
+
+Both modes share the same core C code generation, ensuring consistent numerical results across platforms.
+
+**📖 For detailed deployment instructions, compilation examples, and integration patterns, see [Usage Modes Documentation](./usage-modes.md)**
+
 ## Two-Layer Architecture
 
 ### Conceptual Design
