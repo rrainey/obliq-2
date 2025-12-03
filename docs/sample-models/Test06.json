@@ -1,0 +1,155 @@
+{
+  "name": "Test06",
+  "version": 1,
+  "created": "2025-12-03T20:47:37.617586+00:00",
+  "updated": "2025-12-03T20:47:37.617586+00:00",
+  "data": {
+    "version": "2.1",
+    "metadata": {
+      "created": "2025-12-03T20:52:44.355Z",
+      "description": "Exported from obliq-2 on 12/3/2025"
+    },
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "source_1764733752832",
+            "name": "Source1",
+            "type": "source",
+            "position": {
+              "x": 199.10069261815124,
+              "y": 440.9295501502344
+            },
+            "parameters": {
+              "f0": 0.1,
+              "f1": 10,
+              "mean": 0,
+              "phase": 0,
+              "slope": 1,
+              "value": 3,
+              "offset": 0,
+              "dataType": "double",
+              "duration": 10,
+              "stepTime": 1,
+              "amplitude": 1,
+              "frequency": 1,
+              "startTime": 0,
+              "stepValue": 1,
+              "signalType": "constant",
+              "useParameter": true,
+              "parameterName": "A"
+            }
+          },
+          {
+            "id": "transfer_function_1764733778537",
+            "name": "Transfer function2",
+            "type": "transfer_function",
+            "position": {
+              "x": 479.5,
+              "y": 441.54682921674475
+            },
+            "parameters": {
+              "numerator": [
+                1
+              ],
+              "denominator": [
+                1,
+                0.6,
+                1
+              ]
+            }
+          },
+          {
+            "id": "signal_display_1764733793484",
+            "name": "Signal display3",
+            "type": "signal_display",
+            "position": {
+              "x": 709.5,
+              "y": 443.8046875
+            },
+            "parameters": {
+              "maxSamples": 1000
+            }
+          },
+          {
+            "id": "output_port_1764733797986",
+            "name": "Output port4",
+            "type": "output_port",
+            "position": {
+              "x": 714,
+              "y": 565.8046875
+            },
+            "parameters": {
+              "portName": "Output"
+            }
+          },
+          {
+            "id": "limit_1764794956842",
+            "type": "limit",
+            "name": "Limit5",
+            "position": {
+              "x": 335.15570060093773,
+              "y": 441.84761046674475
+            },
+            "parameters": {
+              "lowerLimit": -1,
+              "upperLimit": 1
+            }
+          }
+        ],
+        "extents": {
+          "width": 1000,
+          "height": 800
+        },
+        "connections": [
+          {
+            "id": "wire_1764733795093",
+            "sourceBlockId": "transfer_function_1764733778537",
+            "targetBlockId": "signal_display_1764733793484",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1764733799724",
+            "sourceBlockId": "transfer_function_1764733778537",
+            "targetBlockId": "output_port_1764733797986",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1764794963308",
+            "sourceBlockId": "source_1764733752832",
+            "sourcePortIndex": 0,
+            "targetBlockId": "limit_1764794956842",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1764794966438",
+            "sourceBlockId": "limit_1764794956842",
+            "sourcePortIndex": 0,
+            "targetBlockId": "transfer_function_1764733778537",
+            "targetPortIndex": 0
+          }
+        ]
+      }
+    ],
+    "parameters": [
+      {
+        "name": "A",
+        "value": 3,
+        "signalType": "double"
+      },
+      {
+        "name": "B",
+        "value": 0,
+        "signalType": "long"
+      }
+    ],
+    "globalSettings": {
+      "simulationTimeStep": 0.01,
+      "simulationDuration": 10
+    }
+  }
+}

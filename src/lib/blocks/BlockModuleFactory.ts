@@ -23,6 +23,7 @@ import { IfBlockModule } from './IfBlockModule'
 import { ConditionBlockModule } from './ConditionBlockModule'
 import { AbsoluteValueBlockModule } from './AbsoluteValueBlockModule'
 import { UnaryMinusBlockModule } from './UnaryMinusBlockModule'
+import { LimitBlockModule } from './LimitBlockModule'
 
 import { SheetLabelSinkBlockModule } from './SheetLabelSinkBlockModule'
 import { SheetLabelSourceBlockModule } from './SheetLabelSourceBlockModule'
@@ -144,7 +145,10 @@ export class BlockModuleFactory {
 
       case 'uminus':
         return new UnaryMinusBlockModule()
-        
+
+      case 'limit':
+        return new LimitBlockModule()
+
       default:
         return null
     }
@@ -184,7 +188,8 @@ export class BlockModuleFactory {
       'if',
       'condition',
       'abs',
-      'uminus'
+      'uminus',
+      'limit'
     ]
   }
   

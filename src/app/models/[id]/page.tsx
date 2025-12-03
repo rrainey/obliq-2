@@ -36,6 +36,7 @@ import SheetLabelSourceConfig from '@/components/SheetLabelSourceConfig'
 import SumConfig from '@/components/SumConfig'
 import ConditionConfig from '@/components/ConditionConfig'
 import EvaluateConfig from '@/components/EvaluateConfig'
+import LimitConfig from '@/components/LimitConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
@@ -504,6 +505,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         }
       case 'scale':
         return { gain: 1 }
+      case 'limit':
+        return { lowerLimit: -1, upperLimit: 1 }
       case 'transfer_function':
         return { 
           numerator: [1], 
@@ -1264,15 +1267,16 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     
     // Open properties dialog for all block types that have configuration
     if (block && (
-      block.type === 'input_port' || 
-      block.type === 'output_port' || 
+      block.type === 'input_port' ||
+      block.type === 'output_port' ||
       block.type === 'source' ||
       block.type === 'scale' ||
+      block.type === 'limit' ||
       block.type === 'transfer_function' ||
       block.type === 'subsystem' ||
       block.type === 'lookup_1d' ||
       block.type === 'lookup_2d' ||
-      block.type === 'sheet_label_sink' || 
+      block.type === 'sheet_label_sink' ||
       block.type === 'sheet_label_source' ||
       block.type === 'sum' ||
       block.type === 'mux' ||
@@ -1932,6 +1936,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'scale' && (
             <ScaleConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'limit' && (
+            <LimitConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

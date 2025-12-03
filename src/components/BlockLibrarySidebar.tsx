@@ -62,12 +62,22 @@ const blockTypes: BlockType[] = [
     vectorSupport: 'full'
   },
   
+  // Signal Processing
+  {
+    id: 'limit',
+    name: 'Limit',
+    category: 'Signal',
+    description: 'Clamp signal to range',
+    icon: '⊏⊐',
+    vectorSupport: 'full'
+  },
+
   // Dynamic Systems
-  { 
-    id: 'transfer_function', 
-    name: 'Transfer Function', 
-    category: 'Dynamic', 
-    description: 'Laplace transfer function', 
+  {
+    id: 'transfer_function',
+    name: 'Transfer Function',
+    category: 'Dynamic',
+    description: 'Laplace transfer function',
     icon: 'H(s)',
     vectorSupport: 'element-wise'
   },
