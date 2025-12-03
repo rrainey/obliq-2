@@ -28,7 +28,11 @@ export class HeaderGenerator {
     // Add standard includes
     header += this.generateIncludes()
     header += '\n'
-    
+
+    // Add model parameters (Feature 3)
+    header += this.generateParameters()
+    header += '\n'
+
     // Add extern "C" opening for C++ compatibility
     header += '#ifdef __cplusplus\n'
     header += 'extern "C" {\n'
@@ -534,5 +538,105 @@ export class HeaderGenerator {
 
     // Default to double if no connection found
     return 'double'
+  }
+
+  /**
+   * Generate model parameter definitions (Feature 3)
+   * Scalars use #define, arrays use const with size macros
+   */
+  private generateParameters(): string {
+    if (!this.model.parameters || this.model.parameters.length === 0) {
+      return CCodeBuilder.generateCommentBlock(['No model parameters defined'])
+    }
+
+    let code = CCodeBuilder.generateCommentBlock(['Model Parameters'])
+
+    for (const param of this.model.parameters) {
+      const { name, signalType, value } = param
+
+      // Parse signal type to determine if scalar, vector, or matrix
+      const typeMatch = signalType.match(/^(\w+)(?:\[(\d+)\])?(?:\[(\d+)\])?$/)
+      if (!typeMatch) {
+        code += `// Warning: Invalid signal type for parameter ${name}: ${signalType}\n`
+        continue
+      }
+
+      const baseType = typeMatch[1] // float, double, long, bool
+      const dim1 = typeMatch[2] ? parseInt(typeMatch[2]) : null
+      const dim2 = typeMatch[3] ? parseInt(typeMatch[3]) : null
+
+      if (dim2 !== null) {
+        // Matrix: Use const array with #define for dimensions
+        code += `#define ${name}_ROWS ${dim1}\n`
+        code += `#define ${name}_COLS ${dim2}\n`
+        code += `const ${baseType} ${name}[${name}_ROWS][${name}_COLS] = `
+
+        // Format matrix value
+        if (Array.isArray(value) && Array.isArray(value[0])) {
+          code += this.formatMatrixLiteral(value as number[][], baseType)
+        } else {
+          code += '{{0}}' // Error fallback
+        }
+        code += ';\n\n'
+
+      } else if (dim1 !== null) {
+        // Vector: Use const array with #define for size
+        code += `#define ${name}_SIZE ${dim1}\n`
+        code += `const ${baseType} ${name}[${name}_SIZE] = `
+
+        // Format vector value
+        if (Array.isArray(value)) {
+          code += this.formatVectorLiteral(value as number[], baseType)
+        } else {
+          code += '{0}' // Error fallback
+        }
+        code += ';\n\n'
+
+      } else {
+        // Scalar: Use #define
+        code += `#define ${name} `
+        code += this.formatScalarLiteral(value as number, baseType)
+        code += '\n'
+      }
+    }
+
+    return code
+  }
+
+  /**
+   * Format a scalar literal with appropriate suffix
+   */
+  private formatScalarLiteral(value: number, baseType: string): string {
+    switch (baseType) {
+      case 'float':
+        return `${value}f`
+      case 'double':
+        return `${value}`
+      case 'long':
+        return `${value}L`
+      case 'bool':
+        return value ? '1' : '0'
+      default:
+        return `${value}`
+    }
+  }
+
+  /**
+   * Format a vector literal
+   */
+  private formatVectorLiteral(values: number[], baseType: string): string {
+    const formattedValues = values.map(v => this.formatScalarLiteral(v, baseType))
+    return `{${formattedValues.join(', ')}}`
+  }
+
+  /**
+   * Format a matrix literal (2D array)
+   */
+  private formatMatrixLiteral(matrix: number[][], baseType: string): string {
+    const rows = matrix.map(row => {
+      const formattedRow = row.map(v => this.formatScalarLiteral(v, baseType))
+      return `{${formattedRow.join(', ')}}`
+    })
+    return `{${rows.join(', ')}}`
   }
 }

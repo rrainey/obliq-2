@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { BlockData } from './BlockNode'
 import { isValidType, getTypeValidationError, parseType } from '@/lib/typeValidator'
+import { useModelStore } from '@/lib/modelStore'
 
 interface SourceConfigProps {
   block: BlockData
@@ -11,10 +12,14 @@ interface SourceConfigProps {
 }
 
 export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigProps) {
+  const parameters = useModelStore((state) => state.parameters)
+
   const [signalType, setSignalType] = useState(block?.parameters?.signalType || 'constant')
   const [dataType, setDataType] = useState(block?.parameters?.dataType || 'double')
   const [value, setValue] = useState(block?.parameters?.value || 0)
   const [valueString, setValueString] = useState('')
+  const [useParameter, setUseParameter] = useState(block?.parameters?.useParameter || false)
+  const [parameterName, setParameterName] = useState(block?.parameters?.parameterName || '')
   const [stepTime, setStepTime] = useState(block?.parameters?.stepTime || 1.0)
   const [stepValue, setStepValue] = useState(block?.parameters?.stepValue || 1.0)
   const [slope, setSlope] = useState(block?.parameters?.slope || 1.0)
@@ -35,7 +40,10 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
 
   // Initialize value string based on existing value
   useEffect(() => {
-    if (Array.isArray(block?.parameters?.value)) {
+    // If using a parameter, show the parameter name
+    if (block?.parameters?.useParameter && block?.parameters?.parameterName) {
+      setValueString(block.parameters.parameterName)
+    } else if (Array.isArray(block?.parameters?.value)) {
       // Check if it's a 2D array (matrix)
       if (block.parameters.value.length > 0 && Array.isArray(block.parameters.value[0])) {
         // Format as matrix
@@ -54,7 +62,7 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
   useEffect(() => {
     const error = getTypeValidationError(dataType)
     setTypeError(error)
-    
+
     if (!error) {
       try {
         const parsedType = parseType(dataType)
@@ -73,10 +81,52 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
     }
   }, [dataType])
 
-  // Parse value string based on whether it's a matrix, vector, or scalar
-  const parseValue = (input: string): { value: number | number[] | number[][], error: string } => {
+  // Auto-sync dataType when parameter reference is detected
+  useEffect(() => {
+    if (useParameter && parameterName) {
+      const param = parameters.find(p => p.name === parameterName)
+      if (param && param.signalType !== dataType) {
+        setDataType(param.signalType)
+      }
+    }
+  }, [useParameter, parameterName, parameters])
+
+  // Check if a string is a valid parameter name
+  const isParameterReference = (input: string): boolean => {
     const trimmed = input.trim()
-    
+    // Valid identifier: starts with letter or underscore, contains only alphanumeric and underscore
+    return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)
+  }
+
+  // Parse value string based on whether it's a matrix, vector, or scalar
+  const parseValue = (input: string): { value: number | number[] | number[][], error: string, isParameter?: boolean } => {
+    const trimmed = input.trim()
+
+    // For scalars, check if it's a parameter reference
+    if (!isVector && !isMatrix && isParameterReference(trimmed)) {
+      // Check if parameter exists
+      const param = parameters.find(p => p.name === trimmed)
+      if (param) {
+        // Auto-sync dataType to match parameter type
+        if (param.signalType !== dataType) {
+          // Update the block's dataType to match the parameter
+          setDataType(param.signalType)
+        }
+        // Use parameter value for display/validation, but mark as parameter reference
+        return {
+          value: param.value as number,
+          error: '',
+          isParameter: true
+        }
+      } else {
+        return {
+          value: 0,
+          error: `Parameter "${trimmed}" not found`,
+          isParameter: true
+        }
+      }
+    }
+
     if (isMatrix && matrixDims) {
       // Parse matrix value: {{1.0, 2.0}, {3.0, 4.0}}
       const matrixMatch = trimmed.match(/^\{\s*(.+)\s*\}$/)
@@ -164,7 +214,16 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
     const result = parseValue(valueString)
     setValue(result.value)
     setValueError(result.error)
-  }, [valueString, isVector, isMatrix, dataType])
+
+    // Update parameter reference state
+    if (result.isParameter && !result.error) {
+      setUseParameter(true)
+      setParameterName(valueString.trim())
+    } else {
+      setUseParameter(false)
+      setParameterName('')
+    }
+  }, [valueString, isVector, isMatrix, dataType, parameters])
 
   // Auto-focus first input when dialog opens
   useEffect(() => {
@@ -175,10 +234,12 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
   }, [])
 
   const handleSave = () => {
-    const parameters = {
+    const params = {
       signalType,
       dataType,
       value,
+      useParameter,
+      parameterName: useParameter ? parameterName : undefined,
       stepTime,
       stepValue,
       slope,
@@ -192,7 +253,7 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
       duration,
       mean
     }
-    onUpdate(parameters)
+    onUpdate(params)
     onClose()
   }
 
@@ -220,13 +281,17 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
               />
               {valueError ? (
                 <p className="text-xs text-red-600 mt-1">{valueError}</p>
+              ) : useParameter ? (
+                <p className="text-xs text-green-600 mt-1">
+                  ✓ Using parameter "{parameterName}" - type auto-synced to {dataType}
+                </p>
               ) : (
                 <p className="text-xs text-gray-500 mt-1">
-                  {isMatrix 
-                    ? `Matrix constant (e.g., {{1.0, 2.0}, {3.0, 4.0}} for ${matrixDims?.rows}×${matrixDims?.cols})` 
-                    : isVector 
-                    ? "Vector constant (e.g., [1.0, 2.0, 3.0])" 
-                    : "Constant output value"}
+                  {isMatrix
+                    ? `Matrix constant (e.g., {{1.0, 2.0}, {3.0, 4.0}} for ${matrixDims?.rows}×${matrixDims?.cols})`
+                    : isVector
+                    ? "Vector constant (e.g., [1.0, 2.0, 3.0])"
+                    : "Constant output value or parameter name (e.g., PI, GAIN). Type will auto-sync with parameter."}
                 </p>
               )}
             </div>

@@ -119,8 +119,9 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
     )
   }
 
-  // Extract the main sheet
+  // Extract the main sheet and parameters
   const sheets = versionData.data.sheets
+  const parameters = versionData.data.parameters || [] // Feature 3
   const mainSheet = sheets.find((s: any) => s.id === 'main') || sheets[0]
 
   if (!mainSheet) {
@@ -172,7 +173,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   //console.log('CodeGenerator instantiated successfully')
 
-  const result = codeGenerator.generateCode(sheets, model.name)
+  const result = codeGenerator.generateCode(sheets, model.name, parameters)
 
   //console.log('generateCode result:', result)
 

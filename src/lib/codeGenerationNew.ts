@@ -2,6 +2,7 @@
 
 import { Sheet } from '@/lib/simulationEngine'
 import { CodeGenerator, CodeGenerationOptions } from './codegen/CodeGenerator'
+import { ModelParameter } from './modelSchema'
 
 /**
  * Wrapper class to maintain backward compatibility with existing code
@@ -18,23 +19,24 @@ export class ModelCodeGenerator {
    * Generate C code from model sheets
    * @param sheets Array of model sheets
    * @param modelName Name for the generated model (defaults to 'model')
+   * @param parameters Model parameters (Feature 3)
    * @returns Object containing header and source code
    */
-  generateCode(sheets: Sheet[], modelName: string = 'model'): {
+  generateCode(sheets: Sheet[], modelName: string = 'model', parameters: ModelParameter[] = []): {
     header: string
     source: string
     warnings: string[]
   } {
     // Pass integration method from metadata if available
-    const options = { 
+    const options = {
       ...this.generator.options,
       modelName,
       integrationMethod: (sheets[0] as any)?.metadata?.integrationMethod
     }
-    
+
     // Create new generator with updated options
     const customGenerator = new CodeGenerator(options)
-    const result = customGenerator.generate(sheets)
+    const result = customGenerator.generate(sheets, parameters)
     
     // Log any warnings
     if (result.warnings.length > 0) {
@@ -62,15 +64,16 @@ export class ModelCodeGenerator {
    */
   generateCodeWithOptions(
     sheets: Sheet[],
-    options: CodeGenerationOptions
+    options: CodeGenerationOptions,
+    parameters: ModelParameter[] = []
   ): {
     header: string
     source: string
     warnings: string[]
   } {
     const customGenerator = new CodeGenerator(options)
-    const result = customGenerator.generate(sheets)
-    
+    const result = customGenerator.generate(sheets, parameters)
+
     return {
       header: result.header,
       source: result.source,

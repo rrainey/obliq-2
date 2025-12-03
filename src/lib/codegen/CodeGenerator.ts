@@ -12,6 +12,7 @@ import { RK4Generator } from './RK4Generator'
 import { CCodeBuilder } from './CCodeBuilder'
 import { CodeGenerationValidator } from './CodeGenerationValidator'
 import { TypePropagator } from './TypePropagator'
+import { ModelParameter } from '@/lib/modelSchema'
 /**
  * Options for code generation
  */
@@ -70,7 +71,7 @@ export class CodeGenerator {
   /**
    * Generate C code from model sheets
    */
-  generate(sheets: Sheet[]): CodeGenerationResult {
+  generate(sheets: Sheet[], parameters: ModelParameter[] = []): CodeGenerationResult {
     // Step 1: Flatten the model
     const flattener = new ModelFlattener({
       preserveOriginalNames: this.options.includeDebugComments,
@@ -78,8 +79,8 @@ export class CodeGenerator {
       namePrefix: '',
       nameSeparator: '_'
     })
-    
-    const flatteningResult = flattener.flattenModel(sheets, this.options.modelName)
+
+    const flatteningResult = flattener.flattenModel(sheets, this.options.modelName, parameters)
     const model = flatteningResult.model
     
     // Step 2: Validate the flattened model

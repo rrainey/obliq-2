@@ -52,9 +52,9 @@ export class WasmCodeGenerator extends CodeGenerator {
   /**
    * Generate C code with WASM exports
    */
-  generateWasm(sheets: Sheet[]): WasmCodeGenerationResult {
+  generateWasm(sheets: Sheet[], parameters: any[] = []): WasmCodeGenerationResult {
     // Generate base code using parent class
-    const baseResult = this.generate(sheets)
+    const baseResult = this.generate(sheets, parameters)
 
     // Flatten the model to run type propagation (same as base code generation does)
     const { ModelFlattener } = require('../../codegen/ModelFlattener')
@@ -67,7 +67,7 @@ export class WasmCodeGenerator extends CodeGenerator {
       nameSeparator: '_'
     })
 
-    const flatteningResult = flattener.flattenModel(sheets, this.options.modelName)
+    const flatteningResult = flattener.flattenModel(sheets, this.options.modelName, parameters)
     const typePropagator = new TypePropagator(flatteningResult.model)
     const typeMap = typePropagator.propagate()
 

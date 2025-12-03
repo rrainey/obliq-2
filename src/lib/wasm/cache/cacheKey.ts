@@ -7,6 +7,7 @@
 
 import crypto from 'crypto'
 import type { Sheet } from '@/lib/simulationEngine'
+import type { ModelParameter } from '@/lib/modelSchema'
 
 /**
  * Code generation version - increment this to invalidate all cached WASM modules
@@ -41,11 +42,13 @@ import type { Sheet } from '@/lib/simulationEngine'
  * - v26: Added use_rk4 field to model struct and initialized it to 1 (RK4)
  * - v27: Removed spurious evaluate_algebraic calls from RK4 substeps that caused extra sample storage
  * - v28: Added SIMD optimization support (-msimd128 flag)
+ * - v29: Added model parameters support (Feature 3) - parameters in header, source block references
  */
-const CODEGEN_VERSION = 'v28'
+const CODEGEN_VERSION = 'v29'
 
 export interface ModelStructure {
   sheets: Sheet[]
+  parameters?: ModelParameter[] // Feature 3
 }
 
 export interface CacheKeyOptions {

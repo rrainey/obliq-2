@@ -4,6 +4,7 @@ import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { Sheet } from '@/lib/simulationEngine'
 import { CCodeBuilder } from '@/lib/codegen/CCodeBuilder'
+import { ModelParameter } from '@/lib/modelSchema'
 /**
  * A flattened block includes the original block data plus hierarchy information
  */
@@ -59,19 +60,22 @@ export interface FlattenedConnection {
 export interface FlattenedModel {
   /** All blocks from all sheets, flattened */
   blocks: FlattenedBlock[]
-  
+
   /** All connections with remapped IDs */
   connections: FlattenedConnection[]
-  
+
   /** Map from original block ID to flattened block */
   blockMap: Map<string, FlattenedBlock>
-  
+
   /** Map from original block ID to enable scope */
   enableScopes: Map<string, string | null>
-  
+
   /** Information about subsystems with enable inputs */
   subsystemEnableInfo: SubsystemEnableInfo[]
-  
+
+  /** Global model parameters (Feature 3) */
+  parameters: ModelParameter[]
+
   /** Model metadata */
   metadata: {
     modelName: string
@@ -779,7 +783,7 @@ export class ModelFlattener {
   /**
    * Main method to flatten a complete model
    */
-  flattenModel(sheets: Sheet[], modelName: string = 'model'): FlatteningResult {
+  flattenModel(sheets: Sheet[], modelName: string = 'model', parameters: ModelParameter[] = []): FlatteningResult {
     // Validate input
     if (!sheets || !Array.isArray(sheets)) {
       throw new Error('Invalid sheets parameter: expected array of sheets')
@@ -836,6 +840,7 @@ export class ModelFlattener {
       blockMap: this.blockMap,
       enableScopes: this.enableScopes,
       subsystemEnableInfo: this.subsystemEnableInfo,
+      parameters, // Feature 3: Include model parameters
       metadata: {
         modelName,
         totalBlocks: finalBlocks.length,

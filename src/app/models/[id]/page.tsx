@@ -14,6 +14,7 @@ import { convertWasmToUIFormat, WasmDataCollector } from '@/lib/simulation/WasmR
 import SaveAsDialog from '@/components/SaveAsDialog'
 import AutoSaveRecoveryDialog from '@/components/AutoSaveRecoveryDialog'
 import AutoSaveStatusIndicator from '@/components/AutoSaveStatusIndicator'
+import ModelParametersDialog from '@/components/ModelParametersDialog'
 import CanvasReactFlow from '@/components/CanvasReactFlow'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SimulationSettingsPanel, { validateSimulationSettings } from '@/components/SimulationSettingsPanel'
@@ -83,7 +84,8 @@ import {
   IconAlertTriangle,
   IconDownload,
   IconClock,
-  IconCheck
+  IconCheck,
+  IconSettings
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 
@@ -100,24 +102,24 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   
   // Zustand store
   const {
-    model, sheets, activeSheetId, blocks, wires,
+    model, sheets, activeSheetId, blocks, wires, parameters,
     selectedBlockId, selectedWireId, configBlock,
     simulationResults, currentSheetSimulationResults, isSimulating, simulationEngine, outputPortValues,
     modelLoading, saving, error, currentVersion, isOlderVersion,
-    globalSimulationResults, 
-    
+    globalSimulationResults,
+
     // Actions
     setModel, setError, setModelLoading, saveModel,
     switchToSheet, addSheet, renameSheet, deleteSheet,
     addBlock, updateBlock, deleteBlock, addWire, deleteWire,
     setSelectedBlockId, setSelectedWireId, setConfigBlock,
     setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
-    setGlobalSimulationResults, clearGlobalSimulationResults, 
+    setGlobalSimulationResults, clearGlobalSimulationResults,
     updateCurrentSheet, saveCurrentSheetData, initializeFromModel, saveAsNewModel,
-    
+
     // Auto-save specific
     deleteAutoSave, enableAutoSave, setIsDirty, markAsClean,
-    
+
     // New actions needed for auto-save recovery
     setSheets, setActiveSheetId, setBlocks, setWires,
     setCurrentVersion, setIsOlderVersion,
@@ -125,6 +127,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   } = useModelStore()
 
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false)
+  const [showParametersDialog, setShowParametersDialog] = useState(false)
   const [simulationSettings, setSimulationSettings] = useState({
     duration: '10.0',
     timeStep: '0.01'
@@ -756,12 +759,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       created: model.created_at,
       updated: model.updated_at,
       data: {
-        version: '2.0',
+        version: '2.1', // Current schema version with parameter support
         metadata: {
           created: new Date().toISOString(),
           description: `Exported from obliq-2 on ${new Date().toLocaleDateString()}`
         },
         sheets,
+        parameters, // Feature 3: Include model parameters
         globalSettings: {
           simulationTimeStep: 0.01,
           simulationDuration: 10
@@ -986,7 +990,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             } catch (mainThreadError) {
               console.error('Main thread WASM error:', mainThreadError)
               wasmEngine.destroy()
-              multiEngine = new MultiSheetSimulationEngine(sheets, config)
+              multiEngine = new MultiSheetSimulationEngine(sheets, config, parameters)
               allResults = multiEngine.run()
             }
           }
@@ -1046,14 +1050,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               autoClose: 5000
             })
 
-            multiEngine = new MultiSheetSimulationEngine(sheets, config)
+            multiEngine = new MultiSheetSimulationEngine(sheets, config, parameters)
             allResults = multiEngine.run()
           }
         }
 
       } else {
         // JavaScript path (current implementation)
-        multiEngine = new MultiSheetSimulationEngine(sheets, config)
+        multiEngine = new MultiSheetSimulationEngine(sheets, config, parameters)
 
         // Run simulation across ALL sheets - this returns results for all sheets
         allResults = multiEngine.run()
@@ -1435,7 +1439,16 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onSelectBlock={setSelectedBlockId}
               onSelectWire={setSelectedWireId}
             />
-            
+
+            <Button
+              onClick={() => setShowParametersDialog(true)}
+              leftSection={<IconSettings size={16} />}
+              variant="outline"
+              color="blue"
+            >
+              Parameters
+            </Button>
+
             {/* Run/Stop Simulation buttons with progress indicator */}
             {isSimulating && simulationProgress && workerManager ? (
               <Group gap="xs">
@@ -1754,6 +1767,12 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           onClose={() => setShowSaveAsDialog(false)}
         />
       )}
+
+      <ModelParametersDialog
+        opened={showParametersDialog}
+        onClose={() => setShowParametersDialog(false)}
+        disabled={isSimulating}
+      />
 
       {/* Add Auto-save Recovery Dialog */}
       {showAutoSaveDialog && model && autoSaveInfo && (

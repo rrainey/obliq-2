@@ -3,7 +3,7 @@ import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { parseType, ParsedType } from '@/lib/typeValidator'
 import { BlockSimulationAdapter } from '@/lib/simulation/BlockSimulationAdapter'
-import { SignalValue } from '@/lib/modelSchema'
+import { SignalValue, ModelParameter } from '@/lib/modelSchema'
 
 export interface Sheet {
   id: string
@@ -35,6 +35,7 @@ export interface SimulationState {
   subsystemEnableStates: Map<string, boolean> // subsystemId -> enabled state
   subsystemEnableSignals: Map<string, boolean> // subsystemId -> enable signal value
   parentSubsystemMap: Map<string, string | null> // blockId -> parent subsystem ID (null for root)
+  parameters: Map<string, any> // parameter name -> value (Feature 3)
 }
 
 export interface BlockState {
@@ -68,11 +69,20 @@ export class SimulationEngine {
   private allSheets: Sheet[] = [] // Store all sheets for subsystem simulation
   private subsystemEngines: Map<string, SimulationEngine> = new Map() // Cache for subsystem engines
 
-  constructor(blocks: BlockData[], wires: WireData[], config: SimulationConfig, externalInputs?: (portName: string) => number | number[] | boolean | boolean[] | number[][] | undefined, allSheets?: Sheet[]) {
+  constructor(blocks: BlockData[], wires: WireData[], config: SimulationConfig, externalInputs?: (portName: string) => number | number[] | boolean | boolean[] | number[][] | undefined, allSheets?: Sheet[], parameters?: ModelParameter[]) {
     this.blocks = blocks
     this.wires = wires
     this.getExternalInput = externalInputs
     this.allSheets = allSheets || []
+
+    // Build parameters map (Feature 3)
+    const parametersMap = new Map<string, any>()
+    if (parameters) {
+      for (const param of parameters) {
+        parametersMap.set(param.name, param.value)
+      }
+    }
+
     this.state = {
       time: 0,
       timeStep: config.timeStep,
@@ -84,7 +94,8 @@ export class SimulationEngine {
       // Initialize new enable state maps
       subsystemEnableStates: new Map(),
       subsystemEnableSignals: new Map(),
-      parentSubsystemMap: new Map()
+      parentSubsystemMap: new Map(),
+      parameters: parametersMap
     }
     this.initializeBlocks()
     this.initializeEnableStates()

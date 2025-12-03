@@ -5,7 +5,7 @@ import { WireData } from '@/components/Wire'
 import { SimulationResults, SimulationEngine } from '@/lib/simulationEngine'
 import { Model, ModelVersion } from '@/lib/types'
 import { supabase } from '@/lib/supabaseClient'
-import { SignalValue } from '@/lib/modelSchema'
+import { SignalValue, ModelParameter } from '@/lib/modelSchema'
 
 export interface Sheet {
   id: string
@@ -25,11 +25,12 @@ export interface ModelState {
   isOlderVersion: boolean
   sheets: Sheet[]
   activeSheetId: string
-  
+  parameters: ModelParameter[]  // Feature 1: Model parameters
+
   // Current sheet content
   blocks: BlockData[]
   wires: WireData[]
-  
+
   // UI state
   selectedBlockId: string | null
   selectedWireId: string | null
@@ -93,7 +94,14 @@ export interface ModelActions {
   setSelectedBlockId: (blockId: string | null) => void
   setSelectedWireId: (wireId: string | null) => void
   setConfigBlock: (block: BlockData | null) => void
-  
+
+  // Parameter actions (Feature 1)
+  addParameter: (param: ModelParameter) => void
+  updateParameter: (name: string, updates: Partial<ModelParameter>) => void
+  deleteParameter: (name: string) => void
+  getParameter: (name: string) => ModelParameter | undefined
+  validateParameterName: (name: string, excludeName?: string) => { valid: boolean; error?: string }
+
   // Simulation actions
   setSimulationResults: (results: SimulationResults | null) => void
   setIsSimulating: (simulating: boolean) => void
@@ -126,6 +134,7 @@ export const useModelStore = create<ModelStore>()(
     isOlderVersion: false,
     sheets: [],
     activeSheetId: 'main',
+    parameters: [],  // Feature 1: Model parameters
     blocks: [],
     wires: [],
     selectedBlockId: null,
@@ -191,7 +200,7 @@ export const useModelStore = create<ModelStore>()(
         
         // Use provided globalSettings or defaults
         const modelData = {
-          version: "2.0",
+          version: "2.1",  // Feature 1: Updated to v2.1 for parameter support
           metadata: {
             created: updatedState.model.created_at,
             description: `Model ${updatedState.model.name}`
@@ -200,7 +209,8 @@ export const useModelStore = create<ModelStore>()(
           globalSettings: globalSettings || {
             simulationTimeStep: 0.01,
             simulationDuration: 10.0
-          }
+          },
+          parameters: updatedState.parameters  // Feature 1: Include parameters
         }
 
         // Get the next version number
@@ -297,7 +307,7 @@ export const useModelStore = create<ModelStore>()(
         }
         
         const modelData = {
-          version: "2.0",
+          version: "2.1",  // Feature 1: Updated to v2.1 for parameter support
           metadata: {
             created: new Date().toISOString(),
             description: `Model ${newName}`
@@ -306,7 +316,8 @@ export const useModelStore = create<ModelStore>()(
           globalSettings: globalSettings || {
             simulationTimeStep: 0.01,
             simulationDuration: 10.0
-          }
+          },
+          parameters: updatedState.parameters  // Feature 1: Include parameters
         }
 
         // Create new model metadata
@@ -616,6 +627,87 @@ export const useModelStore = create<ModelStore>()(
       isDirty: true
     })),
 
+    // Parameter actions (Feature 1)
+    addParameter: (param) => set((state) => {
+      // Validate before adding
+      const validation = get().validateParameterName(param.name)
+      if (!validation.valid) {
+        console.error(`Cannot add parameter: ${validation.error}`)
+        return state // Return unchanged state
+      }
+      return {
+        parameters: [...state.parameters, param],
+        isDirty: true
+      }
+    }),
+
+    updateParameter: (name, updates) => set((state) => {
+      // If name is being updated, validate the new name
+      if (updates.name && updates.name !== name) {
+        const validation = get().validateParameterName(updates.name, name)
+        if (!validation.valid) {
+          console.error(`Cannot update parameter: ${validation.error}`)
+          return state // Return unchanged state
+        }
+      }
+
+      return {
+        parameters: state.parameters.map(param =>
+          param.name === name ? { ...param, ...updates } : param
+        ),
+        isDirty: true
+      }
+    }),
+
+    deleteParameter: (name) => set((state) => ({
+      parameters: state.parameters.filter(param => param.name !== name),
+      isDirty: true
+    })),
+
+    getParameter: (name) => {
+      const state = get()
+      return state.parameters.find(param => param.name === name)
+    },
+
+    validateParameterName: (name, excludeName) => {
+      const state = get()
+
+      // Check if name is empty
+      if (!name || name.trim() === '') {
+        return { valid: false, error: 'Parameter name cannot be empty' }
+      }
+
+      // Check if name is valid identifier
+      const identifierRegex = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+      if (!identifierRegex.test(name)) {
+        return {
+          valid: false,
+          error: 'Parameter name must be a valid identifier (alphanumeric + underscore, start with letter or underscore)'
+        }
+      }
+
+      // Check uniqueness among parameters (excluding the parameter being updated)
+      const exists = state.parameters.some(
+        param => param.name === name && param.name !== excludeName
+      )
+      if (exists) {
+        return { valid: false, error: `Parameter name "${name}" already exists` }
+      }
+
+      // Check against top-level block names (only check blocks on top-level sheets)
+      for (const sheet of state.sheets) {
+        for (const block of sheet.blocks) {
+          if (block.name === name) {
+            return {
+              valid: false,
+              error: `Parameter name "${name}" conflicts with a block name`
+            }
+          }
+        }
+      }
+
+      return { valid: true }
+    },
 
     // Selection actions
     setSelectedBlockId: (selectedBlockId) => set({ selectedBlockId }),
@@ -826,7 +918,7 @@ export const useModelStore = create<ModelStore>()(
         // Convert flat sheet structure to hierarchical structure
         const hierarchicalData = migrateToHierarchicalSheets(versionData.data)
         const sheets = hierarchicalData.sheets
-        
+
         // Data integrity check - model must have at least one sheet
         if (sheets.length === 0) {
           set({
@@ -835,16 +927,20 @@ export const useModelStore = create<ModelStore>()(
           })
           return
         }
-        
+
         const firstSheetId = sheets[0].id
         const firstSheet = sheets[0]
-        
+
+        // Feature 1: Load parameters from model data (defaults to empty array for backward compatibility)
+        const parameters = versionData.data.parameters || []
+
         set({
           model,
           currentVersion: versionData.version,
           isOlderVersion: versionData.version < model.latest_version,
           sheets,
           activeSheetId: firstSheetId,
+          parameters,  // Feature 1: Load parameters
           blocks: firstSheet?.blocks || [],
           wires: firstSheet?.connections || [],
           selectedBlockId: null,

@@ -32,7 +32,8 @@ export function c99ExpressionToCode(
         return expr.value.toString()
 
       case 'Identifier':
-        throw new Error(`Unexpected identifier in expression: ${expr.name}`)
+        // Parameter reference - emit the parameter name directly
+        return expr.name
 
       case 'BinaryExpression':
         return generateBinaryExpression(expr)

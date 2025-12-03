@@ -172,6 +172,7 @@ export async function POST(request: NextRequest) {
         }
 
         const sheets = versionData.data.sheets
+        const parameters = versionData.data.parameters || [] // Feature 3
 
         // Step 2: Checking cache
         sendEvent(controller, 'progress', {
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest) {
           message: 'Checking compilation cache...'
         })
 
-        const cacheKey = generateCacheKey(modelId, { sheets }, { optimizationLevel, enableSimd })
+        const cacheKey = generateCacheKey(modelId, { sheets, parameters }, { optimizationLevel, enableSimd })
         const cacheManager = new SupabaseCacheManager()
         const cachedResult = await cacheManager.get(cacheKey)
 
@@ -245,7 +246,7 @@ export async function POST(request: NextRequest) {
             includeDebugFunctions: false
           })
 
-          generatedCode = generator.generateWasm(sheets)
+          generatedCode = generator.generateWasm(sheets, parameters)
 
           sendEvent(controller, 'progress', {
             step: 'codegen-complete',

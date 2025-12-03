@@ -116,7 +116,7 @@ export class EvaluateBlockModule implements IBlockModule {
   ): void {
     const expression = blockState.internalState?.expression || '0'
     const numInputs = blockState.internalState?.numInputs || 1
-    
+
     // Convert inputs to numbers
     const numericInputs: number[] = []
     for (let i = 0; i < numInputs; i++) {
@@ -130,28 +130,40 @@ export class EvaluateBlockModule implements IBlockModule {
         numericInputs.push(0)
       }
     }
-    
+
+    // Build parameter map for scalar parameters only
+    const parameterMap = new Map<string, number>()
+    if (simulationState.parameters) {
+      simulationState.parameters.forEach((value, name) => {
+        // Only add scalar parameters (numbers)
+        if (typeof value === 'number') {
+          parameterMap.set(name, value)
+        }
+      })
+    }
+
     try {
       // Parse and evaluate the expression
       const parser = new C99ExpressionParser(expression)
       const ast = parser.parse()
-      
-      // Validate
-      const validator = new C99ExpressionValidator(numInputs)
+
+      // Validate - pass parameter names for validation
+      const parameterNames = Array.from(parameterMap.keys())
+      const validator = new C99ExpressionValidator(numInputs, parameterNames)
       const validation = validator.validate(ast)
-      
+
       if (!validation.valid) {
         console.warn(`Expression validation failed: ${validation.errors.join('; ')}`)
         blockState.outputs[0] = 0
         return
       }
-      
-      // Evaluate
-      const evaluator = new C99ExpressionEvaluator(numericInputs)
+
+      // Evaluate with parameters
+      const evaluator = new C99ExpressionEvaluator(numericInputs, parameterMap)
       const result = evaluator.evaluate(ast)
-      
+
       blockState.outputs[0] = result
-      
+
     } catch (error) {
       console.warn(`Expression evaluation error: ${error}`)
       blockState.outputs[0] = 0

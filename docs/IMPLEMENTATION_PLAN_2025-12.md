@@ -220,13 +220,29 @@ Allow Source and Evaluate blocks to reference model parameters. Update code gene
 
 - Add new section: `// Model Parameters`
 - For each parameter in `model.parameters`:
-  ```c
-  const float PARAM_NAME = 3.14;           // Scalar
-  const float PARAM_VEC[3] = {1, 2, 3};    // Vector
-  const float PARAM_MAT[2][3] = {{1,2,3},{4,5,6}}; // Matrix
-  ```
-- Use signal type to determine C type and initialization format
-- Add comment with parameter description/metadata
+  - **Scalars**: Use `#define` preprocessor macros
+    ```c
+    #define PARAM_NAME 3.14f        // float scalar
+    #define PARAM_NAME 3.14         // double scalar
+    #define PARAM_NAME 42L          // long scalar
+    ```
+  - **Vectors**: Use `const` array with `#define` for size
+    ```c
+    #define PARAM_VEC_SIZE 3
+    const float PARAM_VEC[PARAM_VEC_SIZE] = {1.0f, 2.0f, 3.0f};
+    ```
+  - **Matrices**: Use `const` 2D array with `#define` for dimensions
+    ```c
+    #define PARAM_MAT_ROWS 2
+    #define PARAM_MAT_COLS 3
+    const float PARAM_MAT[PARAM_MAT_ROWS][PARAM_MAT_COLS] = {{1,2,3},{4,5,6}};
+    ```
+- Rationale:
+  - Scalars use `#define` for compile-time substitution and optimization
+  - Arrays use `const` because `#define` cannot represent array literals
+  - Size macros allow flexible compile-time configuration
+- Use signal type to determine C type and literal suffix (f for float, L for long)
+- Add comment with parameter metadata
 
 #### 3.6 Update Code Generator - WASM
 **File:** `src/lib/codegen/WasmCodeGenerator.ts`

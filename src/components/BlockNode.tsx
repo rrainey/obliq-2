@@ -166,6 +166,15 @@ const getBlockSymbol = (data: BlockNodeData) => {
 
   // Handle source blocks with constant values
   if (data.type === 'source' && data.parameters?.value !== undefined) {
+    // Check if this source uses a parameter reference
+    if (data.parameters.useParameter && data.parameters.parameterName) {
+      return (
+        <div className="text-sm font-mono px-1 text-purple-700 font-semibold">
+          {data.parameters.parameterName}
+        </div>
+      )
+    }
+
     const value = data.parameters.value
     // Check if it's a matrix
     if (Array.isArray(value) && value.length > 0 && Array.isArray(value[0])) {
