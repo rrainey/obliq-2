@@ -146,31 +146,31 @@ export class RK4Generator {
     block: FlattenedBlock,
     generator: any
   ): string {
-    // For transfer functions, use the generateStateDerivative method
-    if (block.block.type === 'transfer_function' && generator.generateStateDerivative) {
+    // For blocks with generateStateDerivative method (transfer_function, integrator)
+    if (generator.generateStateDerivative) {
       // Get block inputs from signals
       const inputConnections = this.model.connections
         .filter(c => c.targetBlockId === block.originalId)
         .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
-      
+
       let inputExpr = '0.0' // Default if no input
-      
+
       if (inputConnections.length > 0) {
-        const sourceBlock = this.model.blocks.find(b => 
+        const sourceBlock = this.model.blocks.find(b =>
           b.originalId === inputConnections[0].sourceBlockId
         )
-        
+
         if (sourceBlock) {
           const safeName = CCodeBuilder.sanitizeIdentifier(sourceBlock.block.name)
-          
+
           // All signals should be available in the signals struct
           inputExpr = `signals->${safeName}`
         }
       }
-      
+
       // Get output type for the block
       const outputType = this.getBlockOutputType(block)
-      
+
       // Call the module's generateStateDerivative method
       return generator.generateStateDerivative(
         block.block,
@@ -179,7 +179,7 @@ export class RK4Generator {
         outputType
       )
     }
-    
+
     // For other block types that might have states in the future
     return '    /* Derivative computation not implemented for this block type */\n'
   }

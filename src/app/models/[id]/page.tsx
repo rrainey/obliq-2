@@ -37,6 +37,7 @@ import SumConfig from '@/components/SumConfig'
 import ConditionConfig from '@/components/ConditionConfig'
 import EvaluateConfig from '@/components/EvaluateConfig'
 import LimitConfig from '@/components/LimitConfig'
+import IntegratorConfig from '@/components/IntegratorConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
@@ -507,6 +508,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         return { gain: 1 }
       case 'limit':
         return { lowerLimit: -1, upperLimit: 1 }
+      case 'integrator':
+        return {
+          initialValue: 0,
+          showEnableInput: false,
+          showResetInput: false,
+          useLimits: false,
+          lowerLimit: -Infinity,
+          upperLimit: Infinity
+        }
       case 'transfer_function':
         return { 
           numerator: [1], 
@@ -1272,6 +1282,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'source' ||
       block.type === 'scale' ||
       block.type === 'limit' ||
+      block.type === 'integrator' ||
       block.type === 'transfer_function' ||
       block.type === 'subsystem' ||
       block.type === 'lookup_1d' ||
@@ -1943,6 +1954,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'limit' && (
             <LimitConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'integrator' && (
+            <IntegratorConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

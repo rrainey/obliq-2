@@ -81,6 +81,14 @@ const blockTypes: BlockType[] = [
     icon: 'H(s)',
     vectorSupport: 'element-wise'
   },
+  {
+    id: 'integrator',
+    name: 'Integrator',
+    category: 'Dynamic',
+    description: 'Integrate signal over time',
+    icon: '∫',
+    vectorSupport: 'element-wise'
+  },
   
   // Sources & Sinks
   { 

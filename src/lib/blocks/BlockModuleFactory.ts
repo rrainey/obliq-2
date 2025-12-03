@@ -24,6 +24,7 @@ import { ConditionBlockModule } from './ConditionBlockModule'
 import { AbsoluteValueBlockModule } from './AbsoluteValueBlockModule'
 import { UnaryMinusBlockModule } from './UnaryMinusBlockModule'
 import { LimitBlockModule } from './LimitBlockModule'
+import { IntegratorBlockModule } from './IntegratorBlockModule'
 
 import { SheetLabelSinkBlockModule } from './SheetLabelSinkBlockModule'
 import { SheetLabelSourceBlockModule } from './SheetLabelSourceBlockModule'
@@ -149,6 +150,9 @@ export class BlockModuleFactory {
       case 'limit':
         return new LimitBlockModule()
 
+      case 'integrator':
+        return new IntegratorBlockModule()
+
       default:
         return null
     }
@@ -189,7 +193,8 @@ export class BlockModuleFactory {
       'condition',
       'abs',
       'uminus',
-      'limit'
+      'limit',
+      'integrator'
     ]
   }
   

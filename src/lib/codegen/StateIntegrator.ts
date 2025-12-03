@@ -143,7 +143,9 @@ export class StateIntegrator {
   }
   
   /**
-   * Generate the actual state update code for a block
+   * Generate the actual state update code for a block.
+   * Both transfer_function and integrator use the same _states[] pattern.
+   * Integrator is treated as a 1/s transfer function (stateOrder = 1).
    */
   private generateBlockStateUpdate(
     block: FlattenedBlock,
@@ -152,40 +154,43 @@ export class StateIntegrator {
   ): string {
     const indent = '    '.repeat(indentLevel)
     let code = ''
-    
-    // For transfer functions, we need to update states based on derivatives
-    if (block.block.type === 'transfer_function') {
-      const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
-      const denominator = block.block.parameters?.denominator || [1, 1]
-      const stateOrder = Math.max(0, denominator.length - 1)
-      
-      if (stateOrder > 0) {
-        const typeInfo = this.getBlockTypeInfo(block)
-        
-        if (typeInfo.isMatrix) {
-          const [rows, cols] = typeInfo.dimensions
-          code += `${indent}for (int i = 0; i < ${rows}; i++) {\n`
-          code += `${indent}    for (int j = 0; j < ${cols}; j++) {\n`
-          code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
-          code += `${indent}            model->states.${safeName}_states[i][j][k] += model->dt * derivatives.${safeName}_states[i][j][k];\n`
-          code += `${indent}        }\n`
-          code += `${indent}    }\n`
-          code += `${indent}}\n`
-        } else if (typeInfo.isVector) {
-          const size = typeInfo.dimensions[0]
-          code += `${indent}for (int i = 0; i < ${size}; i++) {\n`
-          code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
-          code += `${indent}        model->states.${safeName}_states[i][j] += model->dt * derivatives.${safeName}_states[i][j];\n`
-          code += `${indent}    }\n`
-          code += `${indent}}\n`
-        } else {
-          code += `${indent}for (int i = 0; i < ${stateOrder}; i++) {\n`
-          code += `${indent}    model->states.${safeName}_states[i] += model->dt * derivatives.${safeName}_states[i];\n`
-          code += `${indent}}\n`
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    const typeInfo = this.getBlockTypeInfo(block)
+    const stateOrder = this.getBlockStateOrder(block)
+
+    if (stateOrder > 0) {
+      if (typeInfo.isMatrix) {
+        const [rows, cols] = typeInfo.dimensions
+        code += `${indent}for (int i = 0; i < ${rows}; i++) {\n`
+        code += `${indent}    for (int j = 0; j < ${cols}; j++) {\n`
+        code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
+        code += `${indent}            model->states.${safeName}_states[i][j][k] += model->dt * derivatives.${safeName}_states[i][j][k];\n`
+        code += `${indent}        }\n`
+        code += `${indent}    }\n`
+        code += `${indent}}\n`
+      } else if (typeInfo.isVector) {
+        const size = typeInfo.dimensions[0]
+        code += `${indent}for (int i = 0; i < ${size}; i++) {\n`
+        code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
+        code += `${indent}        model->states.${safeName}_states[i][j] += model->dt * derivatives.${safeName}_states[i][j];\n`
+        code += `${indent}    }\n`
+        code += `${indent}}\n`
+      } else {
+        code += `${indent}for (int i = 0; i < ${stateOrder}; i++) {\n`
+        code += `${indent}    model->states.${safeName}_states[i] += model->dt * derivatives.${safeName}_states[i];\n`
+        code += `${indent}}\n`
+      }
+
+      // Apply post-integration limiting if configured (for integrators with limits)
+      if (generator.generatePostIntegrationLimiting) {
+        const outputType = this.getBlockOutputType(block)
+        const limitCode = generator.generatePostIntegrationLimiting(block.block, outputType)
+        if (limitCode) {
+          code += limitCode.split('\n').map((line: string) => indent.slice(4) + line).join('\n')
         }
       }
     }
-    
+
     return code
   }
   
@@ -286,7 +291,8 @@ export class StateIntegrator {
   }
   
   /**
-   * Generate code to update temporary states
+   * Generate code to update temporary states.
+   * Both transfer_function and integrator use the same _states[] pattern.
    */
   private generateStateUpdate(
     dest: string,
@@ -296,41 +302,37 @@ export class StateIntegrator {
   ): string {
     let code = ''
     const statefulBlocks = this.getStatefulBlocks()
-    
+
     for (const block of statefulBlocks) {
-      if (block.block.type === 'transfer_function') {
-        const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
-        const denominator = block.block.parameters?.denominator || [1, 1]
-        const stateOrder = Math.max(0, denominator.length - 1)
-        
-        if (stateOrder > 0) {
-          const typeInfo = this.getBlockTypeInfo(block)
-          
-          if (typeInfo.isMatrix) {
-            const [rows, cols] = typeInfo.dimensions
-            code += `    for (int i = 0; i < ${rows}; i++) {\n`
-            code += `        for (int j = 0; j < ${cols}; j++) {\n`
-            code += `            for (int k = 0; k < ${stateOrder}; k++) {\n`
-            code += `                ${dest}.${safeName}_states[i][j][k] = ${source}.${safeName}_states[i][j][k] + ${factor} * ${derivative}.${safeName}_states[i][j][k];\n`
-            code += `            }\n`
-            code += `        }\n`
-            code += `    }\n`
-          } else if (typeInfo.isVector) {
-            const size = typeInfo.dimensions[0]
-            code += `    for (int i = 0; i < ${size}; i++) {\n`
-            code += `        for (int j = 0; j < ${stateOrder}; j++) {\n`
-            code += `            ${dest}.${safeName}_states[i][j] = ${source}.${safeName}_states[i][j] + ${factor} * ${derivative}.${safeName}_states[i][j];\n`
-            code += `        }\n`
-            code += `    }\n`
-          } else {
-            code += `    for (int i = 0; i < ${stateOrder}; i++) {\n`
-            code += `        ${dest}.${safeName}_states[i] = ${source}.${safeName}_states[i] + ${factor} * ${derivative}.${safeName}_states[i];\n`
-            code += `    }\n`
-          }
+      const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+      const typeInfo = this.getBlockTypeInfo(block)
+      const stateOrder = this.getBlockStateOrder(block)
+
+      if (stateOrder > 0) {
+        if (typeInfo.isMatrix) {
+          const [rows, cols] = typeInfo.dimensions
+          code += `    for (int i = 0; i < ${rows}; i++) {\n`
+          code += `        for (int j = 0; j < ${cols}; j++) {\n`
+          code += `            for (int k = 0; k < ${stateOrder}; k++) {\n`
+          code += `                ${dest}.${safeName}_states[i][j][k] = ${source}.${safeName}_states[i][j][k] + ${factor} * ${derivative}.${safeName}_states[i][j][k];\n`
+          code += `            }\n`
+          code += `        }\n`
+          code += `    }\n`
+        } else if (typeInfo.isVector) {
+          const size = typeInfo.dimensions[0]
+          code += `    for (int i = 0; i < ${size}; i++) {\n`
+          code += `        for (int j = 0; j < ${stateOrder}; j++) {\n`
+          code += `            ${dest}.${safeName}_states[i][j] = ${source}.${safeName}_states[i][j] + ${factor} * ${derivative}.${safeName}_states[i][j];\n`
+          code += `        }\n`
+          code += `    }\n`
+        } else {
+          code += `    for (int i = 0; i < ${stateOrder}; i++) {\n`
+          code += `        ${dest}.${safeName}_states[i] = ${source}.${safeName}_states[i] + ${factor} * ${derivative}.${safeName}_states[i];\n`
+          code += `    }\n`
         }
       }
     }
-    
+
     return code
   }
   
@@ -339,9 +341,9 @@ export class StateIntegrator {
    */
   private generateRK4FinalUpdate(statefulBlocks: FlattenedBlock[]): string {
     let code = ''
-    
+
     for (const block of statefulBlocks) {
-      if (block.block.type === 'transfer_function') {
+      if (block.block.type === 'transfer_function' || block.block.type === 'integrator') {
         // Check if block is in an enable scope
         if (this.options.checkEnableStates && this.hasEnableScope(block)) {
           const enableCheck = this.generateEnableCheck(block)
@@ -353,24 +355,24 @@ export class StateIntegrator {
         }
       }
     }
-    
+
     return code
   }
   
   /**
-   * Generate RK4 update for a single block
+   * Generate RK4 update for a single block.
+   * Both transfer_function and integrator use the same _states[] pattern.
    */
   private generateRK4BlockUpdate(block: FlattenedBlock, indentLevel: number = 1): string {
     const indent = '    '.repeat(indentLevel)
     let code = ''
-    
+
     const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
-    const denominator = block.block.parameters?.denominator || [1, 1]
-    const stateOrder = Math.max(0, denominator.length - 1)
-    
+    const stateOrder = this.getBlockStateOrder(block)
+
     if (stateOrder > 0) {
       const typeInfo = this.getBlockTypeInfo(block)
-      
+
       if (typeInfo.isMatrix) {
         const [rows, cols] = typeInfo.dimensions
         code += `${indent}for (int i = 0; i < ${rows}; i++) {\n`
@@ -407,11 +409,41 @@ export class StateIntegrator {
         code += `${indent}    );\n`
         code += `${indent}}\n`
       }
+
+      // Apply post-integration limiting if configured (for integrators with limits)
+      try {
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
+        if (generator.generatePostIntegrationLimiting) {
+          const outputType = this.getBlockOutputType(block)
+          const limitCode = generator.generatePostIntegrationLimiting(block.block, outputType)
+          if (limitCode) {
+            code += limitCode.split('\n').map((line: string) => indent.slice(4) + line).join('\n')
+          }
+        }
+      } catch {
+        // Block module not found, skip limiting
+      }
     }
-    
+
     return code
   }
   
+  /**
+   * Get state order for a block.
+   * - transfer_function: order = denominator.length - 1
+   * - integrator: order = 1 (equivalent to 1/s transfer function)
+   */
+  private getBlockStateOrder(block: FlattenedBlock): number {
+    if (block.block.type === 'integrator') {
+      return 1 // Integrator is equivalent to 1/s (order 1)
+    }
+    if (block.block.type === 'transfer_function') {
+      const denominator = block.block.parameters?.denominator || [1, 1]
+      return Math.max(0, denominator.length - 1)
+    }
+    return 0
+  }
+
   /**
    * Get detailed type information for a block's output
    */
