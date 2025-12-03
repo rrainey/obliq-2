@@ -44,6 +44,12 @@ The project follows a clean, modular folder structure to organize different conc
 
   * **`components/PropertiesPanel.tsx`** – A panel for editing properties of the currently selected block or subsystem. For instance, if the user selects a Transfer Function block, this panel would show input fields for numerator/denominator coefficients. For an Input/Output port, it may allow naming the signal (which is important because signal names will carry into code generation). The panel writes changes back to the model state.
 
+  * **`components/ParametersDialog.tsx`** – Modal dialog for viewing and editing model-level parameters. Parameters are name/type/value tuples that can be referenced by Source blocks and Evaluate blocks. The dialog allows adding, editing, and deleting parameters with validation for C-style identifier names and type compatibility.
+
+* **`/types`**: TypeScript type definitions for shared data structures.
+
+  * **`types/clipboard.ts`** – Defines the `ClipboardData` interface for block cut/copy/paste operations. Includes versioning, source tracking, block/wire data, and dependency information (referenced parameters and subsystem sheets). Also defines `PasteOptions`, `PasteResult`, and `DependencyCheckResult` types, plus serialization helpers for cross-tab clipboard via localStorage.
+
 * **`/lib`**: Utility modules and services (plain TypeScript/JavaScript modules that contain business logic, helpers, or integrations).
 
   * **`lib/supabaseClient.ts`** – A module to initialize and export the Supabase client (with the project URL and anon API key). This is used on the client side to interact with Supabase. It might also handle setting up Supabase authentication state listener and refreshing the JWT as needed.
@@ -54,6 +60,9 @@ The project follows a clean, modular folder structure to organize different conc
     - Auto-save functionality with intelligent change detection
     - Methods to mark the model as clean after saves
     - Hash-based comparison to detect actual changes
+    - Model parameters storage (`parameters` array of `ModelParameter` objects with name/type/value)
+    - Multi-selection state (`selectedBlockIds`, `selectedWireIds`) for grouped block operations
+    - Clipboard state (`clipboardData`) for cut/copy/paste with cross-tab localStorage support
 
   * **`lib/simulation/WasmSimulationEngine.ts`** – The **primary simulation engine** using WebAssembly for high-performance execution. This module loads compiled WASM modules and provides an interface for step-by-step simulation execution.
 
@@ -66,7 +75,7 @@ The project follows a clean, modular folder structure to organize different conc
   * **`lib/sheetLabelUtils.ts`** – Utilities for handling sheet label connections, validation, and scoping within subsystems.
   * **`lib/simulationEngine.ts`** – (Archived) Original TypeScript simulation engine, retained for reference and cross-validation testing. The WASM engine has replaced this for production use.
   * **`lib/codeGeneration.ts`** – The **C Code generation service**. This module includes functions that transform a model JSON into C code files. It iterates through the blocks and connections to produce C structures and functions. For example, it may generate a `init()` function to initialize all blocks, an `update(step_time)` function to update the simulation each tick, and data structures for each block's state. It uses the preserved signal names from the model for variable and function names to ensure the generated code is understandable. The code generation could use templates for PlatformIO (e.g., generating a library with a `library.properties` if targeting Arduino, or a PlatformIO `src/` folder with code). This module can be used both on the server (for the API route that delivers a file) and potentially on the client (if we wanted to preview code). However, generating a downloadable library (especially if it involves bundling multiple files into a zip) is better done server-side. The output of code generation is not stored in the database; it's generated on-demand and provided to the user (or external caller) for download.
-  * **`lib/modelSchema.ts`** – Definition of the **Model JSON schema** or TypeScript types for the model. This defines how a model is structured as JSON: e.g., a model object containing metadata and an array of **Sheets**, each Sheet containing a list of **Blocks** (with properties like id, type, position, parameters, etc.) and **Connections** (wires linking block outputs to inputs). It also defines how Subsystems are represented (possibly as a special block type that contains a reference to another list of blocks internally or a child sheet). Defining a clear schema (and perhaps using a validation library like Zod for it) helps maintain consistency between the front-end, simulation, and code generation logic so all interpret the model the same way.
+  * **`lib/modelSchema.ts`** – Definition of the **Model JSON schema** or TypeScript types for the model. This defines how a model is structured as JSON: e.g., a model object containing metadata and an array of **Sheets**, each Sheet containing a list of **Blocks** (with properties like id, type, position, parameters, etc.) and **Connections** (wires linking block outputs to inputs). It also defines how Subsystems are represented (possibly as a special block type that contains a reference to another list of blocks internally or a child sheet). Defining a clear schema (and perhaps using a validation library like Zod for it) helps maintain consistency between the front-end, simulation, and code generation logic so all interpret the model the same way. This module also defines the `ModelParameter` interface for model-level parameters (name, type, value, description) that can be referenced by Source and Evaluate blocks.
   * **`lib/validation.ts`** – (Optional) If needed, this module could contain functions to validate a model (e.g., to ensure there are no unconnected required ports, no algebraic loops without feedback blocks, etc.). This might be used in the automation API to run model checks.
   * **`lib/types.ts`** – TypeScript types for models and versions, including `Model`, `ModelVersion`, and `ModelWithVersion` interfaces.
   * **`lib/useAutoSave.ts`** – React hook managing the auto-save timer with intelligent dirty state checking. The hook:
@@ -186,6 +195,23 @@ A simulation **Model** is logically composed of one or more **Sheets**. Each She
 
 The simulation model is conceived with modularity and component reuse as important consideration.  Based on that idea, a model can be decomposed into **Subsystems** by the user.  As we will see, a Subsystem will have its own unique scope of blocks, names, inputs, outputs, and interconnections. In fact, the main model can be thought of as the root Subsystem to an overall model.  Subsystems may be nested inside a parent Subsystem.  There is no limit to this Subsystem nesting depth.
 
+### Model Parameters
+
+Models support a set of **Model Parameters** - named constants that can be referenced throughout the model. Each parameter has:
+
+* **Name:** A valid C-style identifier (letters, digits, underscores; must start with letter or underscore)
+* **Type:** A C-language data type (e.g., "double", "int", "float", "double[3]", "double[3][4]")
+* **Value:** A constant value matching the declared type
+* **Description:** Optional human-readable description
+
+Parameters are stored at the model level (not per-sheet) and are accessible from any sheet in the model. They can be referenced by:
+
+* **Source Blocks:** A Source block can be configured to output a parameter's value instead of a literal constant. The block displays the parameter name in purple text.
+* **Evaluate Blocks:** Mathematical expressions in Evaluate blocks can reference parameters by name (e.g., `in0 * gain + offset`).
+
+During simulation, parameter values are resolved at initialization time. During code generation, parameters are emitted as C constants in the generated header file, allowing the values to be modified without regenerating code.
+
+The Parameters Dialog (`components/ParametersDialog.tsx`) provides a UI for managing model parameters, with validation ensuring unique names and type-compatible values.
 
 ## Visual Modeling Canvas and Block Editor
 
@@ -203,13 +229,14 @@ Each primitive block type is defined with specific behavior:
 * **Signal Display Block** – an output-only block that graphically displays a signal (for simulation visualization purposes; no outputs). The Signal display block should be capable of storing a fixed number of input Signal samples from each time step of the simulation.  The number of samples should be configurable for each block. The default number of stored samples should be 1000.  Signal Display blocks are only important to the interactive simulation.  These will be ignored when generating C-code. Recorded signals will be plotted as line charts using a popular charting package such as **Recharts**.
 * **Signal Logger Block** – an output-only block that logs a signal's values during simulation (could be used to export data later; no outputs).
 * **Input Port Block** – a source block representing an external input (no inputs, one output). This would be where external signals enter a subsystem or top-level model.
-* **Source Block** - a source block providing either a constant or signal-generator-style signal source (no inputs, one output). Where the Source is a constant, a C-syntax constant expression sets the implied data type - examples  would include "0" - an int, 0.0f - a float, "false" - a bool, "[0.0, 0.0, 0.0]" a C-style double vector.
+* **Source Block** - a source block providing either a constant, a signal-generator-style signal source, or a **model parameter reference** (no inputs, one output). Where the Source is a constant, a C-syntax constant expression sets the implied data type - examples  would include "0" - an int, 0.0f - a float, "false" - a bool, "[0.0, 0.0, 0.0]" a C-style double vector. Alternatively, the Source can reference a model-level parameter by name, inheriting both its type and value. When referencing a parameter, the block displays the parameter name in purple text on the canvas.
 * **Output Port Block** – a sink block representing an external output (one input, no outputs) to mark signals that leave a subsystem or top-level model.
 * **Subsystem Block** – a special block that contains a nested diagram (hierarchical composition). A Subsystem has its own internal sheet with blocks and can have defined input/output interface ports. In the parent sheet, the Subsystem block appears as a block with those ports. Subsystems can be nested to an arbitrary depth.
 * **1-D Lookup Block** - a block which estimates the value of a 1-D function from an array of samples and their associated output values. The input must be a scalar int, float, or double. The output will be the same type as the input. Lookup is performed using linear interpolation. Values for inputs outside of the range of the lookup table can be either clamped to the smallest or largest lookup value or extrapolated.  Lookup is driven by similarly sized vectors: the input values (supplied in order sorted from smalled to largest value) and the corresponding output value for each. 
 * **2-D Lookup Block** - this block is almost identical in function to a **1-D Lookup Block** excepts that it takes two inputs. The types of the two inputs must match and the output will be that same type. Lookup is performed using linear interpolation. Values for inputs outside of the range of the lookup table can be either clamped to the smallest or largest lookup value or extrapolated.  Lookup is driven by two vectors, an N-sized input1, an M-sized input 2, and a N by M table of corresponding output values.
 * **Scale Block** - this block multiplies the input signal by a sclalar constant. It has one input port and one output port.
 * **Trig Block** - this block supports any one of several common trigonometry functions: sin(), cos(), tan(), atan(), atan2(), and sincos(). Inputs and outputs are "double" scalar data types.
+* **Evaluate Block** - a block that evaluates a mathematical expression combining its inputs with model parameters. Inputs are referenced as `in0`, `in1`, etc., and model parameters are referenced by name. Supports standard math functions (sin, cos, sqrt, abs, pow, exp, log, etc.) and arithmetic operators. The number of input ports is configurable. Output type is inferred from the expression and input types. Example expression: `in0 * gain + offset` where `gain` and `offset` are model parameters.
 
 ### Matrix Operation Blocks
 
@@ -350,6 +377,29 @@ This visual design system ensures that block diagrams are both functional and ae
 * **Port Spacing:** Input and output ports on blocks shall be spaced at least 20 pixels apart vertically to ensure clear visual distinction and prevent connection errors. Blocks with multiple ports shall dynamically adjust their height to accommodate proper port spacing.
 * **Block Dragging:** When initiating a drag operation on a block, the relative position between the mouse cursor and the block's origin shall be maintained throughout the drag to prevent visual "jumping."
 * **Connection Feedback:** Ports shall provide clear visual feedback (color change, ring effect) on hover to indicate they are valid connection targets.
+
+**Multi-Block Selection:**
+
+The canvas supports selecting multiple blocks simultaneously for group operations:
+
+* **Rectangle Selection:** Hold Alt and drag to draw a selection rectangle. All blocks intersecting the rectangle are selected when the drag ends.
+* **Shift-Click Selection:** Shift+click on a block adds it to or removes it from the current selection.
+* **Ctrl/Cmd-Click Selection:** Ctrl+click (or Cmd+click on Mac) also toggles block selection.
+* **Auto Wire Selection:** When multiple blocks are selected, any wires connecting selected blocks are automatically included in the selection and visually highlighted.
+* **Group Movement:** Dragging any selected block moves all selected blocks together, maintaining their relative positions.
+* **Group Deletion:** Pressing Delete or Backspace removes all selected blocks and their connections.
+
+The selection state is managed in the Zustand store via `selectedBlockIds` (array of block IDs) and `selectedWireIds` (automatically computed from selected blocks). The legacy `selectedBlockId` is maintained for backward compatibility with single-selection scenarios.
+
+**Clipboard Operations (Cut/Copy/Paste):**
+
+The canvas supports standard clipboard operations for duplicating and moving blocks:
+
+* **Copy (Ctrl+C):** Copies selected blocks and their interconnecting wires to the clipboard. Parameter dependencies (referenced by Source or Evaluate blocks) are tracked in the clipboard data.
+* **Cut (Ctrl+X):** Copies selected blocks to clipboard and removes them from the canvas.
+* **Paste (Ctrl+V):** Inserts clipboard contents at an offset position (same sheet) or original position (different sheet). New unique IDs are generated for pasted blocks and wires. Block names are auto-renamed if conflicts exist (e.g., "Source1" becomes "Source2").
+* **Cross-Tab Support:** Clipboard data is serialized to localStorage, allowing copy/paste between different browser tabs or windows viewing the same or different models.
+* **Dependency Handling:** When pasting blocks that reference parameters not present in the target model, the system can optionally import the missing parameters.
 
 Under the hood, when a new connection (wire) is made, the application updates the model's JSON structure – by adding an entry to a connections list that references the source block's output and target block's input. Conversely, deleting a wire or block updates the JSON state accordingly. Because these operations happen in the client state first, the UI is responsive; periodic saves propagate those changes to the database. The canvas uses a **React context or state management library** (like Zustand or Redux, if needed) to manages the current model graph in memory while editing. Given the moderate complexity, a dedicated state management solution could be beneficial to avoid prop drilling and to allow multiple components (canvas, panels) to sync up. However, we can also leverage React's built-in context to provide the current model and a dispatcher for updates.
 

@@ -6,6 +6,15 @@ import { SimulationResults, SimulationEngine } from '@/lib/simulationEngine'
 import { Model, ModelVersion } from '@/lib/types'
 import { supabase } from '@/lib/supabaseClient'
 import { SignalValue, ModelParameter } from '@/lib/modelSchema'
+import {
+  ClipboardData,
+  PasteOptions,
+  PasteResult,
+  DependencyCheckResult,
+  CLIPBOARD_STORAGE_KEY,
+  serializeClipboard,
+  deserializeClipboard,
+} from '@/types/clipboard'
 
 export interface Sheet {
   id: string
@@ -32,9 +41,14 @@ export interface ModelState {
   wires: WireData[]
 
   // UI state
-  selectedBlockId: string | null
+  selectedBlockId: string | null  // Legacy: kept for backward compatibility
+  selectedBlockIds: string[]      // Feature 4: Multiple block selection
   selectedWireId: string | null
+  selectedWireIds: string[]       // Feature 4: Connections between selected blocks
   configBlock: BlockData | null
+
+  // Feature 5: Clipboard state
+  clipboardData: ClipboardData | null
   
   // Simulation state
   globalSimulationResults: Map<string, SimulationResults> | null
@@ -86,6 +100,7 @@ export interface ModelActions {
   setWires: (wires: WireData[]) => void
   addBlock: (block: BlockData) => void
   updateBlock: (blockId: string, updates: Partial<BlockData>) => void
+  updateBlocks: (updates: Array<{ id: string; updates: Partial<BlockData> }>) => void  // Feature 4: Batch update
   deleteBlock: (blockId: string) => void
   addWire: (wire: WireData) => void
   deleteWire: (wireId: string) => void
@@ -94,6 +109,24 @@ export interface ModelActions {
   setSelectedBlockId: (blockId: string | null) => void
   setSelectedWireId: (wireId: string | null) => void
   setConfigBlock: (block: BlockData | null) => void
+
+  // Feature 4: Multi-selection actions
+  setSelectedBlocks: (blockIds: string[]) => void
+  addToSelection: (blockIds: string[]) => void
+  removeFromSelection: (blockIds: string[]) => void
+  clearSelection: () => void
+  toggleBlockSelection: (blockId: string) => void
+  getSelectedBlocks: () => BlockData[]
+  getSelectedWires: () => WireData[]
+  getConnectionsBetweenBlocks: (blockIds: string[]) => WireData[]
+
+  // Feature 5: Clipboard actions
+  copySelection: () => ClipboardData | null
+  cutSelection: () => ClipboardData | null
+  pasteFromClipboard: (options?: PasteOptions) => PasteResult
+  checkClipboardDependencies: (clipboardData?: ClipboardData) => DependencyCheckResult
+  getClipboardData: () => ClipboardData | null
+  importMissingDependencies: (clipboardData: ClipboardData) => void
 
   // Parameter actions (Feature 1)
   addParameter: (param: ModelParameter) => void
@@ -138,8 +171,11 @@ export const useModelStore = create<ModelStore>()(
     blocks: [],
     wires: [],
     selectedBlockId: null,
+    selectedBlockIds: [],      // Feature 4: Multiple block selection
     selectedWireId: null,
+    selectedWireIds: [],       // Feature 4: Connections between selected blocks
     configBlock: null,
+    clipboardData: null,       // Feature 5: Clipboard state
     simulationResults: null,
     isSimulating: false,
     simulationEngine: null,
@@ -609,6 +645,18 @@ export const useModelStore = create<ModelStore>()(
       isDirty: true
     })),
 
+    // Feature 4: Batch update multiple blocks at once (for multi-block move)
+    updateBlocks: (updates) => set((state) => {
+      const updateMap = new Map(updates.map(u => [u.id, u.updates]))
+      return {
+        blocks: state.blocks.map(block => {
+          const blockUpdates = updateMap.get(block.id)
+          return blockUpdates ? { ...block, ...blockUpdates } : block
+        }),
+        isDirty: true
+      }
+    }),
+
     deleteBlock: (blockId) => set((state) => ({
       blocks: state.blocks.filter(block => block.id !== blockId),
       wires: state.wires.filter(wire => 
@@ -710,9 +758,405 @@ export const useModelStore = create<ModelStore>()(
     },
 
     // Selection actions
-    setSelectedBlockId: (selectedBlockId) => set({ selectedBlockId }),
+    setSelectedBlockId: (selectedBlockId) => set({
+      selectedBlockId,
+      // Keep selectedBlockIds in sync for backward compatibility
+      selectedBlockIds: selectedBlockId ? [selectedBlockId] : []
+    }),
     setSelectedWireId: (selectedWireId) => set({ selectedWireId }),
     setConfigBlock: (configBlock) => set({ configBlock }),
+
+    // Feature 4: Multi-selection actions
+    setSelectedBlocks: (blockIds: string[]) => {
+      const state = get()
+      // Find connections between selected blocks
+      const selectedWireIds = state.wires
+        .filter(wire =>
+          blockIds.includes(wire.sourceBlockId) &&
+          blockIds.includes(wire.targetBlockId)
+        )
+        .map(wire => wire.id)
+
+      set({
+        selectedBlockIds: blockIds,
+        selectedBlockId: blockIds.length === 1 ? blockIds[0] : null,
+        selectedWireIds
+      })
+    },
+
+    addToSelection: (blockIds: string[]) => {
+      const state = get()
+      const newSelection = [...new Set([...state.selectedBlockIds, ...blockIds])]
+
+      // Find connections between selected blocks
+      const selectedWireIds = state.wires
+        .filter(wire =>
+          newSelection.includes(wire.sourceBlockId) &&
+          newSelection.includes(wire.targetBlockId)
+        )
+        .map(wire => wire.id)
+
+      set({
+        selectedBlockIds: newSelection,
+        selectedBlockId: newSelection.length === 1 ? newSelection[0] : null,
+        selectedWireIds
+      })
+    },
+
+    removeFromSelection: (blockIds: string[]) => {
+      const state = get()
+      const newSelection = state.selectedBlockIds.filter(id => !blockIds.includes(id))
+
+      // Find connections between selected blocks
+      const selectedWireIds = state.wires
+        .filter(wire =>
+          newSelection.includes(wire.sourceBlockId) &&
+          newSelection.includes(wire.targetBlockId)
+        )
+        .map(wire => wire.id)
+
+      set({
+        selectedBlockIds: newSelection,
+        selectedBlockId: newSelection.length === 1 ? newSelection[0] : null,
+        selectedWireIds
+      })
+    },
+
+    clearSelection: () => set({
+      selectedBlockIds: [],
+      selectedBlockId: null,
+      selectedWireIds: [],
+      selectedWireId: null
+    }),
+
+    toggleBlockSelection: (blockId: string) => {
+      const state = get()
+      const isSelected = state.selectedBlockIds.includes(blockId)
+
+      if (isSelected) {
+        get().removeFromSelection([blockId])
+      } else {
+        get().addToSelection([blockId])
+      }
+    },
+
+    getSelectedBlocks: () => {
+      const state = get()
+      return state.blocks.filter(block => state.selectedBlockIds.includes(block.id))
+    },
+
+    getSelectedWires: () => {
+      const state = get()
+      return state.wires.filter(wire => state.selectedWireIds.includes(wire.id))
+    },
+
+    getConnectionsBetweenBlocks: (blockIds: string[]) => {
+      const state = get()
+      return state.wires.filter(wire =>
+        blockIds.includes(wire.sourceBlockId) &&
+        blockIds.includes(wire.targetBlockId)
+      )
+    },
+
+    // Feature 5: Clipboard actions
+    copySelection: () => {
+      const state = get()
+      const selectedBlocks = state.blocks.filter(b => state.selectedBlockIds.includes(b.id))
+
+      if (selectedBlocks.length === 0) {
+        return null
+      }
+
+      // Get wires between selected blocks
+      const selectedBlockIdSet = new Set(state.selectedBlockIds)
+      const selectedWires = state.wires.filter(
+        w => selectedBlockIdSet.has(w.sourceBlockId) && selectedBlockIdSet.has(w.targetBlockId)
+      )
+
+      // Find parameter dependencies
+      const referencedParamNames = new Set<string>()
+
+      for (const block of selectedBlocks) {
+        // Check Source blocks with parameter references
+        if (block.type === 'source' && block.parameters?.useParameter && block.parameters?.parameterName) {
+          referencedParamNames.add(block.parameters.parameterName)
+        }
+
+        // Check Evaluate blocks for parameter names in expressions
+        if (block.type === 'evaluate' && block.parameters?.expression) {
+          // Simple regex to find identifiers that might be parameters
+          const expression = block.parameters.expression as string
+          const identifierRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g
+          let match
+          while ((match = identifierRegex.exec(expression)) !== null) {
+            const name = match[1]
+            // Exclude common keywords and functions
+            const reserved = ['in', 'sin', 'cos', 'tan', 'sqrt', 'abs', 'pow', 'exp', 'log', 'floor', 'ceil', 'fabs', 'fmod']
+            if (!reserved.includes(name) && !name.startsWith('in')) {
+              // Check if it's an actual parameter
+              if (state.parameters.some(p => p.name === name)) {
+                referencedParamNames.add(name)
+              }
+            }
+          }
+        }
+      }
+
+      const referencedParameters = state.parameters.filter(p => referencedParamNames.has(p.name))
+
+      // Find subsystem sheet dependencies
+      const subsystemSheets: Sheet[] = []
+      for (const block of selectedBlocks) {
+        if (block.type === 'subsystem' && block.parameters?.sheets) {
+          subsystemSheets.push(...(block.parameters.sheets as Sheet[]))
+        }
+      }
+
+      // Create clipboard data
+      const clipboardData: ClipboardData = {
+        version: '1.0',
+        sourceModelId: state.model?.id,
+        sourceSheetId: state.activeSheetId,
+        timestamp: Date.now(),
+        blocks: JSON.parse(JSON.stringify(selectedBlocks)), // Deep clone
+        wires: JSON.parse(JSON.stringify(selectedWires)),   // Deep clone
+        dependencies: {
+          parameters: referencedParameters,
+          subsystemSheets: subsystemSheets.length > 0 ? subsystemSheets : undefined,
+        },
+      }
+
+      // Store in state and localStorage for cross-tab support
+      set({ clipboardData })
+      try {
+        localStorage.setItem(CLIPBOARD_STORAGE_KEY, serializeClipboard(clipboardData))
+      } catch (e) {
+        console.warn('Failed to save clipboard to localStorage:', e)
+      }
+
+      return clipboardData
+    },
+
+    cutSelection: () => {
+      const state = get()
+      const clipboardData = get().copySelection()
+
+      if (!clipboardData) {
+        return null
+      }
+
+      // Delete selected blocks (this will also delete connected wires via deleteBlock)
+      const selectedIds = [...state.selectedBlockIds]
+      for (const blockId of selectedIds) {
+        get().deleteBlock(blockId)
+      }
+
+      // Clear selection
+      get().clearSelection()
+
+      return clipboardData
+    },
+
+    checkClipboardDependencies: (clipboardData?: ClipboardData): DependencyCheckResult => {
+      const state = get()
+      const data = clipboardData || state.clipboardData || get().getClipboardData()
+
+      if (!data) {
+        return {
+          missingParameters: [],
+          missingSubsystems: [],
+          allSatisfied: true,
+        }
+      }
+
+      // Check for missing parameters
+      const currentParamNames = new Set(state.parameters.map(p => p.name))
+      const missingParameters = data.dependencies.parameters.filter(
+        p => !currentParamNames.has(p.name)
+      )
+
+      // Check for missing subsystem sheets (if pasting subsystems)
+      const missingSubsystems: string[] = []
+      // Subsystems are self-contained in clipboard, so they don't need to be checked
+      // against existing sheets
+
+      return {
+        missingParameters,
+        missingSubsystems,
+        allSatisfied: missingParameters.length === 0 && missingSubsystems.length === 0,
+      }
+    },
+
+    getClipboardData: (): ClipboardData | null => {
+      const state = get()
+
+      // First check local state
+      if (state.clipboardData) {
+        return state.clipboardData
+      }
+
+      // Then check localStorage for cross-tab clipboard
+      try {
+        const stored = localStorage.getItem(CLIPBOARD_STORAGE_KEY)
+        if (stored) {
+          const data = deserializeClipboard(stored)
+          if (data) {
+            // Update local state with loaded clipboard
+            set({ clipboardData: data })
+            return data
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load clipboard from localStorage:', e)
+      }
+
+      return null
+    },
+
+    importMissingDependencies: (clipboardData: ClipboardData) => {
+      const state = get()
+
+      // Import missing parameters
+      const currentParamNames = new Set(state.parameters.map(p => p.name))
+      for (const param of clipboardData.dependencies.parameters) {
+        if (!currentParamNames.has(param.name)) {
+          get().addParameter(param)
+        }
+      }
+    },
+
+    pasteFromClipboard: (options?: PasteOptions): PasteResult => {
+      const state = get()
+      const clipboardData = state.clipboardData || get().getClipboardData()
+
+      if (!clipboardData || clipboardData.blocks.length === 0) {
+        return {
+          success: false,
+          pastedBlockIds: [],
+          pastedWireIds: [],
+          error: 'Clipboard is empty',
+        }
+      }
+
+      // Check dependencies
+      const depCheck = get().checkClipboardDependencies(clipboardData)
+      if (!depCheck.allSatisfied) {
+        // If auto-import is enabled, import missing dependencies
+        if (options?.importMissingParameters) {
+          get().importMissingDependencies(clipboardData)
+        } else {
+          return {
+            success: false,
+            pastedBlockIds: [],
+            pastedWireIds: [],
+            error: 'Missing dependencies',
+            dependencyIssues: depCheck,
+          }
+        }
+      }
+
+      // Calculate position offset
+      const offset = options?.offset || { x: 20, y: 20 }
+
+      // If pasting on same sheet, use offset; otherwise use position or default
+      const isSameSheet = clipboardData.sourceSheetId === state.activeSheetId
+      let baseOffset = offset
+
+      if (options?.position) {
+        // Calculate offset from clipboard block centroid to target position
+        const blocks = clipboardData.blocks
+        const centerX = blocks.reduce((sum, b) => sum + b.position.x, 0) / blocks.length
+        const centerY = blocks.reduce((sum, b) => sum + b.position.y, 0) / blocks.length
+        baseOffset = {
+          x: options.position.x - centerX,
+          y: options.position.y - centerY,
+        }
+      } else if (isSameSheet) {
+        // Default offset for same-sheet paste
+        baseOffset = { x: 20, y: 20 }
+      }
+
+      // Generate new IDs and map old -> new
+      const blockIdMap = new Map<string, string>()
+      const wireIdMap = new Map<string, string>()
+
+      // Build a set of existing block names for duplicate detection
+      const existingNames = new Set(state.blocks.map(b => b.name))
+
+      // Helper to generate a unique block name
+      const generateUniqueName = (blockType: string, originalName: string): string => {
+        // If the original name doesn't conflict, keep it
+        if (!existingNames.has(originalName)) {
+          existingNames.add(originalName)  // Reserve this name
+          return originalName
+        }
+
+        // Generate a new name: <BlockType><next index>
+        const baseName = blockType.charAt(0).toUpperCase() + blockType.slice(1).replace('_', ' ')
+        let index = state.blocks.filter(b => b.type === blockType).length + 1
+
+        // Find the next available index
+        let newName = `${baseName}${index}`
+        while (existingNames.has(newName)) {
+          index++
+          newName = `${baseName}${index}`
+        }
+
+        existingNames.add(newName)  // Reserve this name
+        return newName
+      }
+
+      // Clone and transform blocks
+      const newBlocks: BlockData[] = clipboardData.blocks.map(block => {
+        const newId = `${block.type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        blockIdMap.set(block.id, newId)
+
+        // Generate unique name if there's a conflict
+        const newName = generateUniqueName(block.type, block.name)
+
+        const newBlock: BlockData = {
+          ...JSON.parse(JSON.stringify(block)), // Deep clone
+          id: newId,
+          name: newName,
+          position: {
+            x: block.position.x + baseOffset.x,
+            y: block.position.y + baseOffset.y,
+          },
+        }
+
+        return newBlock
+      })
+
+      // Clone and remap wires
+      const newWires: WireData[] = clipboardData.wires.map(wire => {
+        const newId = `wire_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        wireIdMap.set(wire.id, newId)
+
+        return {
+          ...wire,
+          id: newId,
+          sourceBlockId: blockIdMap.get(wire.sourceBlockId) || wire.sourceBlockId,
+          targetBlockId: blockIdMap.get(wire.targetBlockId) || wire.targetBlockId,
+        }
+      })
+
+      // Add blocks and wires to current sheet
+      for (const block of newBlocks) {
+        get().addBlock(block)
+      }
+      for (const wire of newWires) {
+        get().addWire(wire)
+      }
+
+      // Select newly pasted blocks
+      get().setSelectedBlocks(newBlocks.map(b => b.id))
+
+      return {
+        success: true,
+        pastedBlockIds: newBlocks.map(b => b.id),
+        pastedWireIds: newWires.map(w => w.id),
+      }
+    },
 
     // Simulation actions
     setSimulationResults: (simulationResults) => set({ simulationResults }),

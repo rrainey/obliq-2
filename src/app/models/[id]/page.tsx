@@ -103,7 +103,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   // Zustand store
   const {
     model, sheets, activeSheetId, blocks, wires, parameters,
-    selectedBlockId, selectedWireId, configBlock,
+    selectedBlockId, selectedBlockIds, selectedWireId, selectedWireIds, configBlock,
     simulationResults, currentSheetSimulationResults, isSimulating, simulationEngine, outputPortValues,
     modelLoading, saving, error, currentVersion, isOlderVersion,
     globalSimulationResults,
@@ -111,8 +111,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     // Actions
     setModel, setError, setModelLoading, saveModel,
     switchToSheet, addSheet, renameSheet, deleteSheet,
-    addBlock, updateBlock, deleteBlock, addWire, deleteWire,
-    setSelectedBlockId, setSelectedWireId, setConfigBlock,
+    addBlock, updateBlock, updateBlocks, deleteBlock, addWire, deleteWire,
+    setSelectedBlockId, setSelectedBlocks, setSelectedWireId, setConfigBlock, clearSelection,
+    // Feature 5: Clipboard actions
+    copySelection, cutSelection, pasteFromClipboard, checkClipboardDependencies,
     setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
     setGlobalSimulationResults, clearGlobalSimulationResults,
     updateCurrentSheet, saveCurrentSheetData, initializeFromModel, saveAsNewModel,
@@ -633,6 +635,27 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     saveCurrentSheetData()
     // Position changes should also mark as dirty
     setIsDirty(true)
+  }
+
+  // Feature 4: Handle multi-block move when dragging a selection
+  const handleBlocksMove = (moves: Array<{ id: string; position: { x: number; y: number } }>) => {
+    console.log('[handleBlocksMove] moves:', moves)
+    console.log('[handleBlocksMove] blocks before:', blocks.map(b => ({ id: b.id, pos: b.position })))
+
+    // Use batch update to update all positions in a single state update
+    const updates = moves.map(({ id, position }) => ({ id, updates: { position } }))
+    updateBlocks(updates)
+
+    // Check what the store has after update
+    const storeBlocks = useModelStore.getState().blocks
+    console.log('[handleBlocksMove] store blocks after updateBlocks:', storeBlocks.map(b => ({ id: b.id, pos: b.position })))
+
+    saveCurrentSheetData()
+
+    // Check sheets after save
+    const sheets = useModelStore.getState().sheets
+    const activeSheet = sheets.find(s => s.id === useModelStore.getState().activeSheetId)
+    console.log('[handleBlocksMove] active sheet blocks after save:', activeSheet?.blocks.map(b => ({ id: b.id, pos: b.position })))
   }
 
   const handleBlockDelete = (blockId: string) => {
@@ -1275,6 +1298,73 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     setSimulationSettings(settings)
   }, [])
 
+  // Feature 5: Clipboard handlers
+  const handleCopy = useCallback(() => {
+    const clipboardData = copySelection()
+    if (clipboardData) {
+      notifications.show({
+        title: 'Copied',
+        message: `${clipboardData.blocks.length} block${clipboardData.blocks.length !== 1 ? 's' : ''} copied to clipboard`,
+        color: 'blue',
+        autoClose: 2000,
+      })
+    }
+  }, [copySelection])
+
+  const handleCut = useCallback(() => {
+    const clipboardData = cutSelection()
+    if (clipboardData) {
+      notifications.show({
+        title: 'Cut',
+        message: `${clipboardData.blocks.length} block${clipboardData.blocks.length !== 1 ? 's' : ''} cut to clipboard`,
+        color: 'blue',
+        autoClose: 2000,
+      })
+    }
+  }, [cutSelection])
+
+  const handlePaste = useCallback(() => {
+    // Check for dependency issues first
+    const depCheck = checkClipboardDependencies()
+    if (!depCheck.allSatisfied && depCheck.missingParameters.length > 0) {
+      // For now, auto-import missing parameters with a notification
+      // TODO: Show PasteDependencyDialog for user confirmation
+      const result = pasteFromClipboard({ importMissingParameters: true })
+      if (result.success) {
+        notifications.show({
+          title: 'Pasted with dependencies',
+          message: `${result.pastedBlockIds.length} block${result.pastedBlockIds.length !== 1 ? 's' : ''} pasted. Missing parameters were imported.`,
+          color: 'green',
+          autoClose: 3000,
+        })
+      } else {
+        notifications.show({
+          title: 'Paste failed',
+          message: result.error || 'Unknown error',
+          color: 'red',
+          icon: <IconAlertCircle size={20} />,
+        })
+      }
+    } else {
+      const result = pasteFromClipboard()
+      if (result.success) {
+        notifications.show({
+          title: 'Pasted',
+          message: `${result.pastedBlockIds.length} block${result.pastedBlockIds.length !== 1 ? 's' : ''} pasted`,
+          color: 'green',
+          autoClose: 2000,
+        })
+      } else if (result.error !== 'Clipboard is empty') {
+        notifications.show({
+          title: 'Paste failed',
+          message: result.error || 'Unknown error',
+          color: 'red',
+          icon: <IconAlertCircle size={20} />,
+        })
+      }
+    }
+  }, [checkClipboardDependencies, pasteFromClipboard])
+
   const handleAddSheet = () => {
     saveCurrentSheetData()
     const newSheetId = `sheet_${Date.now()}`
@@ -1520,16 +1610,24 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               blocks={blocks}
               wires={wires}
               selectedBlockId={selectedBlockId}
+              selectedBlockIds={selectedBlockIds}
               selectedWireId={selectedWireId}
+              selectedWireIds={selectedWireIds}
               onDrop={handleCanvasDrop}
               onBlockMove={handleBlockMove}
+              onBlocksMove={handleBlocksMove}
               onBlockSelect={setSelectedBlockId}
+              onBlocksSelect={setSelectedBlocks}
               onBlockDoubleClick={handleBlockDoubleClick}
               onBlockDelete={handleBlockDelete}
               onWireCreate={handleWireCreate}
               onWireSelect={setSelectedWireId}
               onWireDelete={handleWireDelete}
               onSheetNavigate={switchToSheet}
+              onClearSelection={clearSelection}
+              onCopy={handleCopy}
+              onCut={handleCut}
+              onPaste={handlePaste}
             />
           </Box>
         </Box>
