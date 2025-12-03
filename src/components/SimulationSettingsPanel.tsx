@@ -2,13 +2,15 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Paper, Text, NumberInput, Stack, Checkbox, Tooltip } from '@mantine/core'
+import { Paper, Text, NumberInput, Stack, Checkbox, Tooltip, SegmentedControl, Group } from '@mantine/core'
 import { IconInfoCircle } from '@tabler/icons-react'
+import type { IntegrationAlgorithm } from '@/lib/modelSchema'
 
 interface SimulationSettingsPanelProps {
   initialDuration: number
   initialTimeStep: number
-  onChange: (settings: { duration: string; timeStep: string }) => void
+  initialIntegrationAlgorithm?: IntegrationAlgorithm
+  onChange: (settings: { duration: string; timeStep: string; integrationAlgorithm?: IntegrationAlgorithm }) => void
   useWorker?: boolean
   onWorkerChange?: (useWorker: boolean) => void
   workerAvailable?: boolean
@@ -48,6 +50,7 @@ export function validateSimulationSettings(duration: string, timeStep: string) {
 export default function SimulationSettingsPanel({
   initialDuration,
   initialTimeStep,
+  initialIntegrationAlgorithm = 'rk4',
   onChange,
   useWorker = false,
   onWorkerChange,
@@ -55,30 +58,43 @@ export default function SimulationSettingsPanel({
 }: SimulationSettingsPanelProps) {
   const [duration, setDuration] = useState<number | string>(initialDuration)
   const [timeStep, setTimeStep] = useState<number | string>(initialTimeStep)
-  
+  const [integrationAlgorithm, setIntegrationAlgorithm] = useState<IntegrationAlgorithm>(initialIntegrationAlgorithm)
+
   // Use useCallback to prevent onChange from being recreated
-  const debouncedOnChange = useCallback((newDuration: number | string, newTimeStep: number | string) => {
+  const debouncedOnChange = useCallback((
+    newDuration: number | string,
+    newTimeStep: number | string,
+    newAlgorithm: IntegrationAlgorithm
+  ) => {
     const timer = setTimeout(() => {
       onChange({
         duration: newDuration.toString(),
-        timeStep: newTimeStep.toString()
+        timeStep: newTimeStep.toString(),
+        integrationAlgorithm: newAlgorithm
       })
     }, 100)
-    
+
     return () => clearTimeout(timer)
   }, [onChange])
-  
+
   // Handle duration change
   const handleDurationChange = useCallback((value: number | string) => {
     setDuration(value)
-    debouncedOnChange(value, timeStep)
-  }, [timeStep, debouncedOnChange])
-  
+    debouncedOnChange(value, timeStep, integrationAlgorithm)
+  }, [timeStep, integrationAlgorithm, debouncedOnChange])
+
   // Handle time step change
   const handleTimeStepChange = useCallback((value: number | string) => {
     setTimeStep(value)
-    debouncedOnChange(duration, value)
-  }, [duration, debouncedOnChange])
+    debouncedOnChange(duration, value, integrationAlgorithm)
+  }, [duration, integrationAlgorithm, debouncedOnChange])
+
+  // Handle integration algorithm change
+  const handleAlgorithmChange = useCallback((value: string) => {
+    const algo = value as IntegrationAlgorithm
+    setIntegrationAlgorithm(algo)
+    debouncedOnChange(duration, timeStep, algo)
+  }, [duration, timeStep, debouncedOnChange])
   
   return (
     <Paper p="sm" withBorder>
@@ -107,7 +123,27 @@ export default function SimulationSettingsPanel({
           size="sm"
           description="Integration time step"
         />
-        
+
+        {/* Integration Algorithm Selection */}
+        <div>
+          <Text size="sm" fw={500} mb={4}>Integration Algorithm</Text>
+          <SegmentedControl
+            value={integrationAlgorithm}
+            onChange={handleAlgorithmChange}
+            data={[
+              { label: 'RK4 (4th Order)', value: 'rk4' },
+              { label: 'Euler (1st Order)', value: 'euler' }
+            ]}
+            size="xs"
+            fullWidth
+          />
+          <Text size="xs" c="dimmed" mt={4}>
+            {integrationAlgorithm === 'rk4'
+              ? 'Higher accuracy, recommended for most applications'
+              : 'Faster but less accurate, suitable for simple systems'}
+          </Text>
+        </div>
+
         {/* Show calculated steps */}
         {typeof duration === 'number' && typeof timeStep === 'number' && timeStep > 0 && (
           <Text size="xs" c="dimmed">

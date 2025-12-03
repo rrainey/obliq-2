@@ -132,9 +132,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false)
   const [showParametersDialog, setShowParametersDialog] = useState(false)
-  const [simulationSettings, setSimulationSettings] = useState({
+  const [simulationSettings, setSimulationSettings] = useState<{
+    duration: string
+    timeStep: string
+    integrationAlgorithm: 'euler' | 'rk4'
+  }>({
     duration: '10.0',
-    timeStep: '0.01'
+    timeStep: '0.01',
+    integrationAlgorithm: 'rk4'
   })
 
   // WASM compilation state
@@ -302,7 +307,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       if (versionData.data?.globalSettings) {
         setSimulationSettings({
           duration: versionData.data.globalSettings.simulationDuration?.toString() || '10.0',
-          timeStep: versionData.data.globalSettings.simulationTimeStep?.toString() || '0.01'
+          timeStep: versionData.data.globalSettings.simulationTimeStep?.toString() || '0.01',
+          integrationAlgorithm: versionData.data.globalSettings.integrationAlgorithm || 'rk4'
         })
       }
       
@@ -362,7 +368,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         if (autoSaveData.data?.globalSettings) {
           setSimulationSettings({
             duration: autoSaveData.data.globalSettings.simulationDuration?.toString() || '10.0',
-            timeStep: autoSaveData.data.globalSettings.simulationTimeStep?.toString() || '0.01'
+            timeStep: autoSaveData.data.globalSettings.simulationTimeStep?.toString() || '0.01',
+            integrationAlgorithm: autoSaveData.data.globalSettings.integrationAlgorithm || 'rk4'
           })
         }
       }
@@ -466,7 +473,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     
     const globalSettings = {
       simulationTimeStep: settingsValidation.timeStep,
-      simulationDuration: settingsValidation.duration
+      simulationDuration: settingsValidation.duration,
+      integrationAlgorithm: simulationSettings.integrationAlgorithm
     }
 
     const success = await saveModel(globalSettings)
@@ -1309,8 +1317,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }
 
-  const handleSimulationSettingsChange = useCallback((settings: { duration: string; timeStep: string }) => {
-    setSimulationSettings(settings)
+  const handleSimulationSettingsChange = useCallback((settings: { duration: string; timeStep: string; integrationAlgorithm?: 'euler' | 'rk4' }) => {
+    setSimulationSettings(prev => ({
+      ...prev,
+      duration: settings.duration,
+      timeStep: settings.timeStep,
+      integrationAlgorithm: settings.integrationAlgorithm || prev.integrationAlgorithm
+    }))
   }, [])
 
   // Feature 5: Clipboard handlers
@@ -1677,6 +1690,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           <SimulationSettingsPanel
             initialDuration={parseFloat(simulationSettings.duration) || 10.0}
             initialTimeStep={parseFloat(simulationSettings.timeStep) || 0.01}
+            initialIntegrationAlgorithm={simulationSettings.integrationAlgorithm}
             onChange={handleSimulationSettingsChange}
             useWorker={useWorker}
             onWorkerChange={setUseWorker}

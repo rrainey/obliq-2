@@ -79,8 +79,8 @@ export interface ModelActions {
   setIsOlderVersion: (isOlder: boolean) => void
   setError: (error: string | null) => void
   setModelLoading: (loading: boolean) => void
-  saveModel: (globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => Promise<boolean>
-  saveAsNewModel: (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => Promise<string | null>
+  saveModel: (globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => Promise<boolean>
+  saveAsNewModel: (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => Promise<string | null>
   saveAutoSave: () => Promise<boolean>
   deleteAutoSave: () => Promise<void>
   enableAutoSave: () => void
@@ -200,7 +200,7 @@ export const useModelStore = create<ModelStore>()(
     setError: (error) => set({ error }),
     setModelLoading: (modelLoading) => set({ modelLoading }),
     
-    saveModel: async (globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => {
+    saveModel: async (globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => {
       const state = get()
 
       if (!state.model) {
@@ -245,9 +245,10 @@ export const useModelStore = create<ModelStore>()(
             description: `Model ${updatedState.model.name}`
           },
           sheets: updatedState.sheets,
-          globalSettings: globalSettings || {
-            simulationTimeStep: 0.01,
-            simulationDuration: 10.0
+          globalSettings: {
+            simulationTimeStep: globalSettings?.simulationTimeStep ?? 0.01,
+            simulationDuration: globalSettings?.simulationDuration ?? 10.0,
+            integrationAlgorithm: globalSettings?.integrationAlgorithm ?? 'rk4'
           },
           parameters: updatedState.parameters  // Feature 1: Include parameters
         }
@@ -325,26 +326,26 @@ export const useModelStore = create<ModelStore>()(
       }
     },
 
-    saveAsNewModel: async (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => {
+    saveAsNewModel: async (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => {
       const state = get()
-      
+
       if (!state.model) {
         set({ error: 'No model to save' })
         return null
       }
 
       set({ saving: true, error: null })
-      
+
       try {
         // Ensure current sheet data is saved
         get().saveCurrentSheetData()
-        
+
         const updatedState = get()
         if (!updatedState.model) {
           set({ error: 'Model was lost during save preparation', saving: false })
           return null
         }
-        
+
         const modelData = {
           version: "2.1",  // Feature 1: Updated to v2.1 for parameter support
           metadata: {
@@ -352,9 +353,10 @@ export const useModelStore = create<ModelStore>()(
             description: `Model ${newName}`
           },
           sheets: updatedState.sheets,
-          globalSettings: globalSettings || {
-            simulationTimeStep: 0.01,
-            simulationDuration: 10.0
+          globalSettings: {
+            simulationTimeStep: globalSettings?.simulationTimeStep ?? 0.01,
+            simulationDuration: globalSettings?.simulationDuration ?? 10.0,
+            integrationAlgorithm: globalSettings?.integrationAlgorithm ?? 'rk4'
           },
           parameters: updatedState.parameters  // Feature 1: Include parameters
         }
@@ -443,10 +445,11 @@ export const useModelStore = create<ModelStore>()(
           sheets: updatedState.sheets,
           globalSettings: {
             simulationTimeStep: 0.01,
-            simulationDuration: 10.0
+            simulationDuration: 10.0,
+            integrationAlgorithm: 'rk4'
           }
         }
-        
+
         // Check if auto-save (version 0) already exists
         const { data: existingAutoSave, error: checkError } = await supabase
           .from('model_versions')
@@ -534,7 +537,8 @@ export const useModelStore = create<ModelStore>()(
           sheets,
           globalSettings: {
             simulationTimeStep: 0.01,
-            simulationDuration: 10
+            simulationDuration: 10,
+            integrationAlgorithm: 'rk4'
           }
         }
 

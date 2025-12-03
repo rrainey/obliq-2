@@ -5,17 +5,33 @@ import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 
 /**
+ * Options for InitFunctionGenerator
+ */
+export interface InitFunctionOptions {
+  /** Integration algorithm: 'rk4' (default) or 'euler' */
+  integrationAlgorithm?: 'euler' | 'rk4'
+}
+
+/**
  * Generates the initialization function for a flattened model
  */
 export class InitFunctionGenerator {
   private model: FlattenedModel
   private modelName: string
   private typeMap: Map<string, string>
+  private options: Required<InitFunctionOptions>
 
-  constructor(model: FlattenedModel, typeMap: Map<string, string> = new Map()) {
+  constructor(
+    model: FlattenedModel,
+    typeMap: Map<string, string> = new Map(),
+    options: InitFunctionOptions = {}
+  ) {
     this.model = model
     this.modelName = CCodeBuilder.sanitizeIdentifier(model.metadata.modelName)
     this.typeMap = typeMap
+    this.options = {
+      integrationAlgorithm: options.integrationAlgorithm ?? 'rk4'
+    }
   }
   
   /**
@@ -61,10 +77,15 @@ export class InitFunctionGenerator {
    * Generate time initialization
    */
   private generateTimeInit(): string {
+    const useRk4 = this.options.integrationAlgorithm === 'rk4' ? 1 : 0
+    const algorithmComment = this.options.integrationAlgorithm === 'rk4'
+      ? 'RK4 integration (4th order)'
+      : 'Euler integration (1st order)'
+
     return `    /* Initialize time tracking */
     model->time = 0.0;
     model->dt = dt;
-    model->use_rk4 = 1; /* Default to RK4 integration */
+    model->use_rk4 = ${useRk4}; /* ${algorithmComment} */
 
 `
   }

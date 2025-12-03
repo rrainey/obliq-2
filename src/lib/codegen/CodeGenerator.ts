@@ -19,15 +19,18 @@ import { ModelParameter } from '@/lib/modelSchema'
 export interface CodeGenerationOptions {
   /** Model name (defaults to 'model') */
   modelName?: string
-  
+
   /** Whether to generate enable tracking code */
   generateEnableTracking?: boolean
-  
+
   /** Whether to include debug comments */
   includeDebugComments?: boolean
-  
+
   /** Whether to generate a main() function for testing */
   generateMain?: boolean
+
+  /** Integration algorithm: 'rk4' (default) or 'euler' */
+  integrationAlgorithm?: 'euler' | 'rk4'
 }
 
 /**
@@ -64,7 +67,8 @@ export class CodeGenerator {
       modelName: options.modelName || 'model',
       generateEnableTracking: options.generateEnableTracking ?? true,
       includeDebugComments: options.includeDebugComments ?? true,
-      generateMain: options.generateMain ?? false
+      generateMain: options.generateMain ?? false,
+      integrationAlgorithm: options.integrationAlgorithm ?? 'rk4'
     }
   }
   
@@ -181,7 +185,9 @@ export class CodeGenerator {
     source += this.generateStaticData(model)
 
     // Init function (pass typeMap for correct data collection buffer sizing)
-    const initGenerator = new InitFunctionGenerator(model, typeMap)
+    const initGenerator = new InitFunctionGenerator(model, typeMap, {
+      integrationAlgorithm: this.options.integrationAlgorithm
+    })
     source += initGenerator.generate()
     source += '\n'
     

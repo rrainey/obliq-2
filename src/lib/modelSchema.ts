@@ -52,7 +52,7 @@ const BlockSchema = z.discriminatedUnion('type', [
     type: z.enum([
       'sum', 'multiply', 'transfer_function', 'signal_display', 'signal_logger',
       'input_port', 'output_port', 'source', 'scale', 'lookup_1d', 'lookup_2d',
-      'sheet_label_sink', 'sheet_label_source', 'trig'
+      'sheet_label_sink', 'sheet_label_source', 'trig', 'integrator'
     ]),
     name: z.string().min(1, 'Block name cannot be empty'),
     position: PositionSchema,
@@ -109,10 +109,14 @@ const SheetSchemaDefinition = z.object({
   signalTypes: z.record(z.string(), SignalTypeInfoSchema).optional()
 })
 
+// Integration algorithm schema
+const IntegrationAlgorithmSchema = z.enum(['euler', 'rk4']).default('rk4')
+
 // Global settings schema
 const GlobalSettingsSchema = z.object({
   simulationTimeStep: z.number().positive('Simulation time step must be positive'),
-  simulationDuration: z.number().positive('Simulation duration must be positive')
+  simulationDuration: z.number().positive('Simulation duration must be positive'),
+  integrationAlgorithm: IntegrationAlgorithmSchema.optional().default('rk4')
 })
 
 // Metadata schema
@@ -197,6 +201,7 @@ export type Sheet = z.infer<typeof SheetSchemaDefinition>
 export type Position = z.infer<typeof PositionSchema>
 export type Extents = z.infer<typeof ExtentsSchema>
 export type GlobalSettings = z.infer<typeof GlobalSettingsSchema>
+export type IntegrationAlgorithm = z.infer<typeof IntegrationAlgorithmSchema>
 export type Metadata = z.infer<typeof MetadataSchema>
 export type SignalType = z.infer<typeof SignalTypeSchema>
 export type SignalTypeInfo = z.infer<typeof SignalTypeInfoSchema>

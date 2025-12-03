@@ -19,6 +19,7 @@ export const createDefaultModel = () => ({
   ],
   globalSettings: {
     simulationTimeStep: 0.01,
-    simulationDuration: 10.0
+    simulationDuration: 10.0,
+    integrationAlgorithm: 'rk4' as const
   }
 })
