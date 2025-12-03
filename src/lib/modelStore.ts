@@ -104,6 +104,9 @@ export interface ModelActions {
   deleteBlock: (blockId: string) => void
   addWire: (wire: WireData) => void
   deleteWire: (wireId: string) => void
+  // Feature 7: Block rename
+  renameBlock: (blockId: string, newName: string) => { success: boolean; error?: string }
+  validateBlockName: (name: string, excludeBlockId?: string) => { valid: boolean; error?: string }
   
   // Selection actions
   setSelectedBlockId: (blockId: string | null) => void
@@ -674,6 +677,80 @@ export const useModelStore = create<ModelStore>()(
       wires: state.wires.filter(wire => wire.id !== wireId),
       isDirty: true
     })),
+
+    // Feature 7: Block name validation
+    validateBlockName: (name: string, excludeBlockId?: string) => {
+      const state = get()
+
+      // Check if name is empty
+      if (!name || !name.trim()) {
+        return { valid: false, error: 'Block name cannot be empty' }
+      }
+
+      // Check if name is valid identifier
+      const identifierRegex = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+      if (!identifierRegex.test(name)) {
+        return {
+          valid: false,
+          error: 'Block name must be a valid identifier (alphanumeric + underscore, start with letter or underscore)'
+        }
+      }
+
+      // Check uniqueness among blocks on the current sheet (excluding the block being renamed)
+      const nameExists = state.blocks.some(
+        block => block.name === name && block.id !== excludeBlockId
+      )
+      if (nameExists) {
+        return { valid: false, error: `Block name "${name}" already exists on this sheet` }
+      }
+
+      // Check against parameter names (only for top-level sheets)
+      // Get current sheet to check if it's top-level
+      const currentSheet = state.sheets.find(s => s.id === state.activeSheetId)
+      const isTopLevel = currentSheet && !state.sheets.some(
+        sheet => sheet.blocks?.some(
+          b => b.type === 'subsystem' && b.parameters?.sheets?.some((ss: Sheet) => ss.id === state.activeSheetId)
+        )
+      )
+
+      if (isTopLevel) {
+        const paramConflict = state.parameters.some(param => param.name === name)
+        if (paramConflict) {
+          return { valid: false, error: `Block name "${name}" conflicts with a model parameter` }
+        }
+      }
+
+      return { valid: true }
+    },
+
+    // Feature 7: Block rename with reference updates
+    renameBlock: (blockId: string, newName: string) => {
+      const state = get()
+      const block = state.blocks.find(b => b.id === blockId)
+
+      if (!block) {
+        return { success: false, error: 'Block not found' }
+      }
+
+      // Validate the new name
+      const validation = get().validateBlockName(newName, blockId)
+      if (!validation.valid) {
+        return { success: false, error: validation.error }
+      }
+
+      // Update the block name
+      set((state) => {
+        const newBlocks = state.blocks.map(b =>
+          b.id === blockId ? { ...b, name: newName } : b
+        )
+        return {
+          blocks: newBlocks,
+          isDirty: true
+        }
+      })
+
+      return { success: true }
+    },
 
     // Parameter actions (Feature 1)
     addParameter: (param) => set((state) => {
@@ -1246,7 +1323,7 @@ export const useModelStore = create<ModelStore>()(
 
     saveCurrentSheetData: () => {
       const state = get()
-      
+
       // Helper to recursively update a specific sheet
       const updateSheetRecursively = (sheets: Sheet[]): Sheet[] => {
         return sheets.map(sheet => {

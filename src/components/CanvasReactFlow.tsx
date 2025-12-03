@@ -62,6 +62,8 @@ interface CanvasReactFlowProps {
   onCopy?: () => void
   onCut?: () => void
   onPaste?: (position?: { x: number; y: number }) => void
+  // Feature 7: Block rename callback
+  onBlockRename?: (blockId: string, newName: string) => { success: boolean; error?: string }
 }
 
 // Context menu state type
@@ -97,15 +99,24 @@ function CanvasReactFlowInner({
   onCopy,                 // Feature 5
   onCut,                  // Feature 5
   onPaste,                // Feature 5
+  onBlockRename,          // Feature 7
 }: CanvasReactFlowProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const { project, getNode } = useReactFlow()
   const store = useStoreApi()
   const viewport = useViewport()
   const [connectionError, setConnectionError] = useState<string | null>(null)
-  
+
   // Context menu state - following ReactFlow pattern
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
+
+  // Feature 7: Rename dialog state
+  const [renameDialog, setRenameDialog] = useState<{
+    blockId: string
+    currentName: string
+    newName: string
+    error: string | null
+  } | null>(null)
 
   // Convert blocks and wires to ReactFlow format with enhanced edge data
   const initialNodes = blocks.map((block) => blockDataToNode(block))
@@ -205,9 +216,6 @@ function CanvasReactFlowInner({
 
   // Sync external blocks with ReactFlow state
   useEffect(() => {
-    console.log('[useEffect sync] blocks prop changed, syncing nodes')
-    console.log('[useEffect sync] blocks:', blocks.map(b => ({ id: b.id, pos: b.position })))
-    console.log('[useEffect sync] selectedBlockIds:', selectedBlockIds)
     setNodes(blocks.map(block => ({
       ...blockDataToNode(block),
       // Feature 4: Support both single and multi-selection
@@ -720,6 +728,18 @@ const handleEdgesChange = useCallback((changes: any[]) => {
             }
             setContextMenu(null)
           }}
+          onRenameClick={(blockId) => {
+            const block = blocks.find(b => b.id === blockId)
+            if (block) {
+              setRenameDialog({
+                blockId,
+                currentName: block.name,
+                newName: block.name,
+                error: null
+              })
+            }
+            setContextMenu(null)
+          }}
           onSheetNavigate={(sheetId) => {
             if (onSheetNavigate) {
               onSheetNavigate(sheetId)
@@ -728,8 +748,80 @@ const handleEdgesChange = useCallback((changes: any[]) => {
           }}
         />
       )}
+
+      {/* Feature 7: Rename Dialog */}
+      {renameDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-96">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Rename Block
+            </h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Block Name
+              </label>
+              <input
+                type="text"
+                value={renameDialog.newName}
+                onChange={(e) => setRenameDialog({
+                  ...renameDialog,
+                  newName: e.target.value,
+                  error: null
+                })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && renameDialog.newName.trim()) {
+                    handleRenameSubmit()
+                  } else if (e.key === 'Escape') {
+                    setRenameDialog(null)
+                  }
+                }}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white ${
+                  renameDialog.error ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                }`}
+                autoFocus
+              />
+              {renameDialog.error && (
+                <p className="mt-1 text-sm text-red-500">{renameDialog.error}</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setRenameDialog(null)}
+                className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRenameSubmit}
+                disabled={!renameDialog.newName.trim()}
+                className="px-4 py-2 text-sm bg-blue-500 text-white hover:bg-blue-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Rename
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+
+  function handleRenameSubmit() {
+    if (!renameDialog || !renameDialog.newName.trim()) return
+
+    if (onBlockRename) {
+      const result = onBlockRename(renameDialog.blockId, renameDialog.newName.trim())
+      if (result.success) {
+        setRenameDialog(null)
+      } else {
+        setRenameDialog({
+          ...renameDialog,
+          error: result.error || 'Failed to rename block'
+        })
+      }
+    } else {
+      setRenameDialog(null)
+    }
+  }
 }
 
 // Main component wrapped with ReactFlowProvider

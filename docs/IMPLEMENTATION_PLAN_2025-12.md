@@ -922,8 +922,8 @@ Add Limit block that clamps signal values to a configurable range. Supports scal
 #### 8.6 Block Library Entry
 **File:** `src/components/BlockLibrary.tsx`
 
-- Add "Limit" to "Math" or "Signal Processing" category
-- Icon: `IconArrowsVertical` or custom
+- Add "Limit" to "Signal Processing" category
+- Icon: `IconEaseInOutControlPointsFilled` or custom
 - Drag-and-drop support (existing pattern)
 
 #### 8.7 Register in Factory

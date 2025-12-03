@@ -111,7 +111,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     // Actions
     setModel, setError, setModelLoading, saveModel,
     switchToSheet, addSheet, renameSheet, deleteSheet,
-    addBlock, updateBlock, updateBlocks, deleteBlock, addWire, deleteWire,
+    addBlock, updateBlock, updateBlocks, deleteBlock, addWire, deleteWire, renameBlock,
     setSelectedBlockId, setSelectedBlocks, setSelectedWireId, setConfigBlock, clearSelection,
     // Feature 5: Clipboard actions
     copySelection, cutSelection, pasteFromClipboard, checkClipboardDependencies,
@@ -1628,6 +1628,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onCopy={handleCopy}
               onCut={handleCut}
               onPaste={handlePaste}
+              onBlockRename={(blockId, newName) => {
+                const result = renameBlock(blockId, newName)
+                if (result.success) {
+                  saveCurrentSheetData()
+                }
+                return result
+              }}
             />
           </Box>
         </Box>
