@@ -144,7 +144,9 @@ export async function POST(request: NextRequest) {
         }
 
         // Determine version to use
-        const versionToUse = version || model.latest_version || 1
+        // If version is explicitly 0, use auto-save; if undefined/null, use latest saved version
+        const versionToUse = version !== undefined ? version : (model.latest_version || 1)
+        console.log(`[compile-wasm-stream] Requested version: ${version}, using version: ${versionToUse}`)
 
         // Fetch version data
         const { data: versionData, error: versionError } = await supabaseServer
@@ -153,6 +155,8 @@ export async function POST(request: NextRequest) {
           .eq('model_id', modelId)
           .eq('version', versionToUse)
           .single()
+
+        console.log(`[compile-wasm-stream] Fetched version data:`, versionError ? `Error: ${versionError.message}` : `Found version ${versionToUse}`)
 
         if (versionError || !versionData) {
           sendEvent(controller, 'error', {
@@ -182,8 +186,11 @@ export async function POST(request: NextRequest) {
         })
 
         const cacheKey = generateCacheKey(modelId, { sheets, parameters }, { optimizationLevel, enableSimd })
+        console.log(`[compile-wasm-stream] Generated cache key: ${cacheKey}`)
+
         const cacheManager = new SupabaseCacheManager()
         const cachedResult = await cacheManager.get(cacheKey)
+        console.log(`[compile-wasm-stream] Cache lookup result: ${cachedResult ? 'HIT' : 'MISS'}`)
 
         if (cachedResult) {
           // Cache hit - return immediately

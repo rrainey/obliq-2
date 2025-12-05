@@ -428,14 +428,26 @@ export const useModelStore = create<ModelStore>()(
 
       try {
         // Ensure current sheet data is saved
+        console.log('[saveAutoSave] Calling saveCurrentSheetData...')
         get().saveCurrentSheetData()
-        
+
         const updatedState = get()
         if (!updatedState.model) {
           console.error('Model was lost during auto-save preparation')
           return false
         }
-        
+
+        // Debug: Log the blocks being saved
+        console.log('[saveAutoSave] Sheets to save:', updatedState.sheets.length)
+        updatedState.sheets.forEach((sheet, i) => {
+          console.log(`[saveAutoSave] Sheet ${i} (${sheet.name}): ${sheet.blocks.length} blocks`)
+          sheet.blocks.forEach(block => {
+            if (block.type === 'source') {
+              console.log(`[saveAutoSave]   Source block "${block.name}":`, JSON.stringify(block.parameters))
+            }
+          })
+        })
+
         const modelData = {
           version: "1.0",
           metadata: {

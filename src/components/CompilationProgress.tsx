@@ -12,6 +12,7 @@ import { IconCheck, IconClock, IconRocket } from '@tabler/icons-react'
 
 interface CompilationProgressProps {
   modelId: string
+  version?: number  // Optional version - 0 for auto-save, undefined for latest saved version
   optimizationLevel?: 'O0' | 'O1' | 'O2' | 'O3'
   onComplete?: (result: { wasmData: string; jsData: string; metadata: any }) => void
   onError?: (error: string, details?: string) => void
@@ -40,6 +41,7 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
 
 export default function CompilationProgress({
   modelId,
+  version,
   optimizationLevel = 'O2',
   onComplete,
   onError
@@ -75,6 +77,7 @@ export default function CompilationProgress({
           },
           body: JSON.stringify({
             modelId,
+            version,
             optimizationLevel
           }),
           signal: controller.signal
@@ -172,7 +175,7 @@ export default function CompilationProgress({
     return () => {
       controller.abort()
     }
-  }, [modelId, optimizationLevel, onComplete, onError])
+  }, [modelId, version, optimizationLevel, onComplete, onError])
 
   const formatTime = (ms: number) => {
     if (ms < 1000) {

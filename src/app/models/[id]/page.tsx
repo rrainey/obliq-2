@@ -47,7 +47,7 @@ import { migrateToHierarchicalSheets } from '@/lib/modelStore'
 import { useModelStore } from '@/lib/modelStore'
 
 import { useAutoSave } from '@/lib/useAutoSave'
-import { use, useEffect, useState, useCallback } from 'react'
+import { use, useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
@@ -122,7 +122,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     updateCurrentSheet, saveCurrentSheetData, initializeFromModel, saveAsNewModel,
 
     // Auto-save specific
-    deleteAutoSave, enableAutoSave, setIsDirty, markAsClean,
+    isDirty, saveAutoSave, deleteAutoSave, enableAutoSave, setIsDirty, markAsClean,
 
     // New actions needed for auto-save recovery
     setSheets, setActiveSheetId, setBlocks, setWires,
@@ -201,14 +201,25 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }, [user, id, requestedVersion])
 
-  // Pre-warming: Compile WASM in background when model loads
+  // Pre-warming: Compile WASM in background when model loads (for faster first simulation)
+  // Don't pre-warm if model is dirty - the user will trigger compilation via "Run Simulation"
+  // Note: With "always recompile" approach, pre-warming is less critical but still provides a warm cache
   useEffect(() => {
-    if (model && getWasmPreference() && !compiledWasmData && !isCompiling) {
+    if (model && getWasmPreference() && !compiledWasmData && !isCompiling && !isDirty) {
       // Start background compilation
       console.log('[Pre-warming] Starting background WASM compilation for model:', model.id, model.name)
       setIsCompiling(true)
     }
-  }, [model, compiledWasmData]) // Don't include isCompiling to avoid re-triggering when it changes
+  }, [model, compiledWasmData, isDirty]) // Don't include isCompiling to avoid re-triggering when it changes
+
+  // Invalidate compiled WASM when model becomes dirty (user made edits)
+  // Don't trigger wasteful pre-warming - just clear the cached WASM
+  useEffect(() => {
+    if (isDirty && compiledWasmData) {
+      console.log('[WASM] Model edited - invalidating compiled WASM (will recompile on Run Simulation)')
+      setCompiledWasmData(null)
+    }
+  }, [isDirty]) // Only trigger on isDirty changes, not compiledWasmData
 
   const fetchModel = async () => {
     try {
@@ -833,6 +844,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleRunSimulation = async () => {
+    console.log('[handleRunSimulation] Starting. isDirty:', isDirty, 'compiledWasmData:', !!compiledWasmData, 'isCompiling:', isCompiling)
+
     const settingsValidation = validateAndGetSimulationSettings()
     if (!settingsValidation.isValid) {
       return
@@ -916,17 +929,128 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       let multiEngine: MultiSheetSimulationEngine | null = null
 
       if (useWasm && model) {
-        // WASM execution path
-        if (!compiledWasmData) {
-          // No compiled WASM yet - trigger compilation via CompilationProgress
+        // WASM execution path - always recompile before running
+
+        // If model has unsaved changes, auto-save first
+        if (isDirty) {
+          console.log('[Run Simulation] Model is dirty, auto-saving before compilation')
           notifications.show({
-            title: 'WASM compilation starting',
-            message: 'Compiling model to WebAssembly...',
+            title: 'Saving changes...',
+            message: 'Auto-saving model before compilation',
             color: 'blue',
             icon: <IconAlertCircle size={20} />,
-            autoClose: 3000
+            autoClose: 2000
           })
-          setIsCompiling(true)
+
+          const autoSaveSuccess = await saveAutoSave()
+          if (!autoSaveSuccess) {
+            notifications.show({
+              title: 'Auto-save failed',
+              message: 'Could not save changes before compilation',
+              color: 'red',
+              icon: <IconAlertCircle size={20} />,
+              autoClose: 5000
+            })
+            setIsSimulating(false)
+            return
+          }
+          console.log('[Run Simulation] Auto-save complete')
+        }
+
+        // Always compile before running - fetch fresh compilation
+        console.log('[Run Simulation] Starting inline compilation')
+        notifications.show({
+          title: 'Compiling...',
+          message: 'Compiling model to WebAssembly',
+          color: 'blue',
+          icon: <IconAlertCircle size={20} />,
+          autoClose: 3000
+        })
+
+        try {
+          // Use version 0 (auto-save) if we just saved, otherwise latest version
+          const versionToCompile = isDirty ? 0 : undefined
+          const response = await fetch('/api/compile-wasm-stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              modelId: model.id,
+              version: versionToCompile,
+              optimizationLevel: 'O2'
+            })
+          })
+
+          if (!response.ok) {
+            throw new Error(`Compilation failed: ${response.status}`)
+          }
+
+          // Read the SSE stream to get the result
+          const reader = response.body?.getReader()
+          const decoder = new TextDecoder()
+          let wasmResult: { wasmData: string; jsData: string; metadata: any } | null = null
+          let compilationError: string | null = null
+
+          if (reader) {
+            let buffer = ''
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+
+              buffer += decoder.decode(value, { stream: true })
+              const lines = buffer.split('\n')
+              buffer = lines.pop() || ''
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.substring(6))
+                    if (data.wasmData && data.jsData) {
+                      wasmResult = data
+                    } else if (data.error) {
+                      compilationError = data.error
+                    }
+                  } catch (e) {
+                    // Ignore parse errors for progress events
+                  }
+                }
+              }
+            }
+          }
+
+          if (compilationError) {
+            throw new Error(compilationError)
+          }
+
+          if (!wasmResult) {
+            throw new Error('No compilation result received')
+          }
+
+          console.log('[Run Simulation] Compilation complete:', wasmResult.metadata)
+          setCompiledWasmData(wasmResult)
+          setCompilationTime(wasmResult.metadata.compilationTime || wasmResult.metadata.retrievalTime || 0)
+
+          notifications.show({
+            title: 'Compiled!',
+            message: wasmResult.metadata.cacheHit
+              ? `Loaded from cache (${wasmResult.metadata.retrievalTime || 0}ms)`
+              : `Compiled in ${wasmResult.metadata.compilationTime || 0}ms`,
+            color: 'green',
+            icon: <IconCheck size={20} />,
+            autoClose: 2000
+          })
+
+          // Use the fresh compilation result for simulation
+          var compiledWasmToUse = wasmResult
+
+        } catch (error) {
+          console.error('[Run Simulation] Compilation failed:', error)
+          notifications.show({
+            title: 'Compilation Failed',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            color: 'red',
+            icon: <IconAlertCircle size={20} />,
+            autoClose: 5000
+          })
           setIsSimulating(false)
           return
         }
@@ -948,9 +1072,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
             // Initialize worker with WASM module
             await worker.initialize(
-              compiledWasmData.wasmData,
-              compiledWasmData.jsData,
-              compiledWasmData.metadata
+              compiledWasmToUse.wasmData,
+              compiledWasmToUse.jsData,
+              compiledWasmToUse.metadata
             )
 
             // Run with progress updates
@@ -1018,9 +1142,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             const wasmEngine = new WasmSimulationEngine(model.id)
             try {
               await wasmEngine.loadCompiledModule(
-                compiledWasmData.wasmData,
-                compiledWasmData.jsData,
-                compiledWasmData.metadata
+                compiledWasmToUse.wasmData,
+                compiledWasmToUse.jsData,
+                compiledWasmToUse.metadata
               )
               await wasmEngine.initialize(config.timeStep)
               const numSteps = Math.floor(config.duration / config.timeStep)
@@ -1046,9 +1170,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           try {
             // Load compiled WASM module
             await wasmEngine.loadCompiledModule(
-              compiledWasmData.wasmData,
-              compiledWasmData.jsData,
-              compiledWasmData.metadata
+              compiledWasmToUse.wasmData,
+              compiledWasmToUse.jsData,
+              compiledWasmToUse.metadata
             )
 
             await wasmEngine.initialize(config.timeStep)
@@ -1310,10 +1434,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
   const handleBlockConfigUpdate = (parameters: Record<string, any>) => {
     if (configBlock) {
+      console.log('[handleBlockConfigUpdate] Updating block:', configBlock.id, 'with parameters:', parameters)
+      console.log('[handleBlockConfigUpdate] isDirty before update:', isDirty)
       updateBlock(configBlock.id, { parameters })
       saveCurrentSheetData()
       // updateBlock already sets isDirty, but ensure it's set
       setIsDirty(true)
+      console.log('[handleBlockConfigUpdate] isDirty should now be true')
     }
   }
 
@@ -1697,30 +1824,27 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             workerAvailable={isWorkerSimulationAvailable()}
           />
 
-          {/* WASM Compilation Progress */}
+          {/* WASM Compilation Progress - for background pre-warming only */}
           {isCompiling && model && (
             <CompilationProgress
               modelId={model.id}
               optimizationLevel="O2"
               onComplete={(result) => {
-                console.log('[Pre-warming] model.id being passed:', model.id)
                 console.log('[Pre-warming] Compilation complete:', result)
                 setCompilationTime(result.metadata.compilationTime || result.metadata.retrievalTime || 0)
                 setCompiledWasmData(result)
                 setIsCompiling(false)
 
                 // Show subtle notification for background pre-warming
-                if (!isSimulating) {
-                  notifications.show({
-                    title: 'WASM Ready',
-                    message: result.metadata.cacheHit
-                      ? `Loaded from cache (${result.metadata.retrievalTime || 0}ms)`
-                      : `Compiled in ${result.metadata.compilationTime || 0}ms`,
-                    color: 'green',
-                    icon: <IconCheck size={20} />,
-                    autoClose: 3000
-                  })
-                }
+                notifications.show({
+                  title: 'WASM Ready',
+                  message: result.metadata.cacheHit
+                    ? `Loaded from cache (${result.metadata.retrievalTime || 0}ms)`
+                    : `Compiled in ${result.metadata.compilationTime || 0}ms`,
+                  color: 'green',
+                  icon: <IconCheck size={20} />,
+                  autoClose: 3000
+                })
               }}
               onError={(error, details) => {
                 console.error('[Pre-warming] Compilation error:', error, details)
