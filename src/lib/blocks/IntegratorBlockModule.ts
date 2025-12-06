@@ -525,11 +525,9 @@ export class IntegratorBlockModule implements IBlockModule {
   }
 
   getInputPortCount(block: BlockData): number {
-    const { showEnableInput = false, showResetInput = false } = block.parameters || {}
-    let count = 1 // Base: derivative input
-    if (showEnableInput) count++
-    if (showResetInput) count++
-    return count
+    // Only the derivative input is on the left edge
+    // Enable is on top edge (port index -1), Reset is on bottom edge (port index -2)
+    return 1
   }
 
   getOutputPortCount(block: BlockData): number {
@@ -537,11 +535,9 @@ export class IntegratorBlockModule implements IBlockModule {
   }
 
   getInputPortLabels(block: BlockData): string[] | undefined {
-    const { showEnableInput = false, showResetInput = false } = block.parameters || {}
-    const labels = ['Derivative']
-    if (showEnableInput) labels.push('Enable')
-    if (showResetInput) labels.push('Reset')
-    return labels
+    // Only the derivative input is on the left edge
+    // Enable (top) and Reset (bottom) are special ports, not listed here
+    return ['Derivative']
   }
 
   getOutputPortLabels(block: BlockData): string[] | undefined {

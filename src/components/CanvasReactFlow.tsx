@@ -263,7 +263,13 @@ function CanvasReactFlowInner({
         edgeData.sourceType = 'bool' // Enable ports always expect boolean
         edgeData.isEnableConnection = true
       }
-      
+
+      // Special styling for reset connections
+      if (wire.targetPortIndex === -2) {
+        edgeData.sourceType = 'bool' // Reset ports always expect boolean
+        edgeData.isResetConnection = true
+      }
+
       return {
         ...wireDataToEdge(wire),
         type: 'step',
@@ -291,10 +297,13 @@ function CanvasReactFlowInner({
     if (connection.sourceHandle.startsWith('output-')) {
       sourcePortIndex = parseInt(connection.sourceHandle.split('-')[1])
     }
-    
+
     // Parse target port index
+    // Special port indices: -1 = enable (top edge), -2 = reset (bottom edge)
     if (connection.targetHandle === '_enable_') {
-      targetPortIndex = -1 // Special enable port
+      targetPortIndex = -1 // Special enable port (top edge)
+    } else if (connection.targetHandle === '_reset_') {
+      targetPortIndex = -2 // Special reset port (bottom edge)
     } else if (connection.targetHandle.startsWith('input-')) {
       targetPortIndex = parseInt(connection.targetHandle.split('-')[1])
     }
@@ -313,12 +322,15 @@ function CanvasReactFlowInner({
     }
 
     // Get the current edges from ReactFlow state instead of props
+    // Map special handle IDs to port indices: -1 = enable, -2 = reset
     const currentWires = edges.map(edge => ({
       id: edge.id,
       sourceBlockId: edge.source,
       sourcePortIndex: parseInt(edge.sourceHandle?.split('-')[1] || '0'),
       targetBlockId: edge.target,
-      targetPortIndex: edge.targetHandle === '_enable_' ? -1 : parseInt(edge.targetHandle?.split('-')[1] || '0'),
+      targetPortIndex: edge.targetHandle === '_enable_' ? -1 :
+                       edge.targetHandle === '_reset_' ? -2 :
+                       parseInt(edge.targetHandle?.split('-')[1] || '0'),
     }))
     
     //console.log('Current wires for validation:', currentWires)
@@ -335,8 +347,8 @@ function CanvasReactFlowInner({
       return false
     }
 
-    // Check for algebraic loops (unless it's an enable connection)
-    if (targetPortIndex !== -1) {
+    // Check for algebraic loops (unless it's an enable or reset connection)
+    if (targetPortIndex !== -1 && targetPortIndex !== -2) {
       const newWire: WireData = {
         id: 'temp',
         sourceBlockId: connection.source,
@@ -371,10 +383,13 @@ function CanvasReactFlowInner({
     if (connection.sourceHandle.startsWith('output-')) {
       sourcePortIndex = parseInt(connection.sourceHandle.split('-')[1])
     }
-    
+
     // Parse target port index
+    // Special port indices: -1 = enable (top edge), -2 = reset (bottom edge)
     if (connection.targetHandle === '_enable_') {
-      targetPortIndex = -1 // Special enable port
+      targetPortIndex = -1 // Special enable port (top edge)
+    } else if (connection.targetHandle === '_reset_') {
+      targetPortIndex = -2 // Special reset port (bottom edge)
     } else if (connection.targetHandle.startsWith('input-')) {
       targetPortIndex = parseInt(connection.targetHandle.split('-')[1])
     }
