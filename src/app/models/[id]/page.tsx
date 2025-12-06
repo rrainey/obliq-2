@@ -7,14 +7,21 @@ import { BlockData, PortInfo } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
+import { createSimulationEngine, getWasmPreference, createWorkerSimulation, isWorkerSimulationAvailable, type SimulationProgress } from '@/lib/simulation/SimulationEngineFactory'
+import { WasmSimulationEngine } from '@/lib/simulation/WasmSimulationEngine'
+import type { SimulationWorkerManager } from '@/lib/simulation/SimulationWorkerManager'
+import { convertWasmToUIFormat, WasmDataCollector } from '@/lib/simulation/WasmResultConverter'
 import SaveAsDialog from '@/components/SaveAsDialog'
 import AutoSaveRecoveryDialog from '@/components/AutoSaveRecoveryDialog'
 import AutoSaveStatusIndicator from '@/components/AutoSaveStatusIndicator'
+import ModelParametersDialog from '@/components/ModelParametersDialog'
 import CanvasReactFlow from '@/components/CanvasReactFlow'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
 import SimulationSettingsPanel, { validateSimulationSettings } from '@/components/SimulationSettingsPanel'
 import SignalDisplay from '@/components/SignalDisplay'
 import SheetTabs, { Sheet } from '@/components/SheetTabs'
+import CompilationProgress from '@/components/CompilationProgress'
+import WasmErrorDisplay from '@/components/WasmErrorDisplay'
 import InputPortConfig from '@/components/InputPortConfig'
 import SourceConfig from '@/components/SourceConfig'
 import ScaleConfig from '@/components/ScaleConfig'
@@ -29,6 +36,8 @@ import SheetLabelSourceConfig from '@/components/SheetLabelSourceConfig'
 import SumConfig from '@/components/SumConfig'
 import ConditionConfig from '@/components/ConditionConfig'
 import EvaluateConfig from '@/components/EvaluateConfig'
+import LimitConfig from '@/components/LimitConfig'
+import IntegratorConfig from '@/components/IntegratorConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
@@ -38,7 +47,7 @@ import { migrateToHierarchicalSheets } from '@/lib/modelStore'
 import { useModelStore } from '@/lib/modelStore'
 
 import { useAutoSave } from '@/lib/useAutoSave'
-import { use, useEffect, useState, useCallback } from 'react'
+import { use, useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
@@ -69,13 +78,16 @@ import {
   IconArrowLeft,
   IconDeviceFloppy,
   IconPlayerPlay,
+  IconPlayerStop,
   IconCode,
   IconFileExport,
   IconAlertCircle,
   IconCircleCheck,
   IconAlertTriangle,
   IconDownload,
-  IconClock
+  IconClock,
+  IconCheck,
+  IconSettings
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 
@@ -92,24 +104,26 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   
   // Zustand store
   const {
-    model, sheets, activeSheetId, blocks, wires,
-    selectedBlockId, selectedWireId, configBlock,
+    model, sheets, activeSheetId, blocks, wires, parameters,
+    selectedBlockId, selectedBlockIds, selectedWireId, selectedWireIds, configBlock,
     simulationResults, currentSheetSimulationResults, isSimulating, simulationEngine, outputPortValues,
     modelLoading, saving, error, currentVersion, isOlderVersion,
-    globalSimulationResults, 
-    
+    globalSimulationResults,
+
     // Actions
     setModel, setError, setModelLoading, saveModel,
     switchToSheet, addSheet, renameSheet, deleteSheet,
-    addBlock, updateBlock, deleteBlock, addWire, deleteWire,
-    setSelectedBlockId, setSelectedWireId, setConfigBlock,
+    addBlock, updateBlock, updateBlocks, deleteBlock, addWire, deleteWire, renameBlock,
+    setSelectedBlockId, setSelectedBlocks, setSelectedWireId, setConfigBlock, clearSelection,
+    // Feature 5: Clipboard actions
+    copySelection, cutSelection, pasteFromClipboard, checkClipboardDependencies,
     setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
-    setGlobalSimulationResults, clearGlobalSimulationResults, 
+    setGlobalSimulationResults, clearGlobalSimulationResults,
     updateCurrentSheet, saveCurrentSheetData, initializeFromModel, saveAsNewModel,
-    
+
     // Auto-save specific
-    deleteAutoSave, enableAutoSave, setIsDirty, markAsClean,
-    
+    isDirty, saveAutoSave, deleteAutoSave, enableAutoSave, setIsDirty, markAsClean,
+
     // New actions needed for auto-save recovery
     setSheets, setActiveSheetId, setBlocks, setWires,
     setCurrentVersion, setIsOlderVersion,
@@ -117,10 +131,32 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   } = useModelStore()
 
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false)
-  const [simulationSettings, setSimulationSettings] = useState({
+  const [showParametersDialog, setShowParametersDialog] = useState(false)
+  const [simulationSettings, setSimulationSettings] = useState<{
+    duration: string
+    timeStep: string
+    integrationAlgorithm: 'euler' | 'rk4'
+  }>({
     duration: '10.0',
-    timeStep: '0.01'
+    timeStep: '0.01',
+    integrationAlgorithm: 'rk4'
   })
+
+  // WASM compilation state
+  const [isCompiling, setIsCompiling] = useState(false)
+  const [compilationTime, setCompilationTime] = useState<number | null>(null)
+  const [compilationError, setCompilationError] = useState<string | null>(null)
+  const [compilationErrorDetails, setCompilationErrorDetails] = useState<string | null>(null)
+  const [compiledWasmData, setCompiledWasmData] = useState<{
+    wasmData: string
+    jsData: string
+    metadata: any
+  } | null>(null)
+
+  // Simulation progress state (for worker-based simulation)
+  const [simulationProgress, setSimulationProgress] = useState<SimulationProgress | null>(null)
+  const [workerManager, setWorkerManager] = useState<SimulationWorkerManager | null>(null)
+  const [useWorker, setUseWorker] = useState<boolean>(false) // Temporarily disabled - worker needs Next.js config
 
   const [showAutoSaveDialog, setShowAutoSaveDialog] = useState(false)
   const [autoSaveInfo, setAutoSaveInfo] = useState<{
@@ -137,6 +173,22 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   // Enable auto-save only for latest version and when model is fully loaded
   useAutoSave(!isOlderVersion && !modelLoading && !!model)
 
+  // Detect and enable Web Worker support if available
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const workersAvailable = isWorkerSimulationAvailable()
+      console.log('[Worker Detection]', workersAvailable ? 'Web Workers available' : 'Web Workers not available')
+
+      // Enable workers if available (opt-in for now due to Next.js config requirements)
+      // Users can enable via browser settings or future UI toggle
+      const userPreference = localStorage.getItem('obliq-use-workers')
+      if (userPreference === 'true' && workersAvailable) {
+        setUseWorker(true)
+        console.log('[Worker Detection] Enabling worker-based simulation (user preference)')
+      }
+    }
+  }, [])
+
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login')
@@ -148,6 +200,26 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       fetchModel()
     }
   }, [user, id, requestedVersion])
+
+  // Pre-warming: Compile WASM in background when model loads (for faster first simulation)
+  // Don't pre-warm if model is dirty - the user will trigger compilation via "Run Simulation"
+  // Note: With "always recompile" approach, pre-warming is less critical but still provides a warm cache
+  useEffect(() => {
+    if (model && getWasmPreference() && !compiledWasmData && !isCompiling && !isDirty) {
+      // Start background compilation
+      console.log('[Pre-warming] Starting background WASM compilation for model:', model.id, model.name)
+      setIsCompiling(true)
+    }
+  }, [model, compiledWasmData, isDirty]) // Don't include isCompiling to avoid re-triggering when it changes
+
+  // Invalidate compiled WASM when model becomes dirty (user made edits)
+  // Don't trigger wasteful pre-warming - just clear the cached WASM
+  useEffect(() => {
+    if (isDirty && compiledWasmData) {
+      console.log('[WASM] Model edited - invalidating compiled WASM (will recompile on Run Simulation)')
+      setCompiledWasmData(null)
+    }
+  }, [isDirty]) // Only trigger on isDirty changes, not compiledWasmData
 
   const fetchModel = async () => {
     try {
@@ -246,7 +318,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       if (versionData.data?.globalSettings) {
         setSimulationSettings({
           duration: versionData.data.globalSettings.simulationDuration?.toString() || '10.0',
-          timeStep: versionData.data.globalSettings.simulationTimeStep?.toString() || '0.01'
+          timeStep: versionData.data.globalSettings.simulationTimeStep?.toString() || '0.01',
+          integrationAlgorithm: versionData.data.globalSettings.integrationAlgorithm || 'rk4'
         })
       }
       
@@ -306,7 +379,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         if (autoSaveData.data?.globalSettings) {
           setSimulationSettings({
             duration: autoSaveData.data.globalSettings.simulationDuration?.toString() || '10.0',
-            timeStep: autoSaveData.data.globalSettings.simulationTimeStep?.toString() || '0.01'
+            timeStep: autoSaveData.data.globalSettings.simulationTimeStep?.toString() || '0.01',
+            integrationAlgorithm: autoSaveData.data.globalSettings.integrationAlgorithm || 'rk4'
           })
         }
       }
@@ -410,7 +484,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     
     const globalSettings = {
       simulationTimeStep: settingsValidation.timeStep,
-      simulationDuration: settingsValidation.duration
+      simulationDuration: settingsValidation.duration,
+      integrationAlgorithm: simulationSettings.integrationAlgorithm
     }
 
     const success = await saveModel(globalSettings)
@@ -450,6 +525,17 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         }
       case 'scale':
         return { gain: 1 }
+      case 'limit':
+        return { lowerLimit: -1, upperLimit: 1 }
+      case 'integrator':
+        return {
+          initialValue: 0,
+          showEnableInput: false,
+          showResetInput: false,
+          useLimits: false,
+          lowerLimit: -Infinity,
+          upperLimit: Infinity
+        }
       case 'transfer_function':
         return { 
           numerator: [1], 
@@ -583,6 +669,27 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     setIsDirty(true)
   }
 
+  // Feature 4: Handle multi-block move when dragging a selection
+  const handleBlocksMove = (moves: Array<{ id: string; position: { x: number; y: number } }>) => {
+    console.log('[handleBlocksMove] moves:', moves)
+    console.log('[handleBlocksMove] blocks before:', blocks.map(b => ({ id: b.id, pos: b.position })))
+
+    // Use batch update to update all positions in a single state update
+    const updates = moves.map(({ id, position }) => ({ id, updates: { position } }))
+    updateBlocks(updates)
+
+    // Check what the store has after update
+    const storeBlocks = useModelStore.getState().blocks
+    console.log('[handleBlocksMove] store blocks after updateBlocks:', storeBlocks.map(b => ({ id: b.id, pos: b.position })))
+
+    saveCurrentSheetData()
+
+    // Check sheets after save
+    const sheets = useModelStore.getState().sheets
+    const activeSheet = sheets.find(s => s.id === useModelStore.getState().activeSheetId)
+    console.log('[handleBlocksMove] active sheet blocks after save:', activeSheet?.blocks.map(b => ({ id: b.id, pos: b.position })))
+  }
+
   const handleBlockDelete = (blockId: string) => {
     // Find the block to get its name for confirmation
     const block = blocks.find(b => b.id === blockId)
@@ -707,12 +814,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       created: model.created_at,
       updated: model.updated_at,
       data: {
-        version: '2.0',
+        version: '2.1', // Current schema version with parameter support
         metadata: {
           created: new Date().toISOString(),
           description: `Exported from obliq-2 on ${new Date().toLocaleDateString()}`
         },
         sheets,
+        parameters, // Feature 3: Include model parameters
         globalSettings: {
           simulationTimeStep: 0.01,
           simulationDuration: 10
@@ -736,6 +844,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleRunSimulation = async () => {
+    console.log('[handleRunSimulation] Starting. isDirty:', isDirty, 'compiledWasmData:', !!compiledWasmData, 'isCompiling:', isCompiling)
+
     const settingsValidation = validateAndGetSimulationSettings()
     if (!settingsValidation.isValid) {
       return
@@ -772,7 +882,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         const sheetName = sheets.find(s => s.id === e.sheetId)?.name || 'Unknown Sheet'
         return `• [${sheetName}] ${e.message}`
       }).join('\n')
-      
+
       notifications.show({
         title: `Cannot run simulation due to ${errors.length} type compatibility error${errors.length > 1 ? 's' : ''}`,
         message: (
@@ -795,7 +905,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         const sheetName = sheets.find(s => s.id === w.sheetId)?.name || 'Unknown Sheet'
         return `• [${sheetName}] ${w.message}`
       }).join('\n')
-      
+
       const proceed = window.confirm(
         `Found ${warnings.length} warning${warnings.length > 1 ? 's' : ''}:\n\n` +
         `${warningMessages}${warnings.length > 3 ? `\n\n...and ${warnings.length - 3} more warnings` : ''}\n\n` +
@@ -805,33 +915,340 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
 
     setIsSimulating(true)
+    setCompilationError(null)
+
+    const useWasm = getWasmPreference()
+
     try {
       const config = {
         timeStep: settingsValidation.timeStep,
         duration: settingsValidation.duration
       }
-      
-      // Create multi-sheet simulation engine
-      const multiEngine = new MultiSheetSimulationEngine(sheets, config)
-      
-      // Run simulation across ALL sheets - this returns results for all sheets
-      const allResults = multiEngine.run()
-      
+
+      let allResults: Map<string, any>
+      let multiEngine: MultiSheetSimulationEngine | null = null
+
+      if (useWasm && model) {
+        // WASM execution path - always recompile before running
+
+        // If model has unsaved changes, auto-save first
+        if (isDirty) {
+          console.log('[Run Simulation] Model is dirty, auto-saving before compilation')
+          notifications.show({
+            title: 'Saving changes...',
+            message: 'Auto-saving model before compilation',
+            color: 'blue',
+            icon: <IconAlertCircle size={20} />,
+            autoClose: 2000
+          })
+
+          const autoSaveSuccess = await saveAutoSave()
+          if (!autoSaveSuccess) {
+            notifications.show({
+              title: 'Auto-save failed',
+              message: 'Could not save changes before compilation',
+              color: 'red',
+              icon: <IconAlertCircle size={20} />,
+              autoClose: 5000
+            })
+            setIsSimulating(false)
+            return
+          }
+          console.log('[Run Simulation] Auto-save complete')
+        }
+
+        // Always compile before running - fetch fresh compilation
+        console.log('[Run Simulation] Starting inline compilation')
+        notifications.show({
+          title: 'Compiling...',
+          message: 'Compiling model to WebAssembly',
+          color: 'blue',
+          icon: <IconAlertCircle size={20} />,
+          autoClose: 3000
+        })
+
+        try {
+          // Use version 0 (auto-save) if we just saved, otherwise latest version
+          const versionToCompile = isDirty ? 0 : undefined
+          const response = await fetch('/api/compile-wasm-stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              modelId: model.id,
+              version: versionToCompile,
+              optimizationLevel: 'O2'
+            })
+          })
+
+          if (!response.ok) {
+            throw new Error(`Compilation failed: ${response.status}`)
+          }
+
+          // Read the SSE stream to get the result
+          const reader = response.body?.getReader()
+          const decoder = new TextDecoder()
+          let wasmResult: { wasmData: string; jsData: string; metadata: any } | null = null
+          let compilationError: string | null = null
+
+          if (reader) {
+            let buffer = ''
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+
+              buffer += decoder.decode(value, { stream: true })
+              const lines = buffer.split('\n')
+              buffer = lines.pop() || ''
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.substring(6))
+                    if (data.wasmData && data.jsData) {
+                      wasmResult = data
+                    } else if (data.error) {
+                      compilationError = data.error
+                    }
+                  } catch (e) {
+                    // Ignore parse errors for progress events
+                  }
+                }
+              }
+            }
+          }
+
+          if (compilationError) {
+            throw new Error(compilationError)
+          }
+
+          if (!wasmResult) {
+            throw new Error('No compilation result received')
+          }
+
+          console.log('[Run Simulation] Compilation complete:', wasmResult.metadata)
+          setCompiledWasmData(wasmResult)
+          setCompilationTime(wasmResult.metadata.compilationTime || wasmResult.metadata.retrievalTime || 0)
+
+          notifications.show({
+            title: 'Compiled!',
+            message: wasmResult.metadata.cacheHit
+              ? `Loaded from cache (${wasmResult.metadata.retrievalTime || 0}ms)`
+              : `Compiled in ${wasmResult.metadata.compilationTime || 0}ms`,
+            color: 'green',
+            icon: <IconCheck size={20} />,
+            autoClose: 2000
+          })
+
+          // Use the fresh compilation result for simulation
+          var compiledWasmToUse = wasmResult
+
+        } catch (error) {
+          console.error('[Run Simulation] Compilation failed:', error)
+          notifications.show({
+            title: 'Compilation Failed',
+            message: error instanceof Error ? error.message : 'Unknown error',
+            color: 'red',
+            icon: <IconAlertCircle size={20} />,
+            autoClose: 5000
+          })
+          setIsSimulating(false)
+          return
+        }
+
+        // Try worker-based simulation first (non-blocking)
+        const useWorkerSim = useWorker && isWorkerSimulationAvailable()
+
+        if (useWorkerSim) {
+          // Worker-based simulation (recommended)
+          let worker: SimulationWorkerManager | null = null
+
+          try {
+            worker = createWorkerSimulation()
+            if (!worker) {
+              throw new Error('Failed to create simulation worker')
+            }
+
+            setWorkerManager(worker)
+
+            // Initialize worker with WASM module
+            await worker.initialize(
+              compiledWasmToUse.wasmData,
+              compiledWasmToUse.jsData,
+              compiledWasmToUse.metadata
+            )
+
+            // Run with progress updates
+            setSimulationProgress({ step: 0, totalSteps: 0, progress: 0, time: 0 })
+
+            const result = await worker.run(
+              { timeStep: config.timeStep, duration: config.duration },
+              (progress) => setSimulationProgress(progress)
+            )
+
+            if (result.wasStopped) {
+              console.log('Simulation was stopped by user')
+              notifications.show({
+                title: 'Simulation stopped',
+                message: 'Simulation was cancelled',
+                color: 'yellow',
+                icon: <IconAlertCircle size={20} />,
+                autoClose: 3000
+              })
+              return
+            }
+
+            // Retrieve results
+            const sampleData = await worker.getResults()
+
+            // Convert to UI format
+            allResults = convertWasmToUIFormat(
+              sampleData,
+              sheets,
+              config.timeStep,
+              config.duration
+            )
+
+            // Cleanup
+            await worker.cleanup()
+            worker.terminate()
+            setWorkerManager(null)
+            setSimulationProgress(null)
+
+            console.log('Worker WASM simulation completed:', {
+              totalSheets: allResults.size,
+              sheetsWithData: Array.from(allResults.keys()),
+              collectorCount: sampleData.size,
+              samplesPerCollector: Array.from(sampleData.values()).map(arr => arr.length)
+            })
+
+          } catch (error) {
+            console.error('Worker simulation error:', error)
+            if (worker) {
+              worker.terminate()
+              setWorkerManager(null)
+            }
+            setSimulationProgress(null)
+
+            // Fall back to main thread WASM execution
+            notifications.show({
+              title: 'Worker simulation failed',
+              message: 'Falling back to main thread execution',
+              color: 'orange',
+              icon: <IconAlertCircle size={20} />,
+              autoClose: 5000
+            })
+
+            // Execute on main thread
+            const wasmEngine = new WasmSimulationEngine(model.id)
+            try {
+              await wasmEngine.loadCompiledModule(
+                compiledWasmToUse.wasmData,
+                compiledWasmToUse.jsData,
+                compiledWasmToUse.metadata
+              )
+              await wasmEngine.initialize(config.timeStep)
+              const numSteps = Math.floor(config.duration / config.timeStep)
+              for (let i = 0; i < numSteps; i++) {
+                wasmEngine.step()
+              }
+              const sampleData = wasmEngine.getSampleData()
+              allResults = convertWasmToUIFormat(sampleData, sheets, config.timeStep, config.duration)
+              wasmEngine.cleanup()
+              wasmEngine.destroy()
+            } catch (mainThreadError) {
+              console.error('Main thread WASM error:', mainThreadError)
+              wasmEngine.destroy()
+              multiEngine = new MultiSheetSimulationEngine(sheets, config, parameters)
+              allResults = multiEngine.run()
+            }
+          }
+
+        } else {
+          // Main thread WASM execution (fallback)
+          const wasmEngine = new WasmSimulationEngine(model.id)
+
+          try {
+            // Load compiled WASM module
+            await wasmEngine.loadCompiledModule(
+              compiledWasmToUse.wasmData,
+              compiledWasmToUse.jsData,
+              compiledWasmToUse.metadata
+            )
+
+            await wasmEngine.initialize(config.timeStep)
+
+            // Run simulation (no data collection during steps)
+            const numSteps = Math.floor(config.duration / config.timeStep)
+            for (let i = 0; i < numSteps; i++) {
+              wasmEngine.step()
+            }
+
+            // Retrieve all sample data at once from internal buffers
+            const sampleData = wasmEngine.getSampleData()
+
+            // Convert to UI format
+            allResults = convertWasmToUIFormat(
+              sampleData,
+              sheets,
+              config.timeStep,
+              config.duration
+            )
+
+            // Cleanup allocated memory
+            wasmEngine.cleanup()
+            wasmEngine.destroy()
+
+            console.log('WASM simulation completed:', {
+              totalSheets: allResults.size,
+              sheetsWithData: Array.from(allResults.keys()),
+              collectorCount: sampleData.size,
+              samplesPerCollector: Array.from(sampleData.values()).map(arr => arr.length)
+            })
+
+          } catch (error) {
+            console.error('WASM simulation error:', error)
+            wasmEngine.destroy()
+
+            // Fallback to JavaScript
+            notifications.show({
+              title: 'WASM execution failed',
+              message: 'Falling back to JavaScript engine',
+              color: 'orange',
+              icon: <IconAlertCircle size={20} />,
+              autoClose: 5000
+            })
+
+            multiEngine = new MultiSheetSimulationEngine(sheets, config, parameters)
+            allResults = multiEngine.run()
+          }
+        }
+
+      } else {
+        // JavaScript path (current implementation)
+        multiEngine = new MultiSheetSimulationEngine(sheets, config, parameters)
+
+        // Run simulation across ALL sheets - this returns results for all sheets
+        allResults = multiEngine.run()
+      }
+
       // Store ALL results globally
       setGlobalSimulationResults(allResults)
-      
+
       // Also set the current sheet's engine for CSV export and other operations
-      const currentSheetEngine = multiEngine.getSheetEngine(activeSheetId)
-      if (currentSheetEngine) {
-        setSimulationEngine(currentSheetEngine)
-        setOutputPortValues(multiEngine.getOutputPortValues(activeSheetId) || new Map())
+      // (only available when using JavaScript engine)
+      if (multiEngine) {
+        const currentSheetEngine = multiEngine.getSheetEngine(activeSheetId)
+        if (currentSheetEngine) {
+          setSimulationEngine(currentSheetEngine)
+          setOutputPortValues(multiEngine.getOutputPortValues(activeSheetId) || new Map())
+        }
       }
-      
+
       console.log('Simulation completed for all sheets:', {
         totalSheets: allResults.size,
         sheetsWithData: Array.from(allResults.keys())
       })
-      
+
       // Log summary of results for debugging
       for (const [sheetId, results] of allResults) {
         const sheet = sheets.find(s => s.id === sheetId)
@@ -840,24 +1257,39 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           timePoints: results.timePoints.length
         })
       }
-      
+
       notifications.show({
         title: 'Simulation completed',
-        message: 'Simulation ran successfully across all sheets',
+        message: `Simulation ran successfully across all sheets${useWasm && compiledWasmData ? ' (WASM)' : ''}`,
         color: 'green',
         icon: <IconCircleCheck size={20} />
       })
-      
+
     } catch (error) {
       console.error('Simulation error:', error)
+      setCompilationError(error instanceof Error ? error.message : 'Unknown error')
       notifications.show({
         title: 'Simulation failed',
-        message: 'Check console for details',
+        message: error instanceof Error ? error.message : 'Check console for details',
         color: 'red',
         icon: <IconAlertCircle size={20} />
       })
     } finally {
       setIsSimulating(false)
+      setIsCompiling(false)
+    }
+  }
+
+  /**
+   * Stop a running worker-based simulation
+   */
+  const handleStopSimulation = async () => {
+    if (workerManager) {
+      try {
+        await workerManager.stop()
+      } catch (error) {
+        console.error('Error stopping simulation:', error)
+      }
     }
   }
 
@@ -977,15 +1409,17 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     
     // Open properties dialog for all block types that have configuration
     if (block && (
-      block.type === 'input_port' || 
-      block.type === 'output_port' || 
+      block.type === 'input_port' ||
+      block.type === 'output_port' ||
       block.type === 'source' ||
       block.type === 'scale' ||
+      block.type === 'limit' ||
+      block.type === 'integrator' ||
       block.type === 'transfer_function' ||
       block.type === 'subsystem' ||
       block.type === 'lookup_1d' ||
       block.type === 'lookup_2d' ||
-      block.type === 'sheet_label_sink' || 
+      block.type === 'sheet_label_sink' ||
       block.type === 'sheet_label_source' ||
       block.type === 'sum' ||
       block.type === 'mux' ||
@@ -1000,16 +1434,91 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
   const handleBlockConfigUpdate = (parameters: Record<string, any>) => {
     if (configBlock) {
+      console.log('[handleBlockConfigUpdate] Updating block:', configBlock.id, 'with parameters:', parameters)
+      console.log('[handleBlockConfigUpdate] isDirty before update:', isDirty)
       updateBlock(configBlock.id, { parameters })
       saveCurrentSheetData()
       // updateBlock already sets isDirty, but ensure it's set
       setIsDirty(true)
+      console.log('[handleBlockConfigUpdate] isDirty should now be true')
     }
   }
 
-  const handleSimulationSettingsChange = useCallback((settings: { duration: string; timeStep: string }) => {
-    setSimulationSettings(settings)
+  const handleSimulationSettingsChange = useCallback((settings: { duration: string; timeStep: string; integrationAlgorithm?: 'euler' | 'rk4' }) => {
+    setSimulationSettings(prev => ({
+      ...prev,
+      duration: settings.duration,
+      timeStep: settings.timeStep,
+      integrationAlgorithm: settings.integrationAlgorithm || prev.integrationAlgorithm
+    }))
   }, [])
+
+  // Feature 5: Clipboard handlers
+  const handleCopy = useCallback(() => {
+    const clipboardData = copySelection()
+    if (clipboardData) {
+      notifications.show({
+        title: 'Copied',
+        message: `${clipboardData.blocks.length} block${clipboardData.blocks.length !== 1 ? 's' : ''} copied to clipboard`,
+        color: 'blue',
+        autoClose: 2000,
+      })
+    }
+  }, [copySelection])
+
+  const handleCut = useCallback(() => {
+    const clipboardData = cutSelection()
+    if (clipboardData) {
+      notifications.show({
+        title: 'Cut',
+        message: `${clipboardData.blocks.length} block${clipboardData.blocks.length !== 1 ? 's' : ''} cut to clipboard`,
+        color: 'blue',
+        autoClose: 2000,
+      })
+    }
+  }, [cutSelection])
+
+  const handlePaste = useCallback(() => {
+    // Check for dependency issues first
+    const depCheck = checkClipboardDependencies()
+    if (!depCheck.allSatisfied && depCheck.missingParameters.length > 0) {
+      // For now, auto-import missing parameters with a notification
+      // TODO: Show PasteDependencyDialog for user confirmation
+      const result = pasteFromClipboard({ importMissingParameters: true })
+      if (result.success) {
+        notifications.show({
+          title: 'Pasted with dependencies',
+          message: `${result.pastedBlockIds.length} block${result.pastedBlockIds.length !== 1 ? 's' : ''} pasted. Missing parameters were imported.`,
+          color: 'green',
+          autoClose: 3000,
+        })
+      } else {
+        notifications.show({
+          title: 'Paste failed',
+          message: result.error || 'Unknown error',
+          color: 'red',
+          icon: <IconAlertCircle size={20} />,
+        })
+      }
+    } else {
+      const result = pasteFromClipboard()
+      if (result.success) {
+        notifications.show({
+          title: 'Pasted',
+          message: `${result.pastedBlockIds.length} block${result.pastedBlockIds.length !== 1 ? 's' : ''} pasted`,
+          color: 'green',
+          autoClose: 2000,
+        })
+      } else if (result.error !== 'Clipboard is empty') {
+        notifications.show({
+          title: 'Paste failed',
+          message: result.error || 'Unknown error',
+          color: 'red',
+          icon: <IconAlertCircle size={20} />,
+        })
+      }
+    }
+  }, [checkClipboardDependencies, pasteFromClipboard])
 
   const handleAddSheet = () => {
     saveCurrentSheetData()
@@ -1126,7 +1635,32 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           
           <Group>
             <AutoSaveStatusIndicator />
-            
+
+            {/* WASM Status Indicator */}
+            {getWasmPreference() && (
+              <Tooltip label="WebAssembly acceleration enabled">
+                <Badge
+                  variant="light"
+                  color="blue"
+                  leftSection={
+                    <Box component="span" style={{ display: 'flex', alignItems: 'center' }}>
+                      ⚡
+                    </Box>
+                  }
+                >
+                  WASM
+                </Badge>
+              </Tooltip>
+            )}
+
+            {compilationTime !== null && (
+              <Tooltip label={`Last compilation: ${compilationTime}ms`}>
+                <Badge variant="light" color="gray" leftSection={<IconClock size={12} />}>
+                  {compilationTime}ms
+                </Badge>
+              </Tooltip>
+            )}
+
             <Button
               onClick={handleSave}
               loading={saving}
@@ -1150,14 +1684,36 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onSelectBlock={setSelectedBlockId}
               onSelectWire={setSelectedWireId}
             />
-            
+
             <Button
-              onClick={handleRunSimulation}
-              loading={isSimulating}
-              leftSection={<IconPlayerPlay size={16} />}
+              onClick={() => setShowParametersDialog(true)}
+              leftSection={<IconSettings size={16} />}
+              variant="outline"
+              color="blue"
             >
-              Run Simulation
+              Parameters
             </Button>
+
+            {/* Run/Stop Simulation buttons with progress indicator */}
+            {isSimulating && simulationProgress && workerManager ? (
+              <Group gap="xs">
+                <Button
+                  onClick={handleStopSimulation}
+                  color="red"
+                  leftSection={<IconPlayerStop size={16} />}
+                >
+                  Stop ({simulationProgress.progress.toFixed(0)}%)
+                </Button>
+              </Group>
+            ) : (
+              <Button
+                onClick={handleRunSimulation}
+                loading={isSimulating || isCompiling}
+                leftSection={<IconPlayerPlay size={16} />}
+              >
+                {isCompiling ? 'Compiling...' : isSimulating ? 'Running...' : 'Run Simulation'}
+              </Button>
+            )}
             
             <Button
               onClick={handleGenerateCode}
@@ -1209,16 +1765,31 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               blocks={blocks}
               wires={wires}
               selectedBlockId={selectedBlockId}
+              selectedBlockIds={selectedBlockIds}
               selectedWireId={selectedWireId}
+              selectedWireIds={selectedWireIds}
               onDrop={handleCanvasDrop}
               onBlockMove={handleBlockMove}
+              onBlocksMove={handleBlocksMove}
               onBlockSelect={setSelectedBlockId}
+              onBlocksSelect={setSelectedBlocks}
               onBlockDoubleClick={handleBlockDoubleClick}
               onBlockDelete={handleBlockDelete}
               onWireCreate={handleWireCreate}
               onWireSelect={setSelectedWireId}
               onWireDelete={handleWireDelete}
               onSheetNavigate={switchToSheet}
+              onClearSelection={clearSelection}
+              onCopy={handleCopy}
+              onCut={handleCut}
+              onPaste={handlePaste}
+              onBlockRename={(blockId, newName) => {
+                const result = renameBlock(blockId, newName)
+                if (result.success) {
+                  saveCurrentSheetData()
+                }
+                return result
+              }}
             />
           </Box>
         </Box>
@@ -1246,8 +1817,64 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           <SimulationSettingsPanel
             initialDuration={parseFloat(simulationSettings.duration) || 10.0}
             initialTimeStep={parseFloat(simulationSettings.timeStep) || 0.01}
+            initialIntegrationAlgorithm={simulationSettings.integrationAlgorithm}
             onChange={handleSimulationSettingsChange}
+            useWorker={useWorker}
+            onWorkerChange={setUseWorker}
+            workerAvailable={isWorkerSimulationAvailable()}
           />
+
+          {/* WASM Compilation Progress - for background pre-warming only */}
+          {isCompiling && model && (
+            <CompilationProgress
+              modelId={model.id}
+              optimizationLevel="O2"
+              onComplete={(result) => {
+                console.log('[Pre-warming] Compilation complete:', result)
+                setCompilationTime(result.metadata.compilationTime || result.metadata.retrievalTime || 0)
+                setCompiledWasmData(result)
+                setIsCompiling(false)
+
+                // Show subtle notification for background pre-warming
+                notifications.show({
+                  title: 'WASM Ready',
+                  message: result.metadata.cacheHit
+                    ? `Loaded from cache (${result.metadata.retrievalTime || 0}ms)`
+                    : `Compiled in ${result.metadata.compilationTime || 0}ms`,
+                  color: 'green',
+                  icon: <IconCheck size={20} />,
+                  autoClose: 3000
+                })
+              }}
+              onError={(error, details) => {
+                console.error('[Pre-warming] Compilation error:', error, details)
+                setCompilationError(error)
+                setCompilationErrorDetails(details || null)
+                setIsCompiling(false)
+
+                // Show error notification
+                notifications.show({
+                  title: 'WASM Compilation Failed',
+                  message: 'Will use JavaScript engine instead',
+                  color: 'orange',
+                  icon: <IconAlertCircle size={20} />,
+                  autoClose: 5000
+                })
+              }}
+            />
+          )}
+
+          {/* WASM Compilation Error */}
+          {compilationError && !isCompiling && (
+            <WasmErrorDisplay
+              error={compilationError}
+              details={compilationErrorDetails || undefined}
+              onDismiss={() => {
+                setCompilationError(null)
+                setCompilationErrorDetails(null)
+              }}
+            />
+          )}
 
           <ScrollArea style={{ flex: 1 }} offsetScrollbars>
             {currentSheetSimulationResults ? (
@@ -1399,6 +2026,12 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         />
       )}
 
+      <ModelParametersDialog
+        opened={showParametersDialog}
+        onClose={() => setShowParametersDialog(false)}
+        disabled={isSimulating}
+      />
+
       {/* Add Auto-save Recovery Dialog */}
       {showAutoSaveDialog && model && autoSaveInfo && (
         <AutoSaveRecoveryDialog
@@ -1452,6 +2085,20 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'scale' && (
             <ScaleConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'limit' && (
+            <LimitConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'integrator' && (
+            <IntegratorConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

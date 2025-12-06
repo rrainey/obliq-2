@@ -119,8 +119,11 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
     )
   }
 
-  // Extract the main sheet
+  // Extract the main sheet, parameters, and global settings
   const sheets = versionData.data.sheets
+  const parameters = versionData.data.parameters || [] // Feature 3
+  const globalSettings = versionData.data.globalSettings || {}
+  const integrationAlgorithm = globalSettings.integrationAlgorithm || 'rk4'
   const mainSheet = sheets.find((s: any) => s.id === 'main') || sheets[0]
 
   if (!mainSheet) {
@@ -158,9 +161,9 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
   // Generate the code
   let codeGenerator: ModelCodeGenerator
   try {
-    codeGenerator = new ModelCodeGenerator()
-
-  
+    codeGenerator = new ModelCodeGenerator({
+      integrationAlgorithm: integrationAlgorithm as 'euler' | 'rk4'
+    })
   } catch (error) {
     throw new AppError(
       'Failed to initialize code generator',
@@ -172,7 +175,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   //console.log('CodeGenerator instantiated successfully')
 
-  const result = codeGenerator.generateCode(sheets, model.name)
+  const result = codeGenerator.generateCode(sheets, model.name, parameters)
 
   //console.log('generateCode result:', result)
 

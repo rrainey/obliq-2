@@ -5,15 +5,33 @@ import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 
 /**
+ * Options for InitFunctionGenerator
+ */
+export interface InitFunctionOptions {
+  /** Integration algorithm: 'rk4' (default) or 'euler' */
+  integrationAlgorithm?: 'euler' | 'rk4'
+}
+
+/**
  * Generates the initialization function for a flattened model
  */
 export class InitFunctionGenerator {
   private model: FlattenedModel
   private modelName: string
-  
-  constructor(model: FlattenedModel) {
+  private typeMap: Map<string, string>
+  private options: Required<InitFunctionOptions>
+
+  constructor(
+    model: FlattenedModel,
+    typeMap: Map<string, string> = new Map(),
+    options: InitFunctionOptions = {}
+  ) {
     this.model = model
     this.modelName = CCodeBuilder.sanitizeIdentifier(model.metadata.modelName)
+    this.typeMap = typeMap
+    this.options = {
+      integrationAlgorithm: options.integrationAlgorithm ?? 'rk4'
+    }
   }
   
   /**
@@ -44,10 +62,13 @@ export class InitFunctionGenerator {
     
     // Initialize block-specific states
     code += this.generateBlockSpecificInit()
-    
+
+    // Initialize data collection buffers
+    code += this.generateDataCollectionInit()
+
     // Initialize constants and source blocks
     code += this.generateConstantInit()
-    
+
     code += '}\n'
     return code
   }
@@ -56,10 +77,16 @@ export class InitFunctionGenerator {
    * Generate time initialization
    */
   private generateTimeInit(): string {
+    const useRk4 = this.options.integrationAlgorithm === 'rk4' ? 1 : 0
+    const algorithmComment = this.options.integrationAlgorithm === 'rk4'
+      ? 'RK4 integration (4th order)'
+      : 'Euler integration (1st order)'
+
     return `    /* Initialize time tracking */
     model->time = 0.0;
     model->dt = dt;
-    
+    model->use_rk4 = ${useRk4}; /* ${algorithmComment} */
+
 `
   }
   
@@ -96,7 +123,7 @@ export class InitFunctionGenerator {
     
     for (const block of this.model.blocks) {
       try {
-        const generator = BlockModuleFactory.getModuleGenerator(block.block.type)
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
         
         // Check if this block type has initialization
         if (generator.generateInitialization) {
@@ -130,7 +157,100 @@ export class InitFunctionGenerator {
     
     return code
   }
-  
+
+  /**
+   * Generate data collection buffer initialization
+   */
+  private generateDataCollectionInit(): string {
+    let code = ''
+    let hasDataCollection = false
+
+    for (const block of this.model.blocks) {
+      try {
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
+
+        // Check if this block employs data collection
+        if (generator.employsDataCollection && generator.employsDataCollection(block.block)) {
+          // Get input type for this block
+          const inputType = this.getBlockInputType(block)
+
+          // Generate data collection initialization
+          if (generator.generateDataCollectionInit) {
+            const initCode = generator.generateDataCollectionInit(block.block, inputType)
+            if (initCode && initCode.trim()) {
+              if (!hasDataCollection) {
+                code += '    /* Initialize data collection buffers */\n'
+                hasDataCollection = true
+              }
+
+              code += initCode
+              code += '\n'
+            }
+          }
+        }
+      } catch (error) {
+        // Block type not supported for data collection
+        continue
+      }
+    }
+
+    if (hasDataCollection) {
+      code += '\n'
+    }
+
+    return code
+  }
+
+  /**
+   * Get input type for a block by finding the type of the signal connected to its first input
+   * Uses typeMap for accurate type propagation (e.g., Transfer Functions inherit input type)
+   */
+  private getBlockInputType(block: typeof this.model.blocks[0]): string {
+    // Find the connection to the first input port of this block
+    const inputConnection = this.model.connections.find(c =>
+      c.targetBlockId === block.originalId && c.targetPortIndex === 0
+    )
+
+    if (inputConnection) {
+      // First, check the typeMap for the source block's propagated type
+      const propagatedType = this.typeMap.get(inputConnection.sourceBlockId)
+      if (propagatedType) {
+        return propagatedType
+      }
+
+      // Fall back to checking block parameters
+      const sourceBlock = this.model.blocks.find(b => b.originalId === inputConnection.sourceBlockId)
+      if (sourceBlock) {
+        return this.getBlockOutputType(sourceBlock)
+      }
+    }
+
+    // Default to double if no connection found
+    return 'double'
+  }
+
+  /**
+   * Get output type for a block
+   */
+  private getBlockOutputType(block: typeof this.model.blocks[0]): string {
+    // First, check the typeMap for propagated type
+    const propagatedType = this.typeMap.get(block.originalId)
+    if (propagatedType) return propagatedType
+
+    // Check block parameters for explicit type
+    const dataType = block.block.parameters?.dataType
+    if (dataType) return dataType
+
+    // Default types by block type
+    switch (block.block.type) {
+      case 'source':
+      case 'input_port':
+        return block.block.parameters?.dataType || 'double'
+      default:
+        return 'double'
+    }
+  }
+
   /**
    * Generate initialization for constant sources
    */

@@ -5,6 +5,7 @@ import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { SimulationAlgebraicEvaluator } from './simulation/SimulationAlgebraicEvaluator'
 import { SimulationStateIntegrator } from './simulation/SimulationStateIntegrator'
+import { ModelParameter } from './modelSchema'
 
 
 
@@ -124,13 +125,13 @@ export class MultiSheetSimulationEngine {
   }
 
   // Update constructor to compute initial outputs
-  constructor(sheets: Sheet[], config: SimulationConfig) {
+  constructor(sheets: Sheet[], config: SimulationConfig, parameters?: ModelParameter[]) {
     this.sheets = sheets
     this.config = config
-    
+
     // Build subsystem hierarchy first
     this.buildSubsystemHierarchy()
-    
+
     // Create engines for all sheets (including nested)
     const allSheets = this.getAllSheets(sheets)
     for (const sheet of allSheets) {
@@ -139,7 +140,8 @@ export class MultiSheetSimulationEngine {
         sheet.connections,
         config,
         undefined,
-        allSheets
+        allSheets,
+        parameters
       )
       this.blockEngines.set(sheet.id, engine)
 

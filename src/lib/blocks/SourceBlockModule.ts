@@ -11,31 +11,63 @@ export class SourceBlockModule implements IBlockModule {
     const signalType = block.parameters?.signalType || 'constant'
     const dataType = block.parameters?.dataType || 'double'
     const typeInfo = BlockModuleUtils.parseType(dataType)
-    
+
     let code = `    // Source block: ${block.name} (${signalType})\n`
-    
+
     if (signalType === 'constant') {
-      // For constants, use the value directly
-      const value = block.parameters?.value
-      
-      if (typeInfo.isMatrix && Array.isArray(value) && Array.isArray(value[0])) {
-        // Matrix constant
-        code += `    // Matrix constant\n`
-        for (let i = 0; i < value.length; i++) {
-          for (let j = 0; j < value[i].length; j++) {
-            code += `    ${outputName}[${i}][${j}] = ${value[i][j]};\n`
+      // Check if this constant uses a parameter reference
+      const useParameter = block.parameters?.useParameter
+      const parameterName = block.parameters?.parameterName
+
+      if (useParameter && parameterName) {
+        // Use parameter reference instead of literal value
+        code += `    // Using parameter: ${parameterName}\n`
+
+        if (typeInfo.isMatrix) {
+          // Matrix parameter - copy the parameter array
+          code += `    // Matrix parameter\n`
+          if (typeInfo.rows && typeInfo.cols) {
+            for (let i = 0; i < typeInfo.rows; i++) {
+              for (let j = 0; j < typeInfo.cols; j++) {
+                code += `    ${outputName}[${i}][${j}] = ${parameterName}[${i}][${j}];\n`
+              }
+            }
           }
-        }
-      } else if (typeInfo.isArray && Array.isArray(value)) {
-        // Vector constant
-        code += `    // Vector constant\n`
-        for (let i = 0; i < value.length; i++) {
-          code += `    ${outputName}[${i}] = ${value[i]};\n`
+        } else if (typeInfo.isArray) {
+          // Vector parameter - copy the parameter array
+          code += `    // Vector parameter\n`
+          if (typeInfo.arraySize) {
+            for (let i = 0; i < typeInfo.arraySize; i++) {
+              code += `    ${outputName}[${i}] = ${parameterName}[${i}];\n`
+            }
+          }
+        } else {
+          // Scalar parameter - use #define directly
+          code += `    ${outputName} = ${parameterName};\n`
         }
       } else {
-        // Scalar constant
-        const constantValue = value !== undefined ? value : 0
-        code += `    ${outputName} = ${constantValue};\n`
+        // For constants, use the value directly
+        const value = block.parameters?.value
+
+        if (typeInfo.isMatrix && Array.isArray(value) && Array.isArray(value[0])) {
+          // Matrix constant
+          code += `    // Matrix constant\n`
+          for (let i = 0; i < value.length; i++) {
+            for (let j = 0; j < value[i].length; j++) {
+              code += `    ${outputName}[${i}][${j}] = ${value[i][j]};\n`
+            }
+          }
+        } else if (typeInfo.isArray && Array.isArray(value)) {
+          // Vector constant
+          code += `    // Vector constant\n`
+          for (let i = 0; i < value.length; i++) {
+            code += `    ${outputName}[${i}] = ${value[i]};\n`
+          }
+        } else {
+          // Scalar constant
+          const constantValue = value !== undefined ? value : 0
+          code += `    ${outputName} = ${constantValue};\n`
+        }
       }
     } else {
       // For signal generators, we need to implement the signal generation
@@ -44,7 +76,7 @@ export class SourceBlockModule implements IBlockModule {
       code += `    // TODO: Implement ${signalType} signal generation\n`
       code += `    ${outputName} = 0.0; // Placeholder\n`
     }
-    
+
     return code
   }
 
@@ -91,8 +123,8 @@ export class SourceBlockModule implements IBlockModule {
     simulationState: SimulationState
   ): void {
     // Source blocks are signal generators
-    const { signalType, dataType } = blockState.internalState
-    
+    const { signalType, dataType, useParameter, parameterName } = blockState.internalState
+
     // Parse the data type to check if it's a vector or matrix
     let parsedType: ParsedType | null = null
     try {
@@ -100,20 +132,38 @@ export class SourceBlockModule implements IBlockModule {
     } catch {
       parsedType = { baseType: 'double', isArray: false }
     }
-    
+
     // For constant signal type with vectors or matrices, use the value directly
     if (signalType === 'constant') {
-    
-        if (Array.isArray(blockState.internalState.value)) {
-            // Output the vector
-            blockState.outputs[0] = [...blockState.internalState.value]
-            return
+      // Check if this constant uses a parameter reference (Feature 3)
+      if (useParameter && parameterName) {
+        const paramValue = simulationState.parameters.get(parameterName)
+        if (paramValue !== undefined) {
+          if (Array.isArray(paramValue)) {
+            // Vector or matrix parameter - copy the value
+            blockState.outputs[0] = JSON.parse(JSON.stringify(paramValue))
+          } else {
+            // Scalar parameter
+            blockState.outputs[0] = paramValue
+          }
+          return
         } else {
-            // Output scalar value
-            blockState.outputs[0] = blockState.internalState.value
-            return
+          console.warn(`Parameter "${parameterName}" not found in simulation state`)
+          blockState.outputs[0] = 0
+          return
         }
-      }    
+      }
+
+      if (Array.isArray(blockState.internalState.value)) {
+        // Output the vector
+        blockState.outputs[0] = [...blockState.internalState.value]
+        return
+      } else {
+        // Output scalar value
+        blockState.outputs[0] = blockState.internalState.value
+        return
+      }
+    }
 
     console.log(`ERROR: Should not reach here for constant array signal!`)
     

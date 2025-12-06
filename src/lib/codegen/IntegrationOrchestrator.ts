@@ -27,9 +27,10 @@ export class IntegrationOrchestrator {
   private modelName: string
   private options: Required<IntegrationOrchestratorOptions>
   private stateIntegrator: StateIntegrator
-  
+
   constructor(
     model: FlattenedModel,
+    typeMap: Map<string, string>,
     options: IntegrationOrchestratorOptions = {}
   ) {
     this.model = model
@@ -39,7 +40,7 @@ export class IntegrationOrchestrator {
       integrationMethod: options.integrationMethod ?? 'rk4',
       includeTiming: options.includeTiming ?? false
     }
-    this.stateIntegrator = new StateIntegrator(model, {
+    this.stateIntegrator = new StateIntegrator(model, typeMap, {
       includeComments: this.options.includeComments
     })
   }

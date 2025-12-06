@@ -331,6 +331,39 @@ npm run test:codegen
 npm run test:codegen -- --verbose
 ```
 
+### WebAssembly (WASM) Tests
+
+**NEW:** The project now supports compiling models to WebAssembly for high-performance browser simulation.
+
+WASM tests verify that:
+- C code can be compiled to WebAssembly using Emscripten
+- WASM modules load and execute correctly in both Node.js and browsers
+- Generated models produce identical results when run as WASM
+
+#### Running WASM Tests
+
+```bash
+# Build Emscripten Docker image (first time only)
+npm run wasm:build-docker
+
+# Run all WASM tests
+npm run test:wasm
+
+# Run specific WASM test suites
+npm run test:wasm:setup   # Basic Emscripten setup
+npm run test:wasm:model   # Full model compilation
+```
+
+#### Quick Start Guide
+
+See [`__tests__/wasm/QUICKSTART.md`](__tests__/wasm/QUICKSTART.md) for a step-by-step verification guide.
+
+**Documentation:**
+- **Quick Start**: [`__tests__/wasm/QUICKSTART.md`](__tests__/wasm/QUICKSTART.md)
+- **Full Documentation**: [`__tests__/wasm/README.md`](__tests__/wasm/README.md)
+- **Architecture**: [`docs/wasm-simulation-architecture_1.md`](docs/wasm-simulation-architecture_1.md)
+- **Implementation Roadmap**: [`docs/wasm-implementation-roadmap.md`](docs/wasm-implementation-roadmap.md)
+
 The tests will:
 1. Build a Docker image with PlatformIO if not already present
 2. Generate C code for various test models

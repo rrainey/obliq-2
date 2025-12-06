@@ -1,0 +1,122 @@
+{
+  "name": "Test05",
+  "version": 3,
+  "created": "2025-12-03T02:14:45.152877+00:00",
+  "updated": "2025-12-03T03:50:03.908085+00:00",
+  "data": {
+    "version": "2.0",
+    "metadata": {
+      "created": "2025-12-03T04:00:07.046Z",
+      "description": "Exported from obliq-2 on 12/2/2025"
+    },
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "source_1764733752832",
+            "name": "Source1",
+            "type": "source",
+            "position": {
+              "x": 301.5,
+              "y": 442.703125
+            },
+            "parameters": {
+              "f0": 0.1,
+              "f1": 10,
+              "mean": 0,
+              "phase": 0,
+              "slope": 1,
+              "value": 3,
+              "offset": 0,
+              "dataType": "double",
+              "duration": 10,
+              "stepTime": 1,
+              "amplitude": 1,
+              "frequency": 1,
+              "startTime": 0,
+              "stepValue": 1,
+              "signalType": "constant",
+              "useParameter": true,
+              "parameterName": "A"
+            }
+          },
+          {
+            "id": "transfer_function_1764733778537",
+            "name": "Transfer function2",
+            "type": "transfer_function",
+            "position": {
+              "x": 479.5,
+              "y": 442.3046875
+            },
+            "parameters": {
+              "numerator": [
+                1
+              ],
+              "denominator": [
+                1,
+                0
+              ]
+            }
+          },
+          {
+            "id": "signal_display_1764733793484",
+            "name": "Signal display3",
+            "type": "signal_display",
+            "position": {
+              "x": 712,
+              "y": 442.3046875
+            },
+            "parameters": {
+              "maxSamples": 1000
+            }
+          },
+          {
+            "id": "output_port_1764733797986",
+            "name": "Output port4",
+            "type": "output_port",
+            "position": {
+              "x": 714,
+              "y": 565.8046875
+            },
+            "parameters": {
+              "portName": "Output"
+            }
+          }
+        ],
+        "extents": {
+          "width": 1000,
+          "height": 800
+        },
+        "connections": [
+          {
+            "id": "wire_1764733780167",
+            "sourceBlockId": "source_1764733752832",
+            "targetBlockId": "transfer_function_1764733778537",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1764733795093",
+            "sourceBlockId": "transfer_function_1764733778537",
+            "targetBlockId": "signal_display_1764733793484",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1764733799724",
+            "sourceBlockId": "transfer_function_1764733778537",
+            "targetBlockId": "output_port_1764733797986",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          }
+        ]
+      }
+    ],
+    "globalSettings": {
+      "simulationTimeStep": 0.01,
+      "simulationDuration": 10
+    }
+  }
+}

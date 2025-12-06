@@ -24,6 +24,7 @@ import ReactFlow, {
   useStoreApi,
   MarkerType,
   useViewport,
+  SelectionMode,
 } from 'reactflow'
 import  type ColorMode  from 'reactflow'
 import 'reactflow/dist/style.css'
@@ -41,17 +42,28 @@ interface CanvasReactFlowProps {
   blocks?: BlockData[]
   wires?: WireData[]
   selectedBlockId?: string | null
+  selectedBlockIds?: string[]  // Feature 4: Multiple block selection
   selectedWireId?: string | null
+  selectedWireIds?: string[]   // Feature 4: Connections between selected blocks
   sheets?: Array<{ id: string; name: string }>
   onDrop?: (x: number, y: number, blockType: string) => void
   onBlockMove?: (id: string, position: { x: number; y: number }) => void
+  onBlocksMove?: (moves: Array<{ id: string; position: { x: number; y: number } }>) => void  // Feature 4: Multi-block move
   onBlockSelect?: (id: string | null) => void
+  onBlocksSelect?: (ids: string[]) => void  // Feature 4: Multi-selection callback
   onBlockDoubleClick?: (id: string) => void
   onBlockDelete?: (id: string) => void
   onWireCreate?: (sourcePort: PortInfo, targetPort: PortInfo) => void
   onWireSelect?: (wireId: string | null) => void
   onWireDelete?: (wireId: string) => void
   onSheetNavigate?: (sheetId: string) => void
+  onClearSelection?: () => void  // Feature 4: Clear selection callback
+  // Feature 5: Clipboard callbacks
+  onCopy?: () => void
+  onCut?: () => void
+  onPaste?: (position?: { x: number; y: number }) => void
+  // Feature 7: Block rename callback
+  onBlockRename?: (blockId: string, newName: string) => { success: boolean; error?: string }
 }
 
 // Context menu state type
@@ -68,26 +80,43 @@ function CanvasReactFlowInner({
   blocks = [],
   wires = [],
   selectedBlockId = null,
+  selectedBlockIds = [],  // Feature 4
   selectedWireId = null,
+  selectedWireIds = [],   // Feature 4
   sheets = [],
   onDrop,
   onBlockMove,
+  onBlocksMove,           // Feature 4: Multi-block move
   onBlockSelect,
+  onBlocksSelect,         // Feature 4
   onBlockDoubleClick,
   onBlockDelete,
   onWireCreate,
   onWireSelect,
   onWireDelete,
   onSheetNavigate,
+  onClearSelection,       // Feature 4
+  onCopy,                 // Feature 5
+  onCut,                  // Feature 5
+  onPaste,                // Feature 5
+  onBlockRename,          // Feature 7
 }: CanvasReactFlowProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const { project, getNode } = useReactFlow()
   const store = useStoreApi()
   const viewport = useViewport()
   const [connectionError, setConnectionError] = useState<string | null>(null)
-  
+
   // Context menu state - following ReactFlow pattern
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
+
+  // Feature 7: Rename dialog state
+  const [renameDialog, setRenameDialog] = useState<{
+    blockId: string
+    currentName: string
+    newName: string
+    error: string | null
+  } | null>(null)
 
   // Convert blocks and wires to ReactFlow format with enhanced edge data
   const initialNodes = blocks.map((block) => blockDataToNode(block))
@@ -125,16 +154,76 @@ function CanvasReactFlowInner({
   })
 
   // ReactFlow state
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+
+  // Track dragging state to detect when multi-node drag ends
+  const isDraggingRef = useRef(false)
+  const draggedNodePositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+
+  // Custom onNodesChange handler that detects multi-node drag completion
+  // This is a workaround for ReactFlow bug where onSelectionDragStop doesn't fire
+  // when onSelectionChange is also set (see https://github.com/xyflow/xyflow/issues/4945)
+  const onNodesChange = useCallback((changes: any[]) => {
+    // First apply changes to ReactFlow's internal state
+    onNodesChangeInternal(changes)
+
+    // Check for position changes (dragging)
+    const positionChanges = changes.filter(
+      (c: any) => c.type === 'position' && c.dragging !== undefined
+    )
+
+    if (positionChanges.length > 0) {
+      const isDragging = positionChanges.some((c: any) => c.dragging === true)
+      const stoppedDragging = positionChanges.some((c: any) => c.dragging === false)
+
+      if (isDragging && !isDraggingRef.current) {
+        // Drag started
+        isDraggingRef.current = true
+        draggedNodePositionsRef.current.clear()
+      }
+
+      // Track positions during drag
+      positionChanges.forEach((c: any) => {
+        if (c.position) {
+          draggedNodePositionsRef.current.set(c.id, c.position)
+        }
+      })
+
+      if (stoppedDragging && isDraggingRef.current) {
+        // Drag ended - save all moved positions
+        isDraggingRef.current = false
+        const moves = Array.from(draggedNodePositionsRef.current.entries()).map(
+          ([id, position]) => ({ id, position })
+        )
+
+        console.log('[onNodesChange] Drag ended, moves:', moves)
+
+        if (moves.length > 1 && onBlocksMove) {
+          // Multi-node move
+          console.log('[onNodesChange] Calling onBlocksMove for', moves.length, 'nodes')
+          onBlocksMove(moves)
+        } else if (moves.length === 1 && onBlockMove) {
+          // Single node move
+          console.log('[onNodesChange] Calling onBlockMove for single node')
+          onBlockMove(moves[0].id, moves[0].position)
+        }
+
+        draggedNodePositionsRef.current.clear()
+      }
+    }
+  }, [onNodesChangeInternal, onBlockMove, onBlocksMove])
 
   // Sync external blocks with ReactFlow state
   useEffect(() => {
     setNodes(blocks.map(block => ({
       ...blockDataToNode(block),
-      selected: block.id === selectedBlockId
+      // Feature 4: Support both single and multi-selection
+      selected: selectedBlockIds.length > 0
+        ? selectedBlockIds.includes(block.id)
+        : block.id === selectedBlockId
     })))
-  }, [blocks, selectedBlockId, setNodes])
+  }, [blocks, selectedBlockId, selectedBlockIds, setNodes])
 
   useEffect(() => {
     // Run type propagation once for all wires
@@ -174,7 +263,13 @@ function CanvasReactFlowInner({
         edgeData.sourceType = 'bool' // Enable ports always expect boolean
         edgeData.isEnableConnection = true
       }
-      
+
+      // Special styling for reset connections
+      if (wire.targetPortIndex === -2) {
+        edgeData.sourceType = 'bool' // Reset ports always expect boolean
+        edgeData.isResetConnection = true
+      }
+
       return {
         ...wireDataToEdge(wire),
         type: 'step',
@@ -202,10 +297,13 @@ function CanvasReactFlowInner({
     if (connection.sourceHandle.startsWith('output-')) {
       sourcePortIndex = parseInt(connection.sourceHandle.split('-')[1])
     }
-    
+
     // Parse target port index
+    // Special port indices: -1 = enable (top edge), -2 = reset (bottom edge)
     if (connection.targetHandle === '_enable_') {
-      targetPortIndex = -1 // Special enable port
+      targetPortIndex = -1 // Special enable port (top edge)
+    } else if (connection.targetHandle === '_reset_') {
+      targetPortIndex = -2 // Special reset port (bottom edge)
     } else if (connection.targetHandle.startsWith('input-')) {
       targetPortIndex = parseInt(connection.targetHandle.split('-')[1])
     }
@@ -224,12 +322,15 @@ function CanvasReactFlowInner({
     }
 
     // Get the current edges from ReactFlow state instead of props
+    // Map special handle IDs to port indices: -1 = enable, -2 = reset
     const currentWires = edges.map(edge => ({
       id: edge.id,
       sourceBlockId: edge.source,
       sourcePortIndex: parseInt(edge.sourceHandle?.split('-')[1] || '0'),
       targetBlockId: edge.target,
-      targetPortIndex: edge.targetHandle === '_enable_' ? -1 : parseInt(edge.targetHandle?.split('-')[1] || '0'),
+      targetPortIndex: edge.targetHandle === '_enable_' ? -1 :
+                       edge.targetHandle === '_reset_' ? -2 :
+                       parseInt(edge.targetHandle?.split('-')[1] || '0'),
     }))
     
     //console.log('Current wires for validation:', currentWires)
@@ -246,8 +347,8 @@ function CanvasReactFlowInner({
       return false
     }
 
-    // Check for algebraic loops (unless it's an enable connection)
-    if (targetPortIndex !== -1) {
+    // Check for algebraic loops (unless it's an enable or reset connection)
+    if (targetPortIndex !== -1 && targetPortIndex !== -2) {
       const newWire: WireData = {
         id: 'temp',
         sourceBlockId: connection.source,
@@ -282,10 +383,13 @@ function CanvasReactFlowInner({
     if (connection.sourceHandle.startsWith('output-')) {
       sourcePortIndex = parseInt(connection.sourceHandle.split('-')[1])
     }
-    
+
     // Parse target port index
+    // Special port indices: -1 = enable (top edge), -2 = reset (bottom edge)
     if (connection.targetHandle === '_enable_') {
-      targetPortIndex = -1 // Special enable port
+      targetPortIndex = -1 // Special enable port (top edge)
+    } else if (connection.targetHandle === '_reset_') {
+      targetPortIndex = -2 // Special reset port (bottom edge)
     } else if (connection.targetHandle.startsWith('input-')) {
       targetPortIndex = parseInt(connection.targetHandle.split('-')[1])
     }
@@ -344,16 +448,23 @@ const handleEdgesChange = useCallback((changes: any[]) => {
     [setContextMenu]
   )
 
-  // Close context menu when clicking on the pane
+  // Close context menu when clicking on the pane - Feature 4: Clear all selection
   const onPaneClick = useCallback(() => {
     setContextMenu(null)
-    if (onBlockSelect) {
-      onBlockSelect(null)
+    // Feature 4: Use clearSelection if available, otherwise fall back to individual clears
+    if (onClearSelection) {
+      onClearSelection()
+    } else {
+      if (onBlocksSelect) {
+        onBlocksSelect([])
+      } else if (onBlockSelect) {
+        onBlockSelect(null)
+      }
+      if (onWireSelect) {
+        onWireSelect(null)
+      }
     }
-    if (onWireSelect) {
-      onWireSelect(null)
-    }
-  }, [onBlockSelect, onWireSelect])
+  }, [onBlockSelect, onBlocksSelect, onWireSelect, onClearSelection])
 
   // Handle node drag
   const onNodeDrag: NodeDragHandler = useCallback((event, node) => {
@@ -361,26 +472,37 @@ const handleEdgesChange = useCallback((changes: any[]) => {
     setContextMenu(null)
   }, [])
 
-  // Handle node drag stop
-  const onNodeDragStop: NodeDragHandler = useCallback((event, node) => {
-    if (onBlockMove) {
-      onBlockMove(node.id, node.position)
-    }
-  }, [onBlockMove])
+  // Note: We handle drag stop through onNodesChange instead of onNodeDragStop/onSelectionDragStop
+  // due to ReactFlow bug where onSelectionDragStop doesn't fire when onSelectionChange is set
+  // See: https://github.com/xyflow/xyflow/issues/4945
 
-  // Handle selection changes
+  // Handle selection changes - Feature 4: Support multi-selection
   const onSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes, edges }) => {
     if (nodes.length > 0) {
-      onBlockSelect?.(nodes[0].id)
+      // Feature 4: Use multi-selection callback if available
+      if (onBlocksSelect) {
+        onBlocksSelect(nodes.map(n => n.id))
+      } else if (onBlockSelect) {
+        // Fallback to single selection for backward compatibility
+        onBlockSelect(nodes[0].id)
+      }
       onWireSelect?.(null)
     } else if (edges.length > 0) {
       onWireSelect?.(edges[0].id)
-      onBlockSelect?.(null)
+      if (onBlocksSelect) {
+        onBlocksSelect([])
+      } else {
+        onBlockSelect?.(null)
+      }
     } else {
-      onBlockSelect?.(null)
+      if (onBlocksSelect) {
+        onBlocksSelect([])
+      } else {
+        onBlockSelect?.(null)
+      }
       onWireSelect?.(null)
     }
-  }, [onBlockSelect, onWireSelect])
+  }, [onBlockSelect, onBlocksSelect, onWireSelect])
 
   // Handle node double click
   const onNodeDoubleClick = useCallback((event: React.MouseEvent, node: Node) => {
@@ -422,21 +544,73 @@ const handleEdgesChange = useCallback((changes: any[]) => {
     [project, onDrop]
   )
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts - Feature 4: Added Escape and Ctrl+A
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Check if user is typing in an input field
       const target = event.target as HTMLElement
-      if (target.tagName === 'INPUT' || 
-          target.tagName === 'TEXTAREA' || 
+      if (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
           target.isContentEditable) {
+        return
+      }
+
+      // Feature 4: Escape - Clear selection
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        if (onClearSelection) {
+          onClearSelection()
+        } else if (onBlocksSelect) {
+          onBlocksSelect([])
+        } else if (onBlockSelect) {
+          onBlockSelect(null)
+        }
+        if (onWireSelect) {
+          onWireSelect(null)
+        }
+        return
+      }
+
+      // Feature 4: Ctrl+A - Select all blocks on current sheet
+      if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
+        event.preventDefault()
+        if (onBlocksSelect && blocks.length > 0) {
+          onBlocksSelect(blocks.map(b => b.id))
+        }
+        return
+      }
+
+      // Feature 5: Ctrl+C - Copy selection
+      if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+        event.preventDefault()
+        if (onCopy && selectedBlockIds.length > 0) {
+          onCopy()
+        }
+        return
+      }
+
+      // Feature 5: Ctrl+X - Cut selection
+      if ((event.ctrlKey || event.metaKey) && event.key === 'x') {
+        event.preventDefault()
+        if (onCut && selectedBlockIds.length > 0) {
+          onCut()
+        }
+        return
+      }
+
+      // Feature 5: Ctrl+V - Paste
+      if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+        event.preventDefault()
+        if (onPaste) {
+          onPaste()
+        }
         return
       }
 
       // Delete selected nodes/edges
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault()
-        
+
         const selectedNodes = nodes.filter((n: Node) => n.selected)
         const selectedEdges = edges.filter((e: Edge) => e.selected)
 
@@ -453,7 +627,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [nodes, edges, onBlockDelete, onWireDelete])
+  }, [nodes, edges, blocks, selectedBlockIds, onBlockDelete, onWireDelete, onBlockSelect, onBlocksSelect, onWireSelect, onClearSelection, onCopy, onCut, onPaste])
   
 
   // Get the block data for context menu
@@ -479,7 +653,6 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeDrag={onNodeDrag}
-        onNodeDragStop={onNodeDragStop}
         onSelectionChange={onSelectionChange}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
@@ -490,7 +663,12 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
+        // Feature 4: Multi-selection configuration
         multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
+        selectionKeyCode="Alt"  // Alt+Drag to draw selection rectangle
+        selectionOnDrag={true}  // Enable drag selection
+        selectionMode={SelectionMode.Partial}  // Select nodes that intersect with selection box
+        panOnDrag={[1, 2]}      // Pan with middle/right mouse button, or left without Alt
         fitView
         attributionPosition="top-right"
         className="react-flow-drop-target"
@@ -498,7 +676,20 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         nodesDraggable={true}
         elementsSelectable={true}
         onNodeClick={(event, node) => {
-          if (onBlockSelect) {
+          // Feature 4: Handle Shift+Click for toggle selection
+          if (event.shiftKey && onBlocksSelect) {
+            const currentSelection = selectedBlockIds || []
+            if (currentSelection.includes(node.id)) {
+              // Remove from selection
+              onBlocksSelect(currentSelection.filter(id => id !== node.id))
+            } else {
+              // Add to selection
+              onBlocksSelect([...currentSelection, node.id])
+            }
+          } else if (onBlocksSelect) {
+            // Single click replaces selection
+            onBlocksSelect([node.id])
+          } else if (onBlockSelect) {
             onBlockSelect(node.id)
           }
         }}
@@ -530,7 +721,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
 
         {/* Instructions Panel */}
         <Panel position="bottom-left" className="bg-blue-500 dark:bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
-          Drag blocks from the library • Click and drag to pan • Scroll to zoom • Delete key removes selection
+          Drag blocks from library • Alt+Drag to select • Shift+Click to add • Ctrl+A select all • Delete removes selection
         </Panel>
       </ReactFlow>
 
@@ -552,6 +743,18 @@ const handleEdgesChange = useCallback((changes: any[]) => {
             }
             setContextMenu(null)
           }}
+          onRenameClick={(blockId) => {
+            const block = blocks.find(b => b.id === blockId)
+            if (block) {
+              setRenameDialog({
+                blockId,
+                currentName: block.name,
+                newName: block.name,
+                error: null
+              })
+            }
+            setContextMenu(null)
+          }}
           onSheetNavigate={(sheetId) => {
             if (onSheetNavigate) {
               onSheetNavigate(sheetId)
@@ -560,8 +763,80 @@ const handleEdgesChange = useCallback((changes: any[]) => {
           }}
         />
       )}
+
+      {/* Feature 7: Rename Dialog */}
+      {renameDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-96">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Rename Block
+            </h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Block Name
+              </label>
+              <input
+                type="text"
+                value={renameDialog.newName}
+                onChange={(e) => setRenameDialog({
+                  ...renameDialog,
+                  newName: e.target.value,
+                  error: null
+                })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && renameDialog.newName.trim()) {
+                    handleRenameSubmit()
+                  } else if (e.key === 'Escape') {
+                    setRenameDialog(null)
+                  }
+                }}
+                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white ${
+                  renameDialog.error ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
+                }`}
+                autoFocus
+              />
+              {renameDialog.error && (
+                <p className="mt-1 text-sm text-red-500">{renameDialog.error}</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setRenameDialog(null)}
+                className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRenameSubmit}
+                disabled={!renameDialog.newName.trim()}
+                className="px-4 py-2 text-sm bg-blue-500 text-white hover:bg-blue-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Rename
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+
+  function handleRenameSubmit() {
+    if (!renameDialog || !renameDialog.newName.trim()) return
+
+    if (onBlockRename) {
+      const result = onBlockRename(renameDialog.blockId, renameDialog.newName.trim())
+      if (result.success) {
+        setRenameDialog(null)
+      } else {
+        setRenameDialog({
+          ...renameDialog,
+          error: result.error || 'Failed to rename block'
+        })
+      }
+    } else {
+      setRenameDialog(null)
+    }
+  }
 }
 
 // Main component wrapped with ReactFlowProvider

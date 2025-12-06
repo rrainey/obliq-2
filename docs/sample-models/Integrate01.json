@@ -1,0 +1,121 @@
+{
+  "name": "Integrate01",
+  "version": 2,
+  "created": "2025-12-03T21:21:11.741746+00:00",
+  "updated": "2025-12-03T21:23:17.378267+00:00",
+  "data": {
+    "version": "2.1",
+    "metadata": {
+      "created": "2025-12-03T21:23:32.098Z",
+      "description": "Exported from obliq-2 on 12/3/2025"
+    },
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "integrator_1764796893104",
+            "name": "Integrator1",
+            "type": "integrator",
+            "position": {
+              "x": 671,
+              "y": 464.203125
+            },
+            "parameters": {
+              "useLimits": true,
+              "lowerLimit": -1,
+              "upperLimit": 1,
+              "initialValue": 0,
+              "showResetInput": false,
+              "showEnableInput": false
+            }
+          },
+          {
+            "id": "source_1764796963758",
+            "name": "Source2",
+            "type": "source",
+            "position": {
+              "x": 496,
+              "y": 464.8046875
+            },
+            "parameters": {
+              "f0": 0.1,
+              "f1": 10,
+              "mean": 0,
+              "phase": 0,
+              "slope": 1,
+              "value": 3,
+              "offset": 0,
+              "dataType": "double",
+              "duration": 10,
+              "stepTime": 1,
+              "amplitude": 1,
+              "frequency": 1,
+              "startTime": 0,
+              "stepValue": 1,
+              "signalType": "constant",
+              "useParameter": false
+            }
+          },
+          {
+            "id": "output_port_1764796984621",
+            "name": "Output port3",
+            "type": "output_port",
+            "position": {
+              "x": 880,
+              "y": 474.3046875
+            },
+            "parameters": {
+              "portName": "Output"
+            }
+          },
+          {
+            "id": "signal_display_1764796989125",
+            "name": "Signal display4",
+            "type": "signal_display",
+            "position": {
+              "x": 903,
+              "y": 370.8046875
+            },
+            "parameters": {
+              "maxSamples": 1000
+            }
+          }
+        ],
+        "extents": {
+          "width": 1000,
+          "height": 800
+        },
+        "connections": [
+          {
+            "id": "wire_1764796965152",
+            "sourceBlockId": "source_1764796963758",
+            "targetBlockId": "integrator_1764796893104",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1764796985834",
+            "sourceBlockId": "integrator_1764796893104",
+            "targetBlockId": "output_port_1764796984621",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1764796990498",
+            "sourceBlockId": "integrator_1764796893104",
+            "targetBlockId": "signal_display_1764796989125",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          }
+        ]
+      }
+    ],
+    "parameters": [],
+    "globalSettings": {
+      "simulationTimeStep": 0.01,
+      "simulationDuration": 10
+    }
+  }
+}

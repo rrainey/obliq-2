@@ -63,6 +63,8 @@ function getBlockOutputType(block: BlockData): string | null {
     case 'sum':
     case 'multiply':
     case 'scale':
+    case 'limit':
+    case 'integrator':
     case 'transfer_function':
     case 'lookup_1d':
     case 'lookup_2d':
@@ -158,9 +160,11 @@ function determineProcessingBlockOutputType(
       return null // Type mismatch
     
     case 'scale':
-      // Scale block: output type matches input type (scalar, array, or matrix)
+    case 'limit':
+    case 'integrator':
+      // Scale/Limit/Integrator block: output type matches input type (scalar, array, or matrix)
       return typeToString(parsedTypes[0])
-    
+
     case 'transfer_function':
       // Transfer function: output type matches input type
       // Arrays and matrices are processed element-wise
@@ -888,6 +892,8 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'sum':
     case 'multiply':
     case 'scale':
+    case 'limit':
+    case 'integrator':
     case 'transfer_function':
     case 'lookup_1d':
     case 'lookup_2d':
@@ -919,12 +925,20 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'multiply':
       return 2 // Default, but can have more
     case 'scale':
+    case 'limit':
     case 'transfer_function':
     case 'signal_display':
     case 'signal_logger':
     case 'output_port':
     case 'lookup_1d':
       return 1
+    case 'integrator': {
+      // Dynamic port count based on showEnableInput/showResetInput
+      let count = 1 // Base: derivative input
+      if (block.parameters?.showEnableInput) count++
+      if (block.parameters?.showResetInput) count++
+      return count
+    }
     case 'lookup_2d':
     case 'matrix_multiply':
       return 2
@@ -1134,9 +1148,11 @@ export function getMatrixBlockOutputType(
     case 'multiply':
     case 'scale':
       return getElementWiseOutputType(block.type, parsedInputs)
-    
+
+    case 'limit':
+    case 'integrator':
     case 'transfer_function':
-      // Transfer functions process each element independently
+      // Limit, integrator, and transfer functions process each element independently
       return parsedInputs.length > 0 ? typeToString(parsedInputs[0]) : null
     
     default:

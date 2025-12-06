@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 import { BlockData } from './BlockNode'
 import { C99ExpressionParser } from '@/lib/c99ExpressionParser'
 import { C99ExpressionValidator } from '@/lib/c99ExpressionValidator'
+import { useModelStore } from '@/lib/modelStore'
 
 interface EvaluateConfigProps {
   block: BlockData
@@ -14,6 +15,7 @@ interface EvaluateConfigProps {
 }
 
 export default function EvaluateConfig({ block, onUpdate, onClose }: EvaluateConfigProps) {
+  const parameters = useModelStore((state) => state.parameters)
   const [numInputs, setNumInputs] = useState(block?.parameters?.numInputs || 2)
   const [expression, setExpression] = useState(block?.parameters?.expression || 'in(0) + in(1)')
   const [isValid, setIsValid] = useState(true)
@@ -31,16 +33,17 @@ export default function EvaluateConfig({ block, onUpdate, onClose }: EvaluateCon
       // Parse the expression
       const parser = new C99ExpressionParser(expression)
       const ast = parser.parse()
-      
-      // Validate it
-      const validator = new C99ExpressionValidator(numInputs)
+
+      // Validate it - pass parameter names for validation
+      const parameterNames = parameters.map(p => p.name)
+      const validator = new C99ExpressionValidator(numInputs, parameterNames)
       const result = validator.validate(ast)
-      
+
       setIsValid(result.valid)
       setErrors(result.errors)
       setWarnings(result.warnings)
       setUsedInputs(Array.from(result.usedInputs).sort((a, b) => a - b))
-      
+
     } catch (error) {
       setIsValid(false)
       setErrors([error instanceof Error ? error.message : 'Invalid expression'])
@@ -174,12 +177,25 @@ export default function EvaluateConfig({ block, onUpdate, onClose }: EvaluateCon
           </div>
 
           {/* Quick Reference */}
-          <div className="grid grid-cols-3 gap-4 text-xs">
+          <div className="grid grid-cols-4 gap-4 text-xs">
             <div>
               <h5 className="font-medium text-gray-900 mb-1">Input Access</h5>
               <p className="text-gray-600">• in(0) - First input</p>
               <p className="text-gray-600">• in(1) - Second input</p>
               <p className="text-gray-600">• in(n) - (n+1)th input</p>
+            </div>
+            <div>
+              <h5 className="font-medium text-gray-900 mb-1">Parameters</h5>
+              {parameters.length > 0 ? (
+                parameters.slice(0, 4).map((param) => (
+                  <p key={param.name} className="text-gray-600">• {param.name} ({param.signalType})</p>
+                ))
+              ) : (
+                <p className="text-gray-500 italic">No parameters defined</p>
+              )}
+              {parameters.length > 4 && (
+                <p className="text-gray-500">• ... and {parameters.length - 4} more</p>
+              )}
             </div>
             <div>
               <h5 className="font-medium text-gray-900 mb-1">Operators</h5>
@@ -220,12 +236,20 @@ export default function EvaluateConfig({ block, onUpdate, onClose }: EvaluateCon
           {/* Help Text */}
           <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
             <p className="text-sm text-blue-800">
-              <strong>Evaluate Block:</strong> Computes an output value using a C-style arithmetic/logical expression. 
-              Use in(n) to access the nth input (0-indexed). The expression is evaluated at each simulation step.
+              <strong>Evaluate Block:</strong> Computes an output value using a C-style arithmetic/logical expression.
+              Use in(n) to access the nth input (0-indexed). You can also reference model parameters by name.
             </p>
             <p className="text-sm text-blue-800 mt-2">
-              <strong>Example:</strong> Expression "(in(0) + in(1)) / 2" computes the average of two inputs.
+              <strong>Examples:</strong>
             </p>
+            <p className="text-sm text-blue-800">
+              • "(in(0) + in(1)) / 2" - Average of two inputs
+            </p>
+            {parameters.length > 0 && (
+              <p className="text-sm text-blue-800">
+                • "{parameters[0].name} * in(0)" - Multiply input by parameter {parameters[0].name}
+              </p>
+            )}
           </div>
         </div>
 

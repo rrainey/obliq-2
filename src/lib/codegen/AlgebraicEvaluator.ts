@@ -229,16 +229,61 @@ export class AlgebraicEvaluator {
         } else {
           code += generator.generateComputation(block.block, inputs, inputTypes)
         }
-        
+
       } catch (error) {
         code += `    /* Error generating code for ${block.block.type}: ${error} */\n`
       }
     }
-    
+
+    // Add sample storage for data collection blocks
+    code += this.generateDataCollectionStorage(executionOrder)
+
     code += '\n'
     return code
   }
   
+  /**
+   * Generate sample storage for data collection blocks
+   */
+  private generateDataCollectionStorage(executionOrder: FlattenedBlock[]): string {
+    let code = ''
+    let hasDataCollection = false
+
+    for (const block of executionOrder) {
+      try {
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
+
+        // Check if this block employs data collection
+        if (generator.employsDataCollection && generator.employsDataCollection(block.block)) {
+          if (!hasDataCollection) {
+            code += '\n    /* Store samples for data collection */\n'
+            hasDataCollection = true
+          }
+
+          // Get the input expression for this block
+          const inputs = this.getBlockInputExpressions(block, 'model', 'model')
+          if (inputs.length > 0) {
+            const inputExpression = inputs[0]
+            const inputType = this.getBlockInputTypes(block)[0] || 'double'
+
+            // Generate sample storage code
+            if (generator.generateSampleStorage) {
+              const storageCode = generator.generateSampleStorage(block.block, inputExpression, inputType)
+              if (storageCode && storageCode.trim()) {
+                code += storageCode
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Block type not supported for data collection
+        continue
+      }
+    }
+
+    return code
+  }
+
   /**
    * Get input expressions for a block
    */
@@ -347,17 +392,17 @@ export class AlgebraicEvaluator {
    */
   private getBlockInputTypes(block: FlattenedBlock): string[] {
     const types: string[] = []
-    
+
     // Find all connections to this block, sorted by target port index
     const connections = this.model.connections
       .filter(c => c.targetBlockId === block.originalId)
       .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
-    
+
     for (const connection of connections) {
       const sourceType = this.typeMap.get(connection.sourceBlockId) || 'double'
       types.push(sourceType)
     }
-    
+
     return types
   }
   

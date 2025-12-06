@@ -6,6 +6,7 @@ import { memo, CSSProperties, useEffect, useState } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
+import { IconMathIntegral, IconMathMaxMin } from '@tabler/icons-react'
 
 export interface BlockData {
   id: string
@@ -164,8 +165,27 @@ const getBlockSymbol = (data: BlockNodeData) => {
     )
   }
 
+  // Handle integrator block with Tabler icon
+  if (data.type === 'integrator') {
+    return <IconMathIntegral size={24} stroke={1.5} />
+  }
+
+  // Handle limit block with Tabler icon
+  if (data.type === 'limit') {
+    return <IconMathMaxMin size={24} stroke={1.5} />
+  }
+
   // Handle source blocks with constant values
   if (data.type === 'source' && data.parameters?.value !== undefined) {
+    // Check if this source uses a parameter reference
+    if (data.parameters.useParameter && data.parameters.parameterName) {
+      return (
+        <div className="text-sm font-mono px-1 text-purple-700 font-semibold">
+          {data.parameters.parameterName}
+        </div>
+      )
+    }
+
     const value = data.parameters.value
     // Check if it's a matrix
     if (Array.isArray(value) && value.length > 0 && Array.isArray(value[0])) {
@@ -527,6 +547,21 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
     boxShadow: '0 0 0 2px #c4b5fd',
   }
 
+  // Special style for reset handle
+  const resetHandleStyle: CSSProperties = {
+    width: 12,
+    height: 12,
+    borderRadius: '50%',
+    backgroundColor: '#dc2626', // Red color for reset
+    border: '2px solid #ffffff',
+    cursor: 'crosshair',
+  }
+
+  const resetHandleHoverStyle: CSSProperties = {
+    backgroundColor: '#ef4444',
+    boxShadow: '0 0 0 2px #fca5a5',
+  }
+
   // CSS additions for port labels
   const blockNodeStyles = `
     .port-labels {
@@ -681,8 +716,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           )}
         </div>
 
-        {/* Enable port indicator for subsystems with showEnableInput */}
-        {data.type === 'subsystem' && data.parameters?.showEnableInput && (
+        {/* Enable port indicator for blocks with showEnableInput (subsystem, integrator) */}
+        {(data.type === 'subsystem' || data.type === 'integrator') && data.parameters?.showEnableInput && (
           <div
             className="absolute text-purple-700 font-bold pointer-events-none"
             style={{
@@ -696,7 +731,22 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           </div>
         )}
 
-        
+        {/* Reset port indicator for integrator blocks with showResetInput */}
+        {data.type === 'integrator' && data.parameters?.showResetInput && (
+          <div
+            className="absolute text-red-600 font-bold pointer-events-none"
+            style={{
+              bottom: -8,
+              left: blockWidth / 2 - 6,
+              fontSize: '0.75rem',
+              transform: 'translateX(-50%)',
+            }}
+          >
+            ▲
+          </div>
+        )}
+
+
 
         {/* Main block body */}
         {(data.type === 'input_port' || data.type === 'output_port') ? (
@@ -762,8 +812,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           </div>
         ))}
 
-        {/* Enable Handle - Special port at top center for subsystems */}
-        {data.type === 'subsystem' && data.parameters?.showEnableInput && (
+        {/* Enable Handle - Special port at top center for blocks with showEnableInput (subsystem, integrator) */}
+        {(data.type === 'subsystem' || data.type === 'integrator') && data.parameters?.showEnableInput && (
           <Handle
             type="target"
             position={Position.Top}
@@ -781,6 +831,29 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             onMouseLeave={(e) => {
               const target = e.target as HTMLElement
               Object.assign(target.style, enableHandleStyle)
+            }}
+          />
+        )}
+
+        {/* Reset Handle - Special port at bottom center for integrator blocks with showResetInput */}
+        {data.type === 'integrator' && data.parameters?.showResetInput && (
+          <Handle
+            type="target"
+            position={Position.Bottom}
+            id="_reset_"
+            style={{
+              ...resetHandleStyle,
+              bottom: -6,
+              left: blockWidth / 2,
+              transform: 'translateX(-50%)',
+            }}
+            onMouseEnter={(e) => {
+              const target = e.target as HTMLElement
+              Object.assign(target.style, resetHandleHoverStyle)
+            }}
+            onMouseLeave={(e) => {
+              const target = e.target as HTMLElement
+              Object.assign(target.style, resetHandleStyle)
             }}
           />
         )}
@@ -880,17 +953,29 @@ export const blockDataToNode = (block: BlockData) => {
 
 // Helper function to convert WireData to ReactFlow edge format
 export const wireDataToEdge = (wire: any) => {
+  // Map special port indices to handle IDs
+  // -1 = enable port (top edge)
+  // -2 = reset port (bottom edge)
+  let targetHandle: string
+  if (wire.targetPortIndex === -1) {
+    targetHandle = '_enable_'
+  } else if (wire.targetPortIndex === -2) {
+    targetHandle = '_reset_'
+  } else {
+    targetHandle = `input-${wire.targetPortIndex}`
+  }
+
   const edge = {
     id: wire.id,
     source: wire.sourceBlockId,
     target: wire.targetBlockId,
     sourceHandle: `output-${wire.sourcePortIndex}`,
-    targetHandle: wire.targetPortIndex === -1 ? '_enable_' : `input-${wire.targetPortIndex}`,
+    targetHandle,
     type: 'default',
   }
-  
+
   // Important: ReactFlow needs the targetHandle to be accessible for our custom edge
-  // to detect enable connections
+  // to detect enable/reset connections
   return edge
 }
 

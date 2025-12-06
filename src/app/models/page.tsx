@@ -26,13 +26,14 @@ import {
   Loader,
   Box
 } from '@mantine/core'
-import { 
-  IconDotsVertical, 
-  IconEdit, 
-  IconTrash, 
+import {
+  IconDotsVertical,
+  IconEdit,
+  IconTrash,
   IconPlus,
   IconKey,
-  IconArrowRight
+  IconArrowRight,
+  IconCopy
 } from '@tabler/icons-react'
 
 export default function ModelsPage() {
@@ -47,8 +48,11 @@ export default function ModelsPage() {
   const [newModelName, setNewModelName] = useState('')
   const [showRenameDialog, setShowRenameDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false)
   const [selectedModel, setSelectedModel] = useState<Model | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [duplicateName, setDuplicateName] = useState('')
+  const [duplicating, setDuplicating] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -219,6 +223,68 @@ export default function ModelsPage() {
     setShowDeleteDialog(true)
   }
 
+  const openDuplicateDialog = (model: Model) => {
+    setSelectedModel(model)
+    setDuplicateName(`${model.name} (Copy)`)
+    setShowDuplicateDialog(true)
+  }
+
+  const handleDuplicate = async () => {
+    if (!selectedModel || !user || duplicating || !duplicateName.trim()) return
+
+    setDuplicating(true)
+    try {
+      // Get the selected version (or latest) for the model to duplicate
+      const selectedVersion = selectedVersions[selectedModel.id] || (selectedModel as ModelWithVersion).latest_version || 1
+
+      // Fetch the model version data to duplicate
+      const { data: versionData, error: versionError } = await supabase
+        .from('model_versions')
+        .select('data')
+        .eq('model_id', selectedModel.id)
+        .eq('version', selectedVersion)
+        .single()
+
+      if (versionError) throw versionError
+
+      // Create new model metadata
+      const { data: newModelData, error: modelError } = await supabase
+        .from('models')
+        .insert({
+          user_id: user.id,
+          name: duplicateName.trim(),
+          latest_version: 1
+        })
+        .select()
+        .single()
+
+      if (modelError) throw modelError
+
+      // Create version 1 with the duplicated data
+      const { error: newVersionError } = await supabase
+        .from('model_versions')
+        .insert({
+          model_id: newModelData.id,
+          version: 1,
+          data: versionData.data
+        })
+
+      if (newVersionError) throw newVersionError
+
+      // Refresh the models list
+      await fetchModels()
+
+      setShowDuplicateDialog(false)
+      setSelectedModel(null)
+      setDuplicateName('')
+    } catch (error) {
+      console.error('Error duplicating model:', error)
+      alert('Failed to duplicate model. Please try again.')
+    } finally {
+      setDuplicating(false)
+    }
+  }
+
   const handleVersionChange = (modelId: string, version: string | null) => {
     if (version) {
       setSelectedVersions(prev => ({ ...prev, [modelId]: parseInt(version) }))
@@ -314,6 +380,13 @@ export default function ModelsPage() {
                           >
                             Rename
                           </Menu.Item>
+                          <Menu.Item
+                            leftSection={<IconCopy size={16} />}
+                            onClick={() => openDuplicateDialog(model)}
+                          >
+                            Duplicate...
+                          </Menu.Item>
+                          <Menu.Divider />
                           <Menu.Item
                             leftSection={<IconTrash size={16} />}
                             color="red"
@@ -470,6 +543,55 @@ export default function ModelsPage() {
               onClick={handleDelete}
             >
               Delete
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Duplicate Model Modal */}
+      <Modal
+        opened={showDuplicateDialog && !!selectedModel}
+        onClose={() => {
+          setShowDuplicateDialog(false)
+          setSelectedModel(null)
+          setDuplicateName('')
+        }}
+        title="Duplicate Model"
+        centered
+      >
+        <Stack>
+          <Text size="sm" c="dimmed">
+            Create a copy of &ldquo;{selectedModel?.name}&rdquo;
+          </Text>
+          <TextInput
+            label="New Model Name"
+            value={duplicateName}
+            onChange={(e) => setDuplicateName(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && duplicateName.trim()) {
+                handleDuplicate()
+              }
+            }}
+            placeholder="Enter name for the duplicate"
+            data-autofocus
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setShowDuplicateDialog(false)
+                setSelectedModel(null)
+                setDuplicateName('')
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDuplicate}
+              disabled={!duplicateName.trim() || duplicating}
+              loading={duplicating}
+            >
+              Duplicate
             </Button>
           </Group>
         </Stack>

@@ -14,12 +14,14 @@ export class RK4Generator {
   private modelName: string
   private enableEvaluator: EnableEvaluator
   private hasEnableSubsystems: boolean
-  
-  constructor(model: FlattenedModel) {
+  private typeMap: Map<string, string>
+
+  constructor(model: FlattenedModel, typeMap: Map<string, string>) {
     this.model = model
     this.modelName = CCodeBuilder.sanitizeIdentifier(model.metadata.modelName)
     this.enableEvaluator = new EnableEvaluator(model)
     this.hasEnableSubsystems = model.subsystemEnableInfo.some(info => info.hasEnableInput)
+    this.typeMap = typeMap
   }
   
   /**
@@ -144,31 +146,31 @@ export class RK4Generator {
     block: FlattenedBlock,
     generator: any
   ): string {
-    // For transfer functions, use the generateStateDerivative method
-    if (block.block.type === 'transfer_function' && generator.generateStateDerivative) {
+    // For blocks with generateStateDerivative method (transfer_function, integrator)
+    if (generator.generateStateDerivative) {
       // Get block inputs from signals
       const inputConnections = this.model.connections
         .filter(c => c.targetBlockId === block.originalId)
         .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
-      
+
       let inputExpr = '0.0' // Default if no input
-      
+
       if (inputConnections.length > 0) {
-        const sourceBlock = this.model.blocks.find(b => 
+        const sourceBlock = this.model.blocks.find(b =>
           b.originalId === inputConnections[0].sourceBlockId
         )
-        
+
         if (sourceBlock) {
           const safeName = CCodeBuilder.sanitizeIdentifier(sourceBlock.block.name)
-          
+
           // All signals should be available in the signals struct
           inputExpr = `signals->${safeName}`
         }
       }
-      
+
       // Get output type for the block
       const outputType = this.getBlockOutputType(block)
-      
+
       // Call the module's generateStateDerivative method
       return generator.generateStateDerivative(
         block.block,
@@ -177,7 +179,7 @@ export class RK4Generator {
         outputType
       )
     }
-    
+
     // For other block types that might have states in the future
     return '    /* Derivative computation not implemented for this block type */\n'
   }
@@ -207,10 +209,16 @@ export class RK4Generator {
    * Get output type for a block
    */
   private getBlockOutputType(block: FlattenedBlock): string {
-    // This should use the type map from type propagation
+    // First check the type map from type propagation
+    const mappedType = this.typeMap.get(block.originalId)
+    if (mappedType) {
+      return mappedType
+    }
+
+    // Fall back to parameter-based type
     const dataType = block.block.parameters?.dataType
     if (dataType) return dataType
-    
+
     return 'double'
   }
 }

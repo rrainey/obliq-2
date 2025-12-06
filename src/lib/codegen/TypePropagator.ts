@@ -62,9 +62,11 @@ export class TypePropagator {
       try {
         const module = BlockModuleFactory.getBlockModule(block.block.type)
         const outputType = module.getOutputType(block.block, inputTypes)
-        
-        // Validate the output type
-        if (isValidType(outputType)) {
+
+        // Sink blocks (signal_logger, signal_display) have void output type - this is valid
+        if (outputType === 'void') {
+          this.blockOutputTypes.set(block.originalId, 'void')
+        } else if (isValidType(outputType)) {
           this.blockOutputTypes.set(block.originalId, normalizeType(outputType))
         } else {
           console.warn(`Invalid output type for block ${block.block.name}: ${outputType}`)

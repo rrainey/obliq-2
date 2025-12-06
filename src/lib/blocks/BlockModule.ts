@@ -114,7 +114,7 @@ export interface IBlockModule {
    * Compute state derivatives for this block (optional).
    * Used for blocks with continuous states that require integration.
    * This method should compute derivatives WITHOUT updating states.
-   * 
+   *
    * @param blockState - The current state of the block
    * @param inputs - Array of input values
    * @param time - Current simulation time
@@ -125,6 +125,68 @@ export interface IBlockModule {
     inputs: (number | number[] | boolean | boolean[] | number[][])[],
     time: number
   ): number[] | undefined
+
+  /**
+   * Does this block employ internal data collection during simulation?
+   * Blocks that collect data (like Signal Logger and Signal Display) allocate
+   * their own sample buffers and manage historical data storage internally.
+   *
+   * @param block - The block data
+   * @returns true if block stores historical samples internally
+   */
+  employsDataCollection?(block: BlockData): boolean
+
+  /**
+   * Get the maximum number of samples this block will store.
+   * Used to pre-allocate sample buffers during initialization.
+   *
+   * @param block - The block data containing parameters
+   * @returns Maximum sample count (default: 1000)
+   */
+  getMaxSampleCount?(block: BlockData): number
+
+  /**
+   * Generate C struct members for sample data storage.
+   * Creates declarations for sample buffer pointers, indices, and metadata.
+   * Buffer must be sized for: maxSamples × signalType
+   *
+   * @param block - The block data
+   * @param inputType - The C type of the input signal being sampled (e.g., "double", "double[3]")
+   * @returns Array of C struct member declarations for sample storage
+   */
+  generateDataCollectionStructMembers?(block: BlockData, inputType: string): string[]
+
+  /**
+   * Generate initialization code for sample buffer allocation.
+   * Called during model_init() to malloc sample arrays based on signal type.
+   * Must initialize buffer pointer, sample index, and max sample count.
+   *
+   * @param block - The block data
+   * @param inputType - The C type of the input signal (e.g., "double", "double[3]", "double[2][3]")
+   * @returns C code to allocate and initialize sample buffers
+   */
+  generateDataCollectionInit?(block: BlockData, inputType: string): string
+
+  /**
+   * Generate code to store current sample during step().
+   * Appends current input value to the sample buffer at the current index.
+   * Should check bounds and increment sample index.
+   *
+   * @param block - The block data
+   * @param inputExpression - C expression for current input value (e.g., "model->signals.Source1")
+   * @param inputType - The C type of the input signal
+   * @returns C code to store sample at current index
+   */
+  generateSampleStorage?(block: BlockData, inputExpression: string, inputType: string): string
+
+  /**
+   * Generate cleanup code to free sample buffers.
+   * Called during model destruction to prevent memory leaks.
+   *
+   * @param block - The block data
+   * @returns C code to free allocated memory
+   */
+  generateDataCollectionCleanup?(block: BlockData): string
 }
 
 /**

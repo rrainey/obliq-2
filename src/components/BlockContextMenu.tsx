@@ -16,6 +16,7 @@ interface BlockContextMenuProps {
   availableSheets?: Array<{ id: string; name: string }>
   onClose: () => void
   onPropertiesClick: (blockId: string) => void
+  onRenameClick?: (blockId: string) => void
   onSheetNavigate: (sheetId: string) => void
 }
 
@@ -29,6 +30,7 @@ export default function BlockContextMenu({
   availableSheets = [],
   onClose,
   onPropertiesClick,
+  onRenameClick,
   onSheetNavigate,
   ...props
 }: BlockContextMenuProps) {
@@ -79,6 +81,16 @@ export default function BlockContextMenu({
       >
         Properties...
       </button>
+
+      {/* Rename menu item */}
+      {onRenameClick && (
+        <button
+          className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+          onClick={() => onRenameClick(block.id)}
+        >
+          Rename...
+        </button>
+      )}
 
       {/* Subsystem sheet navigation - only show if subsystem has sheets */}
       {isSubsystem && hasSheets && (

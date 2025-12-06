@@ -5,7 +5,16 @@ import { WireData } from '@/components/Wire'
 import { SimulationResults, SimulationEngine } from '@/lib/simulationEngine'
 import { Model, ModelVersion } from '@/lib/types'
 import { supabase } from '@/lib/supabaseClient'
-import { SignalValue } from '@/lib/modelSchema'
+import { SignalValue, ModelParameter } from '@/lib/modelSchema'
+import {
+  ClipboardData,
+  PasteOptions,
+  PasteResult,
+  DependencyCheckResult,
+  CLIPBOARD_STORAGE_KEY,
+  serializeClipboard,
+  deserializeClipboard,
+} from '@/types/clipboard'
 
 export interface Sheet {
   id: string
@@ -25,15 +34,21 @@ export interface ModelState {
   isOlderVersion: boolean
   sheets: Sheet[]
   activeSheetId: string
-  
+  parameters: ModelParameter[]  // Feature 1: Model parameters
+
   // Current sheet content
   blocks: BlockData[]
   wires: WireData[]
-  
+
   // UI state
-  selectedBlockId: string | null
+  selectedBlockId: string | null  // Legacy: kept for backward compatibility
+  selectedBlockIds: string[]      // Feature 4: Multiple block selection
   selectedWireId: string | null
+  selectedWireIds: string[]       // Feature 4: Connections between selected blocks
   configBlock: BlockData | null
+
+  // Feature 5: Clipboard state
+  clipboardData: ClipboardData | null
   
   // Simulation state
   globalSimulationResults: Map<string, SimulationResults> | null
@@ -64,8 +79,8 @@ export interface ModelActions {
   setIsOlderVersion: (isOlder: boolean) => void
   setError: (error: string | null) => void
   setModelLoading: (loading: boolean) => void
-  saveModel: (globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => Promise<boolean>
-  saveAsNewModel: (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => Promise<string | null>
+  saveModel: (globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => Promise<boolean>
+  saveAsNewModel: (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => Promise<string | null>
   saveAutoSave: () => Promise<boolean>
   deleteAutoSave: () => Promise<void>
   enableAutoSave: () => void
@@ -85,15 +100,44 @@ export interface ModelActions {
   setWires: (wires: WireData[]) => void
   addBlock: (block: BlockData) => void
   updateBlock: (blockId: string, updates: Partial<BlockData>) => void
+  updateBlocks: (updates: Array<{ id: string; updates: Partial<BlockData> }>) => void  // Feature 4: Batch update
   deleteBlock: (blockId: string) => void
   addWire: (wire: WireData) => void
   deleteWire: (wireId: string) => void
+  // Feature 7: Block rename
+  renameBlock: (blockId: string, newName: string) => { success: boolean; error?: string }
+  validateBlockName: (name: string, excludeBlockId?: string) => { valid: boolean; error?: string }
   
   // Selection actions
   setSelectedBlockId: (blockId: string | null) => void
   setSelectedWireId: (wireId: string | null) => void
   setConfigBlock: (block: BlockData | null) => void
-  
+
+  // Feature 4: Multi-selection actions
+  setSelectedBlocks: (blockIds: string[]) => void
+  addToSelection: (blockIds: string[]) => void
+  removeFromSelection: (blockIds: string[]) => void
+  clearSelection: () => void
+  toggleBlockSelection: (blockId: string) => void
+  getSelectedBlocks: () => BlockData[]
+  getSelectedWires: () => WireData[]
+  getConnectionsBetweenBlocks: (blockIds: string[]) => WireData[]
+
+  // Feature 5: Clipboard actions
+  copySelection: () => ClipboardData | null
+  cutSelection: () => ClipboardData | null
+  pasteFromClipboard: (options?: PasteOptions) => PasteResult
+  checkClipboardDependencies: (clipboardData?: ClipboardData) => DependencyCheckResult
+  getClipboardData: () => ClipboardData | null
+  importMissingDependencies: (clipboardData: ClipboardData) => void
+
+  // Parameter actions (Feature 1)
+  addParameter: (param: ModelParameter) => void
+  updateParameter: (name: string, updates: Partial<ModelParameter>) => void
+  deleteParameter: (name: string) => void
+  getParameter: (name: string) => ModelParameter | undefined
+  validateParameterName: (name: string, excludeName?: string) => { valid: boolean; error?: string }
+
   // Simulation actions
   setSimulationResults: (results: SimulationResults | null) => void
   setIsSimulating: (simulating: boolean) => void
@@ -126,11 +170,15 @@ export const useModelStore = create<ModelStore>()(
     isOlderVersion: false,
     sheets: [],
     activeSheetId: 'main',
+    parameters: [],  // Feature 1: Model parameters
     blocks: [],
     wires: [],
     selectedBlockId: null,
+    selectedBlockIds: [],      // Feature 4: Multiple block selection
     selectedWireId: null,
+    selectedWireIds: [],       // Feature 4: Connections between selected blocks
     configBlock: null,
+    clipboardData: null,       // Feature 5: Clipboard state
     simulationResults: null,
     isSimulating: false,
     simulationEngine: null,
@@ -152,7 +200,7 @@ export const useModelStore = create<ModelStore>()(
     setError: (error) => set({ error }),
     setModelLoading: (modelLoading) => set({ modelLoading }),
     
-    saveModel: async (globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => {
+    saveModel: async (globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => {
       const state = get()
 
       if (!state.model) {
@@ -191,16 +239,18 @@ export const useModelStore = create<ModelStore>()(
         
         // Use provided globalSettings or defaults
         const modelData = {
-          version: "2.0",
+          version: "2.1",  // Feature 1: Updated to v2.1 for parameter support
           metadata: {
             created: updatedState.model.created_at,
             description: `Model ${updatedState.model.name}`
           },
           sheets: updatedState.sheets,
-          globalSettings: globalSettings || {
-            simulationTimeStep: 0.01,
-            simulationDuration: 10.0
-          }
+          globalSettings: {
+            simulationTimeStep: globalSettings?.simulationTimeStep ?? 0.01,
+            simulationDuration: globalSettings?.simulationDuration ?? 10.0,
+            integrationAlgorithm: globalSettings?.integrationAlgorithm ?? 'rk4'
+          },
+          parameters: updatedState.parameters  // Feature 1: Include parameters
         }
 
         // Get the next version number
@@ -276,37 +326,39 @@ export const useModelStore = create<ModelStore>()(
       }
     },
 
-    saveAsNewModel: async (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number }) => {
+    saveAsNewModel: async (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => {
       const state = get()
-      
+
       if (!state.model) {
         set({ error: 'No model to save' })
         return null
       }
 
       set({ saving: true, error: null })
-      
+
       try {
         // Ensure current sheet data is saved
         get().saveCurrentSheetData()
-        
+
         const updatedState = get()
         if (!updatedState.model) {
           set({ error: 'Model was lost during save preparation', saving: false })
           return null
         }
-        
+
         const modelData = {
-          version: "2.0",
+          version: "2.1",  // Feature 1: Updated to v2.1 for parameter support
           metadata: {
             created: new Date().toISOString(),
             description: `Model ${newName}`
           },
           sheets: updatedState.sheets,
-          globalSettings: globalSettings || {
-            simulationTimeStep: 0.01,
-            simulationDuration: 10.0
-          }
+          globalSettings: {
+            simulationTimeStep: globalSettings?.simulationTimeStep ?? 0.01,
+            simulationDuration: globalSettings?.simulationDuration ?? 10.0,
+            integrationAlgorithm: globalSettings?.integrationAlgorithm ?? 'rk4'
+          },
+          parameters: updatedState.parameters  // Feature 1: Include parameters
         }
 
         // Create new model metadata
@@ -376,14 +428,26 @@ export const useModelStore = create<ModelStore>()(
 
       try {
         // Ensure current sheet data is saved
+        console.log('[saveAutoSave] Calling saveCurrentSheetData...')
         get().saveCurrentSheetData()
-        
+
         const updatedState = get()
         if (!updatedState.model) {
           console.error('Model was lost during auto-save preparation')
           return false
         }
-        
+
+        // Debug: Log the blocks being saved
+        console.log('[saveAutoSave] Sheets to save:', updatedState.sheets.length)
+        updatedState.sheets.forEach((sheet, i) => {
+          console.log(`[saveAutoSave] Sheet ${i} (${sheet.name}): ${sheet.blocks.length} blocks`)
+          sheet.blocks.forEach(block => {
+            if (block.type === 'source') {
+              console.log(`[saveAutoSave]   Source block "${block.name}":`, JSON.stringify(block.parameters))
+            }
+          })
+        })
+
         const modelData = {
           version: "1.0",
           metadata: {
@@ -393,10 +457,11 @@ export const useModelStore = create<ModelStore>()(
           sheets: updatedState.sheets,
           globalSettings: {
             simulationTimeStep: 0.01,
-            simulationDuration: 10.0
+            simulationDuration: 10.0,
+            integrationAlgorithm: 'rk4'
           }
         }
-        
+
         // Check if auto-save (version 0) already exists
         const { data: existingAutoSave, error: checkError } = await supabase
           .from('model_versions')
@@ -484,7 +549,8 @@ export const useModelStore = create<ModelStore>()(
           sheets,
           globalSettings: {
             simulationTimeStep: 0.01,
-            simulationDuration: 10
+            simulationDuration: 10,
+            integrationAlgorithm: 'rk4'
           }
         }
 
@@ -598,6 +664,18 @@ export const useModelStore = create<ModelStore>()(
       isDirty: true
     })),
 
+    // Feature 4: Batch update multiple blocks at once (for multi-block move)
+    updateBlocks: (updates) => set((state) => {
+      const updateMap = new Map(updates.map(u => [u.id, u.updates]))
+      return {
+        blocks: state.blocks.map(block => {
+          const blockUpdates = updateMap.get(block.id)
+          return blockUpdates ? { ...block, ...blockUpdates } : block
+        }),
+        isDirty: true
+      }
+    }),
+
     deleteBlock: (blockId) => set((state) => ({
       blocks: state.blocks.filter(block => block.id !== blockId),
       wires: state.wires.filter(wire => 
@@ -616,11 +694,562 @@ export const useModelStore = create<ModelStore>()(
       isDirty: true
     })),
 
+    // Feature 7: Block name validation
+    validateBlockName: (name: string, excludeBlockId?: string) => {
+      const state = get()
+
+      // Check if name is empty
+      if (!name || !name.trim()) {
+        return { valid: false, error: 'Block name cannot be empty' }
+      }
+
+      // Check if name is valid identifier
+      const identifierRegex = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+      if (!identifierRegex.test(name)) {
+        return {
+          valid: false,
+          error: 'Block name must be a valid identifier (alphanumeric + underscore, start with letter or underscore)'
+        }
+      }
+
+      // Check uniqueness among blocks on the current sheet (excluding the block being renamed)
+      const nameExists = state.blocks.some(
+        block => block.name === name && block.id !== excludeBlockId
+      )
+      if (nameExists) {
+        return { valid: false, error: `Block name "${name}" already exists on this sheet` }
+      }
+
+      // Check against parameter names (only for top-level sheets)
+      // Get current sheet to check if it's top-level
+      const currentSheet = state.sheets.find(s => s.id === state.activeSheetId)
+      const isTopLevel = currentSheet && !state.sheets.some(
+        sheet => sheet.blocks?.some(
+          b => b.type === 'subsystem' && b.parameters?.sheets?.some((ss: Sheet) => ss.id === state.activeSheetId)
+        )
+      )
+
+      if (isTopLevel) {
+        const paramConflict = state.parameters.some(param => param.name === name)
+        if (paramConflict) {
+          return { valid: false, error: `Block name "${name}" conflicts with a model parameter` }
+        }
+      }
+
+      return { valid: true }
+    },
+
+    // Feature 7: Block rename with reference updates
+    renameBlock: (blockId: string, newName: string) => {
+      const state = get()
+      const block = state.blocks.find(b => b.id === blockId)
+
+      if (!block) {
+        return { success: false, error: 'Block not found' }
+      }
+
+      // Validate the new name
+      const validation = get().validateBlockName(newName, blockId)
+      if (!validation.valid) {
+        return { success: false, error: validation.error }
+      }
+
+      // Update the block name
+      set((state) => {
+        const newBlocks = state.blocks.map(b =>
+          b.id === blockId ? { ...b, name: newName } : b
+        )
+        return {
+          blocks: newBlocks,
+          isDirty: true
+        }
+      })
+
+      return { success: true }
+    },
+
+    // Parameter actions (Feature 1)
+    addParameter: (param) => set((state) => {
+      // Validate before adding
+      const validation = get().validateParameterName(param.name)
+      if (!validation.valid) {
+        console.error(`Cannot add parameter: ${validation.error}`)
+        return state // Return unchanged state
+      }
+      return {
+        parameters: [...state.parameters, param],
+        isDirty: true
+      }
+    }),
+
+    updateParameter: (name, updates) => set((state) => {
+      // If name is being updated, validate the new name
+      if (updates.name && updates.name !== name) {
+        const validation = get().validateParameterName(updates.name, name)
+        if (!validation.valid) {
+          console.error(`Cannot update parameter: ${validation.error}`)
+          return state // Return unchanged state
+        }
+      }
+
+      return {
+        parameters: state.parameters.map(param =>
+          param.name === name ? { ...param, ...updates } : param
+        ),
+        isDirty: true
+      }
+    }),
+
+    deleteParameter: (name) => set((state) => ({
+      parameters: state.parameters.filter(param => param.name !== name),
+      isDirty: true
+    })),
+
+    getParameter: (name) => {
+      const state = get()
+      return state.parameters.find(param => param.name === name)
+    },
+
+    validateParameterName: (name, excludeName) => {
+      const state = get()
+
+      // Check if name is empty
+      if (!name || name.trim() === '') {
+        return { valid: false, error: 'Parameter name cannot be empty' }
+      }
+
+      // Check if name is valid identifier
+      const identifierRegex = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+      if (!identifierRegex.test(name)) {
+        return {
+          valid: false,
+          error: 'Parameter name must be a valid identifier (alphanumeric + underscore, start with letter or underscore)'
+        }
+      }
+
+      // Check uniqueness among parameters (excluding the parameter being updated)
+      const exists = state.parameters.some(
+        param => param.name === name && param.name !== excludeName
+      )
+      if (exists) {
+        return { valid: false, error: `Parameter name "${name}" already exists` }
+      }
+
+      // Check against top-level block names (only check blocks on top-level sheets)
+      for (const sheet of state.sheets) {
+        for (const block of sheet.blocks) {
+          if (block.name === name) {
+            return {
+              valid: false,
+              error: `Parameter name "${name}" conflicts with a block name`
+            }
+          }
+        }
+      }
+
+      return { valid: true }
+    },
 
     // Selection actions
-    setSelectedBlockId: (selectedBlockId) => set({ selectedBlockId }),
+    setSelectedBlockId: (selectedBlockId) => set({
+      selectedBlockId,
+      // Keep selectedBlockIds in sync for backward compatibility
+      selectedBlockIds: selectedBlockId ? [selectedBlockId] : []
+    }),
     setSelectedWireId: (selectedWireId) => set({ selectedWireId }),
     setConfigBlock: (configBlock) => set({ configBlock }),
+
+    // Feature 4: Multi-selection actions
+    setSelectedBlocks: (blockIds: string[]) => {
+      const state = get()
+      // Find connections between selected blocks
+      const selectedWireIds = state.wires
+        .filter(wire =>
+          blockIds.includes(wire.sourceBlockId) &&
+          blockIds.includes(wire.targetBlockId)
+        )
+        .map(wire => wire.id)
+
+      set({
+        selectedBlockIds: blockIds,
+        selectedBlockId: blockIds.length === 1 ? blockIds[0] : null,
+        selectedWireIds
+      })
+    },
+
+    addToSelection: (blockIds: string[]) => {
+      const state = get()
+      const newSelection = [...new Set([...state.selectedBlockIds, ...blockIds])]
+
+      // Find connections between selected blocks
+      const selectedWireIds = state.wires
+        .filter(wire =>
+          newSelection.includes(wire.sourceBlockId) &&
+          newSelection.includes(wire.targetBlockId)
+        )
+        .map(wire => wire.id)
+
+      set({
+        selectedBlockIds: newSelection,
+        selectedBlockId: newSelection.length === 1 ? newSelection[0] : null,
+        selectedWireIds
+      })
+    },
+
+    removeFromSelection: (blockIds: string[]) => {
+      const state = get()
+      const newSelection = state.selectedBlockIds.filter(id => !blockIds.includes(id))
+
+      // Find connections between selected blocks
+      const selectedWireIds = state.wires
+        .filter(wire =>
+          newSelection.includes(wire.sourceBlockId) &&
+          newSelection.includes(wire.targetBlockId)
+        )
+        .map(wire => wire.id)
+
+      set({
+        selectedBlockIds: newSelection,
+        selectedBlockId: newSelection.length === 1 ? newSelection[0] : null,
+        selectedWireIds
+      })
+    },
+
+    clearSelection: () => set({
+      selectedBlockIds: [],
+      selectedBlockId: null,
+      selectedWireIds: [],
+      selectedWireId: null
+    }),
+
+    toggleBlockSelection: (blockId: string) => {
+      const state = get()
+      const isSelected = state.selectedBlockIds.includes(blockId)
+
+      if (isSelected) {
+        get().removeFromSelection([blockId])
+      } else {
+        get().addToSelection([blockId])
+      }
+    },
+
+    getSelectedBlocks: () => {
+      const state = get()
+      return state.blocks.filter(block => state.selectedBlockIds.includes(block.id))
+    },
+
+    getSelectedWires: () => {
+      const state = get()
+      return state.wires.filter(wire => state.selectedWireIds.includes(wire.id))
+    },
+
+    getConnectionsBetweenBlocks: (blockIds: string[]) => {
+      const state = get()
+      return state.wires.filter(wire =>
+        blockIds.includes(wire.sourceBlockId) &&
+        blockIds.includes(wire.targetBlockId)
+      )
+    },
+
+    // Feature 5: Clipboard actions
+    copySelection: () => {
+      const state = get()
+      const selectedBlocks = state.blocks.filter(b => state.selectedBlockIds.includes(b.id))
+
+      if (selectedBlocks.length === 0) {
+        return null
+      }
+
+      // Get wires between selected blocks
+      const selectedBlockIdSet = new Set(state.selectedBlockIds)
+      const selectedWires = state.wires.filter(
+        w => selectedBlockIdSet.has(w.sourceBlockId) && selectedBlockIdSet.has(w.targetBlockId)
+      )
+
+      // Find parameter dependencies
+      const referencedParamNames = new Set<string>()
+
+      for (const block of selectedBlocks) {
+        // Check Source blocks with parameter references
+        if (block.type === 'source' && block.parameters?.useParameter && block.parameters?.parameterName) {
+          referencedParamNames.add(block.parameters.parameterName)
+        }
+
+        // Check Evaluate blocks for parameter names in expressions
+        if (block.type === 'evaluate' && block.parameters?.expression) {
+          // Simple regex to find identifiers that might be parameters
+          const expression = block.parameters.expression as string
+          const identifierRegex = /\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g
+          let match
+          while ((match = identifierRegex.exec(expression)) !== null) {
+            const name = match[1]
+            // Exclude common keywords and functions
+            const reserved = ['in', 'sin', 'cos', 'tan', 'sqrt', 'abs', 'pow', 'exp', 'log', 'floor', 'ceil', 'fabs', 'fmod']
+            if (!reserved.includes(name) && !name.startsWith('in')) {
+              // Check if it's an actual parameter
+              if (state.parameters.some(p => p.name === name)) {
+                referencedParamNames.add(name)
+              }
+            }
+          }
+        }
+      }
+
+      const referencedParameters = state.parameters.filter(p => referencedParamNames.has(p.name))
+
+      // Find subsystem sheet dependencies
+      const subsystemSheets: Sheet[] = []
+      for (const block of selectedBlocks) {
+        if (block.type === 'subsystem' && block.parameters?.sheets) {
+          subsystemSheets.push(...(block.parameters.sheets as Sheet[]))
+        }
+      }
+
+      // Create clipboard data
+      const clipboardData: ClipboardData = {
+        version: '1.0',
+        sourceModelId: state.model?.id,
+        sourceSheetId: state.activeSheetId,
+        timestamp: Date.now(),
+        blocks: JSON.parse(JSON.stringify(selectedBlocks)), // Deep clone
+        wires: JSON.parse(JSON.stringify(selectedWires)),   // Deep clone
+        dependencies: {
+          parameters: referencedParameters,
+          subsystemSheets: subsystemSheets.length > 0 ? subsystemSheets : undefined,
+        },
+      }
+
+      // Store in state and localStorage for cross-tab support
+      set({ clipboardData })
+      try {
+        localStorage.setItem(CLIPBOARD_STORAGE_KEY, serializeClipboard(clipboardData))
+      } catch (e) {
+        console.warn('Failed to save clipboard to localStorage:', e)
+      }
+
+      return clipboardData
+    },
+
+    cutSelection: () => {
+      const state = get()
+      const clipboardData = get().copySelection()
+
+      if (!clipboardData) {
+        return null
+      }
+
+      // Delete selected blocks (this will also delete connected wires via deleteBlock)
+      const selectedIds = [...state.selectedBlockIds]
+      for (const blockId of selectedIds) {
+        get().deleteBlock(blockId)
+      }
+
+      // Clear selection
+      get().clearSelection()
+
+      return clipboardData
+    },
+
+    checkClipboardDependencies: (clipboardData?: ClipboardData): DependencyCheckResult => {
+      const state = get()
+      const data = clipboardData || state.clipboardData || get().getClipboardData()
+
+      if (!data) {
+        return {
+          missingParameters: [],
+          missingSubsystems: [],
+          allSatisfied: true,
+        }
+      }
+
+      // Check for missing parameters
+      const currentParamNames = new Set(state.parameters.map(p => p.name))
+      const missingParameters = data.dependencies.parameters.filter(
+        p => !currentParamNames.has(p.name)
+      )
+
+      // Check for missing subsystem sheets (if pasting subsystems)
+      const missingSubsystems: string[] = []
+      // Subsystems are self-contained in clipboard, so they don't need to be checked
+      // against existing sheets
+
+      return {
+        missingParameters,
+        missingSubsystems,
+        allSatisfied: missingParameters.length === 0 && missingSubsystems.length === 0,
+      }
+    },
+
+    getClipboardData: (): ClipboardData | null => {
+      const state = get()
+
+      // First check local state
+      if (state.clipboardData) {
+        return state.clipboardData
+      }
+
+      // Then check localStorage for cross-tab clipboard
+      try {
+        const stored = localStorage.getItem(CLIPBOARD_STORAGE_KEY)
+        if (stored) {
+          const data = deserializeClipboard(stored)
+          if (data) {
+            // Update local state with loaded clipboard
+            set({ clipboardData: data })
+            return data
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load clipboard from localStorage:', e)
+      }
+
+      return null
+    },
+
+    importMissingDependencies: (clipboardData: ClipboardData) => {
+      const state = get()
+
+      // Import missing parameters
+      const currentParamNames = new Set(state.parameters.map(p => p.name))
+      for (const param of clipboardData.dependencies.parameters) {
+        if (!currentParamNames.has(param.name)) {
+          get().addParameter(param)
+        }
+      }
+    },
+
+    pasteFromClipboard: (options?: PasteOptions): PasteResult => {
+      const state = get()
+      const clipboardData = state.clipboardData || get().getClipboardData()
+
+      if (!clipboardData || clipboardData.blocks.length === 0) {
+        return {
+          success: false,
+          pastedBlockIds: [],
+          pastedWireIds: [],
+          error: 'Clipboard is empty',
+        }
+      }
+
+      // Check dependencies
+      const depCheck = get().checkClipboardDependencies(clipboardData)
+      if (!depCheck.allSatisfied) {
+        // If auto-import is enabled, import missing dependencies
+        if (options?.importMissingParameters) {
+          get().importMissingDependencies(clipboardData)
+        } else {
+          return {
+            success: false,
+            pastedBlockIds: [],
+            pastedWireIds: [],
+            error: 'Missing dependencies',
+            dependencyIssues: depCheck,
+          }
+        }
+      }
+
+      // Calculate position offset
+      const offset = options?.offset || { x: 20, y: 20 }
+
+      // If pasting on same sheet, use offset; otherwise use position or default
+      const isSameSheet = clipboardData.sourceSheetId === state.activeSheetId
+      let baseOffset = offset
+
+      if (options?.position) {
+        // Calculate offset from clipboard block centroid to target position
+        const blocks = clipboardData.blocks
+        const centerX = blocks.reduce((sum, b) => sum + b.position.x, 0) / blocks.length
+        const centerY = blocks.reduce((sum, b) => sum + b.position.y, 0) / blocks.length
+        baseOffset = {
+          x: options.position.x - centerX,
+          y: options.position.y - centerY,
+        }
+      } else if (isSameSheet) {
+        // Default offset for same-sheet paste
+        baseOffset = { x: 20, y: 20 }
+      }
+
+      // Generate new IDs and map old -> new
+      const blockIdMap = new Map<string, string>()
+      const wireIdMap = new Map<string, string>()
+
+      // Build a set of existing block names for duplicate detection
+      const existingNames = new Set(state.blocks.map(b => b.name))
+
+      // Helper to generate a unique block name
+      const generateUniqueName = (blockType: string, originalName: string): string => {
+        // If the original name doesn't conflict, keep it
+        if (!existingNames.has(originalName)) {
+          existingNames.add(originalName)  // Reserve this name
+          return originalName
+        }
+
+        // Generate a new name: <BlockType><next index>
+        const baseName = blockType.charAt(0).toUpperCase() + blockType.slice(1).replace('_', ' ')
+        let index = state.blocks.filter(b => b.type === blockType).length + 1
+
+        // Find the next available index
+        let newName = `${baseName}${index}`
+        while (existingNames.has(newName)) {
+          index++
+          newName = `${baseName}${index}`
+        }
+
+        existingNames.add(newName)  // Reserve this name
+        return newName
+      }
+
+      // Clone and transform blocks
+      const newBlocks: BlockData[] = clipboardData.blocks.map(block => {
+        const newId = `${block.type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        blockIdMap.set(block.id, newId)
+
+        // Generate unique name if there's a conflict
+        const newName = generateUniqueName(block.type, block.name)
+
+        const newBlock: BlockData = {
+          ...JSON.parse(JSON.stringify(block)), // Deep clone
+          id: newId,
+          name: newName,
+          position: {
+            x: block.position.x + baseOffset.x,
+            y: block.position.y + baseOffset.y,
+          },
+        }
+
+        return newBlock
+      })
+
+      // Clone and remap wires
+      const newWires: WireData[] = clipboardData.wires.map(wire => {
+        const newId = `wire_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        wireIdMap.set(wire.id, newId)
+
+        return {
+          ...wire,
+          id: newId,
+          sourceBlockId: blockIdMap.get(wire.sourceBlockId) || wire.sourceBlockId,
+          targetBlockId: blockIdMap.get(wire.targetBlockId) || wire.targetBlockId,
+        }
+      })
+
+      // Add blocks and wires to current sheet
+      for (const block of newBlocks) {
+        get().addBlock(block)
+      }
+      for (const wire of newWires) {
+        get().addWire(wire)
+      }
+
+      // Select newly pasted blocks
+      get().setSelectedBlocks(newBlocks.map(b => b.id))
+
+      return {
+        success: true,
+        pastedBlockIds: newBlocks.map(b => b.id),
+        pastedWireIds: newWires.map(w => w.id),
+      }
+    },
 
     // Simulation actions
     setSimulationResults: (simulationResults) => set({ simulationResults }),
@@ -710,7 +1339,7 @@ export const useModelStore = create<ModelStore>()(
 
     saveCurrentSheetData: () => {
       const state = get()
-      
+
       // Helper to recursively update a specific sheet
       const updateSheetRecursively = (sheets: Sheet[]): Sheet[] => {
         return sheets.map(sheet => {
@@ -826,7 +1455,7 @@ export const useModelStore = create<ModelStore>()(
         // Convert flat sheet structure to hierarchical structure
         const hierarchicalData = migrateToHierarchicalSheets(versionData.data)
         const sheets = hierarchicalData.sheets
-        
+
         // Data integrity check - model must have at least one sheet
         if (sheets.length === 0) {
           set({
@@ -835,16 +1464,20 @@ export const useModelStore = create<ModelStore>()(
           })
           return
         }
-        
+
         const firstSheetId = sheets[0].id
         const firstSheet = sheets[0]
-        
+
+        // Feature 1: Load parameters from model data (defaults to empty array for backward compatibility)
+        const parameters = versionData.data.parameters || []
+
         set({
           model,
           currentVersion: versionData.version,
           isOlderVersion: versionData.version < model.latest_version,
           sheets,
           activeSheetId: firstSheetId,
+          parameters,  // Feature 1: Load parameters
           blocks: firstSheet?.blocks || [],
           wires: firstSheet?.connections || [],
           selectedBlockId: null,

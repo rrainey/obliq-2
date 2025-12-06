@@ -48,9 +48,11 @@ export class C99ExpressionValidator {
   private hasFloatOperations: boolean = false
   private usesMathFunctions: boolean = false
   private numInputs: number
+  private parameterNames: string[]
 
-  constructor(numInputs: number) {
+  constructor(numInputs: number, parameterNames: string[] = []) {
     this.numInputs = numInputs
+    this.parameterNames = parameterNames
   }
 
   validate(expr: Expression): ValidationResult {
@@ -85,7 +87,11 @@ export class C99ExpressionValidator {
         break
 
       case 'Identifier':
-        this.errors.push(`Unexpected identifier '${expr.name}'. Only in(n) functions, math functions, and literals are allowed.`)
+        // Check if this is a valid parameter name
+        if (!this.parameterNames.includes(expr.name)) {
+          this.errors.push(`Unknown identifier '${expr.name}'. Expected a model parameter, in(n) function, or literal.`)
+        }
+        // Valid parameter reference - no error
         break
 
       case 'BinaryExpression':

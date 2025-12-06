@@ -5,27 +5,27 @@ import { BlockState, SimulationState } from '@/lib/simulationEngine'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class TransferFunctionBlockModule implements IBlockModule {
-  generateComputation(block: BlockData, inputs: string[]): string {
+  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     const tfName = BlockModuleUtils.sanitizeIdentifier(block.name)
     const denominator = block.parameters?.denominator || [1, 1]
     const stateOrder = Math.max(0, denominator.length - 1)
-    
+
     let code = `    // Transfer function block: ${block.name}\n`
-    
+
     if (inputs.length === 0) {
       code += `    ${outputName} = 0.0; // No input\n`
       return code
     }
-    
+
     if (stateOrder === 0) {
       // Pure gain (no dynamics)
       const numerator = block.parameters?.numerator || [1]
       const gain = (numerator[0] || 0) / (denominator[0] || 1)
       const inputExpr = inputs[0]
-      
+
       // Get type info for proper handling
-      const outputType = this.getOutputType(block, [])
+      const outputType = this.getOutputType(block, inputTypes || [])
       const typeInfo = BlockModuleUtils.parseType(outputType)
       
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
@@ -45,7 +45,7 @@ export class TransferFunctionBlockModule implements IBlockModule {
       }
     } else {
       // Dynamic system - output equals first state
-      const outputType = this.getOutputType(block, [])
+      const outputType = this.getOutputType(block, inputTypes || [])
       const typeInfo = BlockModuleUtils.parseType(outputType)
       
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {

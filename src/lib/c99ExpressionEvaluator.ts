@@ -5,9 +5,11 @@ import { Expression, NumberLiteral, BinaryExpression, UnaryExpression,
 
 export class C99ExpressionEvaluator {
   private inputs: number[]
+  private parameters: Map<string, number>
 
-  constructor(inputs: number[]) {
+  constructor(inputs: number[], parameters: Map<string, number> = new Map()) {
     this.inputs = inputs
+    this.parameters = parameters
   }
 
   evaluate(expr: Expression): number {
@@ -16,7 +18,12 @@ export class C99ExpressionEvaluator {
         return expr.value
 
       case 'Identifier':
-        throw new Error(`Unexpected identifier: ${expr.name}`)
+        // Look up parameter value
+        const paramValue = this.parameters.get(expr.name)
+        if (paramValue === undefined) {
+          throw new Error(`Parameter '${expr.name}' not found`)
+        }
+        return paramValue
 
       case 'BinaryExpression':
         return this.evaluateBinary(expr)

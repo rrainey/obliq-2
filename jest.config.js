@@ -20,6 +20,11 @@ const config = {
     '**/__tests__/**/*.(js|jsx|ts|tsx)',
     '**/*.(test|spec).(js|jsx|ts|tsx)'
   ],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/__tests__/wasm/fixtures/hello.js',
+    '/__tests__/wasm/fixtures/model-output/'
+  ],
   collectCoverageFrom: [
     'lib/**/*.{js,jsx,ts,tsx}',
     'components/**/*.{js,jsx,ts,tsx}',

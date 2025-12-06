@@ -15,6 +15,7 @@ const PositionSchema = z.object({
 // Signal type schema as C-language types
 const SignalTypeSchema = z.enum(['float', 'double', 'long', 'bool'])
   .or(z.string().regex(/^(float|double|long|bool)\[\d+\]$/, 'Invalid array type syntax'))
+  .or(z.string().regex(/^(float|double|long|bool)\[\d+\]\[\d+\]$/, 'Invalid matrix type syntax'))
 
 // Forward declaration for recursive schema
 const SheetSchema: z.ZodType<any> = z.lazy(() => SheetSchemaDefinition)
@@ -51,7 +52,7 @@ const BlockSchema = z.discriminatedUnion('type', [
     type: z.enum([
       'sum', 'multiply', 'transfer_function', 'signal_display', 'signal_logger',
       'input_port', 'output_port', 'source', 'scale', 'lookup_1d', 'lookup_2d',
-      'sheet_label_sink', 'sheet_label_source', 'trig'
+      'sheet_label_sink', 'sheet_label_source', 'trig', 'integrator'
     ]),
     name: z.string().min(1, 'Block name cannot be empty'),
     position: PositionSchema,
@@ -108,10 +109,14 @@ const SheetSchemaDefinition = z.object({
   signalTypes: z.record(z.string(), SignalTypeInfoSchema).optional()
 })
 
+// Integration algorithm schema
+const IntegrationAlgorithmSchema = z.enum(['euler', 'rk4']).default('rk4')
+
 // Global settings schema
 const GlobalSettingsSchema = z.object({
   simulationTimeStep: z.number().positive('Simulation time step must be positive'),
-  simulationDuration: z.number().positive('Simulation duration must be positive')
+  simulationDuration: z.number().positive('Simulation duration must be positive'),
+  integrationAlgorithm: IntegrationAlgorithmSchema.optional().default('rk4')
 })
 
 // Metadata schema
@@ -120,12 +125,61 @@ const MetadataSchema = z.object({
   description: z.string().optional()
 })
 
+// Model parameter schema (Feature 1)
+const ModelParameterSchema = z.object({
+  name: z.string()
+    .min(1, 'Parameter name cannot be empty')
+    .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, 'Parameter name must be a valid identifier (alphanumeric + underscore, no spaces)'),
+  signalType: SignalTypeSchema,
+  value: z.union([
+    z.number(),                          // Scalar
+    z.array(z.number()),                 // Vector
+    z.array(z.array(z.number()))         // Matrix
+  ])
+})
+
 // Main model data schema - only contains root-level sheets
 export const ModelDataSchema = z.object({
-  version: z.enum(['1.0', '2.0']).default('1.0'), // Support both versions
+  version: z.enum(['1.0', '2.0', '2.1']).default('2.0'), // Support v1.0, v2.0, v2.1 (with parameters)
   metadata: MetadataSchema,
   sheets: z.array(SheetSchema).min(1, 'Model must have at least one sheet'),
-  globalSettings: GlobalSettingsSchema
+  globalSettings: GlobalSettingsSchema,
+  parameters: z.array(ModelParameterSchema).optional().default([]) // Feature 1: Model parameters
+}).superRefine((data, ctx) => {
+  // Validate parameter names are unique
+  if (data.parameters && data.parameters.length > 0) {
+    const names = new Set<string>()
+    for (let i = 0; i < data.parameters.length; i++) {
+      const param = data.parameters[i]
+      if (names.has(param.name)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Duplicate parameter name: "${param.name}". Parameter names must be unique.`,
+          path: ['parameters', i, 'name']
+        })
+      }
+      names.add(param.name)
+    }
+
+    // Validate parameter names don't conflict with top-level block names
+    const topLevelBlockNames = new Set<string>()
+    for (const sheet of data.sheets) {
+      for (const block of sheet.blocks) {
+        topLevelBlockNames.add(block.name)
+      }
+    }
+
+    for (let i = 0; i < data.parameters.length; i++) {
+      const param = data.parameters[i]
+      if (topLevelBlockNames.has(param.name)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Parameter name "${param.name}" conflicts with a top-level block name. Parameter names must not conflict with block names.`,
+          path: ['parameters', i, 'name']
+        })
+      }
+    }
+  }
 })
 
 // Complete model schema (as stored in database)
@@ -140,12 +194,14 @@ export const ModelSchema = z.object({
 
 // Type exports
 export type ModelData = z.infer<typeof ModelDataSchema>
+export type ModelParameter = z.infer<typeof ModelParameterSchema>
 export type Block = z.infer<typeof BlockSchema>
 export type Wire = z.infer<typeof WireSchema>
 export type Sheet = z.infer<typeof SheetSchemaDefinition>
 export type Position = z.infer<typeof PositionSchema>
 export type Extents = z.infer<typeof ExtentsSchema>
 export type GlobalSettings = z.infer<typeof GlobalSettingsSchema>
+export type IntegrationAlgorithm = z.infer<typeof IntegrationAlgorithmSchema>
 export type Metadata = z.infer<typeof MetadataSchema>
 export type SignalType = z.infer<typeof SignalTypeSchema>
 export type SignalTypeInfo = z.infer<typeof SignalTypeInfoSchema>

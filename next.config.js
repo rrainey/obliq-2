@@ -2,6 +2,23 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   webpack: (config, { isServer }) => {
+    // Configure Web Workers and WebAssembly support
+    if (!isServer) {
+      // Enable Web Workers with webpack 5 (native support)
+      config.output.webassemblyModuleFilename = 'static/wasm/[modulehash].wasm'
+
+      // Enable experimental features for workers and WASM
+      config.experiments = {
+        ...config.experiments,
+        asyncWebAssembly: true,
+        layers: true,
+        topLevelAwait: true
+      }
+
+      // Ensure worker files are treated as separate entry points
+      config.output.globalObject = 'self'
+    }
+
     // Optimize cache strategy for large files
     if (!isServer) {
       config.cache = {

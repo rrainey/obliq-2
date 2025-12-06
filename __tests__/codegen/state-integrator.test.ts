@@ -4,6 +4,9 @@ import { StateIntegrator } from '@/lib/codegen/StateIntegrator'
 import { FlattenedModel } from '@/lib/codegen/ModelFlattener'
 
 describe('StateIntegrator', () => {
+  // Default empty type map for tests
+  const emptyTypeMap = new Map<string, string>()
+
   const mockModel: FlattenedModel = {
     blocks: [],
     blockMap: new Map(),
@@ -18,26 +21,26 @@ describe('StateIntegrator', () => {
       maxNestingDepth: 1
     }
   }
-  
+
   test('can instantiate class', () => {
-    const integrator = new StateIntegrator(mockModel)
+    const integrator = new StateIntegrator(mockModel, emptyTypeMap)
     expect(integrator).toBeDefined()
   })
-  
+
   test('generateEulerIntegration returns comment when no stateful blocks', () => {
-    const integrator = new StateIntegrator(mockModel)
+    const integrator = new StateIntegrator(mockModel, emptyTypeMap)
     const result = integrator.generateEulerIntegration()
-    
+
     expect(result).toContain('No state integration needed')
   })
-  
+
   test('hasStatefulBlocks returns false for empty model', () => {
-    const integrator = new StateIntegrator(mockModel)
+    const integrator = new StateIntegrator(mockModel, emptyTypeMap)
     expect(integrator.hasStatefulBlocks()).toBe(false)
   })
-  
+
   test('accepts options in constructor', () => {
-    const integrator = new StateIntegrator(mockModel, {
+    const integrator = new StateIntegrator(mockModel, emptyTypeMap, {
       includeComments: false,
       checkEnableStates: false
     })
@@ -66,19 +69,19 @@ describe('StateIntegrator', () => {
         originalId: 'tf1'
       }]
     }
-    
-    const integrator = new StateIntegrator(modelWithStates)
+
+    const integrator = new StateIntegrator(modelWithStates, emptyTypeMap)
     const result = integrator.generateEulerIntegration()
-    
+
     // Check that derivatives are calculated
     expect(result).toContain('Calculate derivatives')
     expect(result).toContain('test_model_derivatives')
-    
+
     // Check that states are updated
     expect(result).toContain('Update states using Euler method')
     expect(result).toContain('model->states.')
     expect(result).toContain('model->dt * derivatives.')
-    
+
     // Check for the state update loop
     expect(result).toContain('for (int i = 0; i <')
     expect(result).toContain('TransferFunction1_states')
@@ -114,25 +117,25 @@ describe('StateIntegrator', () => {
         controlledBlockIds: ['tf1']
       }]
     }
-    
-    const integrator = new StateIntegrator(modelWithEnableStates)
+
+    const integrator = new StateIntegrator(modelWithEnableStates, emptyTypeMap)
     const result = integrator.generateEulerIntegration()
-    
+
     // Check that enable states parameter is included
     expect(result).toContain('&model->enable_states')
-    
+
     // Check for enable state check
     expect(result).toContain('if (model->enable_states.Subsystem1_enabled)')
   })
-  
+
   test('generateRK4Integration method exists and returns placeholder', () => {
-    const integrator = new StateIntegrator(mockModel)
+    const integrator = new StateIntegrator(mockModel, emptyTypeMap)
     const result = integrator.generateRK4Integration()
-    
+
     expect(result).toBeDefined()
     expect(result).toContain('No state integration needed')
   })
-  
+
   test('generateRK4Integration generates proper RK4 code for stateful blocks', () => {
     // Create a model with a transfer function block
     const modelWithStates: FlattenedModel = {
@@ -155,24 +158,24 @@ describe('StateIntegrator', () => {
         originalId: 'tf1'
       }]
     }
-    
-    const integrator = new StateIntegrator(modelWithStates)
+
+    const integrator = new StateIntegrator(modelWithStates, emptyTypeMap)
     const result = integrator.generateRK4Integration()
-    
+
     // Check for RK4 structure
     expect(result).toContain('RK4 Integration')
     expect(result).toContain('k1, k2, k3, k4')
     expect(result).toContain('temp_states')
-    
+
     // Check for k1-k4 calculations
     expect(result).toContain('Calculate k1 = f(t, y)')
     expect(result).toContain('Calculate k2 = f(t + h/2, y + h/2 * k1)')
     expect(result).toContain('Calculate k3 = f(t + h/2, y + h/2 * k2)')
     expect(result).toContain('Calculate k4 = f(t + h, y + h * k3)')
-    
+
     // Check for derivatives calls
     expect(result).toContain('test_model_derivatives')
-    
+
     // Check for final update formula
     expect(result).toContain('h/6')
     expect(result).toContain('2.0 * k2')
