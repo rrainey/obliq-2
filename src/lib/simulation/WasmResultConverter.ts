@@ -90,6 +90,9 @@ export function convertWasmToUIFormat(
 
 /**
  * Internal storage implementation (new)
+ *
+ * Handles circular buffer data by generating time points based on actual sample count.
+ * When a buffer wraps, samples represent the last (numSamples * timeStep) seconds.
  */
 function convertWasmToUIFormatInternal(
   sampleData: Map<string, SignalValue[]>,
@@ -98,7 +101,6 @@ function convertWasmToUIFormatInternal(
   duration: number
 ): Map<string, SimulationResults> {
   const results = new Map<string, SimulationResults>()
-  const timePoints = generateTimePoints(timeStep, duration)
 
   // Build collector name to block mapping
   const collectorToBlockMap = buildLoggerToBlockMap(sheets)
@@ -125,6 +127,30 @@ function convertWasmToUIFormatInternal(
   // Create SimulationResults for each sheet
   for (const [sheetId, collectors] of collectorsBySheet) {
     const signalData = new Map<string, SignalValue[]>()
+
+    // Determine the maximum sample count across all collectors in this sheet
+    let maxSampleCount = 0
+    for (const { loggerName } of collectors) {
+      const shortName = loggerName.replace(/^(logger_|display_)/, '')
+      const data = sampleData.get(shortName)
+      if (data && data.length > maxSampleCount) {
+        maxSampleCount = data.length
+      }
+    }
+
+    // Generate time points based on actual sample count
+    // The samples are in chronological order, with the last sample at 'duration'
+    // So the first sample is at: duration - (numSamples - 1) * timeStep
+    let timePoints: number[]
+    if (maxSampleCount > 0) {
+      const startTime = duration - (maxSampleCount - 1) * timeStep
+      timePoints = []
+      for (let i = 0; i < maxSampleCount; i++) {
+        timePoints.push(startTime + i * timeStep)
+      }
+    } else {
+      timePoints = generateTimePoints(timeStep, duration)
+    }
 
     for (const { blockId, loggerName } of collectors) {
       // Remove prefix to get short name

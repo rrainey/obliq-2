@@ -577,18 +577,66 @@ ${keepalive}const char* wasm_get_collector_name(int index) {
 
 `
 
-    // Get sample count
-    code += `// Get sample count for a collector
+    // Get sample count (number of valid samples in circular buffer)
+    code += `// Get sample count for a collector (actual number of samples collected, capped at max)
 ${keepalive}int wasm_get_sample_count(int collector_index) {
     switch(collector_index) {\n`
 
     collectors.forEach(([name], idx) => {
       // Remove prefix to get sanitized block name
       const blockName = name.replace(/^(logger_|display_)/, '')
+      code += `        case ${idx}: return ${modelName}_instance.${blockName}_num_samples;\n`
+    })
+
+    code += `        default: return 0;
+    }
+}
+
+`
+
+    // Get sample write index (current write position in circular buffer)
+    code += `// Get current write index for a collector (for circular buffer extraction)
+${keepalive}int wasm_get_sample_write_index(int collector_index) {
+    switch(collector_index) {\n`
+
+    collectors.forEach(([name], idx) => {
+      const blockName = name.replace(/^(logger_|display_)/, '')
       code += `        case ${idx}: return ${modelName}_instance.${blockName}_sample_index;\n`
     })
 
     code += `        default: return 0;
+    }
+}
+
+`
+
+    // Get max samples (buffer capacity)
+    code += `// Get maximum sample capacity for a collector
+${keepalive}int wasm_get_max_samples(int collector_index) {
+    switch(collector_index) {\n`
+
+    collectors.forEach(([name], idx) => {
+      const blockName = name.replace(/^(logger_|display_)/, '')
+      code += `        case ${idx}: return ${modelName}_instance.${blockName}_max_samples;\n`
+    })
+
+    code += `        default: return 0;
+    }
+}
+
+`
+
+    // Get last sample time
+    code += `// Get simulation time of the last recorded sample for a collector
+${keepalive}double wasm_get_last_sample_time(int collector_index) {
+    switch(collector_index) {\n`
+
+    collectors.forEach(([name], idx) => {
+      const blockName = name.replace(/^(logger_|display_)/, '')
+      code += `        case ${idx}: return ${modelName}_instance.${blockName}_last_sample_time;\n`
+    })
+
+    code += `        default: return -1.0;
     }
 }
 
