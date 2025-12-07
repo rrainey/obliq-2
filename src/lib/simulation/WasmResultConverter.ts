@@ -139,11 +139,13 @@ function convertWasmToUIFormatInternal(
     }
 
     // Generate time points based on actual sample count
-    // The samples are in chronological order, with the last sample at 'duration'
-    // So the first sample is at: duration - (numSamples - 1) * timeStep
+    // Samples are stored BEFORE time increment in model_step(), so:
+    // - Last sample is at: duration - timeStep (not duration)
+    // - First sample is at: (duration - timeStep) - (numSamples - 1) * timeStep
+    //                     = duration - numSamples * timeStep
     let timePoints: number[]
     if (maxSampleCount > 0) {
-      const startTime = duration - (maxSampleCount - 1) * timeStep
+      const startTime = duration - maxSampleCount * timeStep
       timePoints = []
       for (let i = 0; i < maxSampleCount; i++) {
         timePoints.push(startTime + i * timeStep)

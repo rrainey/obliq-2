@@ -602,18 +602,31 @@ export class WasmSimulationEngine {
         : 1
 
       // For circular buffer: get write index and max samples
-      const writeIndex = this.module._wasm_get_sample_write_index
-        ? this.module._wasm_get_sample_write_index(i)
-        : numSamples
       const maxSamples = this.module._wasm_get_max_samples
         ? this.module._wasm_get_max_samples(i)
         : numSamples
+
+      // writeIndex is where the NEXT write would go, which is also where the OLDEST data is
+      // Fallback to 0 if function doesn't exist (correct for non-wrapped, need recompile for wrapped)
+      const writeIndex = this.module._wasm_get_sample_write_index
+        ? this.module._wasm_get_sample_write_index(i)
+        : 0
 
       // Copy samples from WASM memory to JavaScript array in chronological order
       const samples: SignalValue[] = []
 
       // Determine if buffer has wrapped
       const hasWrapped = numSamples >= maxSamples
+
+      // Always log buffer state for debugging
+      console.log(`[WasmSimulationEngine] Buffer state for ${name}: numSamples=${numSamples}, maxSamples=${maxSamples}, writeIndex=${writeIndex}, hasWrapped=${hasWrapped}`)
+
+      // Debug logging for circular buffer extraction
+      if (hasWrapped) {
+        if (!this.module._wasm_get_sample_write_index) {
+          console.warn(`[WasmSimulationEngine] WARNING: _wasm_get_sample_write_index not available - circular buffer extraction may be incorrect. Force recompile to fix.`)
+        }
+      }
 
       if (elementSize === 1) {
         // Scalar signal - return flat array of numbers

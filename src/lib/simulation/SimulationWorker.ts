@@ -177,6 +177,7 @@ async function runSimulation(config: {
 
 /**
  * Retrieve all sample data from loggers and displays
+ * Handles circular buffer unwrapping for wrapped buffers
  */
 function getSampleData(): Map<string, any[]> {
   if (!wasmModule) {
@@ -195,7 +196,7 @@ function getSampleData(): Map<string, any[]> {
   for (let i = 0; i < collectorCount; i++) {
     const namePtr = wasmModule._wasm_get_collector_name(i)
     const name = wasmModule.UTF8ToString(namePtr)
-    const sampleCount = wasmModule._wasm_get_sample_count(i)
+    const numSamples = wasmModule._wasm_get_sample_count(i)
     const samplesPtr = wasmModule._wasm_get_samples(i)
 
     // Get element size (1 for scalar, N for vector, M*N for matrix)
@@ -203,22 +204,56 @@ function getSampleData(): Map<string, any[]> {
       ? wasmModule._wasm_get_element_size(i)
       : 1
 
-    // Copy samples from WASM memory to JavaScript array
+    // For circular buffer: get write index and max samples
+    const maxSamples = wasmModule._wasm_get_max_samples
+      ? wasmModule._wasm_get_max_samples(i)
+      : numSamples
+
+    // writeIndex is where the NEXT write would go, which is also where the OLDEST data is
+    const writeIndex = wasmModule._wasm_get_sample_write_index
+      ? wasmModule._wasm_get_sample_write_index(i)
+      : 0
+
+    // Determine if buffer has wrapped
+    const hasWrapped = numSamples >= maxSamples
+
+    // Copy samples from WASM memory to JavaScript array in chronological order
     const samples: any[] = []
 
     if (elementSize === 1) {
       // Scalar signal - return flat array of numbers
-      for (let j = 0; j < sampleCount; j++) {
-        samples.push(wasmModule.HEAPF64[samplesPtr / 8 + j])
+      if (!hasWrapped) {
+        // Buffer hasn't wrapped - read from 0 to numSamples
+        for (let j = 0; j < numSamples; j++) {
+          samples.push(wasmModule.HEAPF64[samplesPtr / 8 + j])
+        }
+      } else {
+        // Buffer has wrapped - read in chronological order starting from writeIndex
+        for (let j = 0; j < numSamples; j++) {
+          const bufferIdx = (writeIndex + j) % maxSamples
+          samples.push(wasmModule.HEAPF64[samplesPtr / 8 + bufferIdx])
+        }
       }
     } else {
       // Vector or matrix signal - return array of arrays
-      for (let j = 0; j < sampleCount; j++) {
-        const sample: number[] = []
-        for (let k = 0; k < elementSize; k++) {
-          sample.push(wasmModule.HEAPF64[samplesPtr / 8 + j * elementSize + k])
+      if (!hasWrapped) {
+        for (let j = 0; j < numSamples; j++) {
+          const sample: number[] = []
+          for (let k = 0; k < elementSize; k++) {
+            sample.push(wasmModule.HEAPF64[samplesPtr / 8 + j * elementSize + k])
+          }
+          samples.push(sample)
         }
-        samples.push(sample)
+      } else {
+        // Buffer has wrapped - read in chronological order
+        for (let j = 0; j < numSamples; j++) {
+          const bufferIdx = (writeIndex + j) % maxSamples
+          const sample: number[] = []
+          for (let k = 0; k < elementSize; k++) {
+            sample.push(wasmModule.HEAPF64[samplesPtr / 8 + bufferIdx * elementSize + k])
+          }
+          samples.push(sample)
+        }
       }
     }
 
