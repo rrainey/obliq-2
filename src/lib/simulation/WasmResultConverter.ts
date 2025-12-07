@@ -104,10 +104,19 @@ function convertWasmToUIFormatInternal(
   const collectorToBlockMap = buildLoggerToBlockMap(sheets)
 
   // Get collector names from sample data
+  // Try both prefixes and use whichever one exists in the mapping
   const collectorNames = Array.from(sampleData.keys()).map(name => {
-    // Add prefix back for mapping lookup
-    const prefix = name.startsWith('Signal_display') ? 'display_' : 'logger_'
-    return `${prefix}${name}`
+    // Try display_ prefix first, then logger_
+    const displayName = `display_${name}`
+    const loggerName = `logger_${name}`
+
+    if (collectorToBlockMap.has(displayName)) {
+      return displayName
+    } else if (collectorToBlockMap.has(loggerName)) {
+      return loggerName
+    }
+    // Fallback to display_ if neither found (will be handled by groupLoggersBySheet warning)
+    return displayName
   })
 
   // Group collectors by sheet
