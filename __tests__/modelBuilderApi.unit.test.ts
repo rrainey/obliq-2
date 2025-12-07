@@ -66,7 +66,8 @@ describe('Model Builder API Basic Tests', () => {
     
     expect(response.status).toBe(401);
     expect(data.success).toBe(false);
-    expect(data.error).toBe('Invalid or missing API token');
+    // Token format validation fails before checking against env token
+    expect(data.error).toBe('Invalid token format');
   });
 
   it('should handle missing parameters', async () => {

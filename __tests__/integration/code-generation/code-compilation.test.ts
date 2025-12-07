@@ -617,17 +617,13 @@ lib_deps =
     // Generate model name from the test name
     const modelName = name.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
     
-    // Generate code using the new API
-    const result = generateCCode({
-      modelName,
-      sheets: model.sheets,
-      globalSettings: model.globalSettings
-    })
-    
+    // Generate code using the deprecated API (calls new ModelCodeGenerator internally)
+    const result = generateCCode(model.sheets, modelName)
+
     // Write generated files
     const files = [
-      { name: `${result.fileName}.h`, content: result.headerFile },
-      { name: `${result.fileName}.c`, content: result.sourceFile },
+      { name: `${modelName}.h`, content: result.header },
+      { name: `${modelName}.c`, content: result.source },
       { name: 'library.properties', content: generateLibraryProperties(modelName) }
     ]
     
@@ -1077,18 +1073,14 @@ describe('Multi-sheet and Subsystem Code Generation', () => {
       }
     }
     
-    const result = generateCCode({
-      modelName: 'nested_test',
-      sheets: nestedModel.sheets as Sheet[],
-      globalSettings: nestedModel.globalSettings
-    })
-    
+    const result = generateCCode(nestedModel.sheets as Sheet[], 'nested_test')
+
     // Check that sheet labels are replaced with direct connections
-    expect(result.sourceFile).not.toContain('sheet_label_sink')
-    expect(result.sourceFile).not.toContain('sheet_label_source')
-    
+    expect(result.source).not.toContain('sheet_label_sink')
+    expect(result.source).not.toContain('sheet_label_source')
+
     // Check that the signal flows through properly
-    expect(result.sourceFile).toContain('OuterSub_OuterScale')
-    expect(result.sourceFile).toContain('* 3') // Scale factor
+    expect(result.source).toContain('OuterSub_OuterScale')
+    expect(result.source).toContain('* 3') // Scale factor
   })
 })

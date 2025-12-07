@@ -121,10 +121,7 @@ describe('StateIntegrator', () => {
     const integrator = new StateIntegrator(modelWithEnableStates, emptyTypeMap)
     const result = integrator.generateEulerIntegration()
 
-    // Check that enable states parameter is included
-    expect(result).toContain('&model->enable_states')
-
-    // Check for enable state check
+    // Check for enable state check (enable_states accessed directly from model)
     expect(result).toContain('if (model->enable_states.Subsystem1_enabled)')
   })
 

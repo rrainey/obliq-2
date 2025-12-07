@@ -38,19 +38,19 @@ describe('IntegratorBlockModule', () => {
       expect(module.getInputPortCount(block)).toBe(1)
     })
 
-    test('has 2 input ports with enable input', () => {
+    test('has 1 input port even with enable (enable is on top edge)', () => {
       const block = createBlock('Int1', { showEnableInput: true })
-      expect(module.getInputPortCount(block)).toBe(2)
+      expect(module.getInputPortCount(block)).toBe(1)
     })
 
-    test('has 2 input ports with reset input', () => {
+    test('has 1 input port even with reset (reset is on bottom edge)', () => {
       const block = createBlock('Int1', { showResetInput: true })
-      expect(module.getInputPortCount(block)).toBe(2)
+      expect(module.getInputPortCount(block)).toBe(1)
     })
 
-    test('has 3 input ports with both enable and reset', () => {
+    test('has 1 input port even with both enable and reset (special edge ports)', () => {
       const block = createBlock('Int1', { showEnableInput: true, showResetInput: true })
-      expect(module.getInputPortCount(block)).toBe(3)
+      expect(module.getInputPortCount(block)).toBe(1)
     })
 
     test('has exactly 1 output port', () => {
@@ -63,19 +63,19 @@ describe('IntegratorBlockModule', () => {
       expect(module.getInputPortLabels?.(block)).toEqual(['Derivative'])
     })
 
-    test('input port labels - with enable', () => {
+    test('input port labels same with enable (enable is on top edge)', () => {
       const block = createBlock('Int1', { showEnableInput: true })
-      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative', 'Enable'])
+      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative'])
     })
 
-    test('input port labels - with reset', () => {
+    test('input port labels same with reset (reset is on bottom edge)', () => {
       const block = createBlock('Int1', { showResetInput: true })
-      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative', 'Reset'])
+      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative'])
     })
 
-    test('input port labels - with enable and reset', () => {
+    test('input port labels same with enable and reset (special edge ports)', () => {
       const block = createBlock('Int1', { showEnableInput: true, showResetInput: true })
-      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative', 'Enable', 'Reset'])
+      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative'])
     })
 
     test('output port is labeled "Output"', () => {

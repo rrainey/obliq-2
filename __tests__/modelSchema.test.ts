@@ -369,6 +369,29 @@ describe('Model Schema Validation', () => {
       'input_port', 'output_port', 'source', 'scale', 'lookup_1d', 'lookup_2d', 'subsystem'
     ]
 
+    // Helper to get valid parameters for each block type
+    const getValidParameters = (blockType: string) => {
+      if (blockType === 'subsystem') {
+        return {
+          inputPorts: ['In1'],
+          outputPorts: ['Out1'],
+          sheets: [{
+            id: 'sub-sheet',
+            name: 'SubSheet',
+            blocks: [
+              { id: 'sub-in', type: 'input_port', name: 'In1', position: { x: 0, y: 0 }, parameters: { portName: 'In1' } },
+              { id: 'sub-out', type: 'output_port', name: 'Out1', position: { x: 200, y: 0 }, parameters: { portName: 'Out1' } }
+            ],
+            connections: [
+              { id: 'sub-wire', sourceBlockId: 'sub-in', sourcePortIndex: 0, targetBlockId: 'sub-out', targetPortIndex: 0 }
+            ],
+            extents: { width: 400, height: 300 }
+          }]
+        }
+      }
+      return {}
+    }
+
     test.each(validBlockTypes)('should accept block type: %s', (blockType) => {
       const modelData = {
         version: "1.0",
@@ -386,7 +409,7 @@ describe('Model Schema Validation', () => {
                 type: blockType,
                 name: `${blockType} Block`,
                 position: { x: 100, y: 100 },
-                parameters: {}
+                parameters: getValidParameters(blockType)
               }
             ],
             connections: [],

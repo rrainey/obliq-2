@@ -230,7 +230,8 @@ export class ModelFlattener {
   buildEnableScopes(
     sheets: Sheet[],
     subsystemId: string | null = null,
-    parentEnableScope: string | null = null
+    parentEnableScope: string | null = null,
+    subsystemPath: string[] = []
   ): void {
     for (const sheet of sheets) {
       for (const block of sheet.blocks) {
@@ -238,24 +239,25 @@ export class ModelFlattener {
           // Check if this subsystem has enable input
           const hasEnableInput = block.parameters?.showEnableInput === true
           const currentEnableScope = hasEnableInput ? block.id : parentEnableScope
-          
-          // Create subsystem enable info
+
+          // Create subsystem enable info with correct flattened name
           const enableInfo: SubsystemEnableInfo = {
             subsystemId: block.id,
-            subsystemName: this.generateFlattenedName(block.name, []),
+            subsystemName: this.generateFlattenedName(block.name, subsystemPath),
             hasEnableInput,
             parentSubsystemId: subsystemId,
             controlledBlockIds: []
           }
-          
+
           this.subsystemEnableInfo.push(enableInfo)
-          
-          // Process nested sheets
+
+          // Process nested sheets with updated path
           if (block.parameters?.sheets) {
             this.buildEnableScopes(
               block.parameters.sheets as Sheet[],
               block.id,
-              currentEnableScope
+              currentEnableScope,
+              [...subsystemPath, block.name]
             )
           }
         } else {
@@ -835,11 +837,12 @@ export class ModelFlattener {
   
   /**
    * Resolve sheet label connections within scopes
+   * @returns Object with resolved connections and count of labels resolved
    */
   resolveSheetLabels(
     connections: FlattenedConnection[],
     flattenedBlocks: FlattenedBlock[]
-  ): FlattenedConnection[] {
+  ): { connections: FlattenedConnection[], resolvedCount: number } {
     const resolvedConnections: FlattenedConnection[] = []
     const sheetLabelSinks = new Map<string, SheetLabelConnection>()
     const sheetLabelSources: FlattenedBlock[] = []
@@ -971,21 +974,21 @@ export class ModelFlattener {
       }
     }
     
-    // Log sheet label resolution statistics
+    // Count sheet label resolution statistics
     const resolvedCount = sheetLabelSources.filter(source => {
       const signalName = source.block.parameters?.signalName as string
-      const scope = source.subsystemPath.length > 0 
+      const scope = source.subsystemPath.length > 0
         ? source.subsystemPath.join('/')
         : 'root'
       const key = `${scope}:${signalName}`
       return sheetLabelSinks.has(key)
     }).length
-    
+
     if (resolvedCount > 0) {
       console.log(`Resolved ${resolvedCount} sheet label connections`)
     }
-    
-    return resolvedConnections
+
+    return { connections: resolvedConnections, resolvedCount }
   }
   
   /**
@@ -1028,8 +1031,9 @@ export class ModelFlattener {
     diagnostics.connectionsRemapped = flattenedConnections.length
     
     // Step 4: Resolve sheet label connections
-    const resolvedConnections = this.resolveSheetLabels(flattenedConnections, blocks)
-    diagnostics.sheetLabelsResolved = resolvedConnections.length - flattenedConnections.length
+    const sheetLabelResult = this.resolveSheetLabels(flattenedConnections, blocks)
+    const resolvedConnections = sheetLabelResult.connections
+    diagnostics.sheetLabelsResolved = sheetLabelResult.resolvedCount
     
     // Step 5: Filter out sheet label blocks from final block list
     const finalBlocks = blocks.filter(b => 
