@@ -110,11 +110,17 @@ export class SignalDisplayBlockModule implements IBlockModule {
       members.push(`    double* ${safeName}_samples;`)
     }
 
-    // Current sample index
+    // Current write index (wraps around for circular buffer)
     members.push(`    int ${safeName}_sample_index;`)
 
     // Maximum samples capacity
     members.push(`    int ${safeName}_max_samples;`)
+
+    // Number of samples actually collected (capped at max_samples)
+    members.push(`    int ${safeName}_num_samples;`)
+
+    // Simulation time of the last recorded sample
+    members.push(`    double ${safeName}_last_sample_time;`)
 
     return members
   }
@@ -127,16 +133,16 @@ export class SignalDisplayBlockModule implements IBlockModule {
     let code = `    // Initialize signal display: ${block.name}\n`
     code += `    model->${safeName}_sample_index = 0;\n`
     code += `    model->${safeName}_max_samples = ${maxSamples};\n`
+    code += `    model->${safeName}_num_samples = 0;\n`
+    code += `    model->${safeName}_last_sample_time = -1.0;\n`
 
-    // Allocate sample buffer based on signal type
+    // Allocate sample buffer based on signal type (using max_samples variable)
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-      const size = `${maxSamples} * ${typeInfo.rows} * ${typeInfo.cols}`
-      code += `    model->${safeName}_samples = (double (*)[${typeInfo.rows}][${typeInfo.cols}])malloc(${size} * sizeof(double));\n`
+      code += `    model->${safeName}_samples = (double (*)[${typeInfo.rows}][${typeInfo.cols}])malloc(model->${safeName}_max_samples * ${typeInfo.rows} * ${typeInfo.cols} * sizeof(double));\n`
     } else if (typeInfo.isArray && typeInfo.arraySize) {
-      const size = `${maxSamples} * ${typeInfo.arraySize}`
-      code += `    model->${safeName}_samples = (double (*)[${typeInfo.arraySize}])malloc(${size} * sizeof(double));\n`
+      code += `    model->${safeName}_samples = (double (*)[${typeInfo.arraySize}])malloc(model->${safeName}_max_samples * ${typeInfo.arraySize} * sizeof(double));\n`
     } else {
-      code += `    model->${safeName}_samples = (double*)malloc(${maxSamples} * sizeof(double));\n`
+      code += `    model->${safeName}_samples = (double*)malloc(model->${safeName}_max_samples * sizeof(double));\n`
     }
 
     return code
@@ -146,27 +152,35 @@ export class SignalDisplayBlockModule implements IBlockModule {
     const safeName = BlockModuleUtils.sanitizeIdentifier(block.name)
     const typeInfo = BlockModuleUtils.parseType(inputType)
 
-    let code = `    // Store sample for display: ${block.name}\n`
-    code += `    if (model->${safeName}_sample_index < model->${safeName}_max_samples) {\n`
+    let code = `    // Store sample for display: ${block.name} (circular buffer)\n`
+    code += `    {\n`
+    code += `        int idx = model->${safeName}_sample_index;\n`
 
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       // Copy matrix element by element
       code += `        for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `            for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
-      code += `                model->${safeName}_samples[model->${safeName}_sample_index][i][j] = ${inputExpression}[i][j];\n`
+      code += `                model->${safeName}_samples[idx][i][j] = ${inputExpression}[i][j];\n`
       code += `            }\n`
       code += `        }\n`
     } else if (typeInfo.isArray && typeInfo.arraySize) {
       // Copy vector element by element
       code += `        for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-      code += `            model->${safeName}_samples[model->${safeName}_sample_index][i] = ${inputExpression}[i];\n`
+      code += `            model->${safeName}_samples[idx][i] = ${inputExpression}[i];\n`
       code += `        }\n`
     } else {
       // Copy scalar value
-      code += `        model->${safeName}_samples[model->${safeName}_sample_index] = ${inputExpression};\n`
+      code += `        model->${safeName}_samples[idx] = ${inputExpression};\n`
     }
 
-    code += `        model->${safeName}_sample_index++;\n`
+    // Update sample index with wrap-around
+    code += `        model->${safeName}_sample_index = (idx + 1) % model->${safeName}_max_samples;\n`
+    // Track number of samples (capped at max_samples)
+    code += `        if (model->${safeName}_num_samples < model->${safeName}_max_samples) {\n`
+    code += `            model->${safeName}_num_samples++;\n`
+    code += `        }\n`
+    // Record the simulation time of this sample
+    code += `        model->${safeName}_last_sample_time = model->time;\n`
     code += `    }\n`
 
     return code

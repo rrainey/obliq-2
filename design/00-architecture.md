@@ -64,16 +64,15 @@ The project follows a clean, modular folder structure to organize different conc
     - Multi-selection state (`selectedBlockIds`, `selectedWireIds`) for grouped block operations
     - Clipboard state (`clipboardData`) for cut/copy/paste with cross-tab localStorage support
 
-  * **`lib/simulation/WasmSimulationEngine.ts`** – The **primary simulation engine** using WebAssembly for high-performance execution. This module loads compiled WASM modules and provides an interface for step-by-step simulation execution.
+  * **`lib/simulation/WasmSimulationEngine.ts`** – The **sole simulation engine** using WebAssembly for high-performance execution. This module loads compiled WASM modules and provides an interface for step-by-step simulation execution. Includes support for circular buffer sample data extraction.
 
-  * **`lib/simulation/SimulationEngineFactory.ts`** – Factory for creating WASM simulation engines. As of Phase 6, this always creates WASM engines.
+  * **`lib/simulation/SimulationWorker.ts`** – Web Worker implementation for running WASM simulations off the main thread, improving UI responsiveness during long simulations. Includes circular buffer handling for sample data.
+
+  * **`lib/simulation/SimulationEngineFactory.ts`** – Factory for creating WASM simulation engines. WASM is the only supported simulation engine.
 
   * **`lib/wasm/cache/`** – WASM module caching system including cache key generation (`cacheKey.ts`) and Supabase storage management (`SupabaseCacheManager.ts`).
 
-  * **`lib/multiSheetSimulation.ts`** – (Archived) Original TypeScript `MultiSheetSimulationEngine` class, retained for reference and cross-validation testing.
-
   * **`lib/sheetLabelUtils.ts`** – Utilities for handling sheet label connections, validation, and scoping within subsystems.
-  * **`lib/simulationEngine.ts`** – (Archived) Original TypeScript simulation engine, retained for reference and cross-validation testing. The WASM engine has replaced this for production use.
   * **`lib/codeGeneration.ts`** – The **C Code generation service**. This module includes functions that transform a model JSON into C code files. It iterates through the blocks and connections to produce C structures and functions. For example, it may generate a `init()` function to initialize all blocks, an `update(step_time)` function to update the simulation each tick, and data structures for each block's state. It uses the preserved signal names from the model for variable and function names to ensure the generated code is understandable. The code generation could use templates for PlatformIO (e.g., generating a library with a `library.properties` if targeting Arduino, or a PlatformIO `src/` folder with code). This module can be used both on the server (for the API route that delivers a file) and potentially on the client (if we wanted to preview code). However, generating a downloadable library (especially if it involves bundling multiple files into a zip) is better done server-side. The output of code generation is not stored in the database; it's generated on-demand and provided to the user (or external caller) for download.
   * **`lib/modelSchema.ts`** – Definition of the **Model JSON schema** or TypeScript types for the model. This defines how a model is structured as JSON: e.g., a model object containing metadata and an array of **Sheets**, each Sheet containing a list of **Blocks** (with properties like id, type, position, parameters, etc.) and **Connections** (wires linking block outputs to inputs). It also defines how Subsystems are represented (possibly as a special block type that contains a reference to another list of blocks internally or a child sheet). Defining a clear schema (and perhaps using a validation library like Zod for it) helps maintain consistency between the front-end, simulation, and code generation logic so all interpret the model the same way. This module also defines the `ModelParameter` interface for model-level parameters (name, type, value, description) that can be referenced by Source and Evaluate blocks.
   * **`lib/validation.ts`** – (Optional) If needed, this module could contain functions to validate a model (e.g., to ensure there are no unconnected required ports, no algebraic loops without feedback blocks, etc.). This might be used in the automation API to run model checks.
@@ -435,9 +434,9 @@ The type validation system (`lib/typeValidator.ts`) has been extended to support
 
 The simulation capability allows users to run their model and see how signals change over time.
 
-### WebAssembly Simulation (Primary Engine)
+### WebAssembly Simulation Engine
 
-As of Phase 6, the application uses **WebAssembly (WASM)** as the sole simulation engine. Models are compiled to C code, then compiled to WASM using Emscripten, providing significant performance improvements (typically 7-14x faster than JavaScript simulation).
+The application uses **WebAssembly (WASM)** as the sole simulation engine. Models are compiled to C code, then compiled to WASM using Emscripten, providing significant performance improvements over interpreted JavaScript.
 
 The WASM simulation pipeline:
 1. **Code Generation**: Model JSON is transformed into C code via the code generation layer (`lib/codegen/`)
@@ -447,32 +446,32 @@ The WASM simulation pipeline:
 
 Key components:
 - `lib/simulation/WasmSimulationEngine.ts` - Main WASM simulation engine
+- `lib/simulation/SimulationWorker.ts` - Web Worker for off-main-thread execution
 - `lib/simulation/SimulationEngineFactory.ts` - Factory for creating WASM engines
 - `lib/wasm/cache/` - WASM module caching system
 - `app/api/compile-wasm-stream/` - SSE-based compilation API
 
+#### Circular Buffer Sample Collection
+
+Signal Display and Signal Logger blocks use circular buffers to store sample data efficiently:
+- **Buffer wrapping**: When the sample buffer is full, new samples overwrite the oldest samples
+- **Configurable size**: Default buffer size is 1000 samples, configurable per block
+- **Chronological extraction**: The extraction logic correctly unwraps circular buffers to return samples in chronological order
+- **Time point generation**: Time points are computed based on actual sample count and simulation end time
+
 For detailed WASM architecture documentation, see `design/11-Unifying-simulation-with-Wasm.md`.
 
-### TypeScript Simulation Engine (Archived)
+### Simulation Concepts
 
-The original TypeScript simulation engine (`lib/simulationEngine.ts` and `lib/multiSheetSimulation.ts`) is retained for reference and testing purposes but is no longer used in production. It serves as:
-- A reference implementation for simulation semantics
-- A fallback for environments without WebAssembly support
-- A baseline for cross-validation testing
+The simulation engine implements the following concepts:
 
-The **TypeScript simulation engine** works as follows:
-
-1. It takes a model and an optional simulation configuration (time step, total simulation time, etc. – possibly specified by the user in the UI). This simulations treats all blocks across all sheets as a
-single consolidated sheet for simulation purposes. It follows that Sheet Labels are essential to establishing the correct
-execution order of blocks and also for passing Signal data types and calculated values to the appropriate destinations.
-2. It initializes all blocks. Some blocks have internal state or memory (e.g. a Transfer Function has internal state for its differential equation or difference equation). The engine may create a corresponding JavaScript object for each block to hold its current state and output value.
-3. It then enters a loop over simulation time steps. At each step, it computes outputs of blocks that are driven by inputs. The computation order should respect data dependencies – essentially, this model forms a directed acyclic graph (DAG) if no algebraic loop, so we determine an execution order. (If there are feedback loops with delays, the engine would handle those appropriately by using previous step values for the feedback).
-4. At each block, the engine computes the output based on the block type: Sum will sum its inputs, Multiply multiplies them, Transfer Function uses its internal state and formula to produce a new output (updating internal state), etc. Input Port blocks might just output a user-defined input (could be a constant or a predefined signal like a sine wave for testing), and Output Port blocks might just take a value and mark it as an output (perhaps logging it).
-5. Signal Display and Logger blocks are special: they don't affect other blocks (no output wires), but the engine knows to collect their input value each step. The Display block could directly update a UI element (like plotting on a canvas in real-time), and the Logger block stores values in an array for that run.
-6. The loop continues until the simulation end time. During or after the loop, the engine can present results: e.g., plot data on a chart component, or provide a table of logged values. The user can interact with the simulation (pause, resume, step, reset) if we implement those controls. All of this simulation state (current time, current outputs, log buffers) lives in memory on the client. If a model is large or the simulation is heavy, we could move this to a Web Worker thread to avoid blocking the UI – the architecture allows swapping the engine to a worker without affecting the rest of the system.
-7. Once the simulation is done, the user can see all output plots. If needed, an "Export CSV" for logged signals could be offered (which would just take the logged arrays and create a CSV file for download in the browser).
-
-If we later needed server-side simulation (for example, to offload work or allow long-running simulations to run without keeping the browser open), the architecture can accommodate it. We would implement the `app/api/simulate` route such that it loads the model JSON from the database, runs a simulation using perhaps a Node.js library or a headless version of our simulation engine, and returns the results. However, for now, the client-side approach is sufficient and simpler.
+1. It takes a model and a simulation configuration (time step, total simulation time, integration algorithm). The model is flattened into a single logical structure for simulation purposes.
+2. It initializes all blocks, including state variables for blocks with internal state (e.g., Transfer Functions with state for their differential equations).
+3. It executes simulation steps, computing block outputs in dependency order. The computation order respects data dependencies, forming a directed acyclic graph (DAG).
+4. At each block, outputs are computed based on block type: Sum adds inputs, Multiply multiplies them, Transfer Functions use RK4 integration to update internal state, etc.
+5. Signal Display and Logger blocks collect input values each step into circular buffers. When the buffer fills, oldest samples are overwritten.
+6. The loop continues until the simulation end time. Results are displayed in real-time via chart components.
+7. Simulations can run in a Web Worker to avoid blocking the UI during long runs.
 
 ### Algebraic/Integration Layer Architecture
 
@@ -521,13 +520,6 @@ With the two-layer architecture, each evaluation is a simple call to the algebra
 - **Event Detection**: Can efficiently search for zero-crossings by calling the algebraic layer with interpolated states
 - **Variable Step Size**: Integration layer can adapt step size based on error estimates
 - **Mixed Integration Methods**: Different blocks can use different integration schemes
-
-### Implementation in Simulation Engine
-
-The JavaScript/TypeScript simulation engine implements this pattern through:
-- `SimulationAlgebraicEvaluator`: Computes all block outputs given current states
-- `SimulationStateIntegrator`: Manages state updates using various integration methods
-- `SimulationEngine`: Orchestrates the two layers
 
 ### Implementation in Code Generation
 
@@ -586,16 +578,16 @@ void model_step(model_t* model) {
 
 The implementation is organized as follows:
 
-**Simulation Engine:**
-- `/lib/simulation/SimulationAlgebraicEvaluator.ts` - Algebraic computation logic
-- `/lib/simulation/SimulationStateIntegrator.ts` - Integration algorithms
-- `/lib/simulationEngine.ts` - Orchestration layer
-
 **Code Generation:**
 - `/lib/codegen/AlgebraicTypes.ts` - Type definitions for algebraic layer
 - `/lib/codegen/AlgebraicEvaluator.ts` - Generates C code for algebraic evaluation
 - `/lib/codegen/StateIntegrator.ts` - Generates C code for state integration
 - `/lib/codegen/IntegrationOrchestrator.ts` - Generates the main step function
+
+**WASM Simulation:**
+- `/lib/simulation/WasmSimulationEngine.ts` - WASM module execution and data extraction
+- `/lib/simulation/SimulationWorker.ts` - Web Worker for off-thread simulation
+- `/lib/simulation/WasmResultConverter.ts` - Converts WASM output to UI format
 
 
 
@@ -610,27 +602,23 @@ The application implements a modular block system that centralizes all block-spe
 Each block type implements the `IBlockModule` interface defined in `lib/blocks/BlockModule.ts`, which provides:
 
 ##### Code Generation Methods
-- **`generateComputation(block: BlockData, inputs: string[]): string`**  
+- **`generateComputation(block: BlockData, inputs: string[], inputTypes: string[]): string`**
   Generates C code for the block's computation logic
-  
-- **`getOutputType(block: BlockData, inputTypes: string[]): string`**  
-  Determines the C type of the block's output based on input types
-  
-- **`generateStructMember(block: BlockData, outputType: string): string | null`**  
-  Generates signal struct member declarations
-  
-- **`requiresState(block: BlockData): boolean`**  
-  Indicates if the block needs state variables for integration
-  
-- **`generateStateStructMembers(block: BlockData, outputType: string): string[]`**  
-  Generates state struct member declarations
-  
-- **`generateInitialization?(block: BlockData): string`**  
-  Optional initialization code generation
 
-##### Simulation Methods
-- **`executeSimulation(blockState: BlockState, inputs: any[], simulationState: SimulationState): void`**  
-  Executes the block's simulation logic, updating outputs in the blockState
+- **`getOutputType(block: BlockData, inputTypes: string[]): string`**
+  Determines the C type of the block's output based on input types
+
+- **`generateStructMember(block: BlockData, outputType: string): string | null`**
+  Generates signal struct member declarations
+
+- **`requiresState(block: BlockData): boolean`**
+  Indicates if the block needs state variables for integration
+
+- **`generateStateStructMembers(block: BlockData, outputType: string): string[]`**
+  Generates state struct member declarations
+
+- **`generateInitialization?(block: BlockData): string`**
+  Optional initialization code generation
 
 ##### Port Management Methods
 - **`getInputPortCount(block: BlockData): number`**  
@@ -647,38 +635,19 @@ Each block type implements the `IBlockModule` interface defined in `lib/blocks/B
 
 #### Block Module Factory
 
-The `BlockModuleFactory` (formerly `BlockModuleFactory`) provides centralized access to all block modules:
+The `BlockModuleFactory` provides centralized access to all block modules:
 
 ```typescript
 // Get a block module for any block type
 const module = BlockModuleFactory.getBlockModule('sum')
 
-// Execute simulation
-module.executeSimulation(blockState, inputs, simulationState)
+// Generate C code
+const code = module.generateComputation(block, inputs, inputTypes)
 
 // Get port information
 const inputCount = module.getInputPortCount(block)
 const outputLabels = module.getOutputPortLabels(block)
 ```
-
-### Simulation Execution Flow
-
-The simulation engine delegates block execution to the appropriate modules:
-
-1. **Block Execution Adapter** (`lib/simulation/BlockSimulationAdapter.ts`)
-   - Retrieves the appropriate block module from the factory
-   - Calls `executeSimulation` with current state and inputs
-   - Handles blocks without modules (like subsystems)
-
-2. **Simulation Engine Integration**
-   - Replaces the large switch statement with adapter calls
-   - Maintains the same execution order and state management
-   - Improves maintainability and testability
-
-3. **Enable State Handling**
-   - Block modules check enable states when needed
-   - Transfer functions freeze states when disabled
-   - Subsystem outputs use frozen values when disabled
 
 ### Port Management System
 
@@ -703,11 +672,11 @@ The port system is now unified across the application:
 
 1. **Single Source of Truth**
    - All block behavior in one file per block type
-   - No duplication across simulation, code generation, and validation
+   - No duplication across code generation and validation
 
 2. **Easier Extension**
    - New blocks only need to implement one interface
-   - Automatic support for all features (simulation, codegen, ports)
+   - Automatic support for all features (codegen, ports, validation)
 
 3. **Better Testing**
    - Each module can be tested in isolation
@@ -729,19 +698,18 @@ To add a new block type:
 2. Implement all `IBlockModule` methods
 3. Add to `BlockModuleFactory`
 4. The block automatically works in:
-   - Simulation engine
    - Code generation
    - Connection validation
    - UI port display
 
 No changes needed in multiple files across the codebase!
 
-### Matrix Simulation Support
+### Matrix Support
 
-The simulation engine efficiently handles matrix operations:
+The WASM simulation engine and C code generation efficiently handle matrix operations:
 
-* **Memory Management**: Matrix values are stored as nested JavaScript arrays (number[][])
-* **Block Execution**: Matrix operations are computed element-wise or using optimized algorithms (e.g., matrix multiplication)
+* **C Code Generation**: Matrices are declared as 2D C arrays (e.g., `double matrix[3][4]`) with row-major layout
+* **WASM Execution**: Matrix operations are compiled to native code for optimal performance
 * **Performance**: Large matrices (up to 100×100) are supported with acceptable performance
 * **State Management**: Transfer functions maintain separate state arrays for each matrix element
 
@@ -759,23 +727,17 @@ Subsystems have a special "enable" Boolean input signal.  By default, its value 
 
 **Subsystem Enabled Status updates in the Time Step Function** The Enabled state of all subsystems should be re-evaluated and updated at the end of the time step function.
 
-### Multi-Sheet Simulation Architecture
+### Multi-Sheet Model Handling
 
-The simulation engine uses a hybrid approach that combines the benefits of separate sheet engines with global execution order:
+The WASM simulation engine handles multi-sheet models through a flattening process during C code generation:
 
-1. **Per-Sheet Engines**: Each sheet (including those nested in subsystems) has its own `SimulationEngine` instance, maintaining local state and signal values.
+1. **Model Flattening**: The model is flattened into a single logical structure, with subsystem input/output ports replaced by direct connections.
 
-2. **Global Execution Order**: A `MultiSheetSimulationEngine` coordinates all sheet engines, calculating a global execution order that respects dependencies across sheet boundaries.
+2. **Global Execution Order**: A global block execution order is calculated that respects dependencies across all sheets and subsystems.
 
-3. **Subsystem Transparency**: Subsystem blocks are treated as containers. Values flow directly from subsystem inputs to internal input ports and from internal output ports to subsystem outputs.
+3. **Sheet Label Resolution**: Sheet label connections within each subsystem scope are resolved to direct assignments in the generated code.
 
-4. **Sheet Label Scoping**: Each subsystem maintains its own sheet label namespace, preventing signal name conflicts between different subsystems.
-
-Key implementation details:
-- `SimulationEngine` provides `executeBlockById()` and `advanceTime()` methods for fine-grained control
-- `MultiSheetSimulationEngine` maintains `blockEngines`, `executionOrder`, and `blockToSheet` mappings
-- Sheet label values are scoped to their containing subsystem
-- No redundant subsystem simulation - blocks execute exactly once per time step
+4. **Enable State Handling**: Subsystem enable states are tracked and affect the execution of contained blocks during simulation.
 
 ## C Code Generation Service
 
@@ -935,36 +897,22 @@ The application provides a seamless auto-save experience that protects users' wo
 
 This design ensures that auto-save is truly transparent - it's a safety net that catches unsaved work without adding complexity to the user's workflow.
 
-## Hybrid Simulation and Code Generation Architecture
+## Code Generation Architecture
 
-The application uses a unified approach for handling multi-sheet models in both simulation and code generation:
+The application uses a unified approach for handling multi-sheet models in code generation:
 
-### Shared Concepts
+### Core Concepts
 
-1. **Sheet Hierarchy**: Both systems traverse the complete sheet hierarchy, including sheets nested within subsystem blocks.
+1. **Sheet Hierarchy**: The code generator traverses the complete sheet hierarchy, including sheets nested within subsystem blocks.
 
-2. **Block Identification**: Blocks maintain their original IDs throughout flattening and simulation, enabling consistent tracking.
+2. **Block Identification**: Blocks maintain their original IDs throughout flattening, enabling consistent tracking.
 
-3. **Signal Flow**: Both systems handle:
+3. **Signal Flow**: The generator handles:
    - Direct connections within sheets
    - Subsystem port mappings (input/output port blocks)
    - Sheet label connections within subsystem scopes
 
-4. **Subsystem Semantics**: The ability to dynamically enable/disable subsystems within the simulation is designed to operate consistently across both simulation frameworks.
-
-### Key Differences
-
-**Simulation (Runtime)**:
-- Maintains separate engine instances per sheet
-- Executes blocks in-place with value passing between engines
-- Preserves sheet label scoping dynamically
-- Real-time state management
-
-**Code Generation (Compile-time)**:
-- Flattens entire model into single structure
-- Generates prefixed variable names
-- Replaces sheet labels with direct assignments
-- Static code output
+4. **Subsystem Semantics**: The ability to dynamically enable/disable subsystems is implemented in the generated C code.
 
 ### Multi-Sheet Code Generation
 
@@ -987,10 +935,9 @@ The code generator handles hierarchical multi-sheet models through a flattening 
 
 ### Benefits of This Architecture
 
-1. **Consistency**: Same signal flow logic ensures simulation matches generated code behavior
-2. **Performance**: Simulation avoids unnecessary flattening overhead
-3. **Debugging**: Generated code comments preserve original structure
-4. **Extensibility**: New block types need minimal changes to both systems
+1. **Consistency**: The same signal flow logic in code generation produces consistent behavior in WASM simulation
+2. **Debugging**: Generated code comments preserve original structure for traceability
+3. **Extensibility**: New block types only need to implement the block module interface
 
 ## Extensibility and Performance Considerations
 
@@ -1053,10 +1000,15 @@ The MCP server maintains the same performance characteristics as the Automation 
 
 ## Testing Infrastructure
 
-The application includes a comprehensive testing infrastructure that validates both the simulation engine and the generated C code.
+The application includes a comprehensive testing infrastructure that validates the code generation system and block module implementations.
 
 ### Unit Testing
-Standard unit tests are implemented using Jest and cover the core functionality of the simulation engine, type propagation system, and model validation logic. These tests run directly in Node.js without external dependencies.
+Standard unit tests are implemented using Jest and cover:
+- **Block module C code generation**: Each block module's `generateComputation`, `generateInitialization`, and struct generation methods
+- **Type propagation system**: Signal type inference and validation across connections
+- **Model validation logic**: Connection rules, port compatibility, and sheet label scoping
+
+Tests focus on C code generation correctness rather than runtime simulation behavior, as WASM is the sole simulation engine.
 
 ### Integration Testing for Code Generation
 The code generation testing infrastructure uses Docker to ensure consistent and reproducible compilation environments across different development platforms. This approach eliminates the need for developers to install PlatformIO or other embedded toolchains locally.
@@ -1066,7 +1018,6 @@ The code generation testing infrastructure uses Docker to ensure consistent and 
 The testing infrastructure includes comprehensive matrix support:
 
 * **Type Validation Tests**: Verify correct parsing and validation of matrix type strings
-* **Simulation Tests**: Validate matrix operations produce correct numerical results
 * **Code Generation Tests**: Ensure generated C code compiles and executes correctly
 * **Performance Tests**: Benchmark large matrix operations to ensure acceptable performance
 * **Integration Tests**: Test complex signal flows involving multiple matrix operations

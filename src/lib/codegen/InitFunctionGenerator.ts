@@ -54,7 +54,10 @@ export class InitFunctionGenerator {
     
     // Initialize all structures to zero
     code += this.generateStructureInit()
-    
+
+    // Initialize segregated subsystems
+    code += this.generateSubsystemInit()
+
     // Initialize enable states
     if (this.model.subsystemEnableInfo.some(info => info.hasEnableInput)) {
       code += this.generateEnableStateInit()
@@ -99,10 +102,39 @@ export class InitFunctionGenerator {
     memset(&model->outputs, 0, sizeof(model->outputs));
     memset(&model->signals, 0, sizeof(model->signals));
     memset(&model->states, 0, sizeof(model->states));
-    
+
 `
   }
-  
+
+  /**
+   * Generate segregated subsystem initialization
+   */
+  private generateSubsystemInit(): string {
+    if (!this.model.segregatedSubsystems || this.model.segregatedSubsystems.length === 0) {
+      return ''
+    }
+
+    let code = '    /* Initialize segregated subsystems */\n'
+
+    for (const sub of this.model.segregatedSubsystems) {
+      code += `    ${sub.sanitizedName}_init(&model->${sub.sanitizedName});\n`
+    }
+
+    // Sync subsystem states to parent states struct
+    // The subsystem's init sets model->SubsystemName.states,
+    // but RK4 reads from model->states.SubsystemName
+    const statefulSubs = this.model.segregatedSubsystems.filter(sub => sub.hasState)
+    if (statefulSubs.length > 0) {
+      code += '\n    /* Sync subsystem initial states to parent states struct */\n'
+      for (const sub of statefulSubs) {
+        code += `    memcpy(&model->states.${sub.sanitizedName}, &model->${sub.sanitizedName}.states, sizeof(model->states.${sub.sanitizedName}));\n`
+      }
+    }
+
+    code += '\n'
+    return code
+  }
+
   /**
    * Generate enable state initialization
    */

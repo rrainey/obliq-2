@@ -173,10 +173,13 @@ export class C99ExpressionParser {
         if (expr.type !== 'Identifier') {
           throw new Error('Function call requires identifier')
         }
-        
+
+        const funcName = (expr as Identifier).name
+        this.validateMathFunctionArgs(funcName, args, expr.position)
+
         expr = {
           type: 'FunctionCall',
-          name: (expr as Identifier).name,
+          name: funcName,
           arguments: args,
           position: expr.position
         }
@@ -255,10 +258,96 @@ export class C99ExpressionParser {
 
   private isUnaryOperator(token: C99Token): boolean {
     const unaryOps = [
-      C99TokenType.PLUS, C99TokenType.MINUS, C99TokenType.BANG, 
+      C99TokenType.PLUS, C99TokenType.MINUS, C99TokenType.BANG,
       C99TokenType.TILDE, C99TokenType.PLUS_PLUS, C99TokenType.MINUS_MINUS
     ]
     return unaryOps.includes(token.type)
+  }
+
+  private getConstantValue(expr: Expression): number | null {
+    if (expr.type === 'NumberLiteral') {
+      return expr.value
+    }
+    if (expr.type === 'UnaryExpression' && expr.operand.type === 'NumberLiteral') {
+      const value = expr.operand.value
+      if (expr.operator === '-') return -value
+      if (expr.operator === '+') return value
+    }
+    return null
+  }
+
+  private validateMathFunctionArgs(name: string, args: Expression[], position: number): void {
+    if (args.length === 0) return
+
+    const arg0 = this.getConstantValue(args[0])
+
+    switch (name) {
+      case 'sqrt':
+      case 'sqrtf':
+        if (arg0 !== null && arg0 < 0) {
+          throw new Error(`Invalid argument for ${name}(): cannot take square root of negative number (${arg0}) at position ${position}`)
+        }
+        break
+
+      case 'log':
+      case 'logf':
+      case 'log10':
+      case 'log10f':
+      case 'log2':
+      case 'log2f':
+        if (arg0 !== null && arg0 <= 0) {
+          throw new Error(`Invalid argument for ${name}(): argument must be positive (got ${arg0}) at position ${position}`)
+        }
+        break
+
+      case 'asin':
+      case 'asinf':
+      case 'acos':
+      case 'acosf':
+        if (arg0 !== null && (arg0 < -1 || arg0 > 1)) {
+          throw new Error(`Invalid argument for ${name}(): argument must be in range [-1, 1] (got ${arg0}) at position ${position}`)
+        }
+        break
+
+      case 'acosh':
+      case 'acoshf':
+        if (arg0 !== null && arg0 < 1) {
+          throw new Error(`Invalid argument for ${name}(): argument must be >= 1 (got ${arg0}) at position ${position}`)
+        }
+        break
+
+      case 'atanh':
+      case 'atanhf':
+        if (arg0 !== null && (arg0 <= -1 || arg0 >= 1)) {
+          throw new Error(`Invalid argument for ${name}(): argument must be in range (-1, 1) (got ${arg0}) at position ${position}`)
+        }
+        break
+
+      case 'pow':
+      case 'powf':
+        if (args.length >= 2) {
+          const arg1 = this.getConstantValue(args[1])
+          if (arg0 !== null && arg1 !== null) {
+            if (arg0 < 0 && !Number.isInteger(arg1)) {
+              throw new Error(`Invalid arguments for ${name}(): negative base with non-integer exponent at position ${position}`)
+            }
+            if (arg0 === 0 && arg1 <= 0) {
+              throw new Error(`Invalid arguments for ${name}(): zero base with non-positive exponent at position ${position}`)
+            }
+          }
+        }
+        break
+
+      case 'fmod':
+      case 'fmodf':
+        if (args.length >= 2) {
+          const arg1 = this.getConstantValue(args[1])
+          if (arg1 !== null && arg1 === 0) {
+            throw new Error(`Invalid argument for ${name}(): division by zero at position ${position}`)
+          }
+        }
+        break
+    }
   }
 
   // Token manipulation helpers

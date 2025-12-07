@@ -17,13 +17,17 @@ const config = {
     '^@/(.*)$': '<rootDir>/$1',
   },
   testMatch: [
-    '**/__tests__/**/*.(js|jsx|ts|tsx)',
+    '**/__tests__/**/*.test.(js|jsx|ts|tsx)',
+    '**/__tests__/**/*.tests.(js|jsx|ts|tsx)',
+    '**/__tests__/**/*.spec.(js|jsx|ts|tsx)',
     '**/*.(test|spec).(js|jsx|ts|tsx)'
   ],
   testPathIgnorePatterns: [
     '/node_modules/',
-    '/__tests__/wasm/fixtures/hello.js',
-    '/__tests__/wasm/fixtures/model-output/'
+    '/__tests__/wasm/fixtures/',
+    '/__tests__/utils/',
+    '/__tests__/codegen/enable-test-models.ts',
+    '/__tests__/wasm/api/test-compile-api-manual.ts'
   ],
   collectCoverageFrom: [
     'lib/**/*.{js,jsx,ts,tsx}',

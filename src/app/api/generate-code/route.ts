@@ -181,20 +181,9 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   const safeName = sanitizeFilename(model.name)
 
+  // Log warnings but don't fail - allow users to inspect generated code
   if (result.warnings.length > 0) {
-    let warningMessage = 'Code generation completed with warnings:\n'
-    warningMessage += result.warnings.map((w: string) => `- ${w}`).join('\n')
-    throw new AppError(
-      "Code generation failed:\n" + warningMessage,
-      400,
-      ErrorTypes.VALIDATION_ERROR,
-      { 
-        errors: warningMessage,
-        modelId,
-        modelName: model.name,
-        version: versionToUse
-      }
-    )
+    console.log('Code generation warnings:', result.warnings)
   }
 
   // Validate generated files
@@ -216,12 +205,23 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
   try {
     zip = new JSZip()
 
+    // Add main model files
     zip.file(`${safeName}.h`, result.header)
-    zip.file(`${safeName}.c`, result.source)  
+    zip.file(`${safeName}.c`, result.source)
+
+    // Add segregated subsystem files
+    if (result.subsystemFiles && result.subsystemFiles.length > 0) {
+      console.log(`Adding ${result.subsystemFiles.length} subsystem file(s) to ZIP`)
+      for (const subFile of result.subsystemFiles) {
+        zip.file(`${subFile.subsystemName}.h`, subFile.header)
+        zip.file(`${subFile.subsystemName}.c`, subFile.source)
+      }
+    }
+
     zip.file('library.properties', `name=${safeName}\nversion=${versionToUse}\ndescription=Generated C library for ${model.name}\n\n`)
 
     // Add a README file
-    const readmeContent = generateReadmeContent(model.name, versionToUse)
+    const readmeContent = generateReadmeContent(model.name, versionToUse, result.subsystemFiles)
     zip.file('README.md', readmeContent)
 
     // Generate the ZIP buffer
@@ -252,15 +252,31 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
   })
 }
 
-function generateReadmeContent(modelName: string, version: number): string {
+function generateReadmeContent(
+  modelName: string,
+  version: number,
+  subsystemFiles?: Array<{ subsystemName: string }>
+): string {
+  // Build file list
+  let filesList = `- ${modelName}.h - Header file with data structures and function declarations
+- ${modelName}.c - Implementation file with the model logic`
+
+  if (subsystemFiles && subsystemFiles.length > 0) {
+    filesList += '\n\n### Segregated Subsystems:'
+    for (const sub of subsystemFiles) {
+      filesList += `\n- ${sub.subsystemName}.h - Subsystem header`
+      filesList += `\n- ${sub.subsystemName}.c - Subsystem implementation`
+    }
+  }
+
+  filesList += '\n- library.properties - PlatformIO library configuration'
+
   return `# ${modelName} - Generated C Library (Version ${version})
 
 This library was automatically generated from a visual block diagram model.
 
 ## Files:
-- ${modelName}.h - Header file with data structures and function declarations
-- ${modelName}.c - Implementation file with the model logic
-- library.properties - PlatformIO library configuration
+${filesList}
 
 ## Version Information:
 - Model: ${modelName}
@@ -287,13 +303,13 @@ void setup() {
 void loop() {
   // Set inputs
   model.inputs.Input1 = analogRead(A0) / 1023.0;
-  
+
   // Execute one step
   ${modelName}_step(&model);
-  
+
   // Use outputs
   analogWrite(9, (int)(model.outputs.Output1 * 255));
-  
+
   delay(10); // Match the time step
 }
 \`\`\`

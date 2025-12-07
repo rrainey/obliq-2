@@ -10,6 +10,7 @@
  *   modelId: string,          // UUID of the model
  *   version?: number,          // Optional version (defaults to latest)
  *   optimizationLevel?: string // 'O0' | 'O1' | 'O2' | 'O3' (default: 'O2')
+ *   noCache?: boolean          // Skip cache lookup and force recompilation (default: false)
  * }
  *
  * Response: text/event-stream
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        const { modelId, version, optimizationLevel = 'O2', enableSimd = false } = requestBody
+        const { modelId, version, optimizationLevel = 'O2', enableSimd = false, noCache = false } = requestBody
 
         // Validate optimization level
         if (!['O0', 'O1', 'O2', 'O3'].includes(optimizationLevel)) {
@@ -178,58 +179,69 @@ export async function POST(request: NextRequest) {
         const sheets = versionData.data.sheets
         const parameters = versionData.data.parameters || [] // Feature 3
 
-        // Step 2: Checking cache
-        sendEvent(controller, 'progress', {
-          step: 'cache-check',
-          progress: 20,
-          message: 'Checking compilation cache...'
-        })
-
         const cacheKey = generateCacheKey(modelId, { sheets, parameters }, { optimizationLevel, enableSimd })
         console.log(`[compile-wasm-stream] Generated cache key: ${cacheKey}`)
 
         const cacheManager = new SupabaseCacheManager()
-        const cachedResult = await cacheManager.get(cacheKey)
-        console.log(`[compile-wasm-stream] Cache lookup result: ${cachedResult ? 'HIT' : 'MISS'}`)
 
-        if (cachedResult) {
-          // Cache hit - return immediately
+        // Step 2: Checking cache (unless noCache is set)
+        if (!noCache) {
           sendEvent(controller, 'progress', {
-            step: 'cache-hit',
-            progress: 100,
-            message: 'Using cached compilation'
+            step: 'cache-check',
+            progress: 20,
+            message: 'Checking compilation cache...'
           })
 
-          // Log cache hit metric
-          await cacheManager.logCompilationMetric({
-            modelId,
-            cacheHit: true,
-            blockCount: sheets.flatMap((s: any) => s.blocks).length,
-            optimizationLevel
-          })
+          const cachedResult = await cacheManager.get(cacheKey)
+          console.log(`[compile-wasm-stream] Cache lookup result: ${cachedResult ? 'HIT' : 'MISS'}`)
 
-          sendEvent(controller, 'complete', {
-            wasmData: cachedResult.wasmData.toString('base64'),
-            jsData: cachedResult.jsData.toString('base64'),
-            metadata: {
-              ...cachedResult.metadata,
+          if (cachedResult) {
+            // Cache hit - return immediately
+            sendEvent(controller, 'progress', {
+              step: 'cache-hit',
+              progress: 100,
+              message: 'Using cached compilation'
+            })
+
+            // Log cache hit metric
+            await cacheManager.logCompilationMetric({
+              modelId,
               cacheHit: true,
-              retrievalTime: Date.now() - startTime,
-              modelName: model.name,
-              cacheKey
-            }
+              blockCount: sheets.flatMap((s: any) => s.blocks).length,
+              optimizationLevel
+            })
+
+            sendEvent(controller, 'complete', {
+              wasmData: cachedResult.wasmData.toString('base64'),
+              jsData: cachedResult.jsData.toString('base64'),
+              metadata: {
+                ...cachedResult.metadata,
+                cacheHit: true,
+                retrievalTime: Date.now() - startTime,
+                modelName: model.name,
+                cacheKey
+              }
+            })
+
+            controller.close()
+            return
+          }
+
+          // Cache miss - proceed with compilation
+          sendEvent(controller, 'progress', {
+            step: 'cache-miss',
+            progress: 25,
+            message: 'Cache miss - starting compilation...'
           })
-
-          controller.close()
-          return
+        } else {
+          // Cache bypassed
+          console.log(`[compile-wasm-stream] Cache BYPASSED (noCache=true)`)
+          sendEvent(controller, 'progress', {
+            step: 'cache-bypass',
+            progress: 25,
+            message: 'Cache bypassed - forcing recompilation...'
+          })
         }
-
-        // Cache miss - proceed with compilation
-        sendEvent(controller, 'progress', {
-          step: 'cache-miss',
-          progress: 25,
-          message: 'Cache miss - starting compilation...'
-        })
 
         // Step 3: Generate C code
         sendEvent(controller, 'progress', {
@@ -244,6 +256,12 @@ export async function POST(request: NextRequest) {
           wasmWrapper: string
           inputMap: Map<string, number>
           outputMap: Map<string, number>
+          subsystemFiles: Array<{
+            header: string
+            source: string
+            subsystemName: string
+            warnings: string[]
+          }>
         }
 
         try {
@@ -289,6 +307,18 @@ export async function POST(request: NextRequest) {
           await fs.writeFile(sourcePath, generatedCode.source)
           await fs.writeFile(wrapperPath, generatedCode.wasmWrapper)
 
+          // Write subsystem files (for segregated subsystems)
+          const subsystemSourceFiles: string[] = []
+          if (generatedCode.subsystemFiles && generatedCode.subsystemFiles.length > 0) {
+            for (const subFile of generatedCode.subsystemFiles) {
+              const subHeaderPath = path.join(tempDir, `${subFile.subsystemName}.h`)
+              const subSourcePath = path.join(tempDir, `${subFile.subsystemName}.c`)
+              await fs.writeFile(subHeaderPath, subFile.header)
+              await fs.writeFile(subSourcePath, subFile.source)
+              subsystemSourceFiles.push(`${subFile.subsystemName}.c`)
+            }
+          }
+
           // Step 5: Compile with Emscripten
           const simdLabel = enableSimd ? ', SIMD enabled' : ''
           sendEvent(controller, 'progress', {
@@ -308,11 +338,18 @@ export async function POST(request: NextRequest) {
           // Build SIMD flag if enabled
           const simdFlag = enableSimd ? '-msimd128 ' : ''
 
+          // Build list of source files (main + wrapper + subsystems)
+          const sourceFiles = [
+            `/workspace/${safeName}.c`,
+            `/workspace/${safeName}_wasm.c`,
+            ...subsystemSourceFiles.map(f => `/workspace/${f}`)
+          ].join(' ')
+
           const emccCmd = `docker run --rm -v "${volumeMount}:/workspace" ${DOCKER_IMAGE} ` +
-            `emcc /workspace/${safeName}.c /workspace/${safeName}_wasm.c ` +
+            `emcc ${sourceFiles} ` +
             `-I/workspace -o /workspace/${safeName}.js ` +
             `-s WASM=1 ` +
-            `-s "EXPORTED_FUNCTIONS=[\\"_wasm_init\\",\\"_wasm_set_input\\",\\"_wasm_get_output\\",\\"_wasm_step\\",\\"_wasm_get_time\\",\\"_wasm_get_collector_count\\",\\"_wasm_get_collector_name\\",\\"_wasm_get_sample_count\\",\\"_wasm_get_samples\\",\\"_wasm_get_element_size\\",\\"_wasm_cleanup\\",\\"_malloc\\",\\"_free\\"]" ` +
+            `-s "EXPORTED_FUNCTIONS=[\\"_wasm_init\\",\\"_wasm_set_input\\",\\"_wasm_get_output\\",\\"_wasm_step\\",\\"_wasm_get_time\\",\\"_wasm_get_collector_count\\",\\"_wasm_get_collector_name\\",\\"_wasm_get_sample_count\\",\\"_wasm_get_sample_write_index\\",\\"_wasm_get_max_samples\\",\\"_wasm_get_last_sample_time\\",\\"_wasm_get_samples\\",\\"_wasm_get_element_size\\",\\"_wasm_cleanup\\",\\"_malloc\\",\\"_free\\"]" ` +
             `-s "EXPORTED_RUNTIME_METHODS=[\\"ccall\\",\\"cwrap\\",\\"UTF8ToString\\"]" ` +
             `-s MODULARIZE=1 ` +
             `-s "EXPORT_NAME=createModule" ` +

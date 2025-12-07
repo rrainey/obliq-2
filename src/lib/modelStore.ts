@@ -1639,8 +1639,9 @@ function findSheetInSubsystems(sheets: Sheet[], sheetId: string): Sheet | null {
 
 // Migration function to convert old format to new
 export function migrateToHierarchicalSheets(modelData: any) {
-  // If already hierarchical, return as-is
-  if (modelData.version === "2.0") return modelData
+  // If already hierarchical (v2.0+), return as-is
+  // V2.x models already have subsystem sheets nested inside subsystem block parameters
+  if (modelData.version && modelData.version.startsWith("2.")) return modelData
   
   const rootSheets: Sheet[] = []
   const subsystemSheets = new Map<string, Sheet[]>()

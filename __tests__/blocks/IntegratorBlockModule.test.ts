@@ -1,8 +1,8 @@
 // __tests__/blocks/IntegratorBlockModule.test.ts
+// Tests for C code generation only (JS simulation engine removed)
 
 import { IntegratorBlockModule } from '@/lib/blocks/IntegratorBlockModule'
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
 
 describe('IntegratorBlockModule', () => {
   const module = new IntegratorBlockModule()
@@ -32,62 +32,25 @@ describe('IntegratorBlockModule', () => {
     }
   })
 
-  const createBlockState = (
-    blockId: string,
-    params: {
-      initialValue?: number
-      showEnableInput?: boolean
-      showResetInput?: boolean
-      useLimits?: boolean
-      lowerLimit?: number
-      upperLimit?: number
-    } = {}
-  ): BlockState => ({
-    blockId,
-    blockType: 'integrator',
-    outputs: [0],
-    internalState: {
-      initialValue: params.initialValue ?? 0,
-      showEnableInput: params.showEnableInput ?? false,
-      showResetInput: params.showResetInput ?? false,
-      useLimits: params.useLimits ?? false,
-      lowerLimit: params.lowerLimit ?? -Infinity,
-      upperLimit: params.upperLimit ?? Infinity
-    }
-  })
-
-  const createSimulationState = (timeStep = 0.01): SimulationState => ({
-    time: 0,
-    timeStep,
-    duration: 1.0,
-    blockStates: new Map(),
-    signalValues: new Map(),
-    sheetLabelValues: new Map(),
-    isRunning: false,
-    subsystemEnableStates: new Map(),
-    subsystemEnableSignals: new Map(),
-    parentSubsystemMap: new Map()
-  })
-
   describe('Port configuration', () => {
     test('has 1 input port by default (derivative only)', () => {
       const block = createBlock('Int1')
       expect(module.getInputPortCount(block)).toBe(1)
     })
 
-    test('has 2 input ports with enable input', () => {
+    test('has 1 input port even with enable (enable is on top edge)', () => {
       const block = createBlock('Int1', { showEnableInput: true })
-      expect(module.getInputPortCount(block)).toBe(2)
+      expect(module.getInputPortCount(block)).toBe(1)
     })
 
-    test('has 2 input ports with reset input', () => {
+    test('has 1 input port even with reset (reset is on bottom edge)', () => {
       const block = createBlock('Int1', { showResetInput: true })
-      expect(module.getInputPortCount(block)).toBe(2)
+      expect(module.getInputPortCount(block)).toBe(1)
     })
 
-    test('has 3 input ports with both enable and reset', () => {
+    test('has 1 input port even with both enable and reset (special edge ports)', () => {
       const block = createBlock('Int1', { showEnableInput: true, showResetInput: true })
-      expect(module.getInputPortCount(block)).toBe(3)
+      expect(module.getInputPortCount(block)).toBe(1)
     })
 
     test('has exactly 1 output port', () => {
@@ -100,19 +63,19 @@ describe('IntegratorBlockModule', () => {
       expect(module.getInputPortLabels?.(block)).toEqual(['Derivative'])
     })
 
-    test('input port labels - with enable', () => {
+    test('input port labels same with enable (enable is on top edge)', () => {
       const block = createBlock('Int1', { showEnableInput: true })
-      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative', 'Enable'])
+      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative'])
     })
 
-    test('input port labels - with reset', () => {
+    test('input port labels same with reset (reset is on bottom edge)', () => {
       const block = createBlock('Int1', { showResetInput: true })
-      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative', 'Reset'])
+      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative'])
     })
 
-    test('input port labels - with enable and reset', () => {
+    test('input port labels same with enable and reset (special edge ports)', () => {
       const block = createBlock('Int1', { showEnableInput: true, showResetInput: true })
-      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative', 'Enable', 'Reset'])
+      expect(module.getInputPortLabels?.(block)).toEqual(['Derivative'])
     })
 
     test('output port is labeled "Output"', () => {
@@ -311,234 +274,6 @@ describe('IntegratorBlockModule', () => {
     })
   })
 
-  describe('executeSimulation - Runtime behavior', () => {
-    describe('Basic scalar integration', () => {
-      test('integrates constant positive input', () => {
-        const blockState = createBlockState('int-1')
-        const simState = createSimulationState(0.1)
-
-        // Constant derivative of 1.0, dt = 0.1
-        // After 1 step: 0 + 1.0 * 0.1 = 0.1
-        module.executeSimulation(blockState, [1.0], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(0.1)
-
-        // After 2nd step: 0.1 + 1.0 * 0.1 = 0.2
-        module.executeSimulation(blockState, [1.0], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(0.2)
-      })
-
-      test('integrates constant negative input', () => {
-        const blockState = createBlockState('int-1')
-        const simState = createSimulationState(0.1)
-
-        module.executeSimulation(blockState, [-2.0], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(-0.2)
-
-        module.executeSimulation(blockState, [-2.0], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(-0.4)
-      })
-
-      test('uses initial value', () => {
-        const blockState = createBlockState('int-1', { initialValue: 5 })
-        const simState = createSimulationState(0.1)
-
-        module.executeSimulation(blockState, [1.0], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(5.1) // 5 + 1.0 * 0.1
-      })
-    })
-
-    describe('Enable input', () => {
-      test('integrates when enabled', () => {
-        const blockState = createBlockState('int-1', { showEnableInput: true })
-        const simState = createSimulationState(0.1)
-
-        // Enable = true, should integrate
-        module.executeSimulation(blockState, [1.0, true], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(0.1)
-      })
-
-      test('holds value when disabled', () => {
-        const blockState = createBlockState('int-1', { showEnableInput: true })
-        const simState = createSimulationState(0.1)
-
-        // First integrate while enabled
-        module.executeSimulation(blockState, [1.0, true], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(0.1)
-
-        // Then disable - should hold at 0.1
-        module.executeSimulation(blockState, [1.0, false], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(0.1)
-
-        // Still disabled
-        module.executeSimulation(blockState, [1.0, false], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(0.1)
-
-        // Re-enable and continue integration
-        module.executeSimulation(blockState, [1.0, true], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(0.2)
-      })
-    })
-
-    describe('Reset input', () => {
-      test('resets on rising edge', () => {
-        const blockState = createBlockState('int-1', {
-          showResetInput: true,
-          initialValue: 0
-        })
-        const simState = createSimulationState(0.1)
-
-        // Integrate for a few steps (reset = false)
-        module.executeSimulation(blockState, [10.0, false], simState)
-        module.executeSimulation(blockState, [10.0, false], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(2.0)
-
-        // Rising edge reset - note that reset happens, then integration continues in same step
-        // So output = 0 (reset) + 10 * 0.1 (integrate) = 1.0
-        module.executeSimulation(blockState, [10.0, true], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(1.0) // Reset to 0, then integrated
-      })
-
-      test('does not reset on falling edge', () => {
-        const blockState = createBlockState('int-1', {
-          showResetInput: true,
-          initialValue: 0
-        })
-        const simState = createSimulationState(0.1)
-
-        // Rising edge reset - resets to 0, then integrates
-        // Output = 0 + 10 * 0.1 = 1.0
-        module.executeSimulation(blockState, [10.0, true], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(1.0)
-
-        // Integrate with reset still high (no rising edge, just continues)
-        module.executeSimulation(blockState, [10.0, true], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(2.0) // 1.0 + 10 * 0.1
-
-        // Falling edge - should continue integrating, not reset
-        module.executeSimulation(blockState, [10.0, false], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(3.0) // 2.0 + 10 * 0.1
-      })
-    })
-
-    describe('Limits and saturation', () => {
-      test('clamps output to upper limit', () => {
-        const blockState = createBlockState('int-1', {
-          useLimits: true,
-          lowerLimit: -5,
-          upperLimit: 5
-        })
-        const simState = createSimulationState(1.0) // Large dt for fast saturation
-
-        module.executeSimulation(blockState, [10.0], simState)
-        expect(blockState.outputs[0]).toBe(5) // Clamped to upper limit
-      })
-
-      test('clamps output to lower limit', () => {
-        const blockState = createBlockState('int-1', {
-          useLimits: true,
-          lowerLimit: -5,
-          upperLimit: 5
-        })
-        const simState = createSimulationState(1.0)
-
-        module.executeSimulation(blockState, [-10.0], simState)
-        expect(blockState.outputs[0]).toBe(-5) // Clamped to lower limit
-      })
-
-      test('saturation optimization prevents integration when at limit', () => {
-        const blockState = createBlockState('int-1', {
-          useLimits: true,
-          lowerLimit: -5,
-          upperLimit: 5,
-          initialValue: 5 // Start at upper limit
-        })
-        const simState = createSimulationState(0.1)
-
-        // Initialize with initial value
-        module.executeSimulation(blockState, [10.0], simState) // Positive derivative at upper limit
-        // Due to saturation optimization, should stay at 5
-        expect(blockState.outputs[0]).toBe(5)
-
-        // Negative derivative should allow decrease
-        module.executeSimulation(blockState, [-10.0], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(4.0) // 5 - 10 * 0.1
-      })
-    })
-
-    describe('Vector integration', () => {
-      test('integrates vector elements independently', () => {
-        const blockState = createBlockState('int-1')
-        const simState = createSimulationState(0.1)
-
-        module.executeSimulation(blockState, [[1.0, 2.0, 3.0]], simState)
-        const output = blockState.outputs[0] as number[]
-        expect(output[0]).toBeCloseTo(0.1)
-        expect(output[1]).toBeCloseTo(0.2)
-        expect(output[2]).toBeCloseTo(0.3)
-      })
-
-      test('applies limits to vector elements', () => {
-        const blockState = createBlockState('int-1', {
-          useLimits: true,
-          lowerLimit: -0.5,
-          upperLimit: 0.5
-        })
-        const simState = createSimulationState(1.0)
-
-        module.executeSimulation(blockState, [[1.0, 2.0, -3.0]], simState)
-        const output = blockState.outputs[0] as number[]
-        expect(output[0]).toBe(0.5) // Clamped
-        expect(output[1]).toBe(0.5) // Clamped
-        expect(output[2]).toBe(-0.5) // Clamped
-      })
-    })
-
-    describe('Matrix integration', () => {
-      test('integrates matrix elements independently', () => {
-        const blockState = createBlockState('int-1')
-        const simState = createSimulationState(0.1)
-
-        const input = [
-          [1.0, 2.0],
-          [3.0, 4.0]
-        ]
-        module.executeSimulation(blockState, [input], simState)
-        const output = blockState.outputs[0] as number[][]
-        expect(output[0][0]).toBeCloseTo(0.1)
-        expect(output[0][1]).toBeCloseTo(0.2)
-        expect(output[1][0]).toBeCloseTo(0.3)
-        expect(output[1][1]).toBeCloseTo(0.4)
-      })
-    })
-
-    describe('Combined enable and reset', () => {
-      test('enable and reset work together', () => {
-        const blockState = createBlockState('int-1', {
-          showEnableInput: true,
-          showResetInput: true,
-          initialValue: 0
-        })
-        const simState = createSimulationState(0.1)
-
-        // Integrate enabled, no reset
-        module.executeSimulation(blockState, [10.0, true, false], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(1.0)
-
-        // Disable - hold value
-        module.executeSimulation(blockState, [10.0, false, false], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(1.0)
-
-        // Reset while disabled (rising edge)
-        module.executeSimulation(blockState, [10.0, false, true], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(0) // Reset to initial
-
-        // Re-enable after reset
-        module.executeSimulation(blockState, [10.0, true, false], simState)
-        expect(blockState.outputs[0]).toBeCloseTo(1.0) // 0 + 10 * 0.1
-      })
-    })
-  })
-
   describe('Struct member generation', () => {
     test('generates scalar struct member', () => {
       const block = createBlock('Int1')
@@ -559,27 +294,4 @@ describe('IntegratorBlockModule', () => {
     })
   })
 
-  describe('computeDerivatives', () => {
-    test('returns scalar derivative', () => {
-      const blockState = createBlockState('int-1')
-      const derivs = module.computeDerivatives?.(blockState, [5.0], 0)
-      expect(derivs).toEqual([5.0])
-    })
-
-    test('returns vector derivatives', () => {
-      const blockState = createBlockState('int-1')
-      const derivs = module.computeDerivatives?.(blockState, [[1.0, 2.0, 3.0]], 0)
-      expect(derivs).toEqual([1.0, 2.0, 3.0])
-    })
-
-    test('returns flattened matrix derivatives', () => {
-      const blockState = createBlockState('int-1')
-      const input = [
-        [1.0, 2.0],
-        [3.0, 4.0]
-      ]
-      const derivs = module.computeDerivatives?.(blockState, [input], 0)
-      expect(derivs).toEqual([1.0, 2.0, 3.0, 4.0])
-    })
-  })
 })

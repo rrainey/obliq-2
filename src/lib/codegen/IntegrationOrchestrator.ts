@@ -81,6 +81,11 @@ export class IntegrationOrchestrator {
         code += '    /* Unsupported integration method */\n'
       }
       code += '\n'
+
+      // Sync segregated subsystem states back to their internal structs
+      // This is needed because RK4 integrates model->states.SubsystemName
+      // but the subsystem's compute_outputs reads from model->SubsystemName.states
+      code += this.generateSubsystemStateSync()
     }
     
     // Evaluate enable states at end of step (if needed)
@@ -119,5 +124,37 @@ export class IntegrationOrchestrator {
    */
   private hasEnableSubsystems(): boolean {
     return this.model.subsystemEnableInfo.some(info => info.hasEnableInput)
+  }
+
+  /**
+   * Generate code to sync segregated subsystem states after integration.
+   *
+   * The parent model has two copies of each subsystem's states:
+   * 1. model->states.SubsystemName - used for RK4 integration (part of parent's states struct)
+   * 2. model->SubsystemName.states - used by subsystem's compute_outputs
+   *
+   * After integration updates (1), we need to copy to (2) so the subsystem
+   * reads the correct integrated values on the next step.
+   */
+  private generateSubsystemStateSync(): string {
+    if (!this.model.segregatedSubsystems || this.model.segregatedSubsystems.length === 0) {
+      return ''
+    }
+
+    const statefulSubs = this.model.segregatedSubsystems.filter(sub => sub.hasState)
+    if (statefulSubs.length === 0) {
+      return ''
+    }
+
+    let code = '    /* Sync segregated subsystem states */\n'
+
+    for (const sub of statefulSubs) {
+      const safeName = sub.sanitizedName
+      // memcpy is the most efficient way to sync the entire states struct
+      code += `    memcpy(&model->${safeName}.states, &model->states.${safeName}, sizeof(model->${safeName}.states));\n`
+    }
+
+    code += '\n'
+    return code
   }
 }

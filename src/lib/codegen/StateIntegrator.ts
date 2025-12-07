@@ -3,6 +3,7 @@
 import { FlattenedModel, FlattenedBlock } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
+import { SubsystemInfo } from './SubsystemInfo'
 
 /**
  * Options for state integration code generation
@@ -68,42 +69,132 @@ export class StateIntegrator {
    */
   generateEulerIntegration(): string {
     const statefulBlocks = this.getStatefulBlocks()
-    
-    if (statefulBlocks.length === 0) {
+    const hasSubsystemStates = this.hasStatefulSubsystems()
+
+    if (statefulBlocks.length === 0 && !hasSubsystemStates) {
       return '    /* No state integration needed - no stateful blocks */\n'
     }
-    
+
     let code = ''
-    
+
     if (this.options.includeComments) {
       code += '    /* Euler integration: x[n+1] = x[n] + dt * dx/dt */\n'
     }
-    
+
     // First, calculate derivatives
     code += '    /* Calculate derivatives */\n'
     code += `    ${this.modelName}_states_t derivatives;\n`
     code += `    ${this.modelName}_derivatives(\n`
     code += '        model->time,\n'
-    code += '        &model->inputs,\n'
-    code += '        &model->signals,\n'
+    code += '        model,\n'
     code += '        &model->states,\n'
-    code += '        &derivatives'
-    
-    // Add enable states parameter if needed
-    if (this.hasEnableSubsystems()) {
-      code += ',\n        &model->enable_states'
-    }
-    
-    code += '\n    );\n\n'
-    
+    code += '        &derivatives\n'
+    code += '    );\n\n'
+
     // Then update states
     code += '    /* Update states using Euler method */\n'
-    
+
     // Generate state update for each stateful block
     for (const block of statefulBlocks) {
       code += this.generateEulerBlockUpdate(block)
     }
-    
+
+    // Generate state update for subsystem states
+    code += this.generateSubsystemEulerUpdate()
+
+    return code
+  }
+
+  /**
+   * Generate Euler state update for segregated subsystems
+   */
+  private generateSubsystemEulerUpdate(): string {
+    let code = ''
+    const statefulSubs = this.getStatefulSubsystems()
+
+    for (const sub of statefulSubs) {
+      const subName = sub.sanitizedName
+      const statefulBlocks = this.getSubsystemStatefulBlocks(sub)
+
+      if (statefulBlocks.length === 0) continue
+
+      code += `    /* Subsystem: ${sub.subsystemName} */\n`
+
+      // Check enable state if subsystem has enable input
+      if (sub.hasEnableInput) {
+        code += `    if (model->${subName}.enabled) {\n`
+        for (const block of statefulBlocks) {
+          code += this.generateSubsystemEulerBlockUpdate(block, subName, 2)
+        }
+        code += '    }\n'
+      } else {
+        for (const block of statefulBlocks) {
+          code += this.generateSubsystemEulerBlockUpdate(block, subName, 1)
+        }
+      }
+    }
+
+    return code
+  }
+
+  /**
+   * Generate Euler update for a single block within a subsystem
+   */
+  private generateSubsystemEulerBlockUpdate(
+    block: FlattenedBlock,
+    subName: string,
+    indentLevel: number = 1
+  ): string {
+    const indent = '    '.repeat(indentLevel)
+    let code = ''
+
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    const typeInfo = this.getBlockTypeInfo(block)
+    const stateOrder = this.getBlockStateOrder(block)
+
+    if (stateOrder > 0) {
+      if (typeInfo.isMatrix) {
+        const [rows, cols] = typeInfo.dimensions
+        code += `${indent}for (int i = 0; i < ${rows}; i++) {\n`
+        code += `${indent}    for (int j = 0; j < ${cols}; j++) {\n`
+        code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
+        code += `${indent}            model->states.${subName}.${safeName}_states[i][j][k] += model->dt * derivatives.${subName}.${safeName}_states[i][j][k];\n`
+        code += `${indent}        }\n`
+        code += `${indent}    }\n`
+        code += `${indent}}\n`
+      } else if (typeInfo.isVector) {
+        const size = typeInfo.dimensions[0]
+        code += `${indent}for (int i = 0; i < ${size}; i++) {\n`
+        code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
+        code += `${indent}        model->states.${subName}.${safeName}_states[i][j] += model->dt * derivatives.${subName}.${safeName}_states[i][j];\n`
+        code += `${indent}    }\n`
+        code += `${indent}}\n`
+      } else {
+        code += `${indent}for (int i = 0; i < ${stateOrder}; i++) {\n`
+        code += `${indent}    model->states.${subName}.${safeName}_states[i] += model->dt * derivatives.${subName}.${safeName}_states[i];\n`
+        code += `${indent}}\n`
+      }
+
+      // Apply post-integration limiting if configured (for integrators with limits)
+      try {
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
+        if (generator.generatePostIntegrationLimiting) {
+          const outputType = this.getBlockOutputType(block)
+          const limitCode = generator.generatePostIntegrationLimiting(block.block, outputType)
+          if (limitCode) {
+            // Replace model->states.X with model->states.subName.X for subsystem blocks
+            const modifiedCode = limitCode.replace(
+              /model->states\./g,
+              `model->states.${subName}.`
+            )
+            code += modifiedCode.split('\n').map((line: string) => indent.slice(4) + line).join('\n')
+          }
+        }
+      } catch {
+        // Block module not found, skip limiting
+      }
+    }
+
     return code
   }
   
@@ -221,67 +312,43 @@ export class StateIntegrator {
     code += '    /* Calculate k1 = f(t, y) */\n'
     code += `    ${this.modelName}_derivatives(\n`
     code += '        model->time,\n'
-    code += '        &model->inputs,\n'
-    code += '        &model->signals,\n'
+    code += '        model,\n'
     code += '        &model->states,\n'
-    code += '        &k1'
-    
-    if (this.hasEnableSubsystems()) {
-      code += ',\n        &model->enable_states'
-    }
-    
-    code += '\n    );\n\n'
-    
+    code += '        &k1\n'
+    code += '    );\n\n'
+
     // k2 = f(t + h/2, y + h/2 * k1)
     code += '    /* Calculate k2 = f(t + h/2, y + h/2 * k1) */\n'
     code += this.generateStateUpdate('temp_states', 'model->states', 'k1', 'half_h')
     code += '\n'
     code += `    ${this.modelName}_derivatives(\n`
     code += '        model->time + half_h,\n'
-    code += '        &model->inputs,\n'
-    code += '        &model->signals,\n'
+    code += '        model,\n'
     code += '        &temp_states,\n'
-    code += '        &k2'
-    
-    if (this.hasEnableSubsystems()) {
-      code += ',\n        &model->enable_states'
-    }
-    
-    code += '\n    );\n\n'
-    
+    code += '        &k2\n'
+    code += '    );\n\n'
+
     // k3 = f(t + h/2, y + h/2 * k2)
     code += '    /* Calculate k3 = f(t + h/2, y + h/2 * k2) */\n'
     code += this.generateStateUpdate('temp_states', 'model->states', 'k2', 'half_h')
     code += '\n'
     code += `    ${this.modelName}_derivatives(\n`
     code += '        model->time + half_h,\n'
-    code += '        &model->inputs,\n'
-    code += '        &model->signals,\n'
+    code += '        model,\n'
     code += '        &temp_states,\n'
-    code += '        &k3'
-    
-    if (this.hasEnableSubsystems()) {
-      code += ',\n        &model->enable_states'
-    }
-    
-    code += '\n    );\n\n'
-    
+    code += '        &k3\n'
+    code += '    );\n\n'
+
     // k4 = f(t + h, y + h * k3)
     code += '    /* Calculate k4 = f(t + h, y + h * k3) */\n'
     code += this.generateStateUpdate('temp_states', 'model->states', 'k3', 'h')
     code += '\n'
     code += `    ${this.modelName}_derivatives(\n`
     code += '        model->time + h,\n'
-    code += '        &model->inputs,\n'
-    code += '        &model->signals,\n'
+    code += '        model,\n'
     code += '        &temp_states,\n'
-    code += '        &k4'
-    
-    if (this.hasEnableSubsystems()) {
-      code += ',\n        &model->enable_states'
-    }
-    
-    code += '\n    );\n\n'
+    code += '        &k4\n'
+    code += '    );\n\n'
     
     // Update states using RK4 formula
     code += '    /* Update states using RK4 formula: y[n+1] = y[n] + h/6 * (k1 + 2*k2 + 2*k3 + k4) */\n'
@@ -333,6 +400,63 @@ export class StateIntegrator {
       }
     }
 
+    // Update subsystem states
+    code += this.generateSubsystemStateUpdate(dest, source, derivative, factor)
+
+    return code
+  }
+
+  /**
+   * Generate code to update subsystem states for RK4 intermediate stages
+   */
+  private generateSubsystemStateUpdate(
+    dest: string,
+    source: string,
+    derivative: string,
+    factor: string
+  ): string {
+    let code = ''
+    const statefulSubs = this.getStatefulSubsystems()
+
+    for (const sub of statefulSubs) {
+      const subName = sub.sanitizedName
+      const statefulBlocks = this.getSubsystemStatefulBlocks(sub)
+
+      if (statefulBlocks.length === 0) continue
+
+      code += `    /* Subsystem: ${sub.subsystemName} */\n`
+
+      for (const block of statefulBlocks) {
+        const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+        const typeInfo = this.getBlockTypeInfo(block)
+        const stateOrder = this.getBlockStateOrder(block)
+
+        if (stateOrder > 0) {
+          if (typeInfo.isMatrix) {
+            const [rows, cols] = typeInfo.dimensions
+            code += `    for (int i = 0; i < ${rows}; i++) {\n`
+            code += `        for (int j = 0; j < ${cols}; j++) {\n`
+            code += `            for (int k = 0; k < ${stateOrder}; k++) {\n`
+            code += `                ${dest}.${subName}.${safeName}_states[i][j][k] = ${source}.${subName}.${safeName}_states[i][j][k] + ${factor} * ${derivative}.${subName}.${safeName}_states[i][j][k];\n`
+            code += `            }\n`
+            code += `        }\n`
+            code += `    }\n`
+          } else if (typeInfo.isVector) {
+            const size = typeInfo.dimensions[0]
+            code += `    for (int i = 0; i < ${size}; i++) {\n`
+            code += `        for (int j = 0; j < ${stateOrder}; j++) {\n`
+            code += `            ${dest}.${subName}.${safeName}_states[i][j] = ${source}.${subName}.${safeName}_states[i][j] + ${factor} * ${derivative}.${subName}.${safeName}_states[i][j];\n`
+            code += `        }\n`
+            code += `    }\n`
+          } else {
+            code += `    for (int i = 0; i < ${stateOrder}; i++) {\n`
+            code += `        ${dest}.${subName}.${safeName}_states[i] = ${source}.${subName}.${safeName}_states[i] + ${factor} * ${derivative}.${subName}.${safeName}_states[i];\n`
+            code += `    }\n`
+          }
+        }
+      }
+    }
+
     return code
   }
   
@@ -353,6 +477,119 @@ export class StateIntegrator {
         } else {
           code += this.generateRK4BlockUpdate(block, 1)
         }
+      }
+    }
+
+    // Add subsystem state final updates
+    code += this.generateSubsystemRK4FinalUpdate()
+
+    return code
+  }
+
+  /**
+   * Generate RK4 final state update for segregated subsystems
+   */
+  private generateSubsystemRK4FinalUpdate(): string {
+    let code = ''
+    const statefulSubs = this.getStatefulSubsystems()
+
+    for (const sub of statefulSubs) {
+      const subName = sub.sanitizedName
+      const statefulBlocks = this.getSubsystemStatefulBlocks(sub)
+
+      if (statefulBlocks.length === 0) continue
+
+      code += `    /* Subsystem: ${sub.subsystemName} */\n`
+
+      // Check enable state if subsystem has enable input
+      if (sub.hasEnableInput) {
+        code += `    if (model->${subName}.enabled) {\n`
+        for (const block of statefulBlocks) {
+          code += this.generateSubsystemRK4BlockUpdate(block, subName, 2)
+        }
+        code += '    }\n'
+      } else {
+        for (const block of statefulBlocks) {
+          code += this.generateSubsystemRK4BlockUpdate(block, subName, 1)
+        }
+      }
+    }
+
+    return code
+  }
+
+  /**
+   * Generate RK4 update for a single block within a subsystem
+   */
+  private generateSubsystemRK4BlockUpdate(
+    block: FlattenedBlock,
+    subName: string,
+    indentLevel: number = 1
+  ): string {
+    const indent = '    '.repeat(indentLevel)
+    let code = ''
+
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    const stateOrder = this.getBlockStateOrder(block)
+
+    if (stateOrder > 0) {
+      const typeInfo = this.getBlockTypeInfo(block)
+
+      if (typeInfo.isMatrix) {
+        const [rows, cols] = typeInfo.dimensions
+        code += `${indent}for (int i = 0; i < ${rows}; i++) {\n`
+        code += `${indent}    for (int j = 0; j < ${cols}; j++) {\n`
+        code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
+        code += `${indent}            model->states.${subName}.${safeName}_states[i][j][k] += (h / 6.0) * (\n`
+        code += `${indent}                k1.${subName}.${safeName}_states[i][j][k] +\n`
+        code += `${indent}                2.0 * k2.${subName}.${safeName}_states[i][j][k] +\n`
+        code += `${indent}                2.0 * k3.${subName}.${safeName}_states[i][j][k] +\n`
+        code += `${indent}                k4.${subName}.${safeName}_states[i][j][k]\n`
+        code += `${indent}            );\n`
+        code += `${indent}        }\n`
+        code += `${indent}    }\n`
+        code += `${indent}}\n`
+      } else if (typeInfo.isVector) {
+        const size = typeInfo.dimensions[0]
+        code += `${indent}for (int i = 0; i < ${size}; i++) {\n`
+        code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
+        code += `${indent}        model->states.${subName}.${safeName}_states[i][j] += (h / 6.0) * (\n`
+        code += `${indent}            k1.${subName}.${safeName}_states[i][j] +\n`
+        code += `${indent}            2.0 * k2.${subName}.${safeName}_states[i][j] +\n`
+        code += `${indent}            2.0 * k3.${subName}.${safeName}_states[i][j] +\n`
+        code += `${indent}            k4.${subName}.${safeName}_states[i][j]\n`
+        code += `${indent}        );\n`
+        code += `${indent}    }\n`
+        code += `${indent}}\n`
+      } else {
+        code += `${indent}for (int i = 0; i < ${stateOrder}; i++) {\n`
+        code += `${indent}    model->states.${subName}.${safeName}_states[i] += (h / 6.0) * (\n`
+        code += `${indent}        k1.${subName}.${safeName}_states[i] +\n`
+        code += `${indent}        2.0 * k2.${subName}.${safeName}_states[i] +\n`
+        code += `${indent}        2.0 * k3.${subName}.${safeName}_states[i] +\n`
+        code += `${indent}        k4.${subName}.${safeName}_states[i]\n`
+        code += `${indent}    );\n`
+        code += `${indent}}\n`
+      }
+
+      // Apply post-integration limiting if configured (for integrators with limits)
+      try {
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
+        if (generator.generatePostIntegrationLimiting) {
+          const outputType = this.getBlockOutputType(block)
+          // Need to modify state reference for subsystem blocks
+          const limitCode = generator.generatePostIntegrationLimiting(block.block, outputType)
+          if (limitCode) {
+            // Replace model->states.X with model->states.subName.X for subsystem blocks
+            const modifiedCode = limitCode.replace(
+              /model->states\./g,
+              `model->states.${subName}.`
+            )
+            code += modifiedCode.split('\n').map((line: string) => indent.slice(4) + line).join('\n')
+          }
+        }
+      } catch {
+        // Block module not found, skip limiting
       }
     }
 
@@ -553,9 +790,39 @@ export class StateIntegrator {
   }
   
   /**
-   * Check if the model has any stateful blocks
+   * Check if the model has any stateful blocks (including stateful subsystems)
    */
   hasStatefulBlocks(): boolean {
-    return this.getStatefulBlocks().length > 0
+    return this.getStatefulBlocks().length > 0 || this.hasStatefulSubsystems()
+  }
+
+  /**
+   * Check if the model has any segregated subsystems with state
+   */
+  private hasStatefulSubsystems(): boolean {
+    if (!this.model.segregatedSubsystems) return false
+    return this.model.segregatedSubsystems.some(sub => sub.hasState)
+  }
+
+  /**
+   * Get segregated subsystems that have state
+   */
+  private getStatefulSubsystems(): SubsystemInfo[] {
+    if (!this.model.segregatedSubsystems) return []
+    return this.model.segregatedSubsystems.filter(sub => sub.hasState)
+  }
+
+  /**
+   * Get stateful blocks from within a subsystem's flattened model
+   */
+  private getSubsystemStatefulBlocks(sub: SubsystemInfo): FlattenedBlock[] {
+    return sub.flattenedModel.blocks.filter(block => {
+      try {
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
+        return generator.requiresState(block.block)
+      } catch {
+        return false
+      }
+    })
   }
 }

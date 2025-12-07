@@ -5,27 +5,35 @@ import { WireData } from '@/components/Wire'
 import { Sheet } from '@/lib/simulationEngine'
 import { CCodeBuilder } from '@/lib/codegen/CCodeBuilder'
 import { ModelParameter } from '@/lib/modelSchema'
+import { SubsystemInfo, SubsystemPort } from './SubsystemInfo'
 /**
  * A flattened block includes the original block data plus hierarchy information
  */
 export interface FlattenedBlock {
   /** Original block data */
   block: BlockData
-  
+
   /** Unique flattened name (e.g., "Subsystem1_Controller_Sum1") */
   flattenedName: string
-  
+
   /** Path of subsystem IDs to reach this block (empty for root level) */
   subsystemPath: string[]
-  
+
   /** ID of the subsystem that controls this block's enable state (null for root) */
   enableScope: string | null
-  
+
   /** Original sheet ID where this block resides */
   originalSheetId: string
-  
+
   /** Original block ID (preserved for connection mapping) */
   originalId: string
+
+  /**
+   * Whether this block represents a segregated subsystem.
+   * If true, the subsystem's internals are NOT flattened; instead,
+   * separate code will be generated and this block becomes a function call.
+   */
+  isSegregated?: boolean
 }
 
 /**
@@ -72,6 +80,13 @@ export interface FlattenedModel {
 
   /** Information about subsystems with enable inputs */
   subsystemEnableInfo: SubsystemEnableInfo[]
+
+  /**
+   * Segregated subsystems that generate their own C modules.
+   * These subsystems were NOT flattened; their blocks remain inside
+   * their own flattenedModel for separate code generation.
+   */
+  segregatedSubsystems: SubsystemInfo[]
 
   /** Global model parameters (Feature 3) */
   parameters: ModelParameter[]
@@ -127,6 +142,9 @@ export interface SubsystemPortMapping {
     /** Internal wire or block providing enable signal */
     internalEnableBlockId?: string
   }
+
+  /** Whether this subsystem is segregated (keeps blocks separate for code gen) */
+  isSegregated?: boolean
 }
 
 /**
@@ -195,7 +213,8 @@ export class ModelFlattener {
   private blockMap = new Map<string, FlattenedBlock>()
   private enableScopes = new Map<string, string | null>()
   private subsystemEnableInfo: SubsystemEnableInfo[] = []
-  
+  private segregatedSubsystems: SubsystemInfo[] = []
+
   constructor(options: ModelFlattenerOptions = {}) {
     this.options = {
       preserveOriginalNames: options.preserveOriginalNames ?? true,
@@ -211,7 +230,8 @@ export class ModelFlattener {
   buildEnableScopes(
     sheets: Sheet[],
     subsystemId: string | null = null,
-    parentEnableScope: string | null = null
+    parentEnableScope: string | null = null,
+    subsystemPath: string[] = []
   ): void {
     for (const sheet of sheets) {
       for (const block of sheet.blocks) {
@@ -219,24 +239,25 @@ export class ModelFlattener {
           // Check if this subsystem has enable input
           const hasEnableInput = block.parameters?.showEnableInput === true
           const currentEnableScope = hasEnableInput ? block.id : parentEnableScope
-          
-          // Create subsystem enable info
+
+          // Create subsystem enable info with correct flattened name
           const enableInfo: SubsystemEnableInfo = {
             subsystemId: block.id,
-            subsystemName: this.generateFlattenedName(block.name, []),
+            subsystemName: this.generateFlattenedName(block.name, subsystemPath),
             hasEnableInput,
             parentSubsystemId: subsystemId,
             controlledBlockIds: []
           }
-          
+
           this.subsystemEnableInfo.push(enableInfo)
-          
-          // Process nested sheets
+
+          // Process nested sheets with updated path
           if (block.parameters?.sheets) {
             this.buildEnableScopes(
               block.parameters.sheets as Sheet[],
               block.id,
-              currentEnableScope
+              currentEnableScope,
+              [...subsystemPath, block.name]
             )
           }
         } else {
@@ -287,7 +308,140 @@ export class ModelFlattener {
   private addWarning(message: string): void {
     this.warnings.push(message)
   }
-  
+
+  /**
+   * Analyze a segregated subsystem and create its SubsystemInfo.
+   * This flattens the subsystem's internal structure (respecting nested strategies)
+   * but keeps it separate from the parent model.
+   */
+  private analyzeSegregatedSubsystem(
+    block: BlockData,
+    subsystemSheets: Sheet[],
+    parentPath: string[],
+    parentEnableScope: string | null
+  ): SubsystemInfo {
+    // Create a sub-flattener for the subsystem's internal structure
+    const subFlattener = new ModelFlattener(this.options)
+    const subResult = subFlattener.flattenModel(subsystemSheets, block.name)
+
+    // Collect warnings from sub-flattening
+    this.warnings.push(...subResult.warnings.map(w => `[${block.name}] ${w}`))
+
+    // Extract input port information
+    const inputPorts: SubsystemPort[] = this.extractSubsystemPorts(
+      subResult.model,
+      'input_port',
+      block.parameters?.inputPorts as string[] || []
+    )
+
+    // Extract output port information
+    const outputPorts: SubsystemPort[] = this.extractSubsystemPorts(
+      subResult.model,
+      'output_port',
+      block.parameters?.outputPorts as string[] || []
+    )
+
+    // Check for stateful blocks (integrator, transfer_function)
+    const statefulBlocks = subResult.model.blocks.filter(b =>
+      b.block.type === 'transfer_function' || b.block.type === 'integrator'
+    )
+    const hasState = statefulBlocks.length > 0
+    const stateCount = this.countStateVariables(statefulBlocks)
+
+    // Check for integrators with reset ports
+    const hasResetInput = subResult.model.blocks.some(b =>
+      b.block.type === 'integrator' && b.block.parameters?.showResetInput === true
+    )
+
+    return {
+      subsystemId: block.id,
+      subsystemName: block.name,
+      sanitizedName: CCodeBuilder.sanitizeIdentifier(block.name),
+      sheets: subsystemSheets,
+      flattenedModel: subResult.model,
+      inputPorts,
+      outputPorts,
+      hasEnableInput: block.parameters?.showEnableInput ?? false,
+      hasResetInput,
+      hasState,
+      stateCount,
+      parentPath,
+      enableScope: parentEnableScope
+    }
+  }
+
+  /**
+   * Extract port information from a flattened subsystem model
+   */
+  private extractSubsystemPorts(
+    model: FlattenedModel,
+    portType: 'input_port' | 'output_port',
+    portNames: string[]
+  ): SubsystemPort[] {
+    const ports: SubsystemPort[] = []
+
+    for (let index = 0; index < portNames.length; index++) {
+      const portName = portNames[index]
+
+      // Find the port block in the flattened model
+      const portBlock = model.blocks.find(b =>
+        b.block.type === portType &&
+        b.block.parameters?.portName === portName
+      )
+
+      const dataType = portBlock?.block.parameters?.dataType || 'double'
+
+      ports.push({
+        name: portName,
+        sanitizedName: CCodeBuilder.sanitizeIdentifier(portName),
+        dataType,
+        index
+      })
+    }
+
+    return ports
+  }
+
+  /**
+   * Count the total number of state variables in a set of stateful blocks
+   */
+  private countStateVariables(statefulBlocks: FlattenedBlock[]): number {
+    let count = 0
+
+    for (const block of statefulBlocks) {
+      if (block.block.type === 'integrator') {
+        // Integrator has 1 state per element
+        const dataType = block.block.parameters?.dataType || 'double'
+        count += this.countElementsFromType(dataType)
+      } else if (block.block.type === 'transfer_function') {
+        // Transfer function has (denominator.length - 1) states per element
+        const denominator = block.block.parameters?.denominator || [1, 1]
+        const stateOrder = Math.max(0, denominator.length - 1)
+        const dataType = block.block.parameters?.dataType || 'double'
+        count += stateOrder * this.countElementsFromType(dataType)
+      }
+    }
+
+    return count
+  }
+
+  /**
+   * Count the number of elements in a data type (1 for scalar, N for vector, N*M for matrix)
+   */
+  private countElementsFromType(dataType: string): number {
+    const matrixMatch = dataType.match(/\[(\d+)\]\[(\d+)\]/)
+    if (matrixMatch) {
+      return parseInt(matrixMatch[1]) * parseInt(matrixMatch[2])
+    }
+
+    const vectorMatch = dataType.match(/\[(\d+)\]/)
+    if (vectorMatch) {
+      return parseInt(vectorMatch[1])
+    }
+
+    return 1 // scalar
+  }
+
   /**
    * Flatten all subsystems recursively
    */
@@ -312,20 +466,23 @@ export class ModelFlattener {
           // Handle subsystem block
           const hasEnableInput = block.parameters?.showEnableInput === true
           const currentEnableScope = hasEnableInput ? block.id : parentEnableScope
-          
+
+          // Check code generation strategy
+          const codeGenStrategy = block.parameters?.codeGenStrategy || 'flatten'
+
           // Create port mapping for this subsystem
           const portMapping: SubsystemPortMapping = {
             subsystemId: block.id,
             inputPorts: new Map(),
             outputPorts: new Map()
           }
-          
+
           // Process subsystem's internal sheets
           if (block.parameters?.sheets) {
             const subsystemSheets = block.parameters.sheets as Sheet[]
             const newPath = [...subsystemPath, block.name]
-            
-            // Find input/output port blocks inside subsystem
+
+            // Find input/output port blocks inside subsystem (needed for both strategies)
             for (const subSheet of subsystemSheets) {
               for (const subBlock of subSheet.blocks) {
                 if (subBlock.type === 'input_port') {
@@ -343,26 +500,55 @@ export class ModelFlattener {
                 }
               }
             }
-            
-            // Recursively flatten subsystem contents
-            const subsystemResult = this.flattenSubsystems(
-              subsystemSheets,
-              newPath,
-              currentEnableScope,
-              sheet.id
-            )
-            
-            flattenedBlocks.push(...subsystemResult.blocks)
-            allConnections.push(...subsystemResult.connections)
-            
-            // Merge port mappings
-            subsystemResult.portMappings.forEach((mapping, id) => {
-              portMappings.set(id, mapping)
-            })
+
+            if (codeGenStrategy === 'segregated' || codeGenStrategy === 'segregated_atomic') {
+              // Mark as segregated so connection processing skips internal wire lookup
+              portMapping.isSegregated = true
+
+              // SEGREGATED: Don't flatten - collect for separate code generation
+              const subsystemInfo = this.analyzeSegregatedSubsystem(
+                block,
+                subsystemSheets,
+                newPath,
+                currentEnableScope
+              )
+              this.segregatedSubsystems.push(subsystemInfo)
+
+              // Add the subsystem as a placeholder block (not flattened)
+              const flattenedBlock: FlattenedBlock = {
+                block: { ...block },
+                flattenedName: this.generateFlattenedName(block.name, subsystemPath),
+                subsystemPath: [...subsystemPath],
+                enableScope: parentEnableScope,
+                originalSheetId: sheet.id,
+                originalId: block.id,
+                isSegregated: true
+              }
+              flattenedBlocks.push(flattenedBlock)
+              this.blockMap.set(block.id, flattenedBlock)
+              this.enableScopes.set(block.id, parentEnableScope)
+
+            } else {
+              // FLATTEN: Recursively flatten subsystem contents (existing behavior)
+              const subsystemResult = this.flattenSubsystems(
+                subsystemSheets,
+                newPath,
+                currentEnableScope,
+                sheet.id
+              )
+
+              flattenedBlocks.push(...subsystemResult.blocks)
+              allConnections.push(...subsystemResult.connections)
+
+              // Merge port mappings
+              subsystemResult.portMappings.forEach((mapping, id) => {
+                portMappings.set(id, mapping)
+              })
+            }
           }
-          
+
           portMappings.set(block.id, portMapping)
-          
+
           // Update subsystem enable info with controlled blocks
           const enableInfo = this.subsystemEnableInfo.find(info => info.subsystemId === block.id)
           if (enableInfo && hasEnableInput) {
@@ -371,7 +557,7 @@ export class ModelFlattener {
               .filter(fb => this.enableScopes.get(fb.originalId) === block.id)
               .map(fb => fb.originalId)
           }
-          
+
         } else if (parentSheetId === 'root' || (block.type !== 'input_port' && block.type !== 'output_port')) {
           // Regular block (skip input/output ports as they'll be replaced by connections)
           const flattenedName = this.generateFlattenedName(block.name, subsystemPath)
@@ -494,25 +680,33 @@ export class ModelFlattener {
       // Check if source is a subsystem block with output ports
       if (sourceBlockId && portMappings.has(sourceBlockId)) {
         const mapping = portMappings.get(sourceBlockId)!
-        const internalOutputPortId = mapping.outputPorts.get(sourcePortIndex)
-        
-        if (internalOutputPortId) {
-          // Find the wire that connects TO this output port inside the subsystem
-          const internalWire = connections.find(w => 
-            w.targetBlockId === internalOutputPortId && 
-            w.targetPortIndex === 0 // Output ports have single input at index 0
-          )
-          
-          if (internalWire) {
-            // Update source to point to the internal block
-            sourceBlockId = internalWire.sourceBlockId
-            sourcePortIndex = internalWire.sourcePortIndex
-            connectionType = 'subsystem_output'
-            processedWires.add(internalWire.id)
-            // Important: Do NOT continue here - we want to create the remapped connection below
-          } else {
-            this.addWarning(`Output port ${internalOutputPortId} has no internal connection`)
-            continue
+
+        // For segregated subsystems, keep the connection to the subsystem block as-is
+        // The subsystem will be treated as an opaque block with inputs/outputs
+        if (mapping.isSegregated) {
+          connectionType = 'subsystem_output'
+          // Don't remap - connection stays to the subsystem block
+        } else {
+          const internalOutputPortId = mapping.outputPorts.get(sourcePortIndex)
+
+          if (internalOutputPortId) {
+            // Find the wire that connects TO this output port inside the subsystem
+            const internalWire = connections.find(w =>
+              w.targetBlockId === internalOutputPortId &&
+              w.targetPortIndex === 0 // Output ports have single input at index 0
+            )
+
+            if (internalWire) {
+              // Update source to point to the internal block
+              sourceBlockId = internalWire.sourceBlockId
+              sourcePortIndex = internalWire.sourcePortIndex
+              connectionType = 'subsystem_output'
+              processedWires.add(internalWire.id)
+              // Important: Do NOT continue here - we want to create the remapped connection below
+            } else {
+              this.addWarning(`Output port ${internalOutputPortId} has no internal connection`)
+              continue
+            }
           }
         }
       }
@@ -555,14 +749,30 @@ export class ModelFlattener {
       // Check if target is a subsystem input
       if (targetBlockId && portMappings.has(targetBlockId)) {
         const mapping = portMappings.get(targetBlockId)!
+
+        // For segregated subsystems, keep the connection to the subsystem block as-is
+        if (mapping.isSegregated) {
+          const flatConnection: FlattenedConnection = {
+            id: wire.id,
+            sourceBlockId,
+            sourcePortIndex,
+            targetBlockId,
+            targetPortIndex,
+            originalWireId: wire.id,
+            connectionType: 'subsystem_input'
+          }
+          flattenedConnections.push(flatConnection)
+          continue
+        }
+
         const internalInputPortId = mapping.inputPorts.get(targetPortIndex)
-        
+
         if (internalInputPortId) {
           // Find wires from this input port to internal blocks
-          const internalWires = connections.filter(w => 
+          const internalWires = connections.filter(w =>
             w.sourceBlockId === internalInputPortId && !portBlockIds.has(w.targetBlockId)
           )
-          
+
           // Create a connection for each internal wire
           for (const internalWire of internalWires) {
             const flatConnection: FlattenedConnection = {
@@ -627,11 +837,12 @@ export class ModelFlattener {
   
   /**
    * Resolve sheet label connections within scopes
+   * @returns Object with resolved connections and count of labels resolved
    */
   resolveSheetLabels(
     connections: FlattenedConnection[],
     flattenedBlocks: FlattenedBlock[]
-  ): FlattenedConnection[] {
+  ): { connections: FlattenedConnection[], resolvedCount: number } {
     const resolvedConnections: FlattenedConnection[] = []
     const sheetLabelSinks = new Map<string, SheetLabelConnection>()
     const sheetLabelSources: FlattenedBlock[] = []
@@ -763,21 +974,21 @@ export class ModelFlattener {
       }
     }
     
-    // Log sheet label resolution statistics
+    // Count sheet label resolution statistics
     const resolvedCount = sheetLabelSources.filter(source => {
       const signalName = source.block.parameters?.signalName as string
-      const scope = source.subsystemPath.length > 0 
+      const scope = source.subsystemPath.length > 0
         ? source.subsystemPath.join('/')
         : 'root'
       const key = `${scope}:${signalName}`
       return sheetLabelSinks.has(key)
     }).length
-    
+
     if (resolvedCount > 0) {
       console.log(`Resolved ${resolvedCount} sheet label connections`)
     }
-    
-    return resolvedConnections
+
+    return { connections: resolvedConnections, resolvedCount }
   }
   
   /**
@@ -794,6 +1005,7 @@ export class ModelFlattener {
     this.blockMap.clear()
     this.enableScopes.clear()
     this.subsystemEnableInfo = []
+    this.segregatedSubsystems = []
     
     const diagnostics = {
       blocksFlattened: 0,
@@ -819,8 +1031,9 @@ export class ModelFlattener {
     diagnostics.connectionsRemapped = flattenedConnections.length
     
     // Step 4: Resolve sheet label connections
-    const resolvedConnections = this.resolveSheetLabels(flattenedConnections, blocks)
-    diagnostics.sheetLabelsResolved = resolvedConnections.length - flattenedConnections.length
+    const sheetLabelResult = this.resolveSheetLabels(flattenedConnections, blocks)
+    const resolvedConnections = sheetLabelResult.connections
+    diagnostics.sheetLabelsResolved = sheetLabelResult.resolvedCount
     
     // Step 5: Filter out sheet label blocks from final block list
     const finalBlocks = blocks.filter(b => 
@@ -840,6 +1053,7 @@ export class ModelFlattener {
       blockMap: this.blockMap,
       enableScopes: this.enableScopes,
       subsystemEnableInfo: this.subsystemEnableInfo,
+      segregatedSubsystems: this.segregatedSubsystems,
       parameters, // Feature 3: Include model parameters
       metadata: {
         modelName,
@@ -865,6 +1079,10 @@ export class ModelFlattener {
 
     for (const x of this.subsystemEnableInfo) {
        list += `Subsystem Enable Info: ${x.subsystemName} (ID: ${x.subsystemId}), Has Enable Input: ${x.hasEnableInput}, Controlled Blocks: ${x.controlledBlockIds.join(', ')}` + "\n"
+    }
+
+    for (const seg of this.segregatedSubsystems) {
+       list += `Segregated Subsystem: ${seg.subsystemName} (ID: ${seg.subsystemId}), Inputs: ${seg.inputPorts.length}, Outputs: ${seg.outputPorts.length}, HasState: ${seg.hasState}` + "\n"
     }
     console.log(list)
     
@@ -913,14 +1131,19 @@ export class ModelFlattener {
       if (block.block.type === 'source' || block.block.type === 'input_port') {
         continue
       }
-      
+
       // Skip output ports and signal displays/loggers as they may not have outgoing connections
-      if (block.block.type === 'output_port' || 
-          block.block.type === 'signal_display' || 
+      if (block.block.type === 'output_port' ||
+          block.block.type === 'signal_display' ||
           block.block.type === 'signal_logger') {
         continue
       }
-      
+
+      // Skip segregated subsystems - they are validated separately in their own context
+      if (block.isSegregated) {
+        continue
+      }
+
       if (!connectedBlocks.has(block.originalId)) {
         this.addWarning(`Block ${block.flattenedName} (${block.block.type}) has no connections`)
       }

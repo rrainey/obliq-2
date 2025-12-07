@@ -10,6 +10,7 @@
  *   modelId: string,          // UUID of the model
  *   version?: number,          // Optional version (defaults to latest)
  *   optimizationLevel?: string // 'O0' | 'O1' | 'O2' | 'O3' (default: 'O2')
+ *   noCache?: boolean          // Skip cache lookup and force recompilation (default: false)
  * }
  *
  * Response:
@@ -67,7 +68,7 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
   // Validate required fields
   validateRequiredFields(requestBody, ['modelId'])
 
-  const { modelId, version, optimizationLevel = 'O2' } = requestBody
+  const { modelId, version, optimizationLevel = 'O2', noCache = false } = requestBody
 
   // Validate optimization level
   if (!['O0', 'O1', 'O2', 'O3'].includes(optimizationLevel)) {
@@ -146,36 +147,41 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
   const cacheKey = generateCacheKey(modelId, { sheets }, { optimizationLevel })
   console.log(`[compile-wasm] Cache key: ${cacheKey}`)
 
-  // Check cache
+  // Check cache (unless noCache is set)
   const cacheManager = new SupabaseCacheManager()
-  const cachedResult = await cacheManager.get(cacheKey)
 
-  if (cachedResult) {
-    console.log(`[compile-wasm] Cache HIT (${Date.now() - startTime}ms)`)
+  if (!noCache) {
+    const cachedResult = await cacheManager.get(cacheKey)
 
-    // Log cache hit metric
-    await cacheManager.logCompilationMetric({
-      modelId,
-      cacheHit: true,
-      blockCount: sheets.flatMap((s: any) => s.blocks).length,
-      optimizationLevel
-    })
+    if (cachedResult) {
+      console.log(`[compile-wasm] Cache HIT (${Date.now() - startTime}ms)`)
 
-    // Return cached result
-    return NextResponse.json({
-      wasmData: cachedResult.wasmData.toString('base64'),
-      jsData: cachedResult.jsData.toString('base64'),
-      metadata: {
-        ...cachedResult.metadata,
+      // Log cache hit metric
+      await cacheManager.logCompilationMetric({
+        modelId,
         cacheHit: true,
-        retrievalTime: Date.now() - startTime,
-        modelName: model.name,
-        cacheKey
-      }
-    })
-  }
+        blockCount: sheets.flatMap((s: any) => s.blocks).length,
+        optimizationLevel
+      })
 
-  console.log(`[compile-wasm] Cache MISS - compiling...`)
+      // Return cached result
+      return NextResponse.json({
+        wasmData: cachedResult.wasmData.toString('base64'),
+        jsData: cachedResult.jsData.toString('base64'),
+        metadata: {
+          ...cachedResult.metadata,
+          cacheHit: true,
+          retrievalTime: Date.now() - startTime,
+          modelName: model.name,
+          cacheKey
+        }
+      })
+    }
+
+    console.log(`[compile-wasm] Cache MISS - compiling...`)
+  } else {
+    console.log(`[compile-wasm] Cache BYPASSED (noCache=true) - compiling...`)
+  }
 
   // Generate C code using WasmCodeGenerator
   let generatedCode: {
@@ -184,6 +190,12 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
     wasmWrapper: string
     inputMap: Map<string, number>
     outputMap: Map<string, number>
+    subsystemFiles: Array<{
+      header: string
+      source: string
+      subsystemName: string
+      warnings: string[]
+    }>
   }
 
   try {
@@ -222,7 +234,19 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
     await fs.writeFile(sourcePath, generatedCode.source)
     await fs.writeFile(wrapperPath, generatedCode.wasmWrapper)
 
-    console.log(`[compile-wasm] Files written to disk`)
+    // Write subsystem files (for segregated subsystems)
+    const subsystemSourceFiles: string[] = []
+    if (generatedCode.subsystemFiles && generatedCode.subsystemFiles.length > 0) {
+      for (const subFile of generatedCode.subsystemFiles) {
+        const subHeaderPath = path.join(tempDir, `${subFile.subsystemName}.h`)
+        const subSourcePath = path.join(tempDir, `${subFile.subsystemName}.c`)
+        await fs.writeFile(subHeaderPath, subFile.header)
+        await fs.writeFile(subSourcePath, subFile.source)
+        subsystemSourceFiles.push(`${subFile.subsystemName}.c`)
+      }
+    }
+
+    console.log(`[compile-wasm] Files written to disk (${subsystemSourceFiles.length} subsystems)`)
 
     // Compile with Emscripten using Docker
     const outputPath = path.join(tempDir, `${safeName}.js`)
@@ -234,11 +258,18 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
       ? tempDir.replace(/\\/g, '/') // Convert Windows paths to Unix-style for Docker
       : tempDir
 
+    // Build list of source files (main + wrapper + subsystems)
+    const sourceFiles = [
+      `/workspace/${safeName}.c`,
+      `/workspace/${safeName}_wasm.c`,
+      ...subsystemSourceFiles.map(f => `/workspace/${f}`)
+    ].join(' ')
+
     const emccCmd = `docker run --rm -v "${volumeMount}:/workspace" ${DOCKER_IMAGE} ` +
-      `emcc /workspace/${safeName}.c /workspace/${safeName}_wasm.c ` +
+      `emcc ${sourceFiles} ` +
       `-I/workspace -o /workspace/${safeName}.js ` +
       `-s WASM=1 ` +
-      `-s "EXPORTED_FUNCTIONS=[\\"_wasm_init\\",\\"_wasm_set_input\\",\\"_wasm_get_output\\",\\"_wasm_step\\",\\"_wasm_get_time\\",\\"_wasm_get_collector_count\\",\\"_wasm_get_collector_name\\",\\"_wasm_get_sample_count\\",\\"_wasm_get_samples\\",\\"_wasm_get_element_size\\",\\"_wasm_cleanup\\",\\"_malloc\\",\\"_free\\"]" ` +
+      `-s "EXPORTED_FUNCTIONS=[\\"_wasm_init\\",\\"_wasm_set_input\\",\\"_wasm_get_output\\",\\"_wasm_step\\",\\"_wasm_get_time\\",\\"_wasm_get_collector_count\\",\\"_wasm_get_collector_name\\",\\"_wasm_get_sample_count\\",\\"_wasm_get_sample_write_index\\",\\"_wasm_get_max_samples\\",\\"_wasm_get_last_sample_time\\",\\"_wasm_get_samples\\",\\"_wasm_get_element_size\\",\\"_wasm_cleanup\\",\\"_malloc\\",\\"_free\\"]" ` +
       `-s "EXPORTED_RUNTIME_METHODS=[\\"ccall\\",\\"cwrap\\",\\"UTF8ToString\\"]" ` +
       `-s MODULARIZE=1 ` +
       `-s "EXPORT_NAME=createModule" ` +

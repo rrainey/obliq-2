@@ -4,6 +4,7 @@ import { FlattenedModel, FlattenedBlock } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 import { EnableEvaluator } from './EnableEvaluator'
+import { SubsystemInfo } from './SubsystemInfo'
 
 /**
  * Generates derivatives function for stateful blocks
@@ -28,11 +29,27 @@ export class RK4Generator {
    * Generate derivatives function only
    */
   generate(): string {
-    if (!this.hasStatefulBlocks()) {
+    if (!this.hasStatefulBlocks() && !this.hasStatefulSubsystems()) {
       return ''
     }
-    
+
     return this.generateDerivativesFunction()
+  }
+
+  /**
+   * Check if any segregated subsystem has state
+   */
+  private hasStatefulSubsystems(): boolean {
+    if (!this.model.segregatedSubsystems) return false
+    return this.model.segregatedSubsystems.some(sub => sub.hasState)
+  }
+
+  /**
+   * Get segregated subsystems that have state
+   */
+  private getStatefulSubsystems(): SubsystemInfo[] {
+    if (!this.model.segregatedSubsystems) return []
+    return this.model.segregatedSubsystems.filter(sub => sub.hasState)
   }
   
   /**
@@ -42,22 +59,18 @@ export class RK4Generator {
     let code = CCodeBuilder.generateCommentBlock([
       'Calculate state derivatives for integration',
       'This is part of the algebraic layer - computes derivatives without modifying states',
-      'Takes current states and signals, returns derivatives',
+      'Takes model pointer for access to inputs/signals/subsystems, current_states for RK4 stages',
       this.hasEnableSubsystems ? 'Enable states control which blocks compute derivatives' : ''
     ].filter(Boolean))
-    
+
+    // Simplified signature: pass model pointer for consistent access pattern
     const params = [
       'double t',
-      `const ${this.modelName}_inputs_t* inputs`,
-      `const ${this.modelName}_signals_t* signals`,
+      `const ${this.modelName}_t* model`,
       `const ${this.modelName}_states_t* current_states`,
       `${this.modelName}_states_t* state_derivatives`
     ]
-    
-    if (this.hasEnableSubsystems) {
-      params.push(`const enable_states_t* enable_states`)
-    }
-    
+
     code += CCodeBuilder.generateFunctionHeader(
       'void',
       `${this.modelName}_derivatives`,
@@ -70,12 +83,46 @@ export class RK4Generator {
     
     // Generate derivative calculations for each stateful block
     const statefulBlocks = this.getStatefulBlocks()
-    
+
     for (const block of statefulBlocks) {
       code += this.generateBlockDerivative(block)
     }
-    
+
+    // Generate derivative calls for segregated subsystems with state
+    const statefulSubsystems = this.getStatefulSubsystems()
+    if (statefulSubsystems.length > 0) {
+      code += '    /* Segregated subsystem derivatives */\n'
+      for (const sub of statefulSubsystems) {
+        code += this.generateSubsystemDerivativeCall(sub)
+      }
+    }
+
     code += '}\n'
+    return code
+  }
+
+  /**
+   * Generate derivative call for a segregated subsystem
+   */
+  private generateSubsystemDerivativeCall(sub: SubsystemInfo): string {
+    const safeName = sub.sanitizedName
+    let code = `    /* ${sub.subsystemName} */\n`
+
+    // Find the subsystem block to check enable state
+    const subsystemBlock = this.model.blocks.find(b =>
+      b.originalId === sub.subsystemId && b.isSegregated
+    )
+
+    if (sub.hasEnableInput && subsystemBlock) {
+      // Check if subsystem is enabled before computing derivatives
+      code += `    if (model->${safeName}.enabled) {\n`
+      code += `        ${safeName}_compute_derivatives(&model->${safeName}, &state_derivatives->${safeName});\n`
+      code += `    }\n`
+    } else {
+      code += `    ${safeName}_compute_derivatives(&model->${safeName}, &state_derivatives->${safeName});\n`
+    }
+
+    code += '\n'
     return code
   }
   
@@ -104,13 +151,13 @@ export class RK4Generator {
       if (this.hasEnableSubsystems) {
         const enableScope = this.model.enableScopes.get(block.originalId)
         if (enableScope) {
-          const subsystemInfo = this.model.subsystemEnableInfo.find(info => 
+          const subsystemInfo = this.model.subsystemEnableInfo.find(info =>
             info.subsystemId === enableScope
           )
-          
+
           if (subsystemInfo && subsystemInfo.hasEnableInput) {
             const safeName = CCodeBuilder.sanitizeIdentifier(subsystemInfo.subsystemName)
-            code += `    if (enable_states->${safeName}_enabled) {\n`
+            code += `    if (model->enable_states.${safeName}_enabled) {\n`
             
             // Generate derivative computation (indented)
             const derivCode = this.generateDerivativeComputation(block, generator)
@@ -161,10 +208,24 @@ export class RK4Generator {
         )
 
         if (sourceBlock) {
-          const safeName = CCodeBuilder.sanitizeIdentifier(sourceBlock.block.name)
-
-          // All signals should be available in the signals struct
-          inputExpr = `signals->${safeName}`
+          // Handle segregated subsystems - access outputs directly
+          if (sourceBlock.isSegregated) {
+            const subInfo = this.model.segregatedSubsystems?.find(
+              s => s.subsystemId === sourceBlock.originalId
+            )
+            if (subInfo) {
+              const portIndex = inputConnections[0].sourcePortIndex
+              const outputPort = subInfo.outputPorts.find(p => p.index === portIndex)
+                || subInfo.outputPorts[0]
+              if (outputPort) {
+                inputExpr = `model->${subInfo.sanitizedName}.outputs.${outputPort.sanitizedName}`
+              }
+            }
+          } else {
+            const safeName = CCodeBuilder.sanitizeIdentifier(sourceBlock.block.name)
+            // Access signals via model pointer
+            inputExpr = `model->signals.${safeName}`
+          }
         }
       }
 

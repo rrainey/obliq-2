@@ -273,8 +273,8 @@ describe('Code Generation System', () => {
       expect(result.header).toContain('state_test_derivatives')
       expect(result.source).toContain('void state_test_derivatives')
       
-      // Check for RK4 integration
-      expect(result.source).toContain('perform_rk4_integration')
+      // Check for RK4 integration (inline code, not a function call)
+      expect(result.source).toContain('/* RK4 Integration (Runge-Kutta 4th order) */')
       expect(result.source).toContain('/* Calculate k1 = f(t, y) */')
       expect(result.source).toContain('/* Calculate k2 = f(t + h/2, y + h/2 * k1) */')
     })
@@ -319,7 +319,7 @@ describe('Code Generation System', () => {
       // Check derivatives function has enable checks
       const derivFunc = result.source.match(/void freeze_test_derivatives[\s\S]*?\n\}/)?.[0]
       expect(derivFunc).toBeDefined()
-      expect(derivFunc).toContain('if (enable_states->ProcessingSystem_enabled)')
+      expect(derivFunc).toContain('if (model->enable_states.ProcessingSystem_enabled)')
     })
   })
 

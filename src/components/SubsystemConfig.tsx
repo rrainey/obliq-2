@@ -9,29 +9,69 @@ interface SubsystemConfigProps {
   block: BlockData
   availableSheets?: Sheet[]
   onUpdate: (parameters: Record<string, any>) => void
+  onRename?: (newName: string) => void
   onClose: () => void
   onSheetNavigate?: (sheetId: string) => void
 }
 
-export default function SubsystemConfig({ block, availableSheets = [], onUpdate, onClose, onSheetNavigate }: SubsystemConfigProps) {
-  // Initialize sheets from block parameters
+// Code generation strategy options
+type CodeGenStrategy = 'flatten' | 'segregated' | 'segregated_atomic'
+
+const CODE_GEN_STRATEGY_OPTIONS: { value: CodeGenStrategy; label: string; description: string }[] = [
+  { value: 'flatten', label: 'Flatten', description: 'Pulls all blocks into the top-level model (default)' },
+  { value: 'segregated', label: 'Segregated', description: 'Keeps subsystem blocks separate during code generation' },
+  { value: 'segregated_atomic', label: 'Segregated, atomic', description: 'Keeps subsystem blocks separate and treats them as atomic units' },
+]
+
+export default function SubsystemConfig({ block, availableSheets = [], onUpdate, onRename, onClose, onSheetNavigate }: SubsystemConfigProps) {
+  // Initialize from block properties and parameters
+  const [blockName, setBlockName] = useState(block.name)
   const [sheets, setSheets] = useState<Sheet[]>(block.parameters?.sheets || [])
-  const [sheetName, setSheetName] = useState(block.parameters?.sheetName || 'Subsystem')
   const [inputPorts, setInputPorts] = useState(block.parameters?.inputPorts || ['Input1'])
   const [outputPorts, setOutputPorts] = useState(block.parameters?.outputPorts || ['Output1'])
   const [editingSheetId, setEditingSheetId] = useState<string | null>(null)
   const [editingSheetName, setEditingSheetName] = useState('')
   const [showEnableInput, setShowEnableInput] = useState(block.parameters?.showEnableInput || false)
+  const [codeGenStrategy, setCodeGenStrategy] = useState<CodeGenStrategy>(block.parameters?.codeGenStrategy || 'flatten')
+
+  // Helper to escape special regex characters
+  const escapeRegExp = (string: string) => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
 
   const handleSave = () => {
+    // Check if block name changed
+    const nameChanged = blockName !== block.name
+
+    // If name changed, update internal sheet names to use the new name
+    let updatedSheets = sheets
+    if (nameChanged) {
+      updatedSheets = sheets.map(sheet => {
+        // Replace old block name with new name in sheet names
+        // e.g., "Subsystem5 Main" -> "Integrate Main"
+        const oldNamePattern = new RegExp(`^${escapeRegExp(block.name)}\\s+`)
+        if (oldNamePattern.test(sheet.name)) {
+          return { ...sheet, name: sheet.name.replace(oldNamePattern, `${blockName} `) }
+        }
+        return sheet
+      })
+    }
+
+    // Parameters no longer include sheetName - block.name is the subsystem's name
     const parameters = {
-      sheets, 
-      sheetName,
+      sheets: updatedSheets,
       inputPorts: inputPorts.filter((port: string) => port.trim() !== ''),
       outputPorts: outputPorts.filter((port: string) => port.trim() !== ''),
-      showEnableInput
+      showEnableInput,
+      codeGenStrategy
     }
     onUpdate(parameters)
+
+    // Rename the block if name changed
+    if (nameChanged && onRename) {
+      onRename(blockName)
+    }
+
     onClose()
   }
 
@@ -71,7 +111,7 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
   const addSubsystemSheet = () => {
     const newSheet: Sheet = {
       id: `${block.id}_sheet_${Date.now()}`,
-      name: `${block.name} Sheet ${sheets.length + 1}`,
+      name: `${blockName} Sheet ${sheets.length + 1}`,
       blocks: [],
       connections: [],
       extents: {
@@ -157,8 +197,8 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
             </label>
             <input
               type="text"
-              value={sheetName}
-              onChange={(e) => setSheetName(e.target.value)}
+              value={blockName}
+              onChange={(e) => setBlockName(e.target.value)}
               className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
               placeholder="Enter subsystem name"
             />
@@ -325,8 +365,29 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
               </span>
             </label>
             <p className="mt-1 ml-6 text-xs text-gray-500">
-              When enabled, adds a special boolean input port that controls whether the subsystem is active. 
+              When enabled, adds a special boolean input port that controls whether the subsystem is active.
               When false, the subsystem's state is frozen.
+            </p>
+          </div>
+
+          {/* Code Generation Strategy */}
+          <div className="border-t pt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Code Generation Strategy
+            </label>
+            <select
+              value={codeGenStrategy}
+              onChange={(e) => setCodeGenStrategy(e.target.value as CodeGenStrategy)}
+              className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
+            >
+              {CODE_GEN_STRATEGY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              {CODE_GEN_STRATEGY_OPTIONS.find(o => o.value === codeGenStrategy)?.description}
             </p>
           </div>
 

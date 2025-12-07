@@ -157,6 +157,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const [simulationProgress, setSimulationProgress] = useState<SimulationProgress | null>(null)
   const [workerManager, setWorkerManager] = useState<SimulationWorkerManager | null>(null)
   const [useWorker, setUseWorker] = useState<boolean>(false) // Temporarily disabled - worker needs Next.js config
+  const [forceRecompile, setForceRecompile] = useState<boolean>(false)
 
   const [showAutoSaveDialog, setShowAutoSaveDialog] = useState(false)
   const [autoSaveInfo, setAutoSaveInfo] = useState<{
@@ -976,7 +977,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             body: JSON.stringify({
               modelId: model.id,
               version: versionToCompile,
-              optimizationLevel: 'O2'
+              optimizationLevel: 'O2',
+              noCache: forceRecompile
             })
           })
 
@@ -1822,6 +1824,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             useWorker={useWorker}
             onWorkerChange={setUseWorker}
             workerAvailable={isWorkerSimulationAvailable()}
+            forceRecompile={forceRecompile}
+            onForceRecompileChange={setForceRecompile}
           />
 
           {/* WASM Compilation Progress - for background pre-warming only */}
@@ -2116,6 +2120,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               block={configBlock}
               availableSheets={sheets.filter(s => s.id !== activeSheetId)}
               onUpdate={handleBlockConfigUpdate}
+              onRename={(newName) => renameBlock(configBlock.id, newName)}
               onClose={() => setConfigBlock(null)}
               onSheetNavigate={(sheetId) => {
                 switchToSheet(sheetId)

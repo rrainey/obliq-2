@@ -20,11 +20,16 @@ const SignalTypeSchema = z.enum(['float', 'double', 'long', 'bool'])
 // Forward declaration for recursive schema
 const SheetSchema: z.ZodType<any> = z.lazy(() => SheetSchemaDefinition)
 
+// Code generation strategy for subsystems
+const CodeGenStrategySchema = z.enum(['flatten', 'segregated', 'segregated_atomic']).default('flatten')
+
 // Subsystem-specific parameters schema
 const SubsystemParametersSchema = z.object({
   inputPorts: z.array(z.string()).min(1, 'Subsystem must have at least one input port'),
   outputPorts: z.array(z.string()).min(1, 'Subsystem must have at least one output port'),
-  sheets: z.array(SheetSchema).min(1, 'Subsystem must have at least one sheet')
+  sheets: z.array(SheetSchema).min(1, 'Subsystem must have at least one sheet'),
+  showEnableInput: z.boolean().optional().default(false),
+  codeGenStrategy: CodeGenStrategySchema.optional().default('flatten')
 })
 
 // Block parameters schema with type validation for specific block types
@@ -206,6 +211,7 @@ export type Metadata = z.infer<typeof MetadataSchema>
 export type SignalType = z.infer<typeof SignalTypeSchema>
 export type SignalTypeInfo = z.infer<typeof SignalTypeInfoSchema>
 export type SubsystemParameters = z.infer<typeof SubsystemParametersSchema>
+export type CodeGenStrategy = z.infer<typeof CodeGenStrategySchema>
 
 // Helper type to extract subsystem blocks
 export type SubsystemBlock = Extract<Block, { type: 'subsystem' }>

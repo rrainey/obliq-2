@@ -160,7 +160,7 @@ export class SupabaseCacheManager {
 
       if (jsError) throw jsError
 
-      // 3. Store metadata
+      // 3. Store metadata (upsert to handle force recompile case)
       const { error: metadataError } = await this.supabase
         .from('wasm_cache_metadata')
         .upsert({
@@ -174,6 +174,8 @@ export class SupabaseCacheManager {
           wasm_size_bytes: metadata.wasmSize,
           js_size_bytes: metadata.jsSize,
           block_count: metadata.blockCount
+        }, {
+          onConflict: 'cache_key'
         })
 
       if (metadataError) throw metadataError
