@@ -14,6 +14,8 @@ interface SimulationSettingsPanelProps {
   useWorker?: boolean
   onWorkerChange?: (useWorker: boolean) => void
   workerAvailable?: boolean
+  forceRecompile?: boolean
+  onForceRecompileChange?: (forceRecompile: boolean) => void
 }
 
 export function validateSimulationSettings(duration: string, timeStep: string) {
@@ -54,7 +56,9 @@ export default function SimulationSettingsPanel({
   onChange,
   useWorker = false,
   onWorkerChange,
-  workerAvailable = false
+  workerAvailable = false,
+  forceRecompile = false,
+  onForceRecompileChange
 }: SimulationSettingsPanelProps) {
   const [duration, setDuration] = useState<number | string>(initialDuration)
   const [timeStep, setTimeStep] = useState<number | string>(initialTimeStep)
@@ -178,6 +182,28 @@ export default function SimulationSettingsPanel({
                 }
               }}
               disabled={!workerAvailable}
+              size="sm"
+            />
+          </Tooltip>
+        )}
+
+        {/* Force Recompile toggle */}
+        {onForceRecompileChange && (
+          <Tooltip
+            label="Bypass WASM cache and force fresh compilation. Use this if you suspect stale compiled code."
+            withArrow
+            multiline
+            w={250}
+          >
+            <Checkbox
+              label={
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  Force Recompile
+                  <IconInfoCircle size={14} style={{ opacity: 0.6 }} />
+                </span>
+              }
+              checked={forceRecompile}
+              onChange={(e) => onForceRecompileChange(e.currentTarget.checked)}
               size="sm"
             />
           </Tooltip>

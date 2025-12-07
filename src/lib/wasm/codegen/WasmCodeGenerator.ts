@@ -125,13 +125,13 @@ export class WasmCodeGenerator extends CodeGenerator {
   ): {
     inputMap: Map<string, number>
     outputMap: Map<string, number>
-    outputSourceMap: Map<string, string> // Maps output port name to source block name
+    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; portIndex: number; outputPortName?: string }>
     collectorTypeMap: Map<string, string> // Maps collector name to input signal type
     outputTypeMap: Map<string, string> // Maps output port name to signal type
   } {
     const inputMap = new Map<string, number>()
     const outputMap = new Map<string, number>()
-    const outputSourceMap = new Map<string, string>()
+    const outputSourceMap = new Map<string, { blockName: string; isSubsystem: boolean; portIndex: number; outputPortName?: string }>()
     const collectorTypeMap = new Map<string, string>()
     const outputTypeMap = new Map<string, string>()
 
@@ -169,7 +169,19 @@ export class WasmCodeGenerator extends CodeGenerator {
           if (feedingConnection) {
             const sourceBlock = sheet.blocks.find(b => b.id === feedingConnection.sourceBlockId)
             if (sourceBlock) {
-              outputSourceMap.set(portName, sourceBlock.name)
+              const isSubsystem = sourceBlock.type === 'subsystem'
+              // For subsystems, find the output port name from the subsystem's outputPorts parameter
+              let outputPortName: string | undefined
+              if (isSubsystem && sourceBlock.parameters?.outputPorts) {
+                const outputPorts = sourceBlock.parameters.outputPorts as string[]
+                outputPortName = outputPorts[feedingConnection.sourcePortIndex] || outputPorts[0]
+              }
+              outputSourceMap.set(portName, {
+                blockName: sourceBlock.name,
+                isSubsystem,
+                portIndex: feedingConnection.sourcePortIndex,
+                outputPortName
+              })
               // Get the type from typeMap (handles Transfer Functions properly)
               const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
               outputTypeMap.set(portName, sourceType)
@@ -186,7 +198,18 @@ export class WasmCodeGenerator extends CodeGenerator {
           if (feedingConnection) {
             const sourceBlock = sheet.blocks.find(b => b.id === feedingConnection.sourceBlockId)
             if (sourceBlock) {
-              outputSourceMap.set(loggerName, sourceBlock.name)
+              const isSubsystem = sourceBlock.type === 'subsystem'
+              let outputPortName: string | undefined
+              if (isSubsystem && sourceBlock.parameters?.outputPorts) {
+                const outputPorts = sourceBlock.parameters.outputPorts as string[]
+                outputPortName = outputPorts[feedingConnection.sourcePortIndex] || outputPorts[0]
+              }
+              outputSourceMap.set(loggerName, {
+                blockName: sourceBlock.name,
+                isSubsystem,
+                portIndex: feedingConnection.sourcePortIndex,
+                outputPortName
+              })
               // Get the type from typeMap (handles Transfer Functions properly)
               const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
               collectorTypeMap.set(loggerName, sourceType)
@@ -203,7 +226,18 @@ export class WasmCodeGenerator extends CodeGenerator {
           if (feedingConnection) {
             const sourceBlock = sheet.blocks.find(b => b.id === feedingConnection.sourceBlockId)
             if (sourceBlock) {
-              outputSourceMap.set(displayName, sourceBlock.name)
+              const isSubsystem = sourceBlock.type === 'subsystem'
+              let outputPortName: string | undefined
+              if (isSubsystem && sourceBlock.parameters?.outputPorts) {
+                const outputPorts = sourceBlock.parameters.outputPorts as string[]
+                outputPortName = outputPorts[feedingConnection.sourcePortIndex] || outputPorts[0]
+              }
+              outputSourceMap.set(displayName, {
+                blockName: sourceBlock.name,
+                isSubsystem,
+                portIndex: feedingConnection.sourcePortIndex,
+                outputPortName
+              })
               // Get the type from typeMap (handles Transfer Functions properly)
               const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
               collectorTypeMap.set(displayName, sourceType)
@@ -223,7 +257,7 @@ export class WasmCodeGenerator extends CodeGenerator {
     modelName: string,
     inputMap: Map<string, number>,
     outputMap: Map<string, number>,
-    outputSourceMap: Map<string, string>,
+    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; portIndex: number; outputPortName?: string }>,
     collectorTypeMap: Map<string, string>,
     outputTypeMap: Map<string, string>,
     hasCleanupFunction: boolean
@@ -382,7 +416,7 @@ ${keepalive}void wasm_set_input(int index, double value) {
   private generateWasmGetOutputFunction(
     modelName: string,
     outputMap: Map<string, number>,
-    outputSourceMap: Map<string, string>,
+    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; portIndex: number; outputPortName?: string }>,
     outputTypeMap: Map<string, string>
   ): string {
     const keepalive = this.wasmOptions.includeEmscriptenExports
@@ -415,11 +449,19 @@ ${keepalive}double wasm_get_output(int index) {
     if (sortedOutputs.length > 0) {
       sortedOutputs.forEach(([portName, index]) => {
         // Output ports are fed by signals, not stored directly in outputs struct
-        // Use the source signal if available
-        const sourceBlock = outputSourceMap.get(portName)
-        if (sourceBlock) {
-          const sanitizedSource = CCodeBuilder.sanitizeIdentifier(sourceBlock)
-          code += `        case ${index}: return ${modelName}_instance.signals.${sanitizedSource};\n`
+        // Use the source info if available
+        const sourceInfo = outputSourceMap.get(portName)
+        if (sourceInfo) {
+          if (sourceInfo.isSubsystem) {
+            // Subsystem outputs are accessed via model->SubsystemName.outputs.PortName
+            const sanitizedSubsystem = CCodeBuilder.sanitizeIdentifier(sourceInfo.blockName)
+            const sanitizedPort = CCodeBuilder.sanitizeIdentifier(sourceInfo.outputPortName || 'Output1')
+            code += `        case ${index}: return ${modelName}_instance.${sanitizedSubsystem}.outputs.${sanitizedPort};\n`
+          } else {
+            // Regular blocks have their output in signals struct
+            const sanitizedSource = CCodeBuilder.sanitizeIdentifier(sourceInfo.blockName)
+            code += `        case ${index}: return ${modelName}_instance.signals.${sanitizedSource};\n`
+          }
         } else {
           // Fallback: try outputs struct (may not exist)
           const sanitizedPort = CCodeBuilder.sanitizeIdentifier(portName)

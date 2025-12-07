@@ -13,6 +13,7 @@ import { CCodeBuilder } from './CCodeBuilder'
 import { CodeGenerationValidator } from './CodeGenerationValidator'
 import { TypePropagator } from './TypePropagator'
 import { ModelParameter } from '@/lib/modelSchema'
+import { SubsystemCodeGenerator, SubsystemCodeResult } from './SubsystemCodeGenerator'
 /**
  * Options for code generation
  */
@@ -39,13 +40,19 @@ export interface CodeGenerationOptions {
 export interface CodeGenerationResult {
   /** Generated header file content */
   header: string
-  
+
   /** Generated source file content */
   source: string
-  
+
   /** Any warnings generated during code generation */
   warnings: string[]
-  
+
+  /**
+   * Generated code files for segregated subsystems.
+   * Each entry contains a separate .h and .c file for that subsystem.
+   */
+  subsystemFiles: SubsystemCodeResult[]
+
   /** Statistics about the generated code */
   stats: {
     blocksProcessed: number
@@ -53,6 +60,7 @@ export interface CodeGenerationResult {
     subsystemsFlattened: number
     statesGenerated: number
     enabledSubsystems: number
+    segregatedSubsystems: number
   }
 }
 
@@ -127,26 +135,41 @@ export class CodeGenerator {
     const typePropagator = new TypePropagator(model)
     const typeMap = typePropagator.propagate()
     
-    // Step 4: Generate header file
+    // Step 4: Generate segregated subsystem code files
+    const subsystemFiles: SubsystemCodeResult[] = []
+    if (model.segregatedSubsystems && model.segregatedSubsystems.length > 0) {
+      for (const subInfo of model.segregatedSubsystems) {
+        const subGenerator = new SubsystemCodeGenerator(subInfo)
+        const subResult = subGenerator.generate()
+        subsystemFiles.push(subResult)
+
+        // Collect any warnings from subsystem generation
+        allWarnings.push(...subResult.warnings.map(w => `[${subInfo.subsystemName}] ${w}`))
+      }
+    }
+
+    // Step 5: Generate header file
     const headerGenerator = new HeaderGenerator(model, typeMap)
     const header = headerGenerator.generate()
-    
-    // Step 5: Generate source file
+
+    // Step 6: Generate source file
     const source = this.generateSource(model, typeMap)
-    
-    // Step 6: Collect statistics
+
+    // Step 7: Collect statistics
     const stats = {
       blocksProcessed: model.blocks.length,
       connectionsProcessed: model.connections.length,
       subsystemsFlattened: model.metadata.subsystemCount,
       statesGenerated: this.countStates(model),
-      enabledSubsystems: model.subsystemEnableInfo.filter(info => info.hasEnableInput).length
+      enabledSubsystems: model.subsystemEnableInfo.filter(info => info.hasEnableInput).length,
+      segregatedSubsystems: model.segregatedSubsystems?.length || 0
     }
-    
+
     return {
       header,
       source,
       warnings: allWarnings,
+      subsystemFiles,
       stats
     }
   }

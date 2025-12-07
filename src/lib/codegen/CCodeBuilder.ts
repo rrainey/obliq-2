@@ -10,7 +10,7 @@ export class CCodeBuilder {
   static sanitizeIdentifier(name: string): string {
 
     if (!name || typeof name !== 'string') {
-      throw new Error('Invalid name provided for sanitization')
+      throw new Error(`Invalid name provided for sanitization: ${JSON.stringify(name)} (type: ${typeof name})`)
     }
 
     // Replace non-alphanumeric characters with underscores

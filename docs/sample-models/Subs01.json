@@ -1,0 +1,263 @@
+{
+  "name": "Subs01",
+  "version": 16,
+  "created": "2025-12-06T23:10:58.541421+00:00",
+  "updated": "2025-12-06T23:56:55.157Z",
+  "data": {
+    "version": "2.1",
+    "metadata": {
+      "created": "2025-12-06T23:57:13.223Z",
+      "description": "Exported from obliq-2 on 12/6/2025"
+    },
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "source_1765062678238",
+            "name": "Source1",
+            "type": "source",
+            "position": {
+              "x": -116,
+              "y": 324.203125
+            },
+            "parameters": {
+              "f0": 0.1,
+              "f1": 10,
+              "mean": 0,
+              "phase": 0,
+              "slope": 1,
+              "value": 2,
+              "offset": 0,
+              "dataType": "double",
+              "duration": 10,
+              "stepTime": 1,
+              "amplitude": 1,
+              "frequency": 1,
+              "startTime": 0,
+              "stepValue": 1,
+              "signalType": "constant",
+              "useParameter": false
+            }
+          },
+          {
+            "id": "integrator_1765062687307",
+            "name": "Integrator2",
+            "type": "integrator",
+            "position": {
+              "x": 137.5,
+              "y": 323.5546875
+            },
+            "parameters": {
+              "useLimits": false,
+              "lowerLimit": null,
+              "upperLimit": null,
+              "initialValue": 0,
+              "showResetInput": false,
+              "showEnableInput": false
+            }
+          },
+          {
+            "id": "output_port_1765062695217",
+            "name": "Output port3",
+            "type": "output_port",
+            "position": {
+              "x": 370.45852373231867,
+              "y": 332.7351795892271
+            },
+            "parameters": {
+              "dataType": "double",
+              "portName": "Output1",
+              "defaultValue": 0
+            }
+          },
+          {
+            "id": "subsystem_1765062735432",
+            "name": "Integrate_test",
+            "type": "subsystem",
+            "position": {
+              "x": 137,
+              "y": 501.0546875
+            },
+            "parameters": {
+              "sheets": [
+                {
+                  "id": "subsystem_1765062735432_sheet_1765065318881",
+                  "name": "Integrate_test Sheet 1",
+                  "blocks": [
+                    {
+                      "id": "input_port_1765065329079",
+                      "type": "input_port",
+                      "name": "Input port1",
+                      "position": {
+                        "x": 25.041476267681333,
+                        "y": 454.90625
+                      },
+                      "parameters": {
+                        "portName": "Input1",
+                        "dataType": "double",
+                        "defaultValue": 0
+                      }
+                    },
+                    {
+                      "id": "output_port_1765065331165",
+                      "type": "output_port",
+                      "name": "Output port2",
+                      "position": {
+                        "x": 327.04147626768133,
+                        "y": 455.40625
+                      },
+                      "parameters": {
+                        "portName": "Output1",
+                        "dataType": "double",
+                        "defaultValue": 0
+                      }
+                    },
+                    {
+                      "id": "integrator_1765065333936",
+                      "type": "integrator",
+                      "name": "Integrator3",
+                      "position": {
+                        "x": 191.04147626768133,
+                        "y": 445.90625
+                      },
+                      "parameters": {
+                        "initialValue": 0,
+                        "showEnableInput": false,
+                        "showResetInput": false,
+                        "useLimits": false,
+                        "lowerLimit": null,
+                        "upperLimit": null
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "wire_1765065336397",
+                      "sourceBlockId": "input_port_1765065329079",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "integrator_1765065333936",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "wire_1765065337538",
+                      "sourceBlockId": "integrator_1765065333936",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "output_port_1765065331165",
+                      "targetPortIndex": 0
+                    }
+                  ],
+                  "extents": {
+                    "width": 1000,
+                    "height": 800
+                  }
+                }
+              ],
+              "sheetName": "Subsystem",
+              "inputPorts": [
+                "Input1"
+              ],
+              "outputPorts": [
+                "Output1"
+              ],
+              "showEnableInput": false,
+              "codeGenStrategy": "segregated"
+            }
+          },
+          {
+            "id": "output_port_1765062793147_juhvyohjd",
+            "name": "Output port2",
+            "type": "output_port",
+            "position": {
+              "x": 373.08295253536267,
+              "y": 508.0754256338406
+            },
+            "parameters": {
+              "dataType": "double",
+              "portName": "Output2",
+              "defaultValue": 0
+            }
+          },
+          {
+            "id": "signal_display_1765062793147_fxzue5d5b",
+            "name": "subsystem_output",
+            "type": "signal_display",
+            "position": {
+              "x": 382,
+              "y": 594.5546875
+            },
+            "parameters": {
+              "maxSamples": 1000
+            }
+          },
+          {
+            "id": "signal_display_1765062897938_fsjctxm9u",
+            "name": "Signal display3",
+            "type": "signal_display",
+            "position": {
+              "x": 377,
+              "y": 397.5546875
+            },
+            "parameters": {
+              "maxSamples": 1000
+            }
+          }
+        ],
+        "extents": {
+          "width": 1000,
+          "height": 800
+        },
+        "connections": [
+          {
+            "id": "wire_1765062690161",
+            "sourceBlockId": "source_1765062678238",
+            "targetBlockId": "integrator_1765062687307",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765062696575",
+            "sourceBlockId": "integrator_1765062687307",
+            "targetBlockId": "output_port_1765062695217",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765062739601",
+            "sourceBlockId": "source_1765062678238",
+            "targetBlockId": "subsystem_1765062735432",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765062798562",
+            "sourceBlockId": "subsystem_1765062735432",
+            "targetBlockId": "output_port_1765062793147_juhvyohjd",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765062800495",
+            "sourceBlockId": "subsystem_1765062735432",
+            "targetBlockId": "signal_display_1765062793147_fxzue5d5b",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765062902217",
+            "sourceBlockId": "integrator_1765062687307",
+            "targetBlockId": "signal_display_1765062897938_fsjctxm9u",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          }
+        ]
+      }
+    ],
+    "parameters": [],
+    "globalSettings": {
+      "simulationTimeStep": 0.01,
+      "simulationDuration": 10
+    }
+  }
+}

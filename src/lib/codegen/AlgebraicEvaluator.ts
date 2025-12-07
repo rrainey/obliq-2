@@ -3,6 +3,7 @@
 import { FlattenedModel, FlattenedBlock } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
+import { SubsystemInfo } from './SubsystemInfo'
 
 /**
  * Generates the algebraic evaluation function for a flattened model.
@@ -195,11 +196,17 @@ export class AlgebraicEvaluator {
         continue
       }
       
+      // Handle segregated subsystems specially - they call external functions
+      if (block.isSegregated) {
+        code += this.generateSegregatedSubsystemCall(block)
+        continue
+      }
+
       // Skip blocks that don't generate code
       if (!BlockModuleFactory.isSupported(block.block.type)) {
         continue
       }
-      
+
       // Get the block's inputs and their types
       // FIXED: Pass 'model' instead of 'signals' and 'states'
       const inputs = this.getBlockInputExpressions(block, 'model', 'model')
@@ -330,6 +337,25 @@ export class AlgebraicEvaluator {
     portIndex: number,
     signalsVar: string = 'model'  // Changed default
   ): string {
+    // Handle segregated subsystems - access outputs directly from subsystem struct
+    if (block.isSegregated) {
+      const subInfo = this.model.segregatedSubsystems?.find(
+        s => s.subsystemId === block.originalId
+      )
+      if (subInfo) {
+        // Find the output port by index
+        const outputPort = subInfo.outputPorts.find(p => p.index === portIndex)
+        if (outputPort) {
+          return `model->${subInfo.sanitizedName}.outputs.${outputPort.sanitizedName}`
+        }
+        // Fallback: if port not found by index, use first output (single output case)
+        if (subInfo.outputPorts.length > 0 && portIndex === 0) {
+          const port = subInfo.outputPorts[0]
+          return `model->${subInfo.sanitizedName}.outputs.${port.sanitizedName}`
+        }
+      }
+    }
+
     const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
     // Updated to append ->signals. when signalsVar is 'model'
     if (signalsVar === 'model') {
@@ -411,5 +437,91 @@ export class AlgebraicEvaluator {
    */
   private getBlockOutputType(block: FlattenedBlock): string {
     return this.typeMap.get(block.originalId) || 'double'
+  }
+
+  /**
+   * Generate code to call a segregated subsystem's compute_outputs function
+   */
+  private generateSegregatedSubsystemCall(block: FlattenedBlock): string {
+    // Find the SubsystemInfo for this block
+    const subInfo = this.model.segregatedSubsystems?.find(
+      s => s.subsystemId === block.originalId
+    )
+
+    if (!subInfo) {
+      return `    /* Error: Segregated subsystem info not found for ${block.block.name} */\n`
+    }
+
+    const safeName = subInfo.sanitizedName
+    let code = `\n    /* Segregated subsystem: ${block.block.name} */\n`
+
+    // Copy inputs to subsystem input struct
+    for (const port of subInfo.inputPorts) {
+      const inputExpr = this.getInputExpressionForPort(block, port.index)
+      if (inputExpr) {
+        if (port.dataType.includes('[')) {
+          code += `    memcpy(&model->${safeName}.inputs.${port.sanitizedName}, &${inputExpr}, sizeof(model->${safeName}.inputs.${port.sanitizedName}));\n`
+        } else {
+          code += `    model->${safeName}.inputs.${port.sanitizedName} = ${inputExpr};\n`
+        }
+      }
+    }
+
+    // Set enable state if subsystem has enable input
+    if (subInfo.hasEnableInput) {
+      const enableExpr = this.getEnableExpression(block)
+      code += `    model->${safeName}.enabled = (${enableExpr}) > 0.5 ? 1 : 0;\n`
+      code += `    if (model->${safeName}.enabled) {\n`
+      code += `        ${safeName}_compute_outputs(&model->${safeName});\n`
+      code += `    }\n`
+    } else {
+      code += `    ${safeName}_compute_outputs(&model->${safeName});\n`
+    }
+
+    // Note: Subsystem outputs are accessed directly via model->SubsystemName.outputs.PortName
+    // by downstream blocks (see generateSignalExpression), so no copy is needed here
+
+    return code
+  }
+
+  /**
+   * Get the input expression for a specific port of a block
+   */
+  private getInputExpressionForPort(block: FlattenedBlock, portIndex: number): string | null {
+    const connection = this.model.connections.find(c =>
+      c.targetBlockId === block.originalId && c.targetPortIndex === portIndex
+    )
+
+    if (connection) {
+      const sourceBlock = this.model.blocks.find(b =>
+        b.originalId === connection.sourceBlockId
+      )
+      if (sourceBlock) {
+        return this.generateSignalExpression(sourceBlock, connection.sourcePortIndex)
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Get the enable expression for a subsystem block
+   */
+  private getEnableExpression(block: FlattenedBlock): string {
+    // Find the connection to the enable port (port index -1)
+    const connection = this.model.connections.find(c =>
+      c.targetBlockId === block.originalId && c.targetPortIndex === -1
+    )
+
+    if (connection) {
+      const sourceBlock = this.model.blocks.find(b =>
+        b.originalId === connection.sourceBlockId
+      )
+      if (sourceBlock) {
+        return this.generateSignalExpression(sourceBlock, connection.sourcePortIndex)
+      }
+    }
+
+    return '1' // Default to enabled if no enable wire
   }
 }

@@ -62,11 +62,21 @@ export class HeaderGenerator {
    * Generate include statements
    */
   private generateIncludes(): string {
-    return `#include <stdint.h>
+    let includes = `#include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>\n`
+
+    // Include segregated subsystem headers
+    if (this.model.segregatedSubsystems && this.model.segregatedSubsystems.length > 0) {
+      includes += '\n/* Segregated subsystem headers */\n'
+      for (const sub of this.model.segregatedSubsystems) {
+        includes += `#include "${sub.sanitizedName}.h"\n`
+      }
+    }
+
+    return includes
   }
   
   /**
@@ -107,6 +117,13 @@ export class HeaderGenerator {
     members.push(`    ${this.modelName}_signals_t signals;`)
     members.push(`    ${this.modelName}_states_t states;`)
     members.push(`    enable_states_t enable_states;`) // Always include
+
+    // Add segregated subsystem instances
+    if (this.model.segregatedSubsystems && this.model.segregatedSubsystems.length > 0) {
+      for (const sub of this.model.segregatedSubsystems) {
+        members.push(`    ${sub.sanitizedName}_t ${sub.sanitizedName}; /* Segregated subsystem */`)
+      }
+    }
 
     // Add data collection members for logger/display blocks
     for (const block of this.model.blocks) {
@@ -329,6 +346,9 @@ export class HeaderGenerator {
       }
     }
     
+    // Note: Segregated subsystem outputs are accessed directly via model->SubsystemName.outputs.PortName
+    // rather than being copied to the parent's signals struct
+
     // Add dummy member if no signals
     if (members.length === 0) {
       members.push(CCodeBuilder.generateStructMember(
@@ -338,7 +358,7 @@ export class HeaderGenerator {
         'No internal signals'
       ))
     }
-    
+
     return CCodeBuilder.generateStruct(
       `${this.modelName}_signals`,
       members,
@@ -351,12 +371,12 @@ export class HeaderGenerator {
    */
   private generateStatesStruct(): string {
     const members: string[] = []
-    
+
     // Process each block that needs state storage
     for (const block of this.model.blocks) {
       try {
         const generator = BlockModuleFactory.getBlockModule(block.block.type)
-        
+
         if (generator.requiresState(block.block)) {
           const outputType = this.getBlockOutputType(block)
           const stateMembers = generator.generateStateStructMembers(block.block, outputType)
@@ -367,7 +387,16 @@ export class HeaderGenerator {
         continue
       }
     }
-    
+
+    // Add segregated subsystem state structs (for RK4 derivatives)
+    if (this.model.segregatedSubsystems && this.model.segregatedSubsystems.length > 0) {
+      for (const sub of this.model.segregatedSubsystems) {
+        if (sub.hasState) {
+          members.push(`    ${sub.sanitizedName}_states_t ${sub.sanitizedName}; /* Subsystem states */`)
+        }
+      }
+    }
+
     // Add dummy member if no states
     if (members.length === 0) {
       members.push(CCodeBuilder.generateStructMember(
@@ -377,7 +406,7 @@ export class HeaderGenerator {
         'No state variables'
       ))
     }
-    
+
     return CCodeBuilder.generateStruct(
       `${this.modelName}_states`,
       members,
@@ -420,20 +449,14 @@ export class HeaderGenerator {
     
     // Derivatives function (for RK4) - only if we have stateful blocks
     if (this.hasStatefulBlocks()) {
+      // Simplified signature: model pointer for access to inputs/signals/subsystems
       const params = [
         'double t',
-        `const ${this.modelName}_inputs_t* inputs`,
-        `const ${this.modelName}_signals_t* signals`,  // Add signals parameter
+        `const ${this.modelName}_t* model`,
         `const ${this.modelName}_states_t* current_states`,
         `${this.modelName}_states_t* state_derivatives`
       ]
-      
-      // Only add enable_states parameter if we have subsystems with enable inputs
-      const hasEnableSubsystems = this.model.subsystemEnableInfo.some(info => info.hasEnableInput)
-      if (hasEnableSubsystems) {
-        params.push(`const enable_states_t* enable_states`)
-      }
-      
+
       prototypes += CCodeBuilder.generateFunctionPrototype(
         'void',
         `${this.modelName}_derivatives`,

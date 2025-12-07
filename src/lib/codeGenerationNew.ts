@@ -26,6 +26,7 @@ export class ModelCodeGenerator {
     header: string
     source: string
     warnings: string[]
+    subsystemFiles: Array<{ header: string; source: string; subsystemName: string; warnings: string[] }>
   } {
     // Pass integration method from metadata if available
     const options = {
@@ -37,25 +38,27 @@ export class ModelCodeGenerator {
     // Create new generator with updated options
     const customGenerator = new CodeGenerator(options)
     const result = customGenerator.generate(sheets, parameters)
-    
+
     // Log any warnings
     if (result.warnings.length > 0) {
       console.warn('Code generation warnings:', result.warnings)
     }
-    
+
     // Log statistics
     console.log('Code generation complete:', {
       blocks: result.stats.blocksProcessed,
       connections: result.stats.connectionsProcessed,
       subsystems: result.stats.subsystemsFlattened,
       states: result.stats.statesGenerated,
-      enabledSubsystems: result.stats.enabledSubsystems
+      enabledSubsystems: result.stats.enabledSubsystems,
+      segregatedSubsystems: result.stats.segregatedSubsystems
     })
-    
+
     return {
       header: result.header,
       source: result.source,
-      warnings: result.warnings
+      warnings: result.warnings,
+      subsystemFiles: result.subsystemFiles
     }
   }
   

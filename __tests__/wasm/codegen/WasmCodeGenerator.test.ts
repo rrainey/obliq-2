@@ -332,7 +332,7 @@ describe('WasmCodeGenerator', () => {
       expect(result.inputMap.size).toBe(1)
       expect(result.outputMap.size).toBe(0)
       expect(result.wasmWrapper).toContain('double wasm_get_output')
-      expect(result.wasmWrapper).toContain('// No output ports defined')
+      expect(result.wasmWrapper).toContain('// No scalar output ports defined')
     })
   })
 
