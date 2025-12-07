@@ -618,16 +618,6 @@ export class WasmSimulationEngine {
       // Determine if buffer has wrapped
       const hasWrapped = numSamples >= maxSamples
 
-      // Always log buffer state for debugging
-      console.log(`[WasmSimulationEngine] Buffer state for ${name}: numSamples=${numSamples}, maxSamples=${maxSamples}, writeIndex=${writeIndex}, hasWrapped=${hasWrapped}`)
-
-      // Debug logging for circular buffer extraction
-      if (hasWrapped) {
-        if (!this.module._wasm_get_sample_write_index) {
-          console.warn(`[WasmSimulationEngine] WARNING: _wasm_get_sample_write_index not available - circular buffer extraction may be incorrect. Force recompile to fix.`)
-        }
-      }
-
       if (elementSize === 1) {
         // Scalar signal - return flat array of numbers
         if (!hasWrapped) {
