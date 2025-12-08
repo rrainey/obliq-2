@@ -159,7 +159,8 @@ export class InitFunctionGenerator {
         
         // Check if this block type has initialization
         if (generator.generateInitialization) {
-          const initCode = generator.generateInitialization(block.block)
+          const outputType = this.getBlockOutputType(block)
+          const initCode = generator.generateInitialization(block.block, outputType)
           if (initCode && initCode.trim()) {
             if (!hasBlockInit) {
               code += '    /* Initialize block-specific states */\n'

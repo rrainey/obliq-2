@@ -226,7 +226,7 @@ export class IntegratorBlockModule implements IBlockModule {
     return members
   }
 
-  generateInitialization(block: BlockData): string {
+  generateInitialization(block: BlockData, outputType?: string): string {
     const intName = BlockModuleUtils.sanitizeIdentifier(block.name)
     const {
       initialValue = 0,
@@ -238,39 +238,53 @@ export class IntegratorBlockModule implements IBlockModule {
 
     let code = ''
 
-    // Initialize state to initial value (clamped if using limits)
-    // Uses _states[0] pattern (order 1 transfer function)
-    if (typeof initialValue === 'number') {
+    // Parse the output type to determine dimensions
+    // State structure is: scalar -> [1], vector[n] -> [n][1], matrix[m][n] -> [m][n][1]
+    const typeInfo = BlockModuleUtils.parseType(outputType || 'double')
+
+    // Calculate the initial value (clamped if using limits)
+    const getClampedValue = (val: number): number => {
       if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-        const clampedValue = Math.max(lowerLimit, Math.min(upperLimit, initialValue))
-        code += `    model->states.${intName}_states[0] = ${clampedValue};\n`
-      } else {
-        code += `    model->states.${intName}_states[0] = ${initialValue};\n`
+        return Math.max(lowerLimit, Math.min(upperLimit, val))
       }
-    } else if (Array.isArray(initialValue)) {
-      // Array or matrix initialization
-      code += `    // Initialize ${intName}_states to initial values\n`
-      if (Array.isArray(initialValue[0])) {
-        // Matrix: _states[i][j][0]
-        for (let i = 0; i < initialValue.length; i++) {
-          for (let j = 0; j < (initialValue[i] as number[]).length; j++) {
-            let val = (initialValue[i] as number[])[j]
-            if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-              val = Math.max(lowerLimit, Math.min(upperLimit, val))
-            }
-            code += `    model->states.${intName}_states[${i}][${j}][0] = ${val};\n`
+      return val
+    }
+
+    // Determine the scalar initial value to use
+    const scalarInitial = typeof initialValue === 'number' ? initialValue : 0
+
+    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+      // Matrix: _states[i][j][0]
+      code += `    // Initialize ${intName}_states (matrix ${typeInfo.rows}x${typeInfo.cols})\n`
+      for (let i = 0; i < typeInfo.rows; i++) {
+        for (let j = 0; j < typeInfo.cols; j++) {
+          let val: number
+          if (Array.isArray(initialValue) && Array.isArray(initialValue[i])) {
+            val = (initialValue[i] as number[])[j] ?? scalarInitial
+          } else {
+            val = scalarInitial
           }
-        }
-      } else {
-        // Vector: _states[i][0]
-        for (let i = 0; i < initialValue.length; i++) {
-          let val = initialValue[i] as number
-          if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-            val = Math.max(lowerLimit, Math.min(upperLimit, val))
-          }
-          code += `    model->states.${intName}_states[${i}][0] = ${val};\n`
+          val = getClampedValue(val)
+          code += `    model->states.${intName}_states[${i}][${j}][0] = ${val};\n`
         }
       }
+    } else if (typeInfo.isArray && typeInfo.arraySize) {
+      // Vector: _states[i][0]
+      code += `    // Initialize ${intName}_states (vector size ${typeInfo.arraySize})\n`
+      for (let i = 0; i < typeInfo.arraySize; i++) {
+        let val: number
+        if (Array.isArray(initialValue) && !Array.isArray(initialValue[0])) {
+          val = (initialValue[i] as number) ?? scalarInitial
+        } else {
+          val = scalarInitial
+        }
+        val = getClampedValue(val)
+        code += `    model->states.${intName}_states[${i}][0] = ${val};\n`
+      }
+    } else {
+      // Scalar: _states[0]
+      const val = getClampedValue(scalarInitial)
+      code += `    model->states.${intName}_states[0] = ${val};\n`
     }
 
     // Initialize reset edge detection

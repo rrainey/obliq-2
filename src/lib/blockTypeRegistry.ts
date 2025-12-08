@@ -60,7 +60,12 @@ export const BlockTypes = {
   // Control blocks
   IF: 'if',
   CONDITION: 'condition',
-  
+
+  // Limit block
+  LIMIT: 'limit',
+
+  // Integrator block
+  INTEGRATOR: 'integrator',
 
 } as const;
 
@@ -431,7 +436,37 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     outputs: [{ name: 'output' }],
     description: 'Negates input (element-wise for vectors/matrices)'
   },
-  
+
+  [BlockTypes.LIMIT]: {
+    type: BlockTypes.LIMIT,
+    displayName: 'Limit',
+    category: 'Math',
+    defaultParameters: {
+      lowerLimit: -Infinity,
+      upperLimit: Infinity
+    },
+    inputs: [{ name: 'input' }],
+    outputs: [{ name: 'output' }],
+    description: 'Limits (clamps) signal values to specified range'
+  },
+
+  [BlockTypes.INTEGRATOR]: {
+    type: BlockTypes.INTEGRATOR,
+    displayName: 'Integrator',
+    category: 'Dynamic',
+    defaultParameters: {
+      initialValue: 0,
+      showEnableInput: false,
+      showResetInput: false,
+      useLimits: false,
+      upperLimit: Infinity,
+      lowerLimit: -Infinity
+    },
+    inputs: [{ name: 'input' }],
+    outputs: [{ name: 'output' }],
+    description: 'Integrator block (equivalent to 1/s transfer function)'
+  },
+
 };
 
 /**

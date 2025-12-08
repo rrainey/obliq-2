@@ -6,6 +6,7 @@ import { Sheet } from '@/lib/simulationEngine'
 import { CCodeBuilder } from '@/lib/codegen/CCodeBuilder'
 import { ModelParameter } from '@/lib/modelSchema'
 import { SubsystemInfo, SubsystemPort } from './SubsystemInfo'
+import { TypePropagator } from './TypePropagator'
 /**
  * A flattened block includes the original block data plus hierarchy information
  */
@@ -353,6 +354,26 @@ export class ModelFlattener {
       b.block.type === 'integrator' && b.block.parameters?.showResetInput === true
     )
 
+    // Propagate types through the subsystem's internal model
+    const typePropagator = new TypePropagator(subResult.model)
+    const typeMap = typePropagator.propagate()
+
+    // Update output port types based on type propagation
+    // The output port type should match the signal connected to it
+    for (const port of outputPorts) {
+      // Find the output_port block
+      const portBlock = subResult.model.blocks.find(b =>
+        b.block.type === 'output_port' &&
+        b.block.parameters?.portName === port.name
+      )
+      if (portBlock) {
+        const propagatedType = typeMap.get(portBlock.originalId)
+        if (propagatedType) {
+          port.dataType = propagatedType
+        }
+      }
+    }
+
     return {
       subsystemId: block.id,
       subsystemName: block.name,
@@ -365,6 +386,7 @@ export class ModelFlattener {
       hasResetInput,
       hasState,
       stateCount,
+      typeMap,
       parentPath,
       enableScope: parentEnableScope
     }
