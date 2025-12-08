@@ -1,9 +1,9 @@
 // mcp-server/src/tools/model-construction.ts
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { ToolWithHandler } from '../types.js';
 import { modelBuilderClient } from '../modelBuilderClient.js';
 import { config } from '../config.js';
 
-export const addSheetTool: Tool = {
+export const addSheetTool: ToolWithHandler = {
   name: 'add_sheet',
   description: 'Add a new sheet to a model',
   inputSchema: {
@@ -53,7 +53,7 @@ export const addSheetTool: Tool = {
   }
 };
 
-export const addBlockTool: Tool = {
+export const addBlockTool: ToolWithHandler = {
   name: 'add_block',
   description: 'Add a block to a sheet',
   inputSchema: {
@@ -130,7 +130,7 @@ export const addBlockTool: Tool = {
   }
 };
 
-export const updateBlockTool: Tool = {
+export const updateBlockTool: ToolWithHandler = {
   name: 'update_block',
   description: 'Update a block\'s properties',
   inputSchema: {
@@ -211,7 +211,7 @@ export const updateBlockTool: Tool = {
   }
 };
 
-export const deleteBlockTool: Tool = {
+export const deleteBlockTool: ToolWithHandler = {
   name: 'delete_block',
   description: 'Delete a block from a sheet',
   inputSchema: {
@@ -264,7 +264,7 @@ export const deleteBlockTool: Tool = {
   }
 };
 
-export const addConnectionTool: Tool = {
+export const addConnectionTool: ToolWithHandler = {
   name: 'add_connection',
   description: 'Add a wire connection between two blocks',
   inputSchema: {
@@ -337,7 +337,7 @@ export const addConnectionTool: Tool = {
   }
 };
 
-export const deleteConnectionTool: Tool = {
+export const deleteConnectionTool: ToolWithHandler = {
   name: 'delete_connection',
   description: 'Delete a wire connection',
   inputSchema: {

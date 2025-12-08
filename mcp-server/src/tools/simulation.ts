@@ -1,14 +1,14 @@
 // mcp-server/src/tools/simulation.ts
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { apiClient } from '../client.js';
 import {
+  ToolWithHandler,
   RunSimulationInput,
   RunSimulationOutput,
   GetSimulationResultsInput,
   GetSimulationResultsOutput
 } from '../types.js';
 
-export const runSimulationTool: Tool = {
+export const runSimulationTool: ToolWithHandler = {
   name: 'run_simulation',
   description: 'Run a simulation on a model',
   inputSchema: {
@@ -89,7 +89,7 @@ export const runSimulationTool: Tool = {
   }
 };
 
-export const getSimulationResultsTool: Tool = {
+export const getSimulationResultsTool: ToolWithHandler = {
   name: 'get_simulation_results',
   description: 'Get detailed simulation results',
   inputSchema: {

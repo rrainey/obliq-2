@@ -1,9 +1,9 @@
 // mcp-server/src/tools/batch-operations.ts
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { ToolWithHandler } from '../types.js';
 import { modelBuilderClient } from '../modelBuilderClient.js';
 import { config } from '../config.js';
 
-export const batchExecuteTool: Tool = {
+export const batchExecuteTool: ToolWithHandler = {
   name: 'batch_execute',
   description: 'Execute multiple operations in a single request, with optional transactional behavior',
   inputSchema: {
