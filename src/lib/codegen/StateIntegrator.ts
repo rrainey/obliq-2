@@ -246,7 +246,8 @@ export class StateIntegrator {
   ): string {
     const indent = '    '.repeat(indentLevel)
     let code = ''
-    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    // Use flattened name for state access to handle subsystem blocks correctly
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
     const typeInfo = this.getBlockTypeInfo(block)
     const stateOrder = this.getBlockStateOrder(block)
 
@@ -372,7 +373,8 @@ export class StateIntegrator {
     const statefulBlocks = this.getStatefulBlocks()
 
     for (const block of statefulBlocks) {
-      const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+      // Use flattened name for state access to handle subsystem blocks correctly
+      const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
       const typeInfo = this.getBlockTypeInfo(block)
       const stateOrder = this.getBlockStateOrder(block)
 
@@ -606,7 +608,8 @@ export class StateIntegrator {
     const indent = '    '.repeat(indentLevel)
     let code = ''
 
-    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    // Use flattened name for state access to handle subsystem blocks correctly
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
     const stateOrder = this.getBlockStateOrder(block)
 
     if (stateOrder > 0) {

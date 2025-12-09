@@ -228,13 +228,20 @@ export class AlgebraicEvaluator {
           code += ` (from ${block.subsystemPath.join(' > ')})`
         }
         code += ' */\n'
-        
+
+        // Create a modified block with the flattened name for code generation
+        // This ensures unique signal names when blocks from different subsystems have the same name
+        const blockWithFlattenedName = {
+          ...block.block,
+          name: block.flattenedName
+        }
+
         // For transfer functions, we need special handling to use states
         if (block.block.type === 'transfer_function') {
           const modifiedInputs = this.getTransferFunctionInputs(block, inputs)
-          code += generator.generateComputation(block.block, modifiedInputs, inputTypes)
+          code += generator.generateComputation(blockWithFlattenedName, modifiedInputs, inputTypes)
         } else {
-          code += generator.generateComputation(block.block, inputs, inputTypes)
+          code += generator.generateComputation(blockWithFlattenedName, inputs, inputTypes)
         }
 
       } catch (error) {
@@ -273,9 +280,15 @@ export class AlgebraicEvaluator {
             const inputExpression = inputs[0]
             const inputType = this.getBlockInputTypes(block)[0] || 'double'
 
+            // Create a modified block with the flattened name
+            const blockWithFlattenedName = {
+              ...block.block,
+              name: block.flattenedName
+            }
+
             // Generate sample storage code
             if (generator.generateSampleStorage) {
-              const storageCode = generator.generateSampleStorage(block.block, inputExpression, inputType)
+              const storageCode = generator.generateSampleStorage(blockWithFlattenedName, inputExpression, inputType)
               if (storageCode && storageCode.trim()) {
                 code += storageCode
               }
@@ -324,8 +337,8 @@ export class AlgebraicEvaluator {
    * Special handling for transfer function inputs to include state reference
    */
   private getTransferFunctionInputs(block: FlattenedBlock, inputs: string[]): string[] {
-    // Transfer functions need access to their states
-    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    // Transfer functions need access to their states - use flattened name for uniqueness
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
     return [...inputs, `model->states.${safeName}_states`]  // Changed to use model->
   }
   
@@ -356,7 +369,8 @@ export class AlgebraicEvaluator {
       }
     }
 
-    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    // Use flattened name for signal access to handle subsystem blocks correctly
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
     // Updated to append ->signals. when signalsVar is 'model'
     if (signalsVar === 'model') {
       return `${signalsVar}->signals.${safeName}`

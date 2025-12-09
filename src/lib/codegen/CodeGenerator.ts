@@ -295,7 +295,8 @@ export class CodeGenerator {
    * Generate 1D lookup table
    */
   private generate1DLookupTable(block: any): string {
-    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    // Use flattened name for lookup table variables to handle subsystem blocks correctly
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
     const params = block.block.parameters || {}
     const inputValues = params.inputValues || [0, 1]
     const outputValues = params.outputValues || [0, 1]
@@ -312,7 +313,8 @@ export class CodeGenerator {
    * Generate 2D lookup table
    */
   private generate2DLookupTable(block: any): string {
-    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    // Use flattened name for lookup table variables to handle subsystem blocks correctly
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
     const params = block.block.parameters || {}
     const input1Values = params.input1Values || [0, 1]
     const input2Values = params.input2Values || [0, 1]

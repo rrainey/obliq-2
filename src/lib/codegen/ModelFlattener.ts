@@ -949,15 +949,35 @@ export class ModelFlattener {
         this.addWarning(`Sheet label source ${sourceBlock.originalId} has no signal name`)
         continue
       }
-      
-      const scope = sourceBlock.subsystemPath.length > 0 
+
+      // Search for matching sink starting from current scope and moving up the hierarchy
+      let labelInfo: SheetLabelConnection | undefined
+      let searchScope = sourceBlock.subsystemPath.length > 0
         ? sourceBlock.subsystemPath.join('/')
         : 'root'
-      const key = `${scope}:${signalName}`
-      
-      const labelInfo = sheetLabelSinks.get(key)
+
+      // Try current scope first, then parent scopes
+      const pathParts = [...sourceBlock.subsystemPath]
+      while (true) {
+        const key = `${searchScope}:${signalName}`
+        labelInfo = sheetLabelSinks.get(key)
+        if (labelInfo && labelInfo.sink) {
+          break // Found a match
+        }
+
+        // Move up one level in the hierarchy
+        if (pathParts.length === 0) {
+          break // We've reached the root and still no match
+        }
+        pathParts.pop()
+        searchScope = pathParts.length > 0 ? pathParts.join('/') : 'root'
+      }
+
       if (!labelInfo || !labelInfo.sink) {
-        this.addWarning(`Sheet label source '${signalName}' has no matching sink in scope '${scope}'`)
+        const scope = sourceBlock.subsystemPath.length > 0
+          ? sourceBlock.subsystemPath.join('/')
+          : 'root'
+        this.addWarning(`Sheet label source '${signalName}' has no matching sink in scope '${scope}' or parent scopes`)
         continue
       }
       
