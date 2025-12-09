@@ -463,7 +463,7 @@ describe('Enable Signal Functionality', () => {
       const result = generator.generate(sheets)
 
       // Check for conditional state updates
-      expect(result.source).toContain('if (enable_states->StatefulSub_enabled)')
+      expect(result.source).toContain('if (model->enable_states.StatefulSub_enabled)')
       expect(result.source).toContain('derivatives')
     })
 
@@ -728,7 +728,7 @@ describe('Enable Signal Functionality', () => {
       expect(result.header).toContain('StatefulSub_TF2_states')
 
       // Should check enable state before updating
-      expect(result.source).toContain('if (enable_states->StatefulSub_enabled)')
+      expect(result.source).toContain('if (model->enable_states.StatefulSub_enabled)')
     })
   })
 })

@@ -243,9 +243,9 @@ describe('Segregated Subsystem Code Generation', () => {
 
       // Check source structure
       expect(code.source).toContain('#include "Controller.h"')
-      expect(code.source).toContain('void Controller_init(Controller_t* sub)')
-      expect(code.source).toContain('void Controller_compute_outputs(Controller_t* sub)')
-      expect(code.source).toContain('memset(&sub->inputs, 0, sizeof(sub->inputs))')
+      expect(code.source).toContain('void Controller_init(Controller_t*')
+      expect(code.source).toContain('void Controller_compute_outputs(Controller_t*')
+      expect(code.source).toContain('memset(&model->inputs, 0, sizeof(model->inputs))')
     })
 
     test('should generate derivatives function for stateful subsystem', () => {

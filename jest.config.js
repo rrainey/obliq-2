@@ -27,7 +27,10 @@ const config = {
     '/__tests__/wasm/fixtures/',
     '/__tests__/utils/',
     '/__tests__/codegen/enable-test-models.ts',
-    '/__tests__/wasm/api/test-compile-api-manual.ts'
+    '/__tests__/wasm/api/test-compile-api-manual.ts',
+    // API route tests require Next.js server runtime (Request/Response globals)
+    // Run these with `npm run test:e2e` or in actual Next.js environment
+    '/__tests__/wasm/api/compile-wasm.test.ts'
   ],
   collectCoverageFrom: [
     'lib/**/*.{js,jsx,ts,tsx}',

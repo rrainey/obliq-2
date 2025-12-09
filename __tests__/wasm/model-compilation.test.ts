@@ -97,30 +97,30 @@ describe('Model to WASM Compilation', () => {
         connections: [
           {
             id: 'wire1',
-            source: 'input1',
+            sourceBlockId: 'input1',
             sourcePortIndex: 0,
-            target: 'sum1',
+            targetBlockId: 'sum1',
             targetPortIndex: 0
           },
           {
             id: 'wire2',
-            source: 'input2',
+            sourceBlockId: 'input2',
             sourcePortIndex: 0,
-            target: 'sum1',
+            targetBlockId: 'sum1',
             targetPortIndex: 1
           },
           {
             id: 'wire3',
-            source: 'sum1',
+            sourceBlockId: 'sum1',
             sourcePortIndex: 0,
-            target: 'gain1',
+            targetBlockId: 'gain1',
             targetPortIndex: 0
           },
           {
             id: 'wire4',
-            source: 'gain1',
+            sourceBlockId: 'gain1',
             sourcePortIndex: 0,
-            target: 'output1',
+            targetBlockId: 'output1',
             targetPortIndex: 0
           }
         ],
