@@ -165,6 +165,25 @@ export class ModelBuilderAPIClient {
       transactional
     });
   }
+
+  // Parameter operations
+  async listParameters(modelId: string) {
+    return this.request('GET', `?action=listParameters&modelId=${modelId}`);
+  }
+
+  async setParameter(modelId: string, name: string, signalType: string, value: number | number[] | number[][]) {
+    return this.request('POST', '', {
+      action: 'setParameter',
+      modelId,
+      name,
+      signalType,
+      value
+    });
+  }
+
+  async deleteParameter(modelId: string, name: string) {
+    return this.request('DELETE', `?action=deleteParameter&modelId=${modelId}&name=${name}`);
+  }
 }
 
 // Export singleton instance

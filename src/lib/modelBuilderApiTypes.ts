@@ -452,3 +452,51 @@ export interface DeleteConnectionResponse {
   deletedConnection: ConnectionSummary;
   remainingConnectionCount: number;
 }
+
+// Model Parameter types
+export interface ModelParameterSummary {
+  name: string;
+  signalType: string;
+  value: number | number[] | number[][];
+}
+
+export interface ListParametersRequest {
+  action: 'listParameters';
+  modelId: string;
+}
+
+export interface ListParametersResponse {
+  modelId: string;
+  parameterCount: number;
+  parameters: ModelParameterSummary[];
+}
+
+export interface SetParameterRequest {
+  action: 'setParameter';
+  modelId: string;
+  name: string;
+  signalType: string;
+  value: number | number[] | number[][];
+}
+
+export interface SetParameterResponse {
+  modelId: string;
+  newVersion: number;
+  parameter: ModelParameterSummary;
+  created: boolean;  // true if parameter was created, false if updated
+}
+
+export interface DeleteParameterRequest {
+  action: 'deleteParameter';
+  modelId: string;
+  name: string;
+}
+
+export interface DeleteParameterResponse {
+  modelId: string;
+  newVersion: number;
+  deletedParameter: {
+    name: string;
+  };
+  remainingParameterCount: number;
+}

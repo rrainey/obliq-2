@@ -361,13 +361,13 @@ export const deleteConnectionTool: ToolWithHandler = {
   handler: async (args: any) => {
     try {
       const { modelId, sheetId, connectionId } = args;
-      
+
       if (config.debug) {
         console.error('[delete_connection] Deleting connection:', { modelId, sheetId, connectionId });
       }
 
       const response = await modelBuilderClient.deleteConnection(modelId, sheetId, connectionId);
-      
+
       if (!response.success) {
         return {
           success: false,
@@ -382,6 +382,167 @@ export const deleteConnectionTool: ToolWithHandler = {
       };
     } catch (error) {
       console.error('[delete_connection] Error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+};
+
+export const listParametersTool: ToolWithHandler = {
+  name: 'list_parameters',
+  description: 'List all model parameters. Model parameters are named constants that can be used in block expressions.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      modelId: {
+        type: 'string',
+        description: 'ID of the model'
+      }
+    },
+    required: ['modelId']
+  },
+  handler: async (args: any) => {
+    try {
+      const { modelId } = args;
+
+      if (config.debug) {
+        console.error('[list_parameters] Listing parameters:', { modelId });
+      }
+
+      const response = await modelBuilderClient.listParameters(modelId);
+
+      if (!response.success) {
+        return {
+          success: false,
+          error: response.error || 'Failed to list parameters',
+          errors: response.errors
+        };
+      }
+
+      return {
+        success: true,
+        modelId,
+        parameterCount: (response.data as any)?.parameterCount || 0,
+        parameters: (response.data as any)?.parameters || []
+      };
+    } catch (error) {
+      console.error('[list_parameters] Error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+};
+
+export const setParameterTool: ToolWithHandler = {
+  name: 'set_parameter',
+  description: 'Create or update a model parameter. Parameters are named constants (e.g., Kp=1.5, gain=10) that can be referenced in block expressions. If the parameter exists, it will be updated; otherwise, a new parameter will be created.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      modelId: {
+        type: 'string',
+        description: 'ID of the model'
+      },
+      name: {
+        type: 'string',
+        description: 'Parameter name (must be a valid C identifier: alphanumeric + underscore, cannot start with number)'
+      },
+      signalType: {
+        type: 'string',
+        description: 'Data type: float, double, long, bool, or array types like double[3] or double[3][3]'
+      },
+      value: {
+        oneOf: [
+          { type: 'number' },
+          { type: 'array', items: { type: 'number' } },
+          { type: 'array', items: { type: 'array', items: { type: 'number' } } }
+        ],
+        description: 'Parameter value (scalar, array, or matrix matching the signalType)'
+      }
+    },
+    required: ['modelId', 'name', 'signalType', 'value']
+  },
+  handler: async (args: any) => {
+    try {
+      const { modelId, name, signalType, value } = args;
+
+      if (config.debug) {
+        console.error('[set_parameter] Setting parameter:', { modelId, name, signalType, value });
+      }
+
+      const response = await modelBuilderClient.setParameter(modelId, name, signalType, value);
+
+      if (!response.success) {
+        return {
+          success: false,
+          error: response.error || 'Failed to set parameter',
+          errors: response.errors
+        };
+      }
+
+      const data = response.data as any;
+      return {
+        success: true,
+        modelId,
+        parameter: data?.parameter,
+        created: data?.created,
+        message: data?.created ? `Parameter '${name}' created` : `Parameter '${name}' updated`
+      };
+    } catch (error) {
+      console.error('[set_parameter] Error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+};
+
+export const deleteParameterTool: ToolWithHandler = {
+  name: 'delete_parameter',
+  description: 'Delete a model parameter',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      modelId: {
+        type: 'string',
+        description: 'ID of the model'
+      },
+      name: {
+        type: 'string',
+        description: 'Name of the parameter to delete'
+      }
+    },
+    required: ['modelId', 'name']
+  },
+  handler: async (args: any) => {
+    try {
+      const { modelId, name } = args;
+
+      if (config.debug) {
+        console.error('[delete_parameter] Deleting parameter:', { modelId, name });
+      }
+
+      const response = await modelBuilderClient.deleteParameter(modelId, name);
+
+      if (!response.success) {
+        return {
+          success: false,
+          error: response.error || 'Failed to delete parameter',
+          errors: response.errors
+        };
+      }
+
+      return {
+        success: true,
+        message: `Parameter '${name}' deleted successfully`
+      };
+    } catch (error) {
+      console.error('[delete_parameter] Error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'

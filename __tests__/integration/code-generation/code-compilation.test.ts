@@ -789,12 +789,13 @@ includes=${safeName}.h
     
     program += `    \n`
     program += `    // Run simulation\n`
+    program += `    ${modelName}_init(&model, dt);\n`
     program += `    printf("Running simulation for %.2f seconds with time step %.4f\\n", duration, dt);\n`
     program += `    printf("Total steps: %d\\n\\n", steps);\n`
     program += `    \n`
     program += `    for (int i = 0; i < steps; i++) {\n`
     program += `        // Use the time_step function which handles integration and algebraic computations\n`
-    program += `        ${modelName}_time_step(&model, dt);\n`
+    program += `        ${modelName}_step(&model);\n`
     program += `        \n`
     
     // Store final values

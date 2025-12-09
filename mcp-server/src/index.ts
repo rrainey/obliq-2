@@ -19,7 +19,10 @@ import {
   updateBlockTool,
   deleteBlockTool,
   addConnectionTool,
-  deleteConnectionTool
+  deleteConnectionTool,
+  listParametersTool,
+  setParameterTool,
+  deleteParameterTool
 } from './tools/model-construction.js';
 import {
   runSimulationTool,
@@ -55,6 +58,10 @@ const tools: ToolWithHandler[] = [
   deleteBlockTool,
   addConnectionTool,
   deleteConnectionTool,
+  // Model parameters
+  listParametersTool,
+  setParameterTool,
+  deleteParameterTool,
   // Simulation
   runSimulationTool,
   getSimulationResultsTool,
