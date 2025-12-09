@@ -165,19 +165,20 @@ console.log('Last few data points:', chartData.slice(-5))
               margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
             >
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis 
+            <XAxis
               dataKey="time"
               label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }}
               tick={{ fontSize: 12 }}
               stroke="#6b7280"
-              tickFormatter={(value) => value.toFixed(2)}
+              tickFormatter={(value) => value.toFixed(1)}
+              allowDecimals={false}
             />
-            <YAxis 
+            <YAxis
               domain={yDomain}
               label={{ value: 'Value', angle: -90, position: 'insideLeft' }}
               tick={{ fontSize: 12 }}
               stroke="#6b7280"
-              tickFormatter={(value) => value.toFixed(2)}
+              tickFormatter={(value) => value.toFixed(1)}
             />
             <Tooltip 
               contentStyle={{ 

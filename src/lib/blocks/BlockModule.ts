@@ -53,9 +53,10 @@ export interface IBlockModule {
   /**
    * Generate initialization code for this block (optional).
    * @param block - The block data
+   * @param outputType - The C type string for the output (e.g., "double", "double[3]")
    * @returns C code for initialization or undefined if not needed
    */
-  generateInitialization?(block: BlockData): string
+  generateInitialization?(block: BlockData, outputType?: string): string
 
   /**
    * Execute the simulation logic for this block.
@@ -187,6 +188,17 @@ export interface IBlockModule {
    * @returns C code to free allocated memory
    */
   generateDataCollectionCleanup?(block: BlockData): string
+
+  /**
+   * Generate post-integration limiting code (optional).
+   * Called after state integration to clamp values if limits are configured.
+   * Used by integrators with saturation limits.
+   *
+   * @param block - The block data
+   * @param outputType - The C type string for the output (e.g., "double", "double[3]")
+   * @returns C code to clamp state values or empty string if no limiting
+   */
+  generatePostIntegrationLimiting?(block: BlockData, outputType: string): string
 }
 
 /**

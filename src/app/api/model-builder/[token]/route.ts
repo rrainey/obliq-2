@@ -210,7 +210,10 @@ const ModelBuilderActions = {
   DELETE_CONNECTION: 'deleteConnection',
   GET_BLOCK_PORTS: 'getBlockPorts',
   VALIDATE_MODEL: 'validateModel',
-  BATCH_OPERATIONS: 'batchOperations'
+  BATCH_OPERATIONS: 'batchOperations',
+  LIST_PARAMETERS: 'listParameters',
+  SET_PARAMETER: 'setParameter',
+  DELETE_PARAMETER: 'deleteParameter'
 } as const;
 
 // GET handler for retrieving model data and introspection
@@ -917,7 +920,50 @@ export async function GET(
         blocks: blockDetails
       });
     }
-    
+
+    // Handle listParameters action
+    if (action === ModelBuilderActions.LIST_PARAMETERS) {
+      // Validate modelId parameter
+      if (!modelId) {
+        return ErrorResponses.missingParameter('modelId');
+      }
+
+      // Initialize Supabase client
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      // Get the latest version of the model
+      const { data: versionData, error: versionError } = await supabase
+        .from('model_versions')
+        .select('data')
+        .eq('model_id', modelId)
+        .order('version', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (versionError || !versionData) {
+        return ErrorResponses.modelNotFound(modelId);
+      }
+
+      // Extract parameters from the model data
+      const parameters = versionData.data?.parameters || [];
+
+      // Transform parameters to summary format
+      const parameterDetails = parameters.map((param: any) => ({
+        name: param.name,
+        signalType: param.signalType,
+        value: param.value
+      }));
+
+      return successResponse({
+        modelId,
+        parameterCount: parameterDetails.length,
+        parameters: parameterDetails
+      });
+    }
+
     // Other GET actions will be implemented in subsequent tasks
     const errorResp = errorResponse(`Unknown action: ${action}`, 'UNKNOWN_ACTION');
     logRequest('GET', action, logParams, startTime, { success: false, status: 400, error: `Unknown action: ${action}` });
@@ -1261,7 +1307,7 @@ export async function POST(
           let response: NextResponse;
           
           // Determine method based on action
-          if (['getModel', 'listSheets', 'listBlocks', 'getBlock', 'listConnections', 'getConnection', 'getBlockPorts'].includes(operation.action)) {
+          if (['getModel', 'listSheets', 'listBlocks', 'getBlock', 'listConnections', 'getConnection', 'getBlockPorts', 'listParameters'].includes(operation.action)) {
             // GET operations
             operationUrl.searchParams.set('action', operation.action);
             Object.keys(operation).forEach(key => {
@@ -1269,21 +1315,21 @@ export async function POST(
                 operationUrl.searchParams.set(key, operation[key]);
               }
             });
-            
+
             const getRequest = new NextRequest(operationUrl.toString(), {
               method: 'GET',
               headers: request.headers
             });
-            
+
             response = await GET(getRequest, { params: Promise.resolve({ token }) });
-          } else if (['createModel', 'createSheet', 'addBlock', 'addConnection', 'validateModel'].includes(operation.action)) {
+          } else if (['createModel', 'createSheet', 'addBlock', 'addConnection', 'validateModel', 'setParameter'].includes(operation.action)) {
             // POST operations
             const postRequest = new NextRequest(request.url, {
               method: 'POST',
               headers: request.headers,
               body: JSON.stringify(operation)
             });
-            
+
             response = await POST(postRequest, { params: Promise.resolve({ token }) });
           } else if (['renameSheet', 'updateBlockPosition', 'updateBlockName', 'updateBlockParameters'].includes(operation.action)) {
             // PUT operations
@@ -1292,9 +1338,9 @@ export async function POST(
               headers: request.headers,
               body: JSON.stringify(operation)
             });
-            
+
             response = await PUT(putRequest, { params: Promise.resolve({ token }) });
-          } else if (['deleteSheet', 'deleteBlock', 'deleteConnection'].includes(operation.action)) {
+          } else if (['deleteSheet', 'deleteBlock', 'deleteConnection', 'deleteParameter'].includes(operation.action)) {
             // DELETE operations
             operationUrl.searchParams.set('action', operation.action);
             Object.keys(operation).forEach(key => {
@@ -1302,12 +1348,12 @@ export async function POST(
                 operationUrl.searchParams.set(key, operation[key]);
               }
             });
-            
+
             const deleteRequest = new NextRequest(operationUrl.toString(), {
               method: 'DELETE',
               headers: request.headers
             });
-            
+
             response = await DELETE(deleteRequest, { params: Promise.resolve({ token }) });
           } else {
             errors.push({
@@ -2214,7 +2260,127 @@ export async function POST(
       logRequest('POST', action, { modelId, sheetId, newName }, startTime, { success: true, status: 201 });
       return response;
     }
-    
+
+    // Handle setParameter action (creates or updates a model parameter)
+    if (action === ModelBuilderActions.SET_PARAMETER) {
+      const { modelId, name, signalType, value } = body;
+
+      // Validate required parameters
+      if (!modelId) {
+        return ErrorResponses.missingParameter('modelId');
+      }
+      if (!name) {
+        return ErrorResponses.missingParameter('name');
+      }
+      if (!signalType) {
+        return ErrorResponses.missingParameter('signalType');
+      }
+      if (value === undefined || value === null) {
+        return ErrorResponses.missingParameter('value');
+      }
+
+      // Validate parameter name format (valid C identifier)
+      const nameRegex = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+      if (!nameRegex.test(name)) {
+        return errorResponse(
+          'Parameter name must be a valid identifier (alphanumeric + underscore, cannot start with number)',
+          'INVALID_PARAMETER_NAME',
+          400
+        );
+      }
+
+      // Validate signalType
+      const validSignalTypes = ['float', 'double', 'long', 'bool'];
+      const arrayTypeRegex = /^(float|double|long|bool)\[\d+\]$/;
+      const matrixTypeRegex = /^(float|double|long|bool)\[\d+\]\[\d+\]$/;
+      if (!validSignalTypes.includes(signalType) && !arrayTypeRegex.test(signalType) && !matrixTypeRegex.test(signalType)) {
+        return errorResponse(
+          `Invalid signalType: ${signalType}. Must be float, double, long, bool, or array/matrix type like double[3] or double[3][3]`,
+          'INVALID_SIGNAL_TYPE',
+          400
+        );
+      }
+
+      // Initialize Supabase client
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      // Get the latest version of the model
+      const { data: versionData, error: versionError } = await supabase
+        .from('model_versions')
+        .select('*')
+        .eq('model_id', modelId)
+        .order('version', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (versionError || !versionData) {
+        return ErrorResponses.modelNotFound(modelId);
+      }
+
+      // Extract current model data
+      const modelData = versionData.data;
+      const parameters = modelData.parameters || [];
+
+      // Check if parameter already exists
+      const existingIndex = parameters.findIndex((p: any) => p.name === name);
+      const created = existingIndex === -1;
+
+      if (created) {
+        // Add new parameter
+        parameters.push({ name, signalType, value });
+      } else {
+        // Update existing parameter
+        parameters[existingIndex] = { name, signalType, value };
+      }
+
+      // Update model data with new parameters
+      modelData.parameters = parameters;
+
+      // Create a new version with the updated data
+      const nextVersion = versionData.version + 1;
+
+      const { error: insertError } = await supabase
+        .from('model_versions')
+        .insert({
+          model_id: modelId,
+          version: nextVersion,
+          data: modelData
+        });
+
+      if (insertError) {
+        console.error('Error creating new version:', insertError);
+        return errorResponse('Failed to set parameter', 'SET_PARAMETER_FAILED', 500);
+      }
+
+      // Update model's latest version
+      const { error: updateError } = await supabase
+        .from('models')
+        .update({
+          latest_version: nextVersion,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', modelId);
+
+      if (updateError) {
+        console.error('Error updating model:', updateError);
+        return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
+      }
+
+      // Return the result
+      const response = successResponse({
+        modelId,
+        newVersion: nextVersion,
+        parameter: { name, signalType, value },
+        created
+      }, created ? 201 : 200);
+
+      logRequest('POST', action, { modelId, name }, startTime, { success: true, status: created ? 201 : 200 });
+      return response;
+    }
+
     // Other POST actions will be implemented in subsequent tasks
     const errorResp = errorResponse(`Unknown action: ${action}`, 'UNKNOWN_ACTION');
     logRequest('POST', action || 'unknown', body, startTime, { success: false, status: 400, error: `Unknown action: ${action}` });
@@ -3360,7 +3526,92 @@ export async function DELETE(
         remainingBlockCount: blocks.length
       });
     }
-    
+
+    // Handle deleteParameter action
+    if (action === ModelBuilderActions.DELETE_PARAMETER) {
+      const name = searchParams.get('name');
+
+      // Validate required parameters
+      if (!modelId) {
+        return ErrorResponses.missingParameter('modelId');
+      }
+      if (!name) {
+        return ErrorResponses.missingParameter('name');
+      }
+
+      // Initialize Supabase client
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      // Get the latest version of the model
+      const { data: versionData, error: versionError } = await supabase
+        .from('model_versions')
+        .select('*')
+        .eq('model_id', modelId)
+        .order('version', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (versionError || !versionData) {
+        return ErrorResponses.modelNotFound(modelId);
+      }
+
+      // Extract current model data
+      const modelData = versionData.data;
+      const parameters = modelData.parameters || [];
+
+      // Find the parameter to delete
+      const paramIndex = parameters.findIndex((p: any) => p.name === name);
+
+      if (paramIndex === -1) {
+        return errorResponse(`Parameter not found: ${name}`, 'PARAMETER_NOT_FOUND', 404);
+      }
+
+      // Remove the parameter
+      parameters.splice(paramIndex, 1);
+      modelData.parameters = parameters;
+
+      // Create a new version with the updated data
+      const nextVersion = versionData.version + 1;
+
+      const { error: insertError } = await supabase
+        .from('model_versions')
+        .insert({
+          model_id: modelId,
+          version: nextVersion,
+          data: modelData
+        });
+
+      if (insertError) {
+        console.error('Error creating new version:', insertError);
+        return errorResponse('Failed to delete parameter', 'DELETE_PARAMETER_FAILED', 500);
+      }
+
+      // Update model's latest version
+      const { error: updateError } = await supabase
+        .from('models')
+        .update({
+          latest_version: nextVersion,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', modelId);
+
+      if (updateError) {
+        console.error('Error updating model:', updateError);
+        return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
+      }
+
+      // Return success response
+      return successResponse({
+        modelId,
+        newVersion: nextVersion,
+        deletedParameter: { name },
+        remainingParameterCount: parameters.length
+      });
+    }
+
     // If no valid action or modelId
     return ErrorResponses.missingParameter('modelId or action');
     

@@ -1,12 +1,12 @@
 // mcp-server/src/tools/model-management.ts
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { ToolWithHandler } from '../types.js';
 import { modelBuilderClient } from '../modelBuilderClient.js';
 import { config } from '../config.js';
 
 // Default user ID for MCP operations
 const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000000';
 
-export const createModelTool: Tool = {
+export const createModelTool: ToolWithHandler = {
   name: 'create_model',
   description: 'Create a new empty model',
   inputSchema: {
@@ -56,7 +56,7 @@ export const createModelTool: Tool = {
   }
 };
 
-export const getModelTool: Tool = {
+export const getModelTool: ToolWithHandler = {
   name: 'get_model',
   description: 'Get complete model data including all sheets, blocks, and connections',
   inputSchema: {
@@ -101,7 +101,7 @@ export const getModelTool: Tool = {
   }
 };
 
-export const listModelsTool: Tool = {
+export const listModelsTool: ToolWithHandler = {
   name: 'list_models',
   description: 'List all models (Note: Model Builder API may not support this directly)',
   inputSchema: {
@@ -132,7 +132,7 @@ export const listModelsTool: Tool = {
   }
 };
 
-export const deleteModelTool: Tool = {
+export const deleteModelTool: ToolWithHandler = {
   name: 'delete_model',
   description: 'Delete a model and all its data',
   inputSchema: {

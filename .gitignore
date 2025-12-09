@@ -7,6 +7,9 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 
+.next
+.swc
+
 # generated test model C-files
 __tests__/integration/code-generation/platformio-test/temp/
 __tests__/integration/code-generation/platformio-test/src/main.cpp

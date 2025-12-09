@@ -125,13 +125,13 @@ export class WasmCodeGenerator extends CodeGenerator {
   ): {
     inputMap: Map<string, number>
     outputMap: Map<string, number>
-    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; portIndex: number; outputPortName?: string }>
+    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; isFlattened: boolean; portIndex: number; outputPortName?: string; flattenedSignalPath?: string }>
     collectorTypeMap: Map<string, string> // Maps collector name to input signal type
     outputTypeMap: Map<string, string> // Maps output port name to signal type
   } {
     const inputMap = new Map<string, number>()
     const outputMap = new Map<string, number>()
-    const outputSourceMap = new Map<string, { blockName: string; isSubsystem: boolean; portIndex: number; outputPortName?: string }>()
+    const outputSourceMap = new Map<string, { blockName: string; isSubsystem: boolean; isFlattened: boolean; portIndex: number; outputPortName?: string; flattenedSignalPath?: string }>()
     const collectorTypeMap = new Map<string, string>()
     const outputTypeMap = new Map<string, string>()
 
@@ -154,6 +154,54 @@ export class WasmCodeGenerator extends CodeGenerator {
       return fallbackType
     }
 
+    // Helper function to find the flattened signal path for a subsystem output port
+    // For flattened subsystems, we need to trace inside to find the block that feeds the output port
+    const getFlattenedSignalPath = (subsystemBlock: any, outputPortIndex: number): string | undefined => {
+      const codeGenStrategy = subsystemBlock.parameters?.codeGenStrategy || 'flatten'
+      if (codeGenStrategy === 'segregated' || codeGenStrategy === 'segregated_atomic') {
+        return undefined // Segregated subsystems have their own struct
+      }
+
+      const subsystemSheets = subsystemBlock.parameters?.sheets as Sheet[] | undefined
+      if (!subsystemSheets) return undefined
+
+      const outputPorts = subsystemBlock.parameters?.outputPorts as string[] | undefined
+      if (!outputPorts) return undefined
+
+      const targetPortName = outputPorts[outputPortIndex]
+      if (!targetPortName) return undefined
+
+      // Find the output_port block inside the subsystem
+      for (const subSheet of subsystemSheets) {
+        const outputPortBlock = subSheet.blocks.find(
+          b => b.type === 'output_port' && b.parameters?.portName === targetPortName
+        )
+        if (!outputPortBlock) continue
+
+        // Find the connection feeding this output port
+        const feedingConn = subSheet.connections.find(c => c.targetBlockId === outputPortBlock.id)
+        if (!feedingConn) continue
+
+        // Find the source block
+        const sourceBlock = subSheet.blocks.find(b => b.id === feedingConn.sourceBlockId)
+        if (!sourceBlock) continue
+
+        // Handle nested input_port (passthrough) - trace back through subsystem inputs
+        if (sourceBlock.type === 'input_port') {
+          // This output is connected directly to a subsystem input - trace external connection
+          // For now, skip this case as it requires tracing external connections
+          continue
+        }
+
+        // Construct the flattened signal path: SubsystemName_BlockName
+        const subsystemName = CCodeBuilder.sanitizeIdentifier(subsystemBlock.name)
+        const blockName = CCodeBuilder.sanitizeIdentifier(sourceBlock.name)
+        return `${subsystemName}_${blockName}`
+      }
+
+      return undefined
+    }
+
     // Process all sheets to find input/output ports and signal loggers
     for (const sheet of sheets) {
       for (const block of sheet.blocks) {
@@ -172,15 +220,27 @@ export class WasmCodeGenerator extends CodeGenerator {
               const isSubsystem = sourceBlock.type === 'subsystem'
               // For subsystems, find the output port name from the subsystem's outputPorts parameter
               let outputPortName: string | undefined
-              if (isSubsystem && sourceBlock.parameters?.outputPorts) {
-                const outputPorts = sourceBlock.parameters.outputPorts as string[]
-                outputPortName = outputPorts[feedingConnection.sourcePortIndex] || outputPorts[0]
+              let isFlattened = false
+              let flattenedSignalPath: string | undefined
+              if (isSubsystem) {
+                const outputPorts = sourceBlock.parameters?.outputPorts as string[] | undefined
+                if (outputPorts) {
+                  outputPortName = outputPorts[feedingConnection.sourcePortIndex] || outputPorts[0]
+                }
+                // Check if subsystem is flattened and get the signal path
+                const codeGenStrategy = sourceBlock.parameters?.codeGenStrategy || 'flatten'
+                isFlattened = codeGenStrategy === 'flatten'
+                if (isFlattened) {
+                  flattenedSignalPath = getFlattenedSignalPath(sourceBlock, feedingConnection.sourcePortIndex)
+                }
               }
               outputSourceMap.set(portName, {
                 blockName: sourceBlock.name,
                 isSubsystem,
+                isFlattened,
                 portIndex: feedingConnection.sourcePortIndex,
-                outputPortName
+                outputPortName,
+                flattenedSignalPath
               })
               // Get the type from typeMap (handles Transfer Functions properly)
               const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
@@ -200,15 +260,26 @@ export class WasmCodeGenerator extends CodeGenerator {
             if (sourceBlock) {
               const isSubsystem = sourceBlock.type === 'subsystem'
               let outputPortName: string | undefined
-              if (isSubsystem && sourceBlock.parameters?.outputPorts) {
-                const outputPorts = sourceBlock.parameters.outputPorts as string[]
-                outputPortName = outputPorts[feedingConnection.sourcePortIndex] || outputPorts[0]
+              let isFlattened = false
+              let flattenedSignalPath: string | undefined
+              if (isSubsystem) {
+                const outputPorts = sourceBlock.parameters?.outputPorts as string[] | undefined
+                if (outputPorts) {
+                  outputPortName = outputPorts[feedingConnection.sourcePortIndex] || outputPorts[0]
+                }
+                const codeGenStrategy = sourceBlock.parameters?.codeGenStrategy || 'flatten'
+                isFlattened = codeGenStrategy === 'flatten'
+                if (isFlattened) {
+                  flattenedSignalPath = getFlattenedSignalPath(sourceBlock, feedingConnection.sourcePortIndex)
+                }
               }
               outputSourceMap.set(loggerName, {
                 blockName: sourceBlock.name,
                 isSubsystem,
+                isFlattened,
                 portIndex: feedingConnection.sourcePortIndex,
-                outputPortName
+                outputPortName,
+                flattenedSignalPath
               })
               // Get the type from typeMap (handles Transfer Functions properly)
               const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
@@ -228,15 +299,26 @@ export class WasmCodeGenerator extends CodeGenerator {
             if (sourceBlock) {
               const isSubsystem = sourceBlock.type === 'subsystem'
               let outputPortName: string | undefined
-              if (isSubsystem && sourceBlock.parameters?.outputPorts) {
-                const outputPorts = sourceBlock.parameters.outputPorts as string[]
-                outputPortName = outputPorts[feedingConnection.sourcePortIndex] || outputPorts[0]
+              let isFlattened = false
+              let flattenedSignalPath: string | undefined
+              if (isSubsystem) {
+                const outputPorts = sourceBlock.parameters?.outputPorts as string[] | undefined
+                if (outputPorts) {
+                  outputPortName = outputPorts[feedingConnection.sourcePortIndex] || outputPorts[0]
+                }
+                const codeGenStrategy = sourceBlock.parameters?.codeGenStrategy || 'flatten'
+                isFlattened = codeGenStrategy === 'flatten'
+                if (isFlattened) {
+                  flattenedSignalPath = getFlattenedSignalPath(sourceBlock, feedingConnection.sourcePortIndex)
+                }
               }
               outputSourceMap.set(displayName, {
                 blockName: sourceBlock.name,
                 isSubsystem,
+                isFlattened,
                 portIndex: feedingConnection.sourcePortIndex,
-                outputPortName
+                outputPortName,
+                flattenedSignalPath
               })
               // Get the type from typeMap (handles Transfer Functions properly)
               const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
@@ -257,7 +339,7 @@ export class WasmCodeGenerator extends CodeGenerator {
     modelName: string,
     inputMap: Map<string, number>,
     outputMap: Map<string, number>,
-    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; portIndex: number; outputPortName?: string }>,
+    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; isFlattened: boolean; portIndex: number; outputPortName?: string; flattenedSignalPath?: string }>,
     collectorTypeMap: Map<string, string>,
     outputTypeMap: Map<string, string>,
     hasCleanupFunction: boolean
@@ -416,7 +498,7 @@ ${keepalive}void wasm_set_input(int index, double value) {
   private generateWasmGetOutputFunction(
     modelName: string,
     outputMap: Map<string, number>,
-    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; portIndex: number; outputPortName?: string }>,
+    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; isFlattened: boolean; portIndex: number; outputPortName?: string; flattenedSignalPath?: string }>,
     outputTypeMap: Map<string, string>
   ): string {
     const keepalive = this.wasmOptions.includeEmscriptenExports
@@ -453,10 +535,18 @@ ${keepalive}double wasm_get_output(int index) {
         const sourceInfo = outputSourceMap.get(portName)
         if (sourceInfo) {
           if (sourceInfo.isSubsystem) {
-            // Subsystem outputs are accessed via model->SubsystemName.outputs.PortName
-            const sanitizedSubsystem = CCodeBuilder.sanitizeIdentifier(sourceInfo.blockName)
-            const sanitizedPort = CCodeBuilder.sanitizeIdentifier(sourceInfo.outputPortName || 'Output1')
-            code += `        case ${index}: return ${modelName}_instance.${sanitizedSubsystem}.outputs.${sanitizedPort};\n`
+            if (sourceInfo.isFlattened && sourceInfo.flattenedSignalPath) {
+              // Flattened subsystem: use the flattened signal path in signals struct
+              code += `        case ${index}: return ${modelName}_instance.signals.${sourceInfo.flattenedSignalPath};\n`
+            } else if (!sourceInfo.isFlattened) {
+              // Segregated subsystem: outputs are accessed via model->SubsystemName.outputs.PortName
+              const sanitizedSubsystem = CCodeBuilder.sanitizeIdentifier(sourceInfo.blockName)
+              const sanitizedPort = CCodeBuilder.sanitizeIdentifier(sourceInfo.outputPortName || 'Output1')
+              code += `        case ${index}: return ${modelName}_instance.${sanitizedSubsystem}.outputs.${sanitizedPort};\n`
+            } else {
+              // Flattened but couldn't trace signal path - skip with comment
+              code += `        // case ${index}: skipped - could not trace flattened subsystem output for ${portName}\n`
+            }
           } else {
             // Regular blocks have their output in signals struct
             const sanitizedSource = CCodeBuilder.sanitizeIdentifier(sourceInfo.blockName)

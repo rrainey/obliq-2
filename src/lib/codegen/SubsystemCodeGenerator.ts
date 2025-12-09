@@ -333,7 +333,8 @@ export class SubsystemCodeGenerator {
       const generator = BlockModuleFactory.getBlockModule(block.block.type)
       if (generator.generateInitialization) {
         // Block modules generate code using 'model->' which matches our parameter name
-        return generator.generateInitialization(block.block)
+        const outputType = this.getBlockOutputType(block)
+        return generator.generateInitialization(block.block, outputType)
       }
     } catch {
       // Block type not supported

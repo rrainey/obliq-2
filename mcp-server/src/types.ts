@@ -1,5 +1,24 @@
 // mcp-server/src/types.ts
 
+import { Tool } from '@modelcontextprotocol/sdk/types.js';
+
+/**
+ * Extended Tool type that includes a handler function.
+ * MCP SDK 1.x separates tool definitions from handlers, but we keep them
+ * together for convenience and export them separately when registering.
+ */
+export interface ToolWithHandler extends Tool {
+  handler: (args: unknown) => Promise<any>;
+}
+
+/**
+ * Type guard to extract just the Tool definition (without handler)
+ */
+export function getToolDefinition(tool: ToolWithHandler): Tool {
+  const { handler, ...toolDef } = tool;
+  return toolDef as Tool;
+}
+
 // Base types from the main application
 export interface Position {
   x: number;

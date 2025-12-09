@@ -1,9 +1,9 @@
 // mcp-server/src/tools/validation.ts
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { ToolWithHandler } from '../types.js';
 import { modelBuilderClient } from '../modelBuilderClient.js';
 import { config } from '../config.js';
 
-export const validateModelTool: Tool = {
+export const validateModelTool: ToolWithHandler = {
   name: 'validate_model',
   description: 'Validate a model for errors and warnings',
   inputSchema: {
@@ -53,7 +53,7 @@ export const validateModelTool: Tool = {
   }
 };
 
-export const listSheetLabelsTool: Tool = {
+export const listSheetLabelsTool: ToolWithHandler = {
   name: 'list_sheet_labels',
   description: 'List all sheet labels in a model',
   inputSchema: {
@@ -132,7 +132,7 @@ export const listSheetLabelsTool: Tool = {
   }
 };
 
-export const validateSheetLabelsTool: Tool = {
+export const validateSheetLabelsTool: ToolWithHandler = {
   name: 'validate_sheet_labels',
   description: 'Validate sheet label connections and scoping',
   inputSchema: {

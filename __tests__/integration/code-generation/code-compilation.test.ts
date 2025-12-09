@@ -794,7 +794,7 @@ includes=${safeName}.h
     program += `    \n`
     program += `    for (int i = 0; i < steps; i++) {\n`
     program += `        // Use the time_step function which handles integration and algebraic computations\n`
-    program += `        ${modelName}_time_step(&model, dt);\n`
+    program += `        ${modelName}_step(&model);\n`
     program += `        \n`
     
     // Store final values

@@ -81,6 +81,9 @@ export interface SubsystemInfo {
   /** Total count of state variables within the subsystem */
   stateCount: number
 
+  /** Type map for blocks within the subsystem (block originalId -> output type) */
+  typeMap?: Map<string, string>
+
   // === Parent Context ===
 
   /**

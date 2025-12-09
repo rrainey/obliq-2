@@ -455,7 +455,145 @@ export function validateBlockParameters(
     case BlockTypes.IF:
       // type validation performed at connection time
       break;
-      
+
+    case BlockTypes.EVALUATE:
+      // Validate numInputs
+      if (parameters.numInputs !== undefined) {
+        const num = Number(parameters.numInputs);
+        if (!Number.isInteger(num) || num < 1 || num > 10) {
+          errors.push('numInputs must be an integer between 1 and 10');
+        } else {
+          sanitized.numInputs = num;
+        }
+      } else {
+        sanitized.numInputs = defaults.numInputs;
+      }
+
+      // Validate expression
+      if (parameters.expression !== undefined) {
+        if (typeof parameters.expression !== 'string') {
+          errors.push('expression must be a string');
+        } else if (parameters.expression.trim().length === 0) {
+          errors.push('expression cannot be empty');
+        } else {
+          sanitized.expression = parameters.expression;
+        }
+      } else {
+        sanitized.expression = defaults.expression;
+      }
+      break;
+
+    case BlockTypes.LIMIT:
+      // Validate lowerLimit
+      if (parameters.lowerLimit !== undefined) {
+        const lower = Number(parameters.lowerLimit);
+        if (isNaN(lower)) {
+          errors.push('lowerLimit must be a number');
+        } else {
+          sanitized.lowerLimit = lower;
+        }
+      } else {
+        sanitized.lowerLimit = defaults.lowerLimit;
+      }
+
+      // Validate upperLimit
+      if (parameters.upperLimit !== undefined) {
+        const upper = Number(parameters.upperLimit);
+        if (isNaN(upper)) {
+          errors.push('upperLimit must be a number');
+        } else {
+          sanitized.upperLimit = upper;
+        }
+      } else {
+        sanitized.upperLimit = defaults.upperLimit;
+      }
+
+      // Validate that lowerLimit <= upperLimit
+      if (sanitized.lowerLimit !== undefined && sanitized.upperLimit !== undefined) {
+        if (sanitized.lowerLimit > sanitized.upperLimit) {
+          errors.push('lowerLimit must be less than or equal to upperLimit');
+        }
+      }
+      break;
+
+    case BlockTypes.INTEGRATOR:
+      // Validate initialValue
+      if (parameters.initialValue !== undefined) {
+        const init = Number(parameters.initialValue);
+        if (isNaN(init)) {
+          errors.push('initialValue must be a number');
+        } else {
+          sanitized.initialValue = init;
+        }
+      } else {
+        sanitized.initialValue = defaults.initialValue;
+      }
+
+      // Validate showEnableInput
+      if (parameters.showEnableInput !== undefined) {
+        if (typeof parameters.showEnableInput !== 'boolean') {
+          errors.push('showEnableInput must be a boolean');
+        } else {
+          sanitized.showEnableInput = parameters.showEnableInput;
+        }
+      } else {
+        sanitized.showEnableInput = defaults.showEnableInput;
+      }
+
+      // Validate showResetInput
+      if (parameters.showResetInput !== undefined) {
+        if (typeof parameters.showResetInput !== 'boolean') {
+          errors.push('showResetInput must be a boolean');
+        } else {
+          sanitized.showResetInput = parameters.showResetInput;
+        }
+      } else {
+        sanitized.showResetInput = defaults.showResetInput;
+      }
+
+      // Validate useLimits
+      if (parameters.useLimits !== undefined) {
+        if (typeof parameters.useLimits !== 'boolean') {
+          errors.push('useLimits must be a boolean');
+        } else {
+          sanitized.useLimits = parameters.useLimits;
+        }
+      } else {
+        sanitized.useLimits = defaults.useLimits;
+      }
+
+      // Validate upperLimit
+      if (parameters.upperLimit !== undefined) {
+        const upper = Number(parameters.upperLimit);
+        if (isNaN(upper)) {
+          errors.push('upperLimit must be a number');
+        } else {
+          sanitized.upperLimit = upper;
+        }
+      } else {
+        sanitized.upperLimit = defaults.upperLimit;
+      }
+
+      // Validate lowerLimit
+      if (parameters.lowerLimit !== undefined) {
+        const lower = Number(parameters.lowerLimit);
+        if (isNaN(lower)) {
+          errors.push('lowerLimit must be a number');
+        } else {
+          sanitized.lowerLimit = lower;
+        }
+      } else {
+        sanitized.lowerLimit = defaults.lowerLimit;
+      }
+
+      // Validate that lowerLimit <= upperLimit when useLimits is true
+      if (sanitized.useLimits && sanitized.lowerLimit !== undefined && sanitized.upperLimit !== undefined) {
+        if (sanitized.lowerLimit > sanitized.upperLimit) {
+          errors.push('lowerLimit must be less than or equal to upperLimit');
+        }
+      }
+      break;
+
     default:
       errors.push(`No validation rules defined for block type: ${blockType}`);
   }

@@ -1,14 +1,17 @@
 // mcp-server/src/index.ts
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema, Tool } from '@modelcontextprotocol/sdk/types.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import express, { Request, Response } from 'express';
+import cors from 'cors';
+import { randomUUID } from 'crypto';
 import { config, getMaskedConfig } from './config.js';
-import { authenticateRequest } from './auth.js';
-import { 
-  createModelTool, 
-  getModelTool, 
-  listModelsTool, 
-  deleteModelTool 
+import { ToolWithHandler } from './types.js';
+import {
+  createModelTool,
+  getModelTool,
+  listModelsTool,
+  deleteModelTool
 } from './tools/model-management.js';
 import {
   addSheetTool,
@@ -16,7 +19,10 @@ import {
   updateBlockTool,
   deleteBlockTool,
   addConnectionTool,
-  deleteConnectionTool
+  deleteConnectionTool,
+  listParametersTool,
+  setParameterTool,
+  deleteParameterTool
 } from './tools/model-construction.js';
 import {
   runSimulationTool,
@@ -31,13 +37,15 @@ import {
   generateCodeTool,
   getGeneratedFilesTool
 } from './tools/code-generation.js';
-
 import {
   batchExecuteTool
 } from './tools/batch-operations.js';
 
+// Determine transport mode from command line or environment
+const useHttpMode = process.argv.includes('--http') || process.env.MCP_HTTP_MODE === 'true';
+
 // Collect all tools
-const tools: Tool[] = [
+const tools: ToolWithHandler[] = [
   // Model management
   createModelTool,
   getModelTool,
@@ -50,6 +58,10 @@ const tools: Tool[] = [
   deleteBlockTool,
   addConnectionTool,
   deleteConnectionTool,
+  // Model parameters
+  listParametersTool,
+  setParameterTool,
+  deleteParameterTool,
   // Simulation
   runSimulationTool,
   getSimulationResultsTool,
@@ -67,31 +79,11 @@ const tools: Tool[] = [
 // Export tools for batch operations
 export { tools };
 
-// Initialize MCP server
-const server = new Server(
-  {
-    name: 'obliq2-mcp-server',
-    version: '1.0.0',
-  },
-  {
-    capabilities: {
-      tools: {},
-      // Note: MCP SDK doesn't have built-in batch support
-      // Batch operations would need to be implemented as a special tool
-    },
-  }
-);
-
-// Error handler
-server.onerror = (error) => {
-  console.error('[MCP Server Error]', error);
-};
-
-// Request logging middleware
+// Request logging
 function logRequest(toolName: string, args: any, startTime: number, result: any, error?: any) {
   const duration = Date.now() - startTime;
   const timestamp = new Date().toISOString();
-  
+
   const logEntry = {
     timestamp,
     tool: toolName,
@@ -100,192 +92,209 @@ function logRequest(toolName: string, args: any, startTime: number, result: any,
     ...(config.debug && { args }),
     ...(error && { error: error instanceof Error ? error.message : String(error) })
   };
-  
+
   console.error(`[MCP Request] ${JSON.stringify(logEntry)}`);
 }
 
-// Handle list tools request
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const startTime = Date.now();
-  
-  try {
-    const response = {
-      tools: tools.map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        inputSchema: tool.inputSchema
-      }))
-    };
-    
-    if (config.debug) {
-      console.error(`[MCP Request] list_tools completed in ${Date.now() - startTime}ms`);
-    }
-    
-    return response;
-  } catch (error) {
-    console.error('[MCP Request] list_tools failed:', error);
-    throw error;
-  }
+// Create MCP server
+const server = new McpServer({
+  name: 'obliq2-mcp-server',
+  version: '2.0.0',
 });
 
-// Handle tool execution
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name: toolName, arguments: args } = request.params;
-  const startTime = Date.now();
-  let result: any;
-  let error: any;
-  
-  try {
-    // Log incoming request
-    if (config.debug) {
-      console.error(`[MCP Request] Starting ${toolName}`, { args });
-    }
-    
-    // Authenticate the request
-    //const authResult = authenticateRequest(toolName, args, request.params);
+// Register each tool with the server
+for (const tool of tools) {
+  server.tool(
+    tool.name,
+    tool.description || '',
+    tool.inputSchema as any,
+    async (args: unknown) => {
+      const startTime = Date.now();
+      let result: any;
+      let error: any;
 
-    const authResult = { authenticated: true, error: null }; // Placeholder for actual auth logic
+      try {
+        if (config.debug) {
+          console.error(`[MCP Request] Starting ${tool.name}`, { args });
+        }
 
-    
-    if (!authResult.authenticated) {
-      error = authResult.error || 'Invalid token';
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Authentication failed: ${error}`
-          }
-        ],
-        isError: true
-      };
-    }
-    
-    // Find the tool
-    const tool = tools.find(t => t.name === toolName);
-    if (!tool) {
-      error = `Tool not found: ${toolName}`;
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `${error}. Available tools: ${tools.map(t => t.name).join(', ')}`
-          }
-        ],
-        isError: true
-      };
-    }
-    
-    // Validate tool arguments against schema
-    if (tool.inputSchema && tool.inputSchema.required) {
-      const required = tool.inputSchema.required as string[];
-      const missing = required.filter(field => !(args && typeof args === 'object' && field in args));
-      
-      if (missing.length > 0) {
-        error = `Missing required parameters: ${missing.join(', ')}`;
+        // Execute with timeout
+        const TOOL_TIMEOUT = 30000;
+        const toolPromise = tool.handler(args);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Tool execution timeout')), TOOL_TIMEOUT)
+        );
+
+        result = await Promise.race([toolPromise, timeoutPromise]);
+
+        // Format response
+        if (result.success === false && result.error) {
+          return {
+            content: [{ type: 'text' as const, text: result.error }],
+            isError: true
+          };
+        }
+
         return {
-          content: [
-            {
-              type: 'text',
-              text: `Missing required parameters for ${toolName}: ${missing.join(', ')}`
-            }
-          ],
+          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }]
+        };
+
+      } catch (err) {
+        error = err;
+        console.error(`[MCP Server] Error executing tool ${tool.name}:`, err);
+
+        let errorMessage = 'Unknown error occurred';
+        let errorDetails = '';
+
+        if (err instanceof Error) {
+          errorMessage = err.message;
+          if (err.stack && config.debug) {
+            errorDetails = `\n\nStack trace:\n${err.stack}`;
+          }
+        } else if (typeof err === 'string') {
+          errorMessage = err;
+        }
+
+        return {
+          content: [{ type: 'text' as const, text: `Error executing tool ${tool.name}: ${errorMessage}${errorDetails}` }],
           isError: true
         };
+      } finally {
+        logRequest(tool.name, args, startTime, result, error);
       }
     }
-    
-    // Execute the tool with timeout
-    const TOOL_TIMEOUT = 30000; // 30 seconds
-    const handler = tool.handler as (args: unknown) => Promise<any>;
-    const toolPromise = handler(args);
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Tool execution timeout')), TOOL_TIMEOUT)
-    );
-    
-    result = await Promise.race([toolPromise, timeoutPromise]);
-    
-    // Format the response
-    if (result.success === false && result.error) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: result.error
-          }
-        ],
-        isError: true
-      };
-    }
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2)
-        }
-      ]
-    };
-    
-  } catch (err) {
-    error = err;
-    console.error(`[MCP Server] Error executing tool ${toolName}:`, err);
-    
-    // Determine error type and message
-    let errorMessage = 'Unknown error occurred';
-    let errorDetails = '';
-    
-    if (err instanceof Error) {
-      errorMessage = err.message;
-      if (err.stack && config.debug) {
-        errorDetails = `\n\nStack trace:\n${err.stack}`;
-      }
-    } else if (typeof err === 'string') {
-      errorMessage = err;
-    }
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `Error executing tool ${toolName}: ${errorMessage}${errorDetails}`
-        }
-      ],
-      isError: true
-    };
-  } finally {
-    // Log request completion
-    logRequest(toolName, args, startTime, result, error);
-  }
-});
+  );
+}
 
-// Start the server
-async function main() {
-  console.error('MCP Server starting...');
-  
-  // Log configuration (with masked sensitive values)
+// ============================================
+// STDIO MODE (for Claude Desktop)
+// ============================================
+async function runStdioMode() {
+  console.error('MCP Server starting in STDIO mode (for Claude Desktop)...');
+
   if (config.debug) {
     console.error('Configuration:', getMaskedConfig());
   }
-  
-  // Validate configuration
-  if (!config.automationToken) {
-    console.error('ERROR: AUTOMATION_API_TOKEN environment variable not set');
-    process.exit(1);
+
+  if (!config.modelBuilderToken) {
+    console.error('WARNING: MODEL_BUILDER_API_TOKEN not set - API calls may fail');
   }
-  
-  if (!config.apiToken) {
-    console.error('WARNING: MCP_API_TOKEN not set - authentication disabled');
-  }
-  
-  // Create stdio transport for MCP communication
+
   const transport = new StdioServerTransport();
-  
-  // Connect the server to the transport
   await server.connect(transport);
-  
-  console.error(`MCP Server running on port ${config.port}`);
+
+  console.error('MCP Server connected via stdio');
   console.error(`API Base URL: ${config.apiBaseUrl}`);
   console.error(`Tools available: ${tools.length}`);
+}
+
+// ============================================
+// HTTP MODE (for programmatic access)
+// ============================================
+async function runHttpMode() {
+  console.error('MCP Server starting in HTTP mode...');
+
+  if (config.debug) {
+    console.error('Configuration:', getMaskedConfig());
+  }
+
+  if (!config.modelBuilderToken) {
+    console.error('WARNING: MODEL_BUILDER_API_TOKEN not set - API calls may fail');
+  }
+
+  // Create Express app for HTTP transport
+  const app = express();
+  app.use(cors());
+  app.use(express.json());
+
+  // Store active transports for session management
+  const transports = new Map<string, StreamableHTTPServerTransport>();
+
+  // Health check endpoint
+  app.get('/health', (_req: Request, res: Response) => {
+    res.json({
+      status: 'ok',
+      server: 'obliq2-mcp-server',
+      tools: tools.length,
+      activeSessions: transports.size
+    });
+  });
+
+  // List available tools (for debugging)
+  app.get('/tools', (_req: Request, res: Response) => {
+    res.json({
+      tools: tools.map(t => ({
+        name: t.name,
+        description: t.description
+      }))
+    });
+  });
+
+  // MCP endpoint - handles all MCP protocol messages
+  app.all('/mcp', async (req: Request, res: Response) => {
+    let sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+    if (!sessionId) {
+      sessionId = randomUUID();
+      console.error(`[MCP Server] New session: ${sessionId}`);
+    }
+
+    let transport = transports.get(sessionId);
+
+    if (!transport) {
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => sessionId!,
+        onsessioninitialized: (id) => {
+          console.error(`[MCP Server] Session initialized: ${id}`);
+        }
+      });
+
+      transports.set(sessionId, transport);
+      await server.connect(transport);
+
+      transport.onclose = () => {
+        console.error(`[MCP Server] Session closed: ${sessionId}`);
+        transports.delete(sessionId!);
+      };
+    }
+
+    await transport.handleRequest(req, res);
+  });
+
+  // Session cleanup endpoint
+  app.delete('/mcp/session/:sessionId', (req: Request, res: Response) => {
+    const { sessionId } = req.params;
+    const transport = transports.get(sessionId);
+
+    if (transport) {
+      transport.close();
+      transports.delete(sessionId);
+      res.json({ success: true, message: 'Session closed' });
+    } else {
+      res.status(404).json({ error: 'Session not found' });
+    }
+  });
+
+  // Start HTTP server
+  app.listen(config.port, () => {
+    console.error(`MCP Server running on http://localhost:${config.port}`);
+    console.error(`MCP endpoint: http://localhost:${config.port}/mcp`);
+    console.error(`Health check: http://localhost:${config.port}/health`);
+    console.error(`Tools list: http://localhost:${config.port}/tools`);
+    console.error(`API Base URL: ${config.apiBaseUrl}`);
+    console.error(`Tools available: ${tools.length}`);
+  });
+}
+
+// ============================================
+// MAIN ENTRY POINT
+// ============================================
+async function main() {
+  if (useHttpMode) {
+    await runHttpMode();
+  } else {
+    await runStdioMode();
+  }
 }
 
 // Handle shutdown gracefully

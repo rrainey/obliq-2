@@ -1,14 +1,14 @@
 // mcp-server/src/tools/code-generation.ts
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { apiClient } from '../client.js';
 import {
+  ToolWithHandler,
   GenerateCodeInput,
   GenerateCodeOutput,
   GetGeneratedFilesInput,
   GetGeneratedFilesOutput
 } from '../types.js';
 
-export const generateCodeTool: Tool = {
+export const generateCodeTool: ToolWithHandler = {
   name: 'generate_code',
   description: 'Generate C code from a model',
   inputSchema: {
@@ -72,7 +72,7 @@ export const generateCodeTool: Tool = {
   }
 };
 
-export const getGeneratedFilesTool: Tool = {
+export const getGeneratedFilesTool: ToolWithHandler = {
   name: 'get_generated_files',
   description: 'Retrieve previously generated code files',
   inputSchema: {

@@ -50,15 +50,36 @@ export class TypePropagator {
       if (block.block.type === 'input_port' || block.block.type === 'source') {
         continue // Already handled
       }
-      
+
+      // Special handling for segregated subsystems
+      // Their output types are determined by internal type propagation, not by the block module
+      if (block.isSegregated && block.block.type === 'subsystem') {
+        const subInfo = this.model.segregatedSubsystems?.find(
+          sub => sub.subsystemId === block.originalId
+        )
+        if (subInfo && subInfo.outputPorts.length > 0) {
+          // For subsystems with single output, use that type
+          // For multiple outputs, store first type (connections use port index)
+          const outputType = subInfo.outputPorts[0].dataType
+          if (isValidType(outputType)) {
+            this.blockOutputTypes.set(block.originalId, normalizeType(outputType))
+          } else {
+            this.blockOutputTypes.set(block.originalId, 'double')
+          }
+        } else {
+          this.blockOutputTypes.set(block.originalId, 'double')
+        }
+        continue
+      }
+
       // Get input types for this block
       const inputTypes = this.getBlockInputTypes(block)
-      
+
       // Skip if block type is not supported
       if (!BlockModuleFactory.isSupported(block.block.type)) {
         continue
       }
-      
+
       try {
         const module = BlockModuleFactory.getBlockModule(block.block.type)
         const outputType = module.getOutputType(block.block, inputTypes)

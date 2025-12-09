@@ -124,12 +124,12 @@ export class StateIntegrator {
       if (sub.hasEnableInput) {
         code += `    if (model->${subName}.enabled) {\n`
         for (const block of statefulBlocks) {
-          code += this.generateSubsystemEulerBlockUpdate(block, subName, 2)
+          code += this.generateSubsystemEulerBlockUpdate(block, sub, 2)
         }
         code += '    }\n'
       } else {
         for (const block of statefulBlocks) {
-          code += this.generateSubsystemEulerBlockUpdate(block, subName, 1)
+          code += this.generateSubsystemEulerBlockUpdate(block, sub, 1)
         }
       }
     }
@@ -142,14 +142,15 @@ export class StateIntegrator {
    */
   private generateSubsystemEulerBlockUpdate(
     block: FlattenedBlock,
-    subName: string,
+    sub: SubsystemInfo,
     indentLevel: number = 1
   ): string {
     const indent = '    '.repeat(indentLevel)
+    const subName = sub.sanitizedName
     let code = ''
 
     const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
-    const typeInfo = this.getBlockTypeInfo(block)
+    const typeInfo = this.getSubsystemBlockTypeInfo(sub, block)
     const stateOrder = this.getBlockStateOrder(block)
 
     if (stateOrder > 0) {
@@ -179,7 +180,7 @@ export class StateIntegrator {
       try {
         const generator = BlockModuleFactory.getBlockModule(block.block.type)
         if (generator.generatePostIntegrationLimiting) {
-          const outputType = this.getBlockOutputType(block)
+          const outputType = this.getSubsystemBlockOutputType(sub, block)
           const limitCode = generator.generatePostIntegrationLimiting(block.block, outputType)
           if (limitCode) {
             // Replace model->states.X with model->states.subName.X for subsystem blocks
@@ -245,7 +246,8 @@ export class StateIntegrator {
   ): string {
     const indent = '    '.repeat(indentLevel)
     let code = ''
-    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    // Use flattened name for state access to handle subsystem blocks correctly
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
     const typeInfo = this.getBlockTypeInfo(block)
     const stateOrder = this.getBlockStateOrder(block)
 
@@ -371,7 +373,8 @@ export class StateIntegrator {
     const statefulBlocks = this.getStatefulBlocks()
 
     for (const block of statefulBlocks) {
-      const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+      // Use flattened name for state access to handle subsystem blocks correctly
+      const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
       const typeInfo = this.getBlockTypeInfo(block)
       const stateOrder = this.getBlockStateOrder(block)
 
@@ -428,7 +431,7 @@ export class StateIntegrator {
 
       for (const block of statefulBlocks) {
         const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
-        const typeInfo = this.getBlockTypeInfo(block)
+        const typeInfo = this.getSubsystemBlockTypeInfo(sub, block)
         const stateOrder = this.getBlockStateOrder(block)
 
         if (stateOrder > 0) {
@@ -459,7 +462,7 @@ export class StateIntegrator {
 
     return code
   }
-  
+
   /**
    * Generate final RK4 state update
    */
@@ -505,12 +508,12 @@ export class StateIntegrator {
       if (sub.hasEnableInput) {
         code += `    if (model->${subName}.enabled) {\n`
         for (const block of statefulBlocks) {
-          code += this.generateSubsystemRK4BlockUpdate(block, subName, 2)
+          code += this.generateSubsystemRK4BlockUpdate(block, sub, 2)
         }
         code += '    }\n'
       } else {
         for (const block of statefulBlocks) {
-          code += this.generateSubsystemRK4BlockUpdate(block, subName, 1)
+          code += this.generateSubsystemRK4BlockUpdate(block, sub, 1)
         }
       }
     }
@@ -523,17 +526,18 @@ export class StateIntegrator {
    */
   private generateSubsystemRK4BlockUpdate(
     block: FlattenedBlock,
-    subName: string,
+    sub: SubsystemInfo,
     indentLevel: number = 1
   ): string {
     const indent = '    '.repeat(indentLevel)
+    const subName = sub.sanitizedName
     let code = ''
 
     const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
     const stateOrder = this.getBlockStateOrder(block)
 
     if (stateOrder > 0) {
-      const typeInfo = this.getBlockTypeInfo(block)
+      const typeInfo = this.getSubsystemBlockTypeInfo(sub, block)
 
       if (typeInfo.isMatrix) {
         const [rows, cols] = typeInfo.dimensions
@@ -576,7 +580,7 @@ export class StateIntegrator {
       try {
         const generator = BlockModuleFactory.getBlockModule(block.block.type)
         if (generator.generatePostIntegrationLimiting) {
-          const outputType = this.getBlockOutputType(block)
+          const outputType = this.getSubsystemBlockOutputType(sub, block)
           // Need to modify state reference for subsystem blocks
           const limitCode = generator.generatePostIntegrationLimiting(block.block, outputType)
           if (limitCode) {
@@ -604,7 +608,8 @@ export class StateIntegrator {
     const indent = '    '.repeat(indentLevel)
     let code = ''
 
-    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    // Use flattened name for state access to handle subsystem blocks correctly
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
     const stateOrder = this.getBlockStateOrder(block)
 
     if (stateOrder > 0) {
@@ -691,9 +696,54 @@ export class StateIntegrator {
     dimensions: number[]
   } {
     const outputType = this.getBlockOutputType(block)
+    return this.parseTypeInfo(outputType)
+  }
+
+  /**
+   * Get detailed type information for a subsystem block's output
+   * Uses the subsystem's typeMap instead of the parent's
+   */
+  private getSubsystemBlockTypeInfo(sub: SubsystemInfo, block: FlattenedBlock): {
+    baseType: string,
+    isVector: boolean,
+    isMatrix: boolean,
+    dimensions: number[]
+  } {
+    const outputType = this.getSubsystemBlockOutputType(sub, block)
+    return this.parseTypeInfo(outputType)
+  }
+
+  /**
+   * Get output type for a block within a subsystem using the subsystem's typeMap
+   */
+  private getSubsystemBlockOutputType(sub: SubsystemInfo, block: FlattenedBlock): string {
+    // First check the subsystem's type map
+    if (sub.typeMap) {
+      const mappedType = sub.typeMap.get(block.originalId)
+      if (mappedType) {
+        return mappedType
+      }
+    }
+
+    // Fall back to parameter-based type
+    const dataType = block.block.parameters?.dataType
+    if (dataType) return dataType
+
+    return 'double'
+  }
+
+  /**
+   * Parse a type string into detailed type information
+   */
+  private parseTypeInfo(outputType: string): {
+    baseType: string,
+    isVector: boolean,
+    isMatrix: boolean,
+    dimensions: number[]
+  } {
     const matrixMatch = outputType.match(/(\w+)\[(\d+)\]\[(\d+)\]/)
     const vectorMatch = outputType.match(/(\w+)\[(\d+)\]/)
-    
+
     if (matrixMatch) {
       return {
         baseType: matrixMatch[1],

@@ -159,7 +159,8 @@ export class InitFunctionGenerator {
         
         // Check if this block type has initialization
         if (generator.generateInitialization) {
-          const initCode = generator.generateInitialization(block.block)
+          const outputType = this.getBlockOutputType(block)
+          const initCode = generator.generateInitialization(block.block, outputType)
           if (initCode && initCode.trim()) {
             if (!hasBlockInit) {
               code += '    /* Initialize block-specific states */\n'
@@ -299,7 +300,8 @@ export class InitFunctionGenerator {
       if (sourceType === 'constant') {
         const value = block.block.parameters?.value || '0.0'
         const dataType = block.block.parameters?.dataType || 'double'
-        const signalName = `model->signals.${CCodeBuilder.sanitizeIdentifier(block.block.name)}`
+        // Use flattened name for signal access to handle subsystem blocks correctly
+        const signalName = `model->signals.${CCodeBuilder.sanitizeIdentifier(block.flattenedName)}`
         
         if (!hasConstants) {
           code += '    /* Initialize constant sources */\n'

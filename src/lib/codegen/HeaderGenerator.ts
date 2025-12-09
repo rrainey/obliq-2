@@ -293,27 +293,27 @@ export class HeaderGenerator {
     for (const block of this.model.blocks) {
       // Include input ports in signals struct for internal access
       if (block.block.type === 'input_port') {
-        const portName = block.block.parameters?.portName || block.block.name
+        const portName = block.block.parameters?.portName || block.flattenedName
         const dataType = block.block.parameters?.dataType || 'double'
-        
-        // Generate member for input port signal
+
+        // Generate member for input port signal - use flattened name for uniqueness
         const typeMatch = dataType.match(/^(\w+)(\[[\d\[\]]+\])?$/)
         if (typeMatch) {
           const baseType = typeMatch[1]
           const dimensions = typeMatch[2]
-          
+
           if (dimensions) {
             const dims = dimensions.match(/\d+/g)?.map((d: string) => parseInt(d)) || []
             members.push(CCodeBuilder.generateStructMember(
               baseType,
-              block.block.name, // Use block name, not port name
+              block.flattenedName, // Use flattened name for uniqueness in subsystems
               dims,
               `Signal from input port: ${portName}`
             ))
           } else {
             members.push(CCodeBuilder.generateStructMember(
               baseType,
-              block.block.name, // Use block name, not port name
+              block.flattenedName, // Use flattened name for uniqueness in subsystems
               undefined,
               `Signal from input port: ${portName}`
             ))
@@ -335,8 +335,13 @@ export class HeaderGenerator {
       try {
         const generator = BlockModuleFactory.getBlockModule(block.block.type)
         const outputType = this.getBlockOutputType(block)
-        const member = generator.generateStructMember(block.block, outputType)
-        
+        // Create a modified block with the flattened name for struct member generation
+        const blockWithFlattenedName = {
+          ...block.block,
+          name: block.flattenedName
+        }
+        const member = generator.generateStructMember(blockWithFlattenedName, outputType)
+
         if (member) {
           members.push(member)
         }
@@ -379,7 +384,12 @@ export class HeaderGenerator {
 
         if (generator.requiresState(block.block)) {
           const outputType = this.getBlockOutputType(block)
-          const stateMembers = generator.generateStateStructMembers(block.block, outputType)
+          // Create a modified block with the flattened name for state struct generation
+          const blockWithFlattenedName = {
+            ...block.block,
+            name: block.flattenedName
+          }
+          const stateMembers = generator.generateStateStructMembers(blockWithFlattenedName, outputType)
           members.push(...stateMembers)
         }
       } catch (error) {

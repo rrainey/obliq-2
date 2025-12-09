@@ -1,0 +1,475 @@
+{
+  "name": "Subs05",
+  "version": 7,
+  "created": "2025-12-09T04:02:37.175375+00:00",
+  "updated": "2025-12-09T04:08:56.231474+00:00",
+  "data": {
+    "version": "2.1",
+    "metadata": {
+      "created": "2025-12-09T04:23:06.155Z",
+      "description": "Exported from obliq-2 on 12/8/2025"
+    },
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "source_1765252971385",
+            "name": "Source1",
+            "type": "source",
+            "position": {
+              "x": -108,
+              "y": 173.203125
+            },
+            "parameters": {
+              "f0": 0.1,
+              "f1": 10,
+              "mean": 0,
+              "phase": 0,
+              "slope": 1,
+              "value": 1,
+              "offset": 0,
+              "dataType": "double",
+              "duration": 10,
+              "stepTime": 1,
+              "amplitude": 1,
+              "frequency": 1,
+              "startTime": 0,
+              "stepValue": 1,
+              "signalType": "constant",
+              "useParameter": false
+            }
+          },
+          {
+            "id": "output_port_1765252983947",
+            "name": "Output port2",
+            "type": "output_port",
+            "position": {
+              "x": 476.25,
+              "y": 225.5546875
+            },
+            "parameters": {
+              "dataType": "double",
+              "portName": "Output1",
+              "defaultValue": 0
+            }
+          },
+          {
+            "id": "signal_display_1765252987313",
+            "name": "Signal display3",
+            "type": "signal_display",
+            "position": {
+              "x": 476.25,
+              "y": 140.0546875
+            },
+            "parameters": {
+              "maxSamples": 1000
+            }
+          },
+          {
+            "id": "source_1765253014857_6f3exwtng",
+            "name": "Source2",
+            "type": "source",
+            "position": {
+              "x": -108,
+              "y": 287.203125
+            },
+            "parameters": {
+              "f0": 0.1,
+              "f1": 10,
+              "mean": 0,
+              "phase": 0,
+              "slope": 1,
+              "value": 2,
+              "offset": 0,
+              "dataType": "double",
+              "duration": 10,
+              "stepTime": 1,
+              "amplitude": 1,
+              "frequency": 1,
+              "startTime": 0,
+              "stepValue": 1,
+              "signalType": "constant",
+              "useParameter": false
+            }
+          },
+          {
+            "id": "sum_1765253026059",
+            "name": "Sum5",
+            "type": "sum",
+            "position": {
+              "x": 162.9117148050267,
+              "y": 184.87811711005338
+            },
+            "parameters": {
+              "signs": "++",
+              "inputs": [
+                "Input1",
+                "Input2"
+              ],
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "multiply_1765253048592",
+            "name": "Multiply6",
+            "type": "multiply",
+            "position": {
+              "x": 163.25,
+              "y": 312.0546875
+            },
+            "parameters": {}
+          },
+          {
+            "id": "output_port_1765253066236_m64ljze4u",
+            "name": "Output port3",
+            "type": "output_port",
+            "position": {
+              "x": 471.25,
+              "y": 376.0546875
+            },
+            "parameters": {
+              "dataType": "double",
+              "portName": "Output2",
+              "defaultValue": 0
+            }
+          },
+          {
+            "id": "signal_display_1765253066236_mran52od4",
+            "name": "Signal display2",
+            "type": "signal_display",
+            "position": {
+              "x": 471.25,
+              "y": 290.5546875
+            },
+            "parameters": {
+              "maxSamples": 1000
+            }
+          },
+          {
+            "id": "subsystem_1765253078224",
+            "name": "Subsystem9",
+            "type": "subsystem",
+            "position": {
+              "x": 164.19438299036204,
+              "y": 436.27768850097596
+            },
+            "parameters": {
+              "sheets": [
+                {
+                  "id": "subsystem_1765253078224_main",
+                  "name": "Subsystem9 Main",
+                  "blocks": [
+                    {
+                      "id": "subsystem_1765253078224_main_input1",
+                      "name": "Input1",
+                      "type": "input_port",
+                      "position": {
+                        "x": -150,
+                        "y": 214.5
+                      },
+                      "parameters": {
+                        "dataType": "double",
+                        "portName": "Input1",
+                        "defaultValue": 0
+                      }
+                    },
+                    {
+                      "id": "subsystem_1765253078224_main_output1",
+                      "name": "Output1",
+                      "type": "output_port",
+                      "position": {
+                        "x": 427,
+                        "y": 235
+                      },
+                      "parameters": {
+                        "dataType": "double",
+                        "portName": "Output1",
+                        "defaultValue": 0
+                      }
+                    },
+                    {
+                      "id": "sum_1765253128063_a0ovoffi4",
+                      "name": "Sum5",
+                      "type": "sum",
+                      "position": {
+                        "x": 193.25,
+                        "y": 225.5546875
+                      },
+                      "parameters": {
+                        "signs": "++",
+                        "inputs": [
+                          "Input1",
+                          "Input2"
+                        ],
+                        "numInputs": 2
+                      }
+                    },
+                    {
+                      "id": "multiply_1765253128063_o90ac8ufp",
+                      "name": "Multiply6",
+                      "type": "multiply",
+                      "position": {
+                        "x": 194.13174673617226,
+                        "y": 322.17870795745387
+                      },
+                      "parameters": {}
+                    },
+                    {
+                      "id": "input_port_1765253131417_bd66xmtmw",
+                      "name": "Input port2",
+                      "type": "input_port",
+                      "position": {
+                        "x": -146.67288223161435,
+                        "y": 342.8737345054934
+                      },
+                      "parameters": {
+                        "dataType": "double",
+                        "portName": "Input2",
+                        "defaultValue": 0
+                      }
+                    },
+                    {
+                      "id": "output_port_1765253143432_5je3ec934",
+                      "name": "Output port2",
+                      "type": "output_port",
+                      "position": {
+                        "x": 428.0058991981631,
+                        "y": 333.0594031752855
+                      },
+                      "parameters": {
+                        "dataType": "double",
+                        "portName": "Output2",
+                        "defaultValue": 0
+                      }
+                    }
+                  ],
+                  "extents": {
+                    "width": 1000,
+                    "height": 800
+                  },
+                  "connections": [
+                    {
+                      "id": "wire_1765253152002",
+                      "sourceBlockId": "subsystem_1765253078224_main_input1",
+                      "targetBlockId": "sum_1765253128063_a0ovoffi4",
+                      "sourcePortIndex": 0,
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "wire_1765253153865",
+                      "sourceBlockId": "sum_1765253128063_a0ovoffi4",
+                      "targetBlockId": "subsystem_1765253078224_main_output1",
+                      "sourcePortIndex": 0,
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "wire_1765253155681",
+                      "sourceBlockId": "input_port_1765253131417_bd66xmtmw",
+                      "targetBlockId": "sum_1765253128063_a0ovoffi4",
+                      "sourcePortIndex": 0,
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "wire_1765253157085",
+                      "sourceBlockId": "subsystem_1765253078224_main_input1",
+                      "targetBlockId": "multiply_1765253128063_o90ac8ufp",
+                      "sourcePortIndex": 0,
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "wire_1765253160370",
+                      "sourceBlockId": "input_port_1765253131417_bd66xmtmw",
+                      "targetBlockId": "multiply_1765253128063_o90ac8ufp",
+                      "sourcePortIndex": 0,
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "wire_1765253162222",
+                      "sourceBlockId": "multiply_1765253128063_o90ac8ufp",
+                      "targetBlockId": "output_port_1765253143432_5je3ec934",
+                      "sourcePortIndex": 0,
+                      "targetPortIndex": 0
+                    }
+                  ]
+                }
+              ],
+              "inputPorts": [
+                "Input1",
+                "Input2"
+              ],
+              "outputPorts": [
+                "Output1",
+                "Output2"
+              ],
+              "codeGenStrategy": "flatten",
+              "showEnableInput": false
+            }
+          },
+          {
+            "id": "output_port_1765253200162_sa1gmgbwm",
+            "name": "Output port4",
+            "type": "output_port",
+            "position": {
+              "x": 467.33227593516006,
+              "y": 533.5646569972041
+            },
+            "parameters": {
+              "dataType": "double",
+              "portName": "Output3",
+              "defaultValue": 0
+            }
+          },
+          {
+            "id": "signal_display_1765253200162_n4a2dxmbz",
+            "name": "Signal display4",
+            "type": "signal_display",
+            "position": {
+              "x": 478.8192594851305,
+              "y": 445.7672602872101
+            },
+            "parameters": {
+              "maxSamples": 1000
+            }
+          },
+          {
+            "id": "output_port_1765253200162_8gz7npn2i",
+            "name": "Output port5",
+            "type": "output_port",
+            "position": {
+              "x": 471.52186277513636,
+              "y": 680.6185619322131
+            },
+            "parameters": {
+              "dataType": "double",
+              "portName": "Output4",
+              "defaultValue": 0
+            }
+          },
+          {
+            "id": "signal_display_1765253200162_tbyulflga",
+            "name": "Signal display5",
+            "type": "signal_display",
+            "position": {
+              "x": 473.8192594851305,
+              "y": 596.2672602872101
+            },
+            "parameters": {
+              "maxSamples": 1000
+            }
+          }
+        ],
+        "extents": {
+          "width": 1000,
+          "height": 800
+        },
+        "connections": [
+          {
+            "id": "wire_1765253028116",
+            "sourceBlockId": "source_1765252971385",
+            "targetBlockId": "sum_1765253026059",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765253029618",
+            "sourceBlockId": "source_1765253014857_6f3exwtng",
+            "targetBlockId": "sum_1765253026059",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_1765253033405",
+            "sourceBlockId": "sum_1765253026059",
+            "targetBlockId": "output_port_1765252983947",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765253035397",
+            "sourceBlockId": "sum_1765253026059",
+            "targetBlockId": "signal_display_1765252987313",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765253050353",
+            "sourceBlockId": "source_1765252971385",
+            "targetBlockId": "multiply_1765253048592",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765253052103",
+            "sourceBlockId": "source_1765253014857_6f3exwtng",
+            "targetBlockId": "multiply_1765253048592",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_1765253071207",
+            "sourceBlockId": "multiply_1765253048592",
+            "targetBlockId": "signal_display_1765253066236_mran52od4",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765253072826",
+            "sourceBlockId": "multiply_1765253048592",
+            "targetBlockId": "output_port_1765253066236_m64ljze4u",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765253181866",
+            "sourceBlockId": "source_1765252971385",
+            "targetBlockId": "subsystem_1765253078224",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765253184031",
+            "sourceBlockId": "source_1765253014857_6f3exwtng",
+            "targetBlockId": "subsystem_1765253078224",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_1765253209095",
+            "sourceBlockId": "subsystem_1765253078224",
+            "targetBlockId": "signal_display_1765253200162_n4a2dxmbz",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765253211247",
+            "sourceBlockId": "subsystem_1765253078224",
+            "targetBlockId": "output_port_1765253200162_sa1gmgbwm",
+            "sourcePortIndex": 0,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765253213019",
+            "sourceBlockId": "subsystem_1765253078224",
+            "targetBlockId": "signal_display_1765253200162_tbyulflga",
+            "sourcePortIndex": 1,
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_1765253215305",
+            "sourceBlockId": "subsystem_1765253078224",
+            "targetBlockId": "output_port_1765253200162_8gz7npn2i",
+            "sourcePortIndex": 1,
+            "targetPortIndex": 0
+          }
+        ]
+      }
+    ],
+    "parameters": [],
+    "globalSettings": {
+      "simulationTimeStep": 0.01,
+      "simulationDuration": 10
+    }
+  }
+}
