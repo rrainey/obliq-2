@@ -218,6 +218,13 @@ export interface RunSimulationOutput {
   outputPorts?: Record<string, number | boolean | number[] | boolean[]>;
   signals?: Record<string, any>;
   error?: string;
+  /** Detailed error information (compilation errors, validation errors, etc.) */
+  errorDetails?: {
+    code?: string;
+    emccError?: string;
+    errors?: string[];
+    [key: string]: any;
+  };
 }
 
 export interface GetSimulationResultsInput {
@@ -294,6 +301,12 @@ export interface GenerateCodeOutput {
     wiresProcessed: number;
   };
   error?: string;
+  /** Detailed error information (code generation errors, etc.) */
+  errorDetails?: {
+    code?: string;
+    errors?: string[];
+    [key: string]: any;
+  };
 }
 
 export interface GetGeneratedFilesInput {

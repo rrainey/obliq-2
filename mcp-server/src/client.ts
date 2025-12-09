@@ -7,6 +7,13 @@ export interface APIResponse<T = any> {
   data?: T;
   errors?: string[];
   error?: string;
+  /** Error code (e.g., VALIDATION_ERROR, INTERNAL_ERROR) */
+  code?: string;
+  /** Detailed error information from the API */
+  details?: {
+    emccError?: string;
+    [key: string]: any;
+  };
 }
 
 export interface AutomationRequest {
@@ -91,7 +98,9 @@ export class AutomationAPIClient {
         return {
           success: false,
           error: responseData.error || `API request failed: ${response.status}`,
-          errors: responseData.errors || [responseData.error || 'Unknown error']
+          errors: responseData.errors || [responseData.error || 'Unknown error'],
+          code: responseData.code,
+          details: responseData.details
         };
       }
 
@@ -99,7 +108,9 @@ export class AutomationAPIClient {
       return {
         success: responseData.success !== false,
         data: responseData.data || responseData,
-        errors: responseData.errors
+        errors: responseData.errors,
+        code: responseData.code,
+        details: responseData.details
       };
 
     } catch (error) {

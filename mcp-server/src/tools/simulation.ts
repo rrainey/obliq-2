@@ -65,7 +65,13 @@ export const runSimulationTool: ToolWithHandler = {
       if (!response.success) {
         return {
           success: false,
-          error: response.error || 'Simulation failed'
+          error: response.error || 'Simulation failed',
+          errorDetails: {
+            code: response.code,
+            emccError: response.details?.emccError,
+            errors: response.errors,
+            ...response.details
+          }
         };
       }
       

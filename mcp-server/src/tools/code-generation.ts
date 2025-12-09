@@ -44,7 +44,12 @@ export const generateCodeTool: ToolWithHandler = {
       if (!response.success) {
         return {
           success: false,
-          error: response.error || 'Code generation failed'
+          error: response.error || 'Code generation failed',
+          errorDetails: {
+            code: response.code,
+            errors: response.errors,
+            ...response.details
+          }
         };
       }
       
