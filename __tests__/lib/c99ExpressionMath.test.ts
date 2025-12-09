@@ -61,18 +61,18 @@ describe('Math Function Support', () => {
       expect(result.hasFloatOperations).toBe(true)
     })
 
-    test('warns about invalid math inputs', () => {
-      const validator = new C99ExpressionValidator(1)
-      
-      // sqrt of negative
-      let parser = new C99ExpressionParser('sqrt(-1)')
-      let result = validator.validate(parser.parse())
-      expect(result.warnings.length).toBeGreaterThan(0)
-      
-      // log of zero
-      parser = new C99ExpressionParser('log(0)')
-      result = validator.validate(parser.parse())
-      expect(result.warnings.length).toBeGreaterThan(0)
+    test('throws error for invalid math inputs', () => {
+      // sqrt of negative throws during parsing (mathematically undefined)
+      expect(() => {
+        const parser = new C99ExpressionParser('sqrt(-1)')
+        parser.parse()
+      }).toThrow('cannot take square root of negative number')
+
+      // log of zero throws during parsing (mathematically undefined)
+      expect(() => {
+        const parser = new C99ExpressionParser('log(0)')
+        parser.parse()
+      }).toThrow('argument must be positive')
     })
   })
 

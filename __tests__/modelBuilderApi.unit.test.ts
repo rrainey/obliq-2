@@ -75,12 +75,12 @@ describe('Model Builder API Basic Tests', () => {
     process.env.MODEL_BUILDER_API_TOKEN = 'test-token-123';
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
-    
+
     // Mock modules
     jest.doMock('@supabase/supabase-js', () => ({
       createClient: jest.fn(() => ({}))
     }));
-    
+
     jest.doMock('next/server', () => ({
       NextRequest: jest.fn(),
       NextResponse: {
@@ -91,7 +91,17 @@ describe('Model Builder API Basic Tests', () => {
         }))
       }
     }));
-    
+
+    // Mock auth middleware
+    jest.doMock('../src/lib/apiAuthMiddleware', () => ({
+      authenticateApiRequest: jest.fn(async (token: string) => {
+        if (token === 'test-token-123') {
+          return { authenticated: true, isEnvironmentToken: true };
+        }
+        return { authenticated: false, error: 'Invalid or missing API token' };
+      })
+    }));
+
     const { POST } = await import('@/app/api/model-builder/[token]/route');
     
     const request = {
@@ -115,12 +125,12 @@ describe('Model Builder API Basic Tests', () => {
     process.env.MODEL_BUILDER_API_TOKEN = 'test-token-123';
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
-    
+
     // Mock modules
     jest.doMock('@supabase/supabase-js', () => ({
       createClient: jest.fn(() => ({}))
     }));
-    
+
     jest.doMock('next/server', () => ({
       NextRequest: jest.fn(),
       NextResponse: {
@@ -131,7 +141,17 @@ describe('Model Builder API Basic Tests', () => {
         }))
       }
     }));
-    
+
+    // Mock auth middleware
+    jest.doMock('../src/lib/apiAuthMiddleware', () => ({
+      authenticateApiRequest: jest.fn(async (token: string) => {
+        if (token === 'test-token-123') {
+          return { authenticated: true, isEnvironmentToken: true };
+        }
+        return { authenticated: false, error: 'Invalid or missing API token' };
+      })
+    }));
+
     const { POST } = await import('@/app/api/model-builder/[token]/route');
     
     // Test invalid operations type

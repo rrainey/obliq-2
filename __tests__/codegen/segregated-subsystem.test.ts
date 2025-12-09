@@ -280,8 +280,8 @@ describe('Segregated Subsystem Code Generation', () => {
       expect(code.header).toContain('void Dynamics_compute_derivatives(')
       expect(code.header).toContain('Dynamics_states_t* derivatives')
 
-      // Source should have derivatives function
-      expect(code.source).toContain('void Dynamics_compute_derivatives(Dynamics_t* sub, Dynamics_states_t* derivatives)')
+      // Source should have derivatives function (const because it doesn't modify model)
+      expect(code.source).toContain('void Dynamics_compute_derivatives(const Dynamics_t* model, Dynamics_states_t* derivatives)')
     })
   })
 })
