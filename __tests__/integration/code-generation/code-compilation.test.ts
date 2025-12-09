@@ -789,7 +789,6 @@ includes=${safeName}.h
     
     program += `    \n`
     program += `    // Run simulation\n`
-    program += `    ${modelName}_init(&model, dt);\n`
     program += `    printf("Running simulation for %.2f seconds with time step %.4f\\n", duration, dt);\n`
     program += `    printf("Total steps: %d\\n\\n", steps);\n`
     program += `    \n`
