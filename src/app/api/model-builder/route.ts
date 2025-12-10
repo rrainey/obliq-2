@@ -53,6 +53,23 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
+// Helper function to extract Bearer token from Authorization header
+function extractBearerToken(request: NextRequest): string | null {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader) {
+    return null;
+  }
+
+  // Support "Bearer <token>" format
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (bearerMatch) {
+    return bearerMatch[1];
+  }
+
+  // Also support raw token for backward compatibility during transition
+  return authHeader;
+}
+
 // Request logging helper
 function logRequest(
   method: string,
@@ -217,18 +234,27 @@ const ModelBuilderActions = {
 } as const;
 
 // GET handler for retrieving model data and introspection
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
+export async function GET(request: NextRequest) {
   const startTime = Date.now();
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
   const modelId = searchParams.get('modelId');
-  
-  // Await the params
-  const { token } = await params;
-  
+
+  // Extract token from Authorization header
+  const token = extractBearerToken(request);
+
+  if (!token) {
+    return NextResponse.json(
+      {
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: 'Missing Authorization header. Use: Authorization: Bearer <token>',
+        code: 'MISSING_AUTH_HEADER'
+      },
+      { status: 401 }
+    );
+  }
+
   // Prepare logging params (mask token for security)
   const logParams = {
     token: token.substring(0, 8) + '...',
@@ -236,7 +262,7 @@ export async function GET(
     modelId,
     ...Object.fromEntries(searchParams.entries())
   };
-  
+
   // Authenticate the request using the new middleware
   const authResult = await authenticateApiRequest(token);
   
@@ -299,28 +325,26 @@ export async function GET(
         return ErrorResponses.modelNotFound(modelId);
       }
       
-      // If using a user token (not environment token), verify ownership
-      if (authResult.userId && !authResult.isEnvironmentToken) {
-        if (model.user_id !== authResult.userId) {
-          modelBuilderApiMetrics.record(
-            'GET',
-            action || 'getModel',
-            Date.now() - startTime,
-            false,
-            403,
-            'Access denied'
-          );
-          
-          return NextResponse.json(
-            {
-              success: false,
-              timestamp: new Date().toISOString(),
-              error: 'Access denied: You can only access your own models',
-              code: 'FORBIDDEN'
-            },
-            { status: 403 }
-          );
-        }
+      // Verify ownership - user can only access their own models
+      if (model.user_id !== authResult.userId) {
+        modelBuilderApiMetrics.record(
+          'GET',
+          action || 'getModel',
+          Date.now() - startTime,
+          false,
+          403,
+          'Access denied'
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            timestamp: new Date().toISOString(),
+            error: 'Access denied: You can only access your own models',
+            code: 'FORBIDDEN'
+          },
+          { status: 403 }
+        );
       }
       
       // Return the complete model data
@@ -978,17 +1002,26 @@ export async function GET(
 }
 
 // POST handler for creating models, sheets, blocks, and connections
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
+export async function POST(request: NextRequest) {
   const startTime = Date.now();
   let action = 'unknown';
   let body: any = {};
-  
-  // Await the params
-  const { token } = await params;
-  
+
+  // Extract token from Authorization header
+  const token = extractBearerToken(request);
+
+  if (!token) {
+    return NextResponse.json(
+      {
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: 'Missing Authorization header. Use: Authorization: Bearer <token>',
+        code: 'MISSING_AUTH_HEADER'
+      },
+      { status: 401 }
+    );
+  }
+
   // Check rate limit
   const rateLimit = checkRateLimit(token);
   if (!rateLimit.allowed) {
@@ -996,7 +1029,7 @@ export async function POST(
     logRequest('POST', action, { token: token }, startTime, { success: false, status: 429, error: 'Rate limit exceeded' });
     return response;
   }
-  
+
   // Authenticate the request using the new middleware
   const authResult = await authenticateApiRequest(token);
   
@@ -1039,16 +1072,22 @@ export async function POST(
     
     // Handle create model action
     if (action === 'createModel') {
-      const { name, userId: providedUserId } = body;
+      const { name } = body;
 
-      const userIdToUse = authResult.userId || providedUserId;
-      
+      // userId is always derived from the API token - never from request body
+      const userIdToUse = authResult.userId;
+      if (!userIdToUse) {
+        return NextResponse.json({
+          success: false,
+          timestamp: new Date().toISOString(),
+          error: 'Unable to determine user from API token',
+          code: 'INVALID_TOKEN'
+        }, { status: 401 });
+      }
+
       // Validate required parameters
       if (!name) {
         return ErrorResponses.missingParameter('name');
-      }
-      if (!userIdToUse) {
-        return ErrorResponses.missingParameter('userId');
       }
     
       // Initialize Supabase client with service role
@@ -1321,7 +1360,7 @@ export async function POST(
               headers: request.headers
             });
 
-            response = await GET(getRequest, { params: Promise.resolve({ token }) });
+            response = await GET(getRequest);
           } else if (['createModel', 'createSheet', 'addBlock', 'addConnection', 'validateModel', 'setParameter'].includes(operation.action)) {
             // POST operations
             const postRequest = new NextRequest(request.url, {
@@ -1330,7 +1369,7 @@ export async function POST(
               body: JSON.stringify(operation)
             });
 
-            response = await POST(postRequest, { params: Promise.resolve({ token }) });
+            response = await POST(postRequest);
           } else if (['renameSheet', 'updateBlockPosition', 'updateBlockName', 'updateBlockParameters'].includes(operation.action)) {
             // PUT operations
             const putRequest = new NextRequest(request.url, {
@@ -1339,7 +1378,7 @@ export async function POST(
               body: JSON.stringify(operation)
             });
 
-            response = await PUT(putRequest, { params: Promise.resolve({ token }) });
+            response = await PUT(putRequest);
           } else if (['deleteSheet', 'deleteBlock', 'deleteConnection', 'deleteParameter'].includes(operation.action)) {
             // DELETE operations
             operationUrl.searchParams.set('action', operation.action);
@@ -1354,7 +1393,7 @@ export async function POST(
               headers: request.headers
             });
 
-            response = await DELETE(deleteRequest, { params: Promise.resolve({ token }) });
+            response = await DELETE(deleteRequest);
           } else {
             errors.push({
               operationId,
@@ -2395,17 +2434,26 @@ export async function POST(
 }
 
 // PUT handler for updating models, sheets, blocks, and connections
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
+export async function PUT(request: NextRequest) {
   const startTime = Date.now();
   let action = 'unknown';
   let body: any = {};
-  
-  // Await the params
-  const { token } = await params;
-  
+
+  // Extract token from Authorization header
+  const token = extractBearerToken(request);
+
+  if (!token) {
+    return NextResponse.json(
+      {
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: 'Missing Authorization header. Use: Authorization: Bearer <token>',
+        code: 'MISSING_AUTH_HEADER'
+      },
+      { status: 401 }
+    );
+  }
+
   // Check rate limit
   const rateLimit = checkRateLimit(token);
   if (!rateLimit.allowed) {
@@ -2413,7 +2461,7 @@ export async function PUT(
     logRequest('PUT', action, { token: token }, startTime, { success: false, status: 429, error: 'Rate limit exceeded' });
     return response;
   }
-  
+
   // Authenticate the request using the new middleware
   const authResult = await authenticateApiRequest(token);
   
@@ -2978,18 +3026,27 @@ export async function PUT(
 }
 
 // DELETE handler for removing models, sheets, blocks, and connections
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-) {
+export async function DELETE(request: NextRequest) {
   const startTime = Date.now();
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
   const modelId = searchParams.get('modelId');
-  
-  // Await the params
-  const { token } = await params;
-  
+
+  // Extract token from Authorization header
+  const token = extractBearerToken(request);
+
+  if (!token) {
+    return NextResponse.json(
+      {
+        success: false,
+        timestamp: new Date().toISOString(),
+        error: 'Missing Authorization header. Use: Authorization: Bearer <token>',
+        code: 'MISSING_AUTH_HEADER'
+      },
+      { status: 401 }
+    );
+  }
+
   // Prepare logging params
   const logParams = {
     token: token,
@@ -2997,7 +3054,7 @@ export async function DELETE(
     modelId,
     ...Object.fromEntries(searchParams.entries())
   };
-  
+
   // Check rate limit
   const rateLimit = checkRateLimit(token);
   if (!rateLimit.allowed) {
@@ -3005,7 +3062,7 @@ export async function DELETE(
     logRequest('DELETE', action, logParams, startTime, { success: false, status: 429, error: 'Rate limit exceeded' });
     return response;
   }
-  
+
   // Authenticate the request using the new middleware
   const authResult = await authenticateApiRequest(token);
   
@@ -3057,26 +3114,6 @@ export async function DELETE(
         return ErrorResponses.modelNotFound(modelId);
       }
 
-      if (modelId && authResult.userId && !authResult.isEnvironmentToken) {
-      const { data: model, error: modelCheckError } = await supabase
-        .from('models')
-        .select('user_id')
-        .eq('id', modelId)
-        .single();
-        
-      if (modelCheckError || !model || model.user_id !== authResult.userId) {
-        return NextResponse.json(
-          {
-            success: false,
-            timestamp: new Date().toISOString(),
-            error: 'Access denied: You can only access your own models',
-            code: 'FORBIDDEN'
-          },
-          { status: 403 }
-        );
-      }
-    }
-      
       // Delete all model versions first (due to foreign key constraint)
       const { error: versionsError } = await supabase
         .from('model_versions')

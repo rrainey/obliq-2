@@ -57,10 +57,11 @@ jest.mock('@supabase/supabase-js', () => ({
 }));
 
 // Mock API auth middleware to simplify authentication testing
+// All API access requires user tokens - userId is always derived from the token
 jest.mock('../src/lib/apiAuthMiddleware', () => ({
   authenticateApiRequest: jest.fn(async (token: string) => {
     if (token === 'test-token-123') {
-      return { authenticated: true, isEnvironmentToken: true };
+      return { authenticated: true, userId: 'test-user-123' };
     }
     return { authenticated: false, error: 'Invalid or missing API token' };
   })
@@ -72,7 +73,7 @@ process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
 
 // Import after mocks are set up
-import { GET, POST, PUT, DELETE } from '@/app/api/model-builder/[token]/route';
+import { GET, POST, PUT, DELETE } from '@/app/api/model-builder/route';
 
 describe('Model Builder API', () => {
   const validToken = 'test-token-123';
@@ -93,15 +94,20 @@ describe('Model Builder API', () => {
     console.log = originalConsoleLog;
   });
 
-  // Helper to create mock request
-  const createMockRequest = (method: string, url: string, body?: any) => {
+  // Helper to create mock request with Authorization header
+  const createMockRequest = (method: string, url: string, body?: any, token?: string) => {
     const urlObj = new URL(url);
-    const searchParams = urlObj.searchParams;
-    
+    const headers = new Map<string, string>([['content-type', 'application/json']]);
+    if (token) {
+      headers.set('authorization', `Bearer ${token}`);
+    }
+
     return {
       url,
       method,
-      headers: new Map([['content-type', 'application/json']]),
+      headers: {
+        get: (key: string) => headers.get(key.toLowerCase()) || null
+      },
       text: async () => body ? JSON.stringify(body) : '',
       json: async () => body || {},
       nextUrl: urlObj
@@ -110,54 +116,63 @@ describe('Model Builder API', () => {
 
   describe('Authentication', () => {
     it('should reject requests with invalid token', async () => {
-      const request = createMockRequest('GET', `${baseUrl}/${invalidToken}?modelId=123`);
-      const response = await GET(request as any, { params: { token: invalidToken } });
+      const request = createMockRequest('GET', `${baseUrl}?modelId=123`, undefined, invalidToken);
+      const response = await GET(request as any);
       const data = await response.json();
-      
+
       expect(response.status).toBe(401);
       expect(data.success).toBe(false);
       expect(data.error).toBe('Invalid or missing API token');
     });
 
     it('should accept requests with valid token', async () => {
-      const request = createMockRequest('GET', `${baseUrl}/${validToken}?modelId=123`);
-      const response = await GET(request as any, { params: { token: validToken } });
-      
+      const request = createMockRequest('GET', `${baseUrl}?modelId=123`, undefined, validToken);
+      const response = await GET(request as any);
+
       expect(response.status).not.toBe(401);
+    });
+
+    it('should reject requests with missing token', async () => {
+      const request = createMockRequest('GET', `${baseUrl}?modelId=123`);
+      const response = await GET(request as any);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.code).toBe('MISSING_AUTH_HEADER');
     });
   });
 
   describe('GET endpoints', () => {
     it('should handle getModel request', async () => {
-      const request = createMockRequest('GET', `${baseUrl}/${validToken}?modelId=123`);
-      const response = await GET(request as any, { params: { token: validToken } });
-      
+      const request = createMockRequest('GET', `${baseUrl}?modelId=123`, undefined, validToken);
+      const response = await GET(request as any);
+
       // Since mock returns null data, expect 404
       expect(response.status).toBe(404);
     });
 
     it('should handle missing modelId for getModel', async () => {
-      const request = createMockRequest('GET', `${baseUrl}/${validToken}`);
-      const response = await GET(request as any, { params: { token: validToken } });
+      const request = createMockRequest('GET', `${baseUrl}`, undefined, validToken);
+      const response = await GET(request as any);
       const data = await response.json();
-      
+
       expect(response.status).toBe(400);
       expect(data.code).toBe('MISSING_PARAMETER');
     });
 
     it('should handle listSheets action', async () => {
-      const request = createMockRequest('GET', `${baseUrl}/${validToken}?action=listSheets&modelId=123`);
-      const response = await GET(request as any, { params: { token: validToken } });
-      
+      const request = createMockRequest('GET', `${baseUrl}?action=listSheets&modelId=123`, undefined, validToken);
+      const response = await GET(request as any);
+
       // Mock doesn't return data, so expect 404
       expect(response.status).toBe(404);
     });
 
     it('should handle unknown action', async () => {
-      const request = createMockRequest('GET', `${baseUrl}/${validToken}?action=unknownAction`);
-      const response = await GET(request as any, { params: { token: validToken } });
+      const request = createMockRequest('GET', `${baseUrl}?action=unknownAction`, undefined, validToken);
+      const response = await GET(request as any);
       const data = await response.json();
-      
+
       expect(response.status).toBe(400);
       expect(data.code).toBe('UNKNOWN_ACTION');
     });
@@ -167,12 +182,11 @@ describe('Model Builder API', () => {
     it('should handle createModel request', async () => {
       const body = {
         action: 'createModel',
-        name: 'Test Model',
-        userId: 'user-123'
+        name: 'Test Model'
       };
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
-      
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
+
       // Mock returns error, so expect 500
       expect(response.status).toBe(500);
     });
@@ -182,10 +196,10 @@ describe('Model Builder API', () => {
         action: 'createModel',
         // Missing required parameters
       };
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
-      
+
       expect(response.status).toBe(400);
       expect(data.code).toBe('MISSING_PARAMETER');
     });
@@ -200,9 +214,9 @@ describe('Model Builder API', () => {
         blockId: 'block-1',
         position: { x: 100, y: 200 }
       };
-      const request = createMockRequest('PUT', `${baseUrl}/${validToken}`, body);
-      const response = await PUT(request as any, { params: { token: validToken } });
-      
+      const request = createMockRequest('PUT', `${baseUrl}`, body, validToken);
+      const response = await PUT(request as any);
+
       // Mock doesn't return data, so expect 404
       expect(response.status).toBe(404);
     });
@@ -215,10 +229,10 @@ describe('Model Builder API', () => {
         blockId: 'block-1',
         position: { x: 'not-a-number', y: 200 }
       };
-      const request = createMockRequest('PUT', `${baseUrl}/${validToken}`, body);
-      const response = await PUT(request as any, { params: { token: validToken } });
+      const request = createMockRequest('PUT', `${baseUrl}`, body, validToken);
+      const response = await PUT(request as any);
       const data = await response.json();
-      
+
       expect(response.status).toBe(400);
       expect(data.code).toBe('INVALID_POSITION');
     });
@@ -226,8 +240,8 @@ describe('Model Builder API', () => {
 
   describe('DELETE endpoints', () => {
     it('should handle deleteModel request', async () => {
-      const request = createMockRequest('DELETE', `${baseUrl}/${validToken}?modelId=123`);
-      const response = await DELETE(request as any, { params: { token: validToken } });
+      const request = createMockRequest('DELETE', `${baseUrl}?modelId=123`, undefined, validToken);
+      const response = await DELETE(request as any);
 
       // Mock doesn't return data - expect error but NOT 401 (auth should pass)
       expect(response.status).not.toBe(401);
@@ -235,9 +249,9 @@ describe('Model Builder API', () => {
     });
 
     it('should handle deleteBlock with action', async () => {
-      const request = createMockRequest('DELETE', `${baseUrl}/${validToken}?action=deleteBlock&modelId=123&sheetId=main&blockId=block-1`);
-      const response = await DELETE(request as any, { params: { token: validToken } });
-      
+      const request = createMockRequest('DELETE', `${baseUrl}?action=deleteBlock&modelId=123&sheetId=main&blockId=block-1`, undefined, validToken);
+      const response = await DELETE(request as any);
+
       // Mock doesn't return data, so expect 404
       expect(response.status).toBe(404);
     });
@@ -249,10 +263,10 @@ describe('Model Builder API', () => {
         action: 'batchOperations',
         operations: 'not-an-array' // Invalid
       };
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
-      
+
       expect(response.status).toBe(400);
       expect(data.code).toBe('INVALID_OPERATIONS');
     });
@@ -262,10 +276,10 @@ describe('Model Builder API', () => {
         action: 'batchOperations',
         operations: []
       };
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
-      
+
       expect(response.status).toBe(400);
       expect(data.code).toBe('EMPTY_OPERATIONS');
     });

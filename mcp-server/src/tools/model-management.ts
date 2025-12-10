@@ -3,35 +3,29 @@ import { ToolWithHandler } from '../types.js';
 import { modelBuilderClient } from '../modelBuilderClient.js';
 import { config } from '../config.js';
 
-// Default user ID for MCP operations
-const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000000';
-
 export const createModelTool: ToolWithHandler = {
   name: 'create_model',
-  description: 'Create a new empty model',
+  description: 'Create a new empty model. The owner will be determined by the API token used.',
   inputSchema: {
     type: 'object',
     properties: {
       name: {
         type: 'string',
         description: 'Name for the new model'
-      },
-      userId: {
-        type: 'string',
-        description: 'User ID for model ownership (optional)'
       }
     },
     required: ['name']
   },
   handler: async (args: any) => {
     try {
-      const { name, userId = DEFAULT_USER_ID } = args;
-      
+      const { name } = args;
+
       if (config.debug) {
-        console.error('[create_model] Creating model:', { name, userId });
+        console.error('[create_model] Creating model:', { name });
       }
 
-      const response = await modelBuilderClient.createModel(name, userId);
+      // userId is derived from the API token - never passed explicitly
+      const response = await modelBuilderClient.createModel(name);
       
       if (!response.success) {
         return {
@@ -103,17 +97,12 @@ export const getModelTool: ToolWithHandler = {
 
 export const listModelsTool: ToolWithHandler = {
   name: 'list_models',
-  description: 'List all models (Note: Model Builder API may not support this directly)',
+  description: 'List all models owned by the authenticated user (derived from API token)',
   inputSchema: {
     type: 'object',
-    properties: {
-      userId: {
-        type: 'string',
-        description: 'User ID to filter models (optional)'
-      }
-    }
+    properties: {}
   },
-  handler: async (args: any) => {
+  handler: async (_args: any) => {
     try {
       // Note: The Model Builder API doesn't have a list models endpoint
       // This would need to be implemented in the main app first

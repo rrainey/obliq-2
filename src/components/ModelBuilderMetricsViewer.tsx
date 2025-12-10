@@ -26,16 +26,17 @@ export function ModelBuilderMetricsViewer({ token }: { token: string }) {
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   const fetchMetrics = async () => {
+    const headers = { 'Authorization': `Bearer ${token}` };
     try {
       // Fetch summary
-      const summaryRes = await fetch(`/api/model-builder/${token}?metricsAction=summary`);
+      const summaryRes = await fetch(`/api/model-builder?metricsAction=summary`, { headers });
       if (summaryRes.ok) {
         const summaryData = await summaryRes.json();
         setSummary(summaryData.data);
       }
 
       // Fetch hourly stats
-      const hourlyRes = await fetch(`/api/model-builder/${token}?metricsAction=hourly&hours=24`);
+      const hourlyRes = await fetch(`/api/model-builder?metricsAction=hourly&hours=24`, { headers });
       if (hourlyRes.ok) {
         const hourlyData = await hourlyRes.json();
         setHourlyStats(hourlyData.data);
@@ -57,12 +58,26 @@ export function ModelBuilderMetricsViewer({ token }: { token: string }) {
   }, [autoRefresh]);
 
   const exportMetrics = async () => {
-    window.location.href = `/api/model-builder/${token}?metricsAction=export`;
+    // For export, we need to use fetch with Authorization header and then trigger download
+    const response = await fetch(`/api/model-builder?metricsAction=export`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'model-builder-metrics.csv';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    }
   };
 
   const clearMetrics = async () => {
     if (confirm('Are you sure you want to clear all metrics data?')) {
-      await fetch(`/api/model-builder/${token}?metricsAction=clear`);
+      await fetch(`/api/model-builder?metricsAction=clear`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       fetchMetrics();
     }
   };

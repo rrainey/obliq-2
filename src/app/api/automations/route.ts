@@ -1,10 +1,10 @@
-//app/api/automations/[token]/route.ts
+//app/api/automations/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { CodeGenerator } from '@/lib/codeGeneration'
+import { CodeGenerator } from '@/lib/codeGenerationNew'
 import { SimulationEngine } from '@/lib/simulationEngine'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
-import JSZip from 'jszip'
+import { authenticateApiRequest } from '@/lib/apiAuthMiddleware'
 
 // Create a server-side Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -33,20 +33,47 @@ interface AutomationResponse {
   errors?: string[]
 }
 
-async function automationHandler(
-  request: NextRequest,
-  { params }: { params: Promise<{ token: string }> }
-): Promise<NextResponse> {
-  const { token } = await params
+/**
+ * Extract Bearer token from Authorization header
+ */
+function extractBearerToken(request: NextRequest): string | null {
+  const authHeader = request.headers.get('Authorization')
+  if (!authHeader) return null
 
-  // Verify the automation token
-  if (!isValidToken(token)) {
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i)
+  if (bearerMatch) return bearerMatch[1]
+
+  // Allow raw token in Authorization header as fallback
+  return authHeader
+}
+
+async function automationHandler(
+  request: NextRequest
+): Promise<NextResponse> {
+  // Extract token from Authorization header
+  const token = extractBearerToken(request)
+
+  if (!token) {
     throw new AppError(
-      'Invalid or missing automation token',
+      'Missing Authorization header. Use: Authorization: Bearer <token>',
       401,
       ErrorTypes.UNAUTHORIZED
     )
   }
+
+  // Authenticate using the API token middleware
+  const authResult = await authenticateApiRequest(token)
+
+  if (!authResult.authenticated) {
+    throw new AppError(
+      authResult.error || 'Invalid or expired API token',
+      401,
+      ErrorTypes.UNAUTHORIZED
+    )
+  }
+
+  // userId is always available now (no environment tokens)
+  const userId = authResult.userId!
 
   // Parse and validate request body
   let body: AutomationRequest
@@ -85,20 +112,21 @@ async function automationHandler(
     )
   }
 
-  // Fetch the model metadata using service role (bypasses RLS for automation)
+  // Fetch the model metadata - scoped to the authenticated user
   const { data: model, error: dbError } = await supabaseServer
     .from('models')
     .select('*')
     .eq('id', body.modelId)
+    .eq('user_id', userId)  // User can only access their own models
     .single()
 
-  if (dbError) {
+  if (dbError && dbError.code !== 'PGRST116') {
     throw dbError // Will be handled by the error handler
   }
 
   if (!model) {
     throw new AppError(
-      'Model not found',
+      'Model not found or access denied',
       404,
       ErrorTypes.NOT_FOUND,
       { modelId: body.modelId }
@@ -141,23 +169,8 @@ async function automationHandler(
   return NextResponse.json(result)
 }
 
-function isValidToken(token: string): boolean {
-  const validToken = process.env.AUTOMATION_API_TOKEN
-  
-  if (!validToken) {
-    console.error('AUTOMATION_API_TOKEN environment variable not set')
-    return false
-  }
-
-  if (!token || typeof token !== 'string') {
-    return false
-  }
-
-  return token === validToken
-}
-
 async function executeAction(
-  action: string, 
+  action: string,
   model: any,
   versionData: any,
   parameters?: Record<string, any>
@@ -174,13 +187,13 @@ async function executeAction(
     switch (action) {
       case 'generateCode':
         return await handleGenerateCode(model, versionData, baseResponse)
-      
+
       case 'simulate':
         return await handleSimulate(model, versionData, baseResponse, parameters)
-      
+
       case 'validateModel':
         return await handleValidateModel(model, versionData, baseResponse)
-      
+
       default:
         throw new AppError(
           `Unknown action: ${action}`,
@@ -219,45 +232,43 @@ async function handleGenerateCode(model: any, versionData: any, baseResponse: Au
     }
   }
 
-  let codeGenerator: CodeGenerator
+  let result: any
   try {
-    codeGenerator = new CodeGenerator(blocks, connections, sheets, model.name)
+    const codeGenerator = new CodeGenerator({ modelName: model.name })
+    result = codeGenerator.generate(sheets)
   } catch (error) {
     return {
       ...baseResponse,
-      errors: [`Failed to initialize code generator: ${error instanceof Error ? error.message : 'Unknown error'}`]
+      errors: [`Code generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`]
     }
   }
 
-  const result = codeGenerator.generateCode()
-
-  if (!result.success) {
-    return {
-      ...baseResponse,
-      errors: result.errors || ['Code generation failed with unknown error']
-    }
+  // Check for warnings that might indicate issues
+  if (result.warnings && result.warnings.length > 0) {
+    console.warn('[handleGenerateCode] Warnings:', result.warnings)
   }
 
-  if (!result.files || result.files.length === 0) {
-    return {
-      ...baseResponse,
-      errors: ['Code generation produced no files']
-    }
+  // For automation API, return code generation summary
+  const filesGenerated = [`${model.name}.h`, `${model.name}.c`]
+  if (result.subsystemFiles && result.subsystemFiles.length > 0) {
+    result.subsystemFiles.forEach((sf: any) => {
+      filesGenerated.push(`${sf.name}.h`, `${sf.name}.c`)
+    })
   }
 
-  // For automation API, return code generation summary instead of files
   return {
     ...baseResponse,
     success: true,
     data: {
-      filesGenerated: result.files.map((f: any) => f.name),
+      filesGenerated,
       summary: {
         headerFile: `${model.name}.h`,
         sourceFile: `${model.name}.c`,
-        libraryConfig: 'library.properties',
-        blocksProcessed: blocks.length,
-        wiresProcessed: connections.length
-      }
+        blocksProcessed: result.stats?.blocksProcessed || blocks.length,
+        connectionsProcessed: result.stats?.connectionsProcessed || connections.length,
+        subsystemsFlattened: result.stats?.subsystemsFlattened || 0
+      },
+      warnings: result.warnings || []
     }
   }
 }
@@ -265,7 +276,7 @@ async function handleGenerateCode(model: any, versionData: any, baseResponse: Au
 async function handleSimulate(
   model: any,
   versionData: any,
-  baseResponse: AutomationResponse, 
+  baseResponse: AutomationResponse,
   parameters?: Record<string, any>
 ): Promise<AutomationResponse> {
   const sheets = versionData.data.sheets || []
@@ -337,7 +348,7 @@ async function handleSimulate(
 
   // Collect output port values
   const outputPortValues = engine.getOutputPortValues()
-  const outputSummary: Record<string, number | boolean | number[] | boolean[]> = {}
+  const outputSummary: Record<string, any> = {}
   outputPortValues.forEach((value, portName) => {
     outputSummary[portName] = value
   })
@@ -353,7 +364,7 @@ async function handleSimulate(
         finalValue: data[data.length - 1] || 0,
         min: Math.min(...data),
         max: Math.max(...data),
-        average: data.reduce((a, b) => a + b, 0) / data.length
+        average: data.reduce((a: number, b: number) => a + b, 0) / data.length
       }
     }
   }
@@ -373,7 +384,7 @@ async function handleSimulate(
 
 async function handleValidateModel(model: any, versionData: any, baseResponse: AutomationResponse): Promise<AutomationResponse> {
   const sheets = versionData.data.sheets || []
-  
+
   if (sheets.length === 0) {
     return {
       ...baseResponse,
@@ -398,16 +409,16 @@ async function handleValidateModel(model: any, versionData: any, baseResponse: A
       errors.push(`Block missing or invalid ID: ${JSON.stringify(block)}`)
       continue
     }
-    
+
     if (!block.type || typeof block.type !== 'string') {
       errors.push(`Block ${block.id} missing or invalid type`)
       continue
     }
-    
+
     if (!block.name || typeof block.name !== 'string') {
       warnings.push(`Block ${block.id} missing or invalid name`)
     }
-    
+
     if (!block.position || typeof block.position.x !== 'number' || typeof block.position.y !== 'number') {
       warnings.push(`Block ${block.id} missing or invalid position`)
     }
@@ -419,20 +430,20 @@ async function handleValidateModel(model: any, versionData: any, baseResponse: A
       errors.push(`Wire missing or invalid ID: ${JSON.stringify(wire)}`)
       continue
     }
-    
+
     if (!wire.sourceBlockId || !wire.targetBlockId) {
       errors.push(`Wire ${wire.id} missing source or target block ID`)
       continue
     }
-    
+
     // Check if referenced blocks exist
     const sourceBlock = blocks.find((b: any) => b.id === wire.sourceBlockId)
     const targetBlock = blocks.find((b: any) => b.id === wire.targetBlockId)
-    
+
     if (!sourceBlock) {
       errors.push(`Wire ${wire.id} references non-existent source block: ${wire.sourceBlockId}`)
     }
-    
+
     if (!targetBlock) {
       errors.push(`Wire ${wire.id} references non-existent target block: ${wire.targetBlockId}`)
     }
@@ -443,7 +454,7 @@ async function handleValidateModel(model: any, versionData: any, baseResponse: A
     for (const block of blocks) {
       const requiredInputs = getRequiredInputCount(block.type)
       const connectedInputs = wires.filter((wire: any) => wire.targetBlockId === block.id).length
-      
+
       if (connectedInputs < requiredInputs) {
         errors.push(`Block ${block.name} (${block.type}) has ${connectedInputs}/${requiredInputs} required inputs connected`)
       }
@@ -454,7 +465,7 @@ async function handleValidateModel(model: any, versionData: any, baseResponse: A
       if (!['input_port', 'source'].includes(block.type)) {
         const hasInputs = wires.some((wire: any) => wire.targetBlockId === block.id)
         const hasOutputs = wires.some((wire: any) => wire.sourceBlockId === block.id)
-        
+
         if (!hasInputs && !hasOutputs) {
           warnings.push(`Block ${block.name} is isolated (no connections)`)
         }

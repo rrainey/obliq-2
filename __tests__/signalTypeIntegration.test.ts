@@ -27,11 +27,11 @@ jest.mock('next/server', () => ({
   }
 }));
 
-// Mock API auth middleware
+// Mock API auth middleware - all access requires user tokens with userId
 jest.mock('../src/lib/apiAuthMiddleware', () => ({
   authenticateApiRequest: jest.fn(async (token: string) => {
     if (token === 'test-token-123') {
-      return { authenticated: true, isEnvironmentToken: true };
+      return { authenticated: true, userId: 'test-user-123' };
     }
     return { authenticated: false, error: 'Invalid or missing API token' };
   })
@@ -43,7 +43,7 @@ process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
 
 // Import after mocks
-import { GET, POST, PUT, DELETE } from '@/app/api/model-builder/[token]/route';
+import { GET, POST, PUT, DELETE } from '@/app/api/model-builder/route';
 import { BlockTypes } from '@/lib/blockTypeRegistry';
 
 // Mock data storage for integration tests
@@ -271,13 +271,19 @@ describe('Model Builder API Integration Tests', () => {
   const validToken = 'test-token-123';
   const baseUrl = 'http://localhost:3000/api/model-builder';
   
-  // Helper to create mock request
-  const createMockRequest = (method: string, url: string, body?: any) => {
+  // Helper to create mock request with Authorization header
+  const createMockRequest = (method: string, url: string, body?: any, token?: string) => {
     const urlObj = new URL(url);
+    const headersMap = new Map<string, string>([['content-type', 'application/json']]);
+    if (token) {
+      headersMap.set('authorization', `Bearer ${token}`);
+    }
     return {
       url,
       method,
-      headers: new Map([['content-type', 'application/json']]),
+      headers: {
+        get: (key: string) => headersMap.get(key.toLowerCase()) || null
+      },
       text: async () => body ? JSON.stringify(body) : '',
       json: async () => body || {},
       nextUrl: urlObj
@@ -311,8 +317,8 @@ describe('Model Builder API Integration Tests', () => {
         userId: 'test-user-123'
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -336,8 +342,8 @@ describe('Model Builder API Integration Tests', () => {
         parameters: { value: '5.0', dataType: 'double' }
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -361,8 +367,8 @@ describe('Model Builder API Integration Tests', () => {
         parameters: { factor: 2.5 }
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -384,8 +390,8 @@ describe('Model Builder API Integration Tests', () => {
         parameters: { signalName: 'scaled_output' }
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -406,8 +412,8 @@ describe('Model Builder API Integration Tests', () => {
         targetPort: 'input'
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -429,8 +435,8 @@ describe('Model Builder API Integration Tests', () => {
         targetPort: 'input'
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -443,8 +449,8 @@ describe('Model Builder API Integration Tests', () => {
         modelId
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(200);
@@ -455,8 +461,8 @@ describe('Model Builder API Integration Tests', () => {
     });
 
     it('should retrieve the complete model', async () => {
-      const request = createMockRequest('GET', `${baseUrl}/${validToken}?modelId=${modelId}`);
-      const response = await GET(request as any, { params: { token: validToken } });
+      const request = createMockRequest('GET', `${baseUrl}?modelId=${modelId}`, undefined, validToken);
+      const response = await GET(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(200);
@@ -479,8 +485,8 @@ describe('Model Builder API Integration Tests', () => {
         userId: 'test-user'
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       modelId = data.data.id;
     });
@@ -518,8 +524,8 @@ describe('Model Builder API Integration Tests', () => {
         ]
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(200);
@@ -559,8 +565,8 @@ describe('Model Builder API Integration Tests', () => {
         ]
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(200);
@@ -585,8 +591,8 @@ describe('Model Builder API Integration Tests', () => {
         userId: 'test-user'
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       modelId = data.data.id;
     });
@@ -598,8 +604,8 @@ describe('Model Builder API Integration Tests', () => {
         name: 'Second Sheet'
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -618,8 +624,8 @@ describe('Model Builder API Integration Tests', () => {
         parameters: { signalName: 'shared_signal' }
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -636,8 +642,8 @@ describe('Model Builder API Integration Tests', () => {
           name: 'Second Sheet'
         };
         
-        const createSheetReq = createMockRequest('POST', `${baseUrl}/${validToken}`, createSheetBody);
-        const createSheetRes = await POST(createSheetReq as any, { params: { token: validToken } });
+        const createSheetReq = createMockRequest('POST', `${baseUrl}`, createSheetBody, validToken);
+        const createSheetRes = await POST(createSheetReq as any);
         const createSheetData = await createSheetRes.json();
         expect(createSheetRes.status).toBe(201);
         sheet2Id = createSheetData.data.sheet.id;
@@ -653,8 +659,8 @@ describe('Model Builder API Integration Tests', () => {
         parameters: { signalName: 'shared_signal' }
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -667,8 +673,8 @@ describe('Model Builder API Integration Tests', () => {
         modelId
       };
       
-      const request = createMockRequest('POST', `${baseUrl}/${validToken}`, body);
-      const response = await POST(request as any, { params: { token: validToken } });
+      const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
+      const response = await POST(request as any);
       const data = await response.json();
       
       expect(response.status).toBe(200);
@@ -687,8 +693,8 @@ describe('Model Builder API Integration Tests', () => {
         userId: 'test-user'
       };
       
-      const createModelReq = createMockRequest('POST', `${baseUrl}/${validToken}`, createModelBody);
-      const createModelRes = await POST(createModelReq as any, { params: { token: validToken } });
+      const createModelReq = createMockRequest('POST', `${baseUrl}`, createModelBody, validToken);
+      const createModelRes = await POST(createModelReq as any);
       const modelData = await createModelRes.json();
       const modelId = modelData.data.id;
       
@@ -709,11 +715,11 @@ describe('Model Builder API Integration Tests', () => {
         position: { x: 300, y: 100 }
       };
       
-      const req1 = createMockRequest('POST', `${baseUrl}/${validToken}`, block1Body);
-      const req2 = createMockRequest('POST', `${baseUrl}/${validToken}`, block2Body);
+      const req1 = createMockRequest('POST', `${baseUrl}`, block1Body, validToken);
+      const req2 = createMockRequest('POST', `${baseUrl}`, block2Body, validToken);
       
-      const res1 = await POST(req1 as any, { params: { token: validToken } });
-      const res2 = await POST(req2 as any, { params: { token: validToken } });
+      const res1 = await POST(req1 as any);
+      const res2 = await POST(req2 as any);
       
       const block1Id = (await res1.json()).data.block.id;
       const block2Id = (await res2.json()).data.block.id;
@@ -729,8 +735,8 @@ describe('Model Builder API Integration Tests', () => {
         targetPort: 'input'
       };
       
-      const connReq1 = createMockRequest('POST', `${baseUrl}/${validToken}`, conn1Body);
-      const connRes1 = await POST(connReq1 as any, { params: { token: validToken } });
+      const connReq1 = createMockRequest('POST', `${baseUrl}`, conn1Body, validToken);
+      const connRes1 = await POST(connReq1 as any);
       
       expect(connRes1.status).toBe(201);
       
@@ -745,8 +751,8 @@ describe('Model Builder API Integration Tests', () => {
         targetPort: 'input'
       };
       
-      const connReq2 = createMockRequest('POST', `${baseUrl}/${validToken}`, conn2Body);
-      const connRes2 = await POST(connReq2 as any, { params: { token: validToken } });
+      const connReq2 = createMockRequest('POST', `${baseUrl}`, conn2Body, validToken);
+      const connRes2 = await POST(connReq2 as any);
       const connData2 = await connRes2.json();
       
       expect(connRes2.status).toBe(400);
@@ -762,8 +768,8 @@ describe('Model Builder API Integration Tests', () => {
         userId: 'test-user'
       };
       
-      const createModelReq = createMockRequest('POST', `${baseUrl}/${validToken}`, createModelBody);
-      const createModelRes = await POST(createModelReq as any, { params: { token: validToken } });
+      const createModelReq = createMockRequest('POST', `${baseUrl}`, createModelBody, validToken);
+      const createModelRes = await POST(createModelReq as any);
       const modelData = await createModelRes.json();
       const modelId = modelData.data.id;
       
@@ -776,8 +782,8 @@ describe('Model Builder API Integration Tests', () => {
         position: { x: 200, y: 200 }
       };
       
-      const blockReq = createMockRequest('POST', `${baseUrl}/${validToken}`, blockBody);
-      const blockRes = await POST(blockReq as any, { params: { token: validToken } });
+      const blockReq = createMockRequest('POST', `${baseUrl}`, blockBody, validToken);
+      const blockRes = await POST(blockReq as any);
       const blockId = (await blockRes.json()).data.block.id;
       
       // Try to connect block to itself
@@ -791,8 +797,8 @@ describe('Model Builder API Integration Tests', () => {
         targetPort: 'input'
       };
       
-      const connReq = createMockRequest('POST', `${baseUrl}/${validToken}`, connBody);
-      const connRes = await POST(connReq as any, { params: { token: validToken } });
+      const connReq = createMockRequest('POST', `${baseUrl}`, connBody, validToken);
+      const connRes = await POST(connReq as any);
       const connData = await connRes.json();
       
       expect(connRes.status).toBe(400);
@@ -808,8 +814,8 @@ describe('Model Builder API Integration Tests', () => {
         userId: 'test-user'
       };
       
-      const createModelReq = createMockRequest('POST', `${baseUrl}/${validToken}`, createModelBody);
-      const createModelRes = await POST(createModelReq as any, { params: { token: validToken } });
+      const createModelReq = createMockRequest('POST', `${baseUrl}`, createModelBody, validToken);
+      const createModelRes = await POST(createModelReq as any);
       const modelData = await createModelRes.json();
       const modelId = modelData.data.id;
       
@@ -826,8 +832,8 @@ describe('Model Builder API Integration Tests', () => {
         }
       };
       
-      const tfReq = createMockRequest('POST', `${baseUrl}/${validToken}`, tfBody);
-      const tfRes = await POST(tfReq as any, { params: { token: validToken } });
+      const tfReq = createMockRequest('POST', `${baseUrl}`, tfBody, validToken);
+      const tfRes = await POST(tfReq as any);
       const tfData = await tfRes.json();
       
       expect(tfRes.status).toBe(400);

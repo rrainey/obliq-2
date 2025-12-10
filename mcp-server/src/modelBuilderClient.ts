@@ -9,14 +9,61 @@ export interface ModelBuilderResponse<T = any> {
   errors?: string[];
 }
 
+// Helper to mask sensitive data for logging
+function maskToken(token: string): string {
+  if (!token) return 'NOT SET';
+  if (token.length <= 8) return '***';
+  return '***' + token.slice(-4);
+}
+
+// Debug logger that always outputs to stderr
+function debugLog(category: string, message: string, data?: any) {
+  if (config.debug) {
+    const timestamp = new Date().toISOString();
+    console.error(`[${timestamp}] [ModelBuilderAPI:${category}] ${message}`);
+    if (data !== undefined) {
+      console.error(`[${timestamp}] [ModelBuilderAPI:${category}] Data:`, JSON.stringify(data, null, 2));
+    }
+  }
+}
+
+// Always log initialization
+function initLog(message: string, data?: any) {
+  const timestamp = new Date().toISOString();
+  console.error(`[${timestamp}] [ModelBuilderAPI:INIT] ${message}`);
+  if (data !== undefined) {
+    console.error(`[${timestamp}] [ModelBuilderAPI:INIT]`, data);
+  }
+}
+
 export class ModelBuilderAPIClient {
   private baseUrl: string;
   private token: string;
+  private requestCounter: number = 0;
 
   constructor() {
-    // Use the Model Builder API token from config
+    // Use the user-specific API token from config
     this.baseUrl = `${config.apiBaseUrl}/api/model-builder`;
-    this.token = config.modelBuilderToken || config.automationToken; // Fallback to automation token if not set
+    this.token = config.apiToken;
+
+    // Always log initialization details
+    initLog('ModelBuilderAPIClient initialized', {
+      baseUrl: this.baseUrl,
+      tokenSet: !!this.token,
+      tokenMasked: maskToken(this.token),
+      debugEnabled: config.debug,
+      configSnapshot: {
+        port: config.port,
+        apiBaseUrl: config.apiBaseUrl,
+        debug: config.debug
+      }
+    });
+
+    if (!this.token) {
+      console.error('[ModelBuilderAPI:INIT] WARNING: No API token configured!');
+      console.error('[ModelBuilderAPI:INIT] Set MCP_API_TOKEN environment variable with a user-specific API token.');
+      console.error('[ModelBuilderAPI:INIT] Generate a token at: /settings/tokens in the web application.');
+    }
   }
 
   private async request<T>(
@@ -24,30 +71,95 @@ export class ModelBuilderAPIClient {
     endpoint: string,
     body?: any
   ): Promise<ModelBuilderResponse<T>> {
-    const url = `${this.baseUrl}/${this.token}${endpoint}`;
-    
-    if (config.debug) {
-      console.error(`[Model Builder API] ${method} ${url}`);
+    const requestId = ++this.requestCounter;
+    const url = `${this.baseUrl}${endpoint}`;
+    const startTime = Date.now();
+
+    // Always log requests (not just in debug mode) - helps diagnose issues
+    console.error(`\n========== REQUEST #${requestId} ==========`);
+    console.error(`[Request #${requestId}] ${method} ${url}`);
+    console.error(`[Request #${requestId}] Debug mode: ${config.debug}`);
+    console.error(`[Request #${requestId}] Token: ${maskToken(this.token)}`);
+
+    if (body) {
+      // Log body but mask any sensitive fields
+      const sanitizedBody = { ...body };
+      if (sanitizedBody.token) sanitizedBody.token = maskToken(sanitizedBody.token);
+      if (sanitizedBody.password) sanitizedBody.password = '***';
+      console.error(`[Request #${requestId}] Body:`, JSON.stringify(sanitizedBody, null, 2));
     }
 
     try {
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: body ? JSON.stringify(body) : undefined
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.token}`
+      };
+
+      debugLog('REQUEST', `Headers (sanitized):`, {
+        'Content-Type': headers['Content-Type'],
+        'Authorization': `Bearer ${maskToken(this.token)}`
       });
 
-      const data = await response.json() as ModelBuilderResponse<T>;
-      
+      const fetchOptions: any = {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+      };
+
+      console.error(`[Request #${requestId}] Sending fetch request...`);
+      const response = await fetch(url, fetchOptions);
+      const elapsed = Date.now() - startTime;
+
+      console.error(`[Request #${requestId}] Response received in ${elapsed}ms`);
+      console.error(`[Request #${requestId}] Status: ${response.status} ${response.statusText}`);
+
+      // Log response headers in debug mode
       if (config.debug) {
-        console.error(`[Model Builder API] Response:`, data);
+        const responseHeaders: Record<string, string> = {};
+        response.headers.forEach((value, key) => {
+          responseHeaders[key] = value;
+        });
+        debugLog('RESPONSE', `Headers:`, responseHeaders);
       }
 
+      const responseText = await response.text();
+      console.error(`[Request #${requestId}] Response body length: ${responseText.length} chars`);
+
+      let data: ModelBuilderResponse<T>;
+      try {
+        data = JSON.parse(responseText) as ModelBuilderResponse<T>;
+      } catch (parseError) {
+        console.error(`[Request #${requestId}] ERROR: Failed to parse JSON response`);
+        console.error(`[Request #${requestId}] Raw response (first 500 chars): ${responseText.substring(0, 500)}`);
+        return {
+          success: false,
+          error: `Invalid JSON response: ${responseText.substring(0, 100)}`,
+          errors: ['Failed to parse API response as JSON']
+        };
+      }
+
+      // Log full response in debug mode
+      console.error(`[Request #${requestId}] Parsed response:`, JSON.stringify(data, null, 2));
+
+      if (!data.success) {
+        console.error(`[Request #${requestId}] API returned error: ${data.error || 'Unknown error'}`);
+        if (data.errors) {
+          console.error(`[Request #${requestId}] Error details:`, data.errors);
+        }
+      }
+
+      console.error(`========== END REQUEST #${requestId} ==========\n`);
       return data;
     } catch (error) {
-      console.error('[Model Builder API] Request failed:', error);
+      const elapsed = Date.now() - startTime;
+      console.error(`[Request #${requestId}] EXCEPTION after ${elapsed}ms:`, error);
+      console.error(`[Request #${requestId}] Error type: ${error?.constructor?.name}`);
+      if (error instanceof Error) {
+        console.error(`[Request #${requestId}] Error message: ${error.message}`);
+        console.error(`[Request #${requestId}] Error stack: ${error.stack}`);
+      }
+      console.error(`========== END REQUEST #${requestId} (FAILED) ==========\n`);
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -57,8 +169,9 @@ export class ModelBuilderAPIClient {
   }
 
   // Model operations
-  async createModel(name: string, userId: string) {
-    return this.request('POST', '', { action: 'createModel', name, userId });
+  async createModel(name: string) {
+    // userId is derived from the API token - never passed explicitly
+    return this.request('POST', '', { action: 'createModel', name });
   }
 
   async getModel(modelId: string) {

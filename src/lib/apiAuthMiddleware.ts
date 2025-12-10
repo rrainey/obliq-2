@@ -17,11 +17,11 @@ export interface AuthResult {
   userId?: string
   tokenId?: string
   error?: string
-  isEnvironmentToken?: boolean
 }
 
 /**
- * Authenticate API request using either environment token or user-specific token
+ * Authenticate API request using user-specific API tokens from the database.
+ * All API access requires a valid user token - environment tokens are not supported.
  */
 export async function authenticateApiRequest(token: string): Promise<AuthResult> {
   if (!token || typeof token !== 'string') {
@@ -31,17 +31,7 @@ export async function authenticateApiRequest(token: string): Promise<AuthResult>
     }
   }
 
-  // First, check if it's the environment token
-  const envToken = process.env.AUTOMATION_API_TOKEN || process.env.MODEL_BUILDER_API_TOKEN
-  
-  if (envToken && token === envToken) {
-    return {
-      authenticated: true,
-      isEnvironmentToken: true
-    }
-  }
-
-  // Validate token format for user tokens
+  // Validate token format
   if (!ApiTokenService.isValidTokenFormat(token)) {
     return {
       authenticated: false,
@@ -206,14 +196,14 @@ export async function cleanupExpiredTokens(): Promise<number> {
 
 /**
  * Get user ID from authentication token
- * Returns null if token is invalid or environment token
+ * Returns null if token is invalid
  */
 export async function getUserIdFromToken(token: string): Promise<string | null> {
   const authResult = await authenticateApiRequest(token)
-  
-  if (!authResult.authenticated || authResult.isEnvironmentToken) {
+
+  if (!authResult.authenticated) {
     return null
   }
-  
+
   return authResult.userId || null
 }

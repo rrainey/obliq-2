@@ -2,6 +2,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import {
+  ListToolsRequestSchema,
+  CallToolRequestSchema,
+  Tool
+} from '@modelcontextprotocol/sdk/types.js';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { randomUUID } from 'crypto';
@@ -100,71 +105,95 @@ function logRequest(toolName: string, args: any, startTime: number, result: any,
 const server = new McpServer({
   name: 'obliq2-mcp-server',
   version: '2.0.0',
+}, {
+  capabilities: {
+    tools: {}
+  }
 });
 
-// Register each tool with the server
+// Build a map for quick tool lookup
+const toolMap = new Map<string, ToolWithHandler>();
 for (const tool of tools) {
-  server.tool(
-    tool.name,
-    tool.description || '',
-    tool.inputSchema as any,
-    async (args: unknown) => {
-      const startTime = Date.now();
-      let result: any;
-      let error: any;
-
-      try {
-        if (config.debug) {
-          console.error(`[MCP Request] Starting ${tool.name}`, { args });
-        }
-
-        // Execute with timeout
-        const TOOL_TIMEOUT = 30000;
-        const toolPromise = tool.handler(args);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Tool execution timeout')), TOOL_TIMEOUT)
-        );
-
-        result = await Promise.race([toolPromise, timeoutPromise]);
-
-        // Format response
-        if (result.success === false && result.error) {
-          return {
-            content: [{ type: 'text' as const, text: result.error }],
-            isError: true
-          };
-        }
-
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }]
-        };
-
-      } catch (err) {
-        error = err;
-        console.error(`[MCP Server] Error executing tool ${tool.name}:`, err);
-
-        let errorMessage = 'Unknown error occurred';
-        let errorDetails = '';
-
-        if (err instanceof Error) {
-          errorMessage = err.message;
-          if (err.stack && config.debug) {
-            errorDetails = `\n\nStack trace:\n${err.stack}`;
-          }
-        } else if (typeof err === 'string') {
-          errorMessage = err;
-        }
-
-        return {
-          content: [{ type: 'text' as const, text: `Error executing tool ${tool.name}: ${errorMessage}${errorDetails}` }],
-          isError: true
-        };
-      } finally {
-        logRequest(tool.name, args, startTime, result, error);
-      }
-    }
-  );
+  toolMap.set(tool.name, tool);
 }
+
+// Register tools using the low-level Server API to preserve raw JSON Schema
+// The high-level McpServer.tool() method expects Zod schemas, but our tools use raw JSON Schema
+server.server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: tools.map((tool): Tool => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema as Tool['inputSchema']
+    }))
+  };
+});
+
+server.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+  const tool = toolMap.get(name);
+
+  if (!tool) {
+    return {
+      content: [{ type: 'text' as const, text: `Unknown tool: ${name}` }],
+      isError: true
+    };
+  }
+
+  const startTime = Date.now();
+  let result: any;
+  let error: any;
+
+  try {
+    if (config.debug) {
+      console.error(`[MCP Request] Starting ${name}`, { args });
+    }
+
+    // Execute with timeout
+    const TOOL_TIMEOUT = 30000;
+    const toolPromise = tool.handler(args);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Tool execution timeout')), TOOL_TIMEOUT)
+    );
+
+    result = await Promise.race([toolPromise, timeoutPromise]);
+
+    // Format response
+    if (result.success === false && result.error) {
+      return {
+        content: [{ type: 'text' as const, text: result.error }],
+        isError: true
+      };
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }]
+    };
+
+  } catch (err) {
+    error = err;
+    console.error(`[MCP Server] Error executing tool ${name}:`, err);
+
+    let errorMessage = 'Unknown error occurred';
+    let errorDetails = '';
+
+    if (err instanceof Error) {
+      errorMessage = err.message;
+      if (err.stack && config.debug) {
+        errorDetails = `\n\nStack trace:\n${err.stack}`;
+      }
+    } else if (typeof err === 'string') {
+      errorMessage = err;
+    }
+
+    return {
+      content: [{ type: 'text' as const, text: `Error executing tool ${name}: ${errorMessage}${errorDetails}` }],
+      isError: true
+    };
+  } finally {
+    logRequest(name, args, startTime, result, error);
+  }
+});
 
 // ============================================
 // STDIO MODE (for Claude Desktop)
@@ -176,8 +205,9 @@ async function runStdioMode() {
     console.error('Configuration:', getMaskedConfig());
   }
 
-  if (!config.modelBuilderToken) {
-    console.error('WARNING: MODEL_BUILDER_API_TOKEN not set - API calls may fail');
+  if (!config.apiToken) {
+    console.error('WARNING: MCP_API_TOKEN not set - API calls will fail');
+    console.error('Please set a user-specific API token. Generate one at: /settings/tokens');
   }
 
   const transport = new StdioServerTransport();
@@ -198,8 +228,9 @@ async function runHttpMode() {
     console.error('Configuration:', getMaskedConfig());
   }
 
-  if (!config.modelBuilderToken) {
-    console.error('WARNING: MODEL_BUILDER_API_TOKEN not set - API calls may fail');
+  if (!config.apiToken) {
+    console.error('WARNING: MCP_API_TOKEN not set - API calls will fail');
+    console.error('Please set a user-specific API token. Generate one at: /settings/tokens');
   }
 
   // Create Express app for HTTP transport

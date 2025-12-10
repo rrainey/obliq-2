@@ -1,5 +1,5 @@
 // mcp-server/src/client.ts
-import fetch, { Response } from 'node-fetch';
+import fetch from 'node-fetch';
 import { config } from './config.js';
 
 export interface APIResponse<T = any> {
@@ -23,41 +23,55 @@ export interface AutomationRequest {
   parameters?: Record<string, any>;
 }
 
+// Helper to mask token for logging
+function maskToken(token: string): string {
+  if (!token) return 'NOT SET';
+  if (token.length <= 8) return '***';
+  return '***' + token.slice(-4);
+}
+
 export class AutomationAPIClient {
   private baseUrl: string;
   private token: string;
 
   constructor() {
     this.baseUrl = config.apiBaseUrl;
-    this.token = config.automationToken;
+    this.token = config.apiToken;
+
+    if (!this.token) {
+      console.error('[AutomationAPI] WARNING: No API token configured!');
+      console.error('[AutomationAPI] Set MCP_API_TOKEN environment variable with a user-specific API token.');
+    }
   }
 
   /**
    * Makes a request to the automation API
    */
   async request<T = any>(
-    action: AutomationRequest['action'], 
-    modelId: string, 
+    action: AutomationRequest['action'],
+    modelId: string,
     parameters?: any,
     version?: number
   ): Promise<APIResponse<T>> {
-    const url = `${this.baseUrl}/api/automations/${this.token}`;
-    
+    const url = `${this.baseUrl}/api/automations`;
+
     if (config.debug) {
-      console.error(`[API Client] Making request:`, {
+      console.error(`[AutomationAPI] Making request:`, {
         url,
         action,
         modelId,
         version,
-        hasParameters: !!parameters
+        hasParameters: !!parameters,
+        token: maskToken(this.token)
       });
     }
-    
+
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`
         },
         body: JSON.stringify({
           action,
@@ -68,9 +82,10 @@ export class AutomationAPIClient {
       });
 
       const responseText = await response.text();
-      
+
       if (config.debug) {
-        console.error(`[API Client] Response status: ${response.status}`);
+        console.error(`[AutomationAPI] Response status: ${response.status}`);
+        console.error(`[AutomationAPI] Response body length: ${responseText.length} chars`);
       }
 
       // Try to parse as JSON
@@ -91,6 +106,10 @@ export class AutomationAPIClient {
           success: true,
           data: responseText as T
         };
+      }
+
+      if (config.debug) {
+        console.error(`[AutomationAPI] Parsed response:`, JSON.stringify(responseData, null, 2));
       }
 
       // Handle structured error responses
@@ -114,7 +133,7 @@ export class AutomationAPIClient {
       };
 
     } catch (error) {
-      console.error('[API Client] Request failed:', error);
+      console.error('[AutomationAPI] Request failed:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -134,7 +153,7 @@ export class AutomationAPIClient {
    * Run simulation for a model
    */
   async simulate(
-    modelId: string, 
+    modelId: string,
     parameters?: { timeStep?: number; duration?: number },
     version?: number
   ): Promise<APIResponse> {
@@ -149,16 +168,17 @@ export class AutomationAPIClient {
   }
 
   /**
-   * Direct HTTP GET request (for future use)
+   * Direct HTTP GET request with authentication
    */
   async get<T = any>(path: string): Promise<APIResponse<T>> {
     const url = `${this.baseUrl}${path}`;
-    
+
     try {
       const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`
         }
       });
 
@@ -186,16 +206,17 @@ export class AutomationAPIClient {
   }
 
   /**
-   * Direct HTTP POST request (for future use)
+   * Direct HTTP POST request with authentication
    */
   async post<T = any>(path: string, body: any): Promise<APIResponse<T>> {
     const url = `${this.baseUrl}${path}`;
-    
+
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`
         },
         body: JSON.stringify(body)
       });

@@ -45,13 +45,15 @@ export class ModelBuilderApiClient {
   // Helper method to make requests
   private async request<T>(
     method: string,
-    url: string,
+    endpoint: string,
     body?: any
   ): Promise<ModelBuilderResponse<T>> {
+    const url = `${this.baseUrl}${endpoint}`;
     const response = await fetch(url, {
       method,
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.token}`
       },
       body: body ? JSON.stringify(body) : undefined
     });
@@ -69,22 +71,23 @@ export class ModelBuilderApiClient {
   async getModel(modelId: string): Promise<ModelBuilderResponse<GetModelResponse>> {
     return this.request<GetModelResponse>(
       'GET',
-      `${this.baseUrl}/${this.token}?modelId=${modelId}`
+      `?modelId=${modelId}`
     );
   }
 
-  async createModel(name: string, userId: string): Promise<ModelBuilderResponse<CreateModelResponse>> {
+  async createModel(name: string): Promise<ModelBuilderResponse<CreateModelResponse>> {
+    // userId is derived from the API token - never passed explicitly
     return this.request<CreateModelResponse>(
       'POST',
-      `${this.baseUrl}/${this.token}`,
-      { action: 'createModel', name, userId }
+      ``,
+      { action: 'createModel', name }
     );
   }
 
   async updateModelName(modelId: string, name: string): Promise<ModelBuilderResponse<any>> {
     return this.request<any>(
       'PUT',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'updateModelName', modelId, name }
     );
   }
@@ -92,7 +95,7 @@ export class ModelBuilderApiClient {
   async deleteModel(modelId: string): Promise<ModelBuilderResponse<DeleteModelResponse>> {
     return this.request<DeleteModelResponse>(
       'DELETE',
-      `${this.baseUrl}/${this.token}?modelId=${modelId}`
+      `?modelId=${modelId}`
     );
   }
 
@@ -100,14 +103,14 @@ export class ModelBuilderApiClient {
   async listSheets(modelId: string): Promise<ModelBuilderResponse<ListSheetsResponse>> {
     return this.request<ListSheetsResponse>(
       'GET',
-      `${this.baseUrl}/${this.token}?action=listSheets&modelId=${modelId}`
+      `?action=listSheets&modelId=${modelId}`
     );
   }
 
   async createSheet(modelId: string, name?: string): Promise<ModelBuilderResponse<CreateSheetResponse>> {
     return this.request<CreateSheetResponse>(
       'POST',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'createSheet', modelId, name }
     );
   }
@@ -115,7 +118,7 @@ export class ModelBuilderApiClient {
   async renameSheet(modelId: string, sheetId: string, newName: string): Promise<ModelBuilderResponse<RenameSheetResponse>> {
     return this.request<RenameSheetResponse>(
       'PUT',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'renameSheet', modelId, sheetId, newName }
     );
   }
@@ -123,14 +126,14 @@ export class ModelBuilderApiClient {
   async deleteSheet(modelId: string, sheetId: string): Promise<ModelBuilderResponse<DeleteSheetResponse>> {
     return this.request<DeleteSheetResponse>(
       'DELETE',
-      `${this.baseUrl}/${this.token}?action=deleteSheet&modelId=${modelId}&sheetId=${sheetId}`
+      `?action=deleteSheet&modelId=${modelId}&sheetId=${sheetId}`
     );
   }
 
   async cloneSheet(modelId: string, sheetId: string, newName?: string): Promise<ModelBuilderResponse<any>> {
     return this.request<any>(
       'POST',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'cloneSheet', modelId, sheetId, newName }
     );
   }
@@ -138,14 +141,14 @@ export class ModelBuilderApiClient {
   async clearSheet(modelId: string, sheetId: string): Promise<ModelBuilderResponse<any>> {
     return this.request<any>(
       'DELETE',
-      `${this.baseUrl}/${this.token}?action=clearSheet&modelId=${modelId}&sheetId=${sheetId}`
+      `?action=clearSheet&modelId=${modelId}&sheetId=${sheetId}`
     );
   }
 
   async importSheet(modelId: string, sheetData: any, overrideId?: string, overrideName?: string): Promise<ModelBuilderResponse<any>> {
     return this.request<any>(
       'POST',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'importSheet', modelId, sheetData, overrideId, overrideName }
     );
   }
@@ -153,7 +156,7 @@ export class ModelBuilderApiClient {
   async exportSheet(modelId: string, sheetId: string): Promise<ModelBuilderResponse<any>> {
     return this.request<any>(
       'GET',
-      `${this.baseUrl}/${this.token}?action=exportSheet&modelId=${modelId}&sheetId=${sheetId}`
+      `?action=exportSheet&modelId=${modelId}&sheetId=${sheetId}`
     );
   }
 
@@ -161,14 +164,14 @@ export class ModelBuilderApiClient {
   async listBlocks(modelId: string, sheetId: string): Promise<ModelBuilderResponse<ListBlocksResponse>> {
     return this.request<ListBlocksResponse>(
       'GET',
-      `${this.baseUrl}/${this.token}?action=listBlocks&modelId=${modelId}&sheetId=${sheetId}`
+      `?action=listBlocks&modelId=${modelId}&sheetId=${sheetId}`
     );
   }
 
   async getBlock(modelId: string, sheetId: string, blockId: string): Promise<ModelBuilderResponse<GetBlockResponse>> {
     return this.request<GetBlockResponse>(
       'GET',
-      `${this.baseUrl}/${this.token}?action=getBlock&modelId=${modelId}&sheetId=${sheetId}&blockId=${blockId}`
+      `?action=getBlock&modelId=${modelId}&sheetId=${sheetId}&blockId=${blockId}`
     );
   }
 
@@ -182,7 +185,7 @@ export class ModelBuilderApiClient {
   ): Promise<ModelBuilderResponse<AddBlockResponse>> {
     return this.request<AddBlockResponse>(
       'POST',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'addBlock', modelId, sheetId, blockType, name, position, parameters }
     );
   }
@@ -195,7 +198,7 @@ export class ModelBuilderApiClient {
   ): Promise<ModelBuilderResponse<UpdateBlockPositionResponse>> {
     return this.request<UpdateBlockPositionResponse>(
       'PUT',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'updateBlockPosition', modelId, sheetId, blockId, position }
     );
   }
@@ -208,7 +211,7 @@ export class ModelBuilderApiClient {
   ): Promise<ModelBuilderResponse<UpdateBlockNameResponse>> {
     return this.request<UpdateBlockNameResponse>(
       'PUT',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'updateBlockName', modelId, sheetId, blockId, name }
     );
   }
@@ -221,7 +224,7 @@ export class ModelBuilderApiClient {
   ): Promise<ModelBuilderResponse<UpdateBlockParametersResponse>> {
     return this.request<UpdateBlockParametersResponse>(
       'PUT',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'updateBlockParameters', modelId, sheetId, blockId, parameters }
     );
   }
@@ -229,14 +232,14 @@ export class ModelBuilderApiClient {
   async deleteBlock(modelId: string, sheetId: string, blockId: string): Promise<ModelBuilderResponse<DeleteBlockResponse>> {
     return this.request<DeleteBlockResponse>(
       'DELETE',
-      `${this.baseUrl}/${this.token}?action=deleteBlock&modelId=${modelId}&sheetId=${sheetId}&blockId=${blockId}`
+      `?action=deleteBlock&modelId=${modelId}&sheetId=${sheetId}&blockId=${blockId}`
     );
   }
 
   async getBlockPorts(modelId: string, sheetId: string, blockId: string): Promise<ModelBuilderResponse<GetBlockPortsResponse>> {
     return this.request<GetBlockPortsResponse>(
       'GET',
-      `${this.baseUrl}/${this.token}?action=getBlockPorts&modelId=${modelId}&sheetId=${sheetId}&blockId=${blockId}`
+      `?action=getBlockPorts&modelId=${modelId}&sheetId=${sheetId}&blockId=${blockId}`
     );
   }
 
@@ -244,14 +247,14 @@ export class ModelBuilderApiClient {
   async listConnections(modelId: string, sheetId: string): Promise<ModelBuilderResponse<ListConnectionsResponse>> {
     return this.request<ListConnectionsResponse>(
       'GET',
-      `${this.baseUrl}/${this.token}?action=listConnections&modelId=${modelId}&sheetId=${sheetId}`
+      `?action=listConnections&modelId=${modelId}&sheetId=${sheetId}`
     );
   }
 
   async getConnection(modelId: string, sheetId: string, connectionId: string): Promise<ModelBuilderResponse<GetConnectionResponse>> {
     return this.request<GetConnectionResponse>(
       'GET',
-      `${this.baseUrl}/${this.token}?action=getConnection&modelId=${modelId}&sheetId=${sheetId}&connectionId=${connectionId}`
+      `?action=getConnection&modelId=${modelId}&sheetId=${sheetId}&connectionId=${connectionId}`
     );
   }
 
@@ -265,7 +268,7 @@ export class ModelBuilderApiClient {
   ): Promise<ModelBuilderResponse<AddConnectionResponse>> {
     return this.request<AddConnectionResponse>(
       'POST',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'addConnection', modelId, sheetId, sourceBlockId, sourcePort, targetBlockId, targetPort }
     );
   }
@@ -273,7 +276,7 @@ export class ModelBuilderApiClient {
   async deleteConnection(modelId: string, sheetId: string, connectionId: string): Promise<ModelBuilderResponse<DeleteConnectionResponse>> {
     return this.request<DeleteConnectionResponse>(
       'DELETE',
-      `${this.baseUrl}/${this.token}?action=deleteConnection&modelId=${modelId}&sheetId=${sheetId}&connectionId=${connectionId}`
+      `?action=deleteConnection&modelId=${modelId}&sheetId=${sheetId}&connectionId=${connectionId}`
     );
   }
 
@@ -281,7 +284,7 @@ export class ModelBuilderApiClient {
   async validateModel(modelId: string): Promise<ModelBuilderResponse<ValidateModelResponse>> {
     return this.request<ValidateModelResponse>(
       'POST',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'validateModel', modelId }
     );
   }
@@ -293,7 +296,7 @@ export class ModelBuilderApiClient {
   ): Promise<ModelBuilderResponse<BatchOperationsResponse>> {
     return this.request<BatchOperationsResponse>(
       'POST',
-      `${this.baseUrl}/${this.token}`,
+      ``,
       { action: 'batchOperations', operations, transactional }
     );
   }
@@ -302,7 +305,7 @@ export class ModelBuilderApiClient {
   async getModelMetadata(modelId: string): Promise<ModelBuilderResponse<any>> {
     return this.request<any>(
       'GET',
-      `${this.baseUrl}/${this.token}?action=getModelMetadata&modelId=${modelId}`
+      `?action=getModelMetadata&modelId=${modelId}`
     );
   }
 }
