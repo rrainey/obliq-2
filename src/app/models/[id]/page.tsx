@@ -44,6 +44,7 @@ import ModelValidationButton from '@/components/ModelValidationButton'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
 import { getSheetPath } from '@/lib/navigationUtils'
 import { parseType } from '@/lib/typeValidator'
+import { propagateSignalTypes } from '@/lib/signalTypePropagation'
 import { migrateToHierarchicalSheets } from '@/lib/modelStore'
 import { useModelStore } from '@/lib/modelStore'
 
@@ -763,15 +764,73 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
 
     addWire(newWire)
-    updateCurrentSheet({ connections: [...wires, newWire] })
+    const updatedWires = [...wires, newWire]
+    updateCurrentSheet({ connections: updatedWires })
     console.log('Wire created:', newWire)
+
+    // Update Demux block parameters when a wire connects to its input
+    if (targetBlock.type === 'demux' && targetPort.portIndex === 0) {
+      // Run type propagation to get the source type
+      const propagationResult = propagateSignalTypes(blocks, updatedWires)
+      const sourceKey = `${sourcePort.blockId}:${sourcePort.portIndex}`
+      const sourceType = propagationResult.blockOutputTypes.get(sourceKey)
+
+      if (sourceType) {
+        try {
+          const parsed = parseType(sourceType)
+          let outputCount = 1
+          let inputDimensions: number[] = [1]
+
+          if (parsed.isMatrix && parsed.rows && parsed.cols) {
+            // Matrix input: rows × cols outputs
+            outputCount = parsed.rows * parsed.cols
+            inputDimensions = [parsed.rows, parsed.cols]
+          } else if (parsed.isArray && parsed.arraySize) {
+            // Vector input: arraySize outputs
+            outputCount = parsed.arraySize
+            inputDimensions = [parsed.arraySize]
+          }
+
+          // Update the Demux block parameters
+          if (outputCount > 1) {
+            updateBlock(targetBlock.id, {
+              parameters: {
+                ...targetBlock.parameters,
+                outputCount,
+                inputDimensions
+              }
+            })
+            console.log(`Updated Demux ${targetBlock.name}: outputCount=${outputCount}, inputDimensions=${JSON.stringify(inputDimensions)}`)
+          }
+        } catch (error) {
+          console.error('Error parsing source type for Demux:', error)
+        }
+      }
+    }
   }
 
   const handleWireDelete = (wireId: string) => {
     console.log('=== handleWireDelete called ===')
     console.log('Deleting wire:', wireId)
     console.log('Wires before delete:', wires.map(w => ({ id: w.id, source: w.sourceBlockId, target: w.targetBlockId })))
-    
+
+    // Check if the wire being deleted is connected to a Demux input
+    const wireToDelete = wires.find(w => w.id === wireId)
+    if (wireToDelete) {
+      const targetBlock = blocks.find(b => b.id === wireToDelete.targetBlockId)
+      if (targetBlock?.type === 'demux' && wireToDelete.targetPortIndex === 0) {
+        // Reset Demux parameters to default
+        updateBlock(targetBlock.id, {
+          parameters: {
+            ...targetBlock.parameters,
+            outputCount: 1,
+            inputDimensions: [1]
+          }
+        })
+        console.log(`Reset Demux ${targetBlock.name} to single output`)
+      }
+    }
+
     deleteWire(wireId)
     setSelectedWireId(null)
     saveCurrentSheetData()
