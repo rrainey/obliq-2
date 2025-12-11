@@ -20,6 +20,7 @@ export interface CustomEdgeData {
   targetType?: string
   signalName?: string
   isEnableConnection?: boolean
+  isResetConnection?: boolean
 }
 
 // Helper to extract matrix dimensions from type string
@@ -70,22 +71,18 @@ export const DefaultEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
   
   const [isHovered, setIsHovered] = useState(false)
   
-  // Check if this is an enable connection
+  // Check if this is an enable or reset connection
   // ReactFlow passes the edge object which contains targetHandle
   const edge = (props as any)
   const isEnableConnection = edge.targetHandle === '_enable_' || data?.isEnableConnection === true
-  
-  // Debug logging
-  if (isEnableConnection) {
-    console.log('Enable connection detected:', { id, targetHandle: edge.targetHandle, dataFlag: data?.isEnableConnection })
-  }
+  const isResetConnection = edge.targetHandle === '_reset_' || data?.isResetConnection === true
   
   let edgePath: string
   let labelX: number
   let labelY: number
   
-  if (isEnableConnection) {
-    // Custom path for enable connections - drop vertically to the top port
+  if (isEnableConnection || isResetConnection) {
+    // Custom path for enable/reset connections - drop vertically to the top/bottom port
     const midY = sourceY + (targetY - sourceY) * 0.7
     edgePath = `M ${sourceX} ${sourceY} L ${targetX} ${midY} L ${targetX} ${targetY}`
     labelX = targetX
@@ -108,17 +105,18 @@ export const DefaultEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
   // Dynamic styles based on state
   const edgeStyle = {
     ...style,
-    stroke: hasError ? '#ef4444' : (selected ? '#3b82f6' : (isHovered ? '#6b7280' : (isEnableConnection ? '#7c3aed' : '#374151'))),
+    stroke: hasError ? '#ef4444' : (selected ? '#3b82f6' : (isHovered ? '#6b7280' : (isResetConnection ? '#dc2626' : (isEnableConnection ? '#7c3aed' : '#374151')))),
     strokeWidth: selected || isHovered ? 3 : (isMatrix ? 3 : 2),
     strokeDasharray: hasError ? '5,5' : (isMatrix && !isHovered && !selected ? '10,3' : 'none'),
     transition: 'stroke 0.2s, stroke-width 0.2s',
   }
 
   // Custom marker based on state and connection type
-  const customMarkerEnd = hasError ? 'url(#arrow-error)' : 
+  const customMarkerEnd = hasError ? 'url(#arrow-error)' :
+                         isResetConnection ? 'url(#arrow-reset)' :
                          isEnableConnection ? 'url(#arrow-enable)' :
-                         selected ? 'url(#arrow-selected)' : 
-                         isHovered ? 'url(#arrow-hover)' : 
+                         selected ? 'url(#arrow-selected)' :
+                         isHovered ? 'url(#arrow-hover)' :
                          isMatrix ? 'url(#arrow-matrix)' :
                          'url(#arrow-default)'
 
@@ -204,12 +202,13 @@ export const AnimatedEdge: FC<EdgeProps<CustomEdgeData & { signalValue?: number 
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data } = props
   const [offset, setOffset] = useState(0)
   
-  // Check if this is an enable connection
+  // Check if this is an enable or reset connection
   const isEnableConnection = (props as any).targetHandle === '_enable_' || data?.isEnableConnection === true
-  
+  const isResetConnection = (props as any).targetHandle === '_reset_' || data?.isResetConnection === true
+
   let edgePath: string
-  if (isEnableConnection) {
-    // Custom path for enable connections
+  if (isEnableConnection || isResetConnection) {
+    // Custom path for enable/reset connections
     const midY = sourceY + (targetY - sourceY) * 0.7
     edgePath = `M ${sourceX} ${sourceY} L ${targetX} ${midY} L ${targetX} ${targetY}`
   } else {
@@ -440,6 +439,28 @@ export function CustomEdgeWrapper() {
           orient="auto"
         >
           <path d="M 0 5 L 20 10 L 0 15 Z" fill="#6b7280" />
+        </marker>
+        <marker
+          id="arrow-enable"
+          viewBox="0 0 20 20"
+          refX="20"
+          refY="10"
+          markerWidth="5"
+          markerHeight="5"
+          orient="auto"
+        >
+          <path d="M 0 5 L 20 10 L 0 15 Z" fill="#7c3aed" />
+        </marker>
+        <marker
+          id="arrow-reset"
+          viewBox="0 0 20 20"
+          refX="20"
+          refY="10"
+          markerWidth="5"
+          markerHeight="5"
+          orient="auto"
+        >
+          <path d="M 0 5 L 20 10 L 0 15 Z" fill="#dc2626" />
         </marker>
       </defs>
     </svg>

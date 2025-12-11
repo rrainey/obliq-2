@@ -118,8 +118,17 @@ function CanvasReactFlowInner({
     error: string | null
   } | null>(null)
 
+  // Convert wires to the format needed for port name rendering
+  const wiresForNodes = wires.map(w => ({
+    id: w.id,
+    sourceBlockId: w.sourceBlockId,
+    sourcePortIndex: w.sourcePortIndex,
+    targetBlockId: w.targetBlockId,
+    targetPortIndex: w.targetPortIndex,
+  }))
+
   // Convert blocks and wires to ReactFlow format with enhanced edge data
-  const initialNodes = blocks.map((block) => blockDataToNode(block))
+  const initialNodes = blocks.map((block) => blockDataToNode(block, wiresForNodes, blocks))
   const initialEdges = wires.map(wire => {
     // Run type propagation to get signal types
     const propagationResult = propagateSignalTypes(blocks, wires)
@@ -216,14 +225,23 @@ function CanvasReactFlowInner({
 
   // Sync external blocks with ReactFlow state
   useEffect(() => {
+    // Convert wires to the format needed for port name rendering
+    const currentWiresForNodes = wires.map(w => ({
+      id: w.id,
+      sourceBlockId: w.sourceBlockId,
+      sourcePortIndex: w.sourcePortIndex,
+      targetBlockId: w.targetBlockId,
+      targetPortIndex: w.targetPortIndex,
+    }))
+
     setNodes(blocks.map(block => ({
-      ...blockDataToNode(block),
+      ...blockDataToNode(block, currentWiresForNodes, blocks),
       // Feature 4: Support both single and multi-selection
       selected: selectedBlockIds.length > 0
         ? selectedBlockIds.includes(block.id)
         : block.id === selectedBlockId
     })))
-  }, [blocks, selectedBlockId, selectedBlockIds, setNodes])
+  }, [blocks, wires, selectedBlockId, selectedBlockIds, setNodes])
 
   useEffect(() => {
     // Run type propagation once for all wires

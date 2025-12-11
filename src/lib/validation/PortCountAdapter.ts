@@ -87,7 +87,7 @@ export class PortCountAdapter {
    */
   static hasDynamicPorts(block: BlockData): boolean {
     // Blocks with dynamic ports
-    const dynamicPortBlocks = ['mux', 'demux', 'subsystem', 'integrator']
+    const dynamicPortBlocks = ['mux', 'demux', 'subsystem', 'integrator', 'orientation_conversion']
     return dynamicPortBlocks.includes(block.type)
   }
 }

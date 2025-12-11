@@ -1,7 +1,7 @@
 // hooks/useWireValidation.ts
 
 import { useState, useEffect, useMemo } from 'react'
-import { BlockData } from '@/components/Block'
+import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { validateModelTypeCompatibility, TypeCompatibilityError, validateModelTypeCompatibilityMultiSheet } from '@/lib/typeCompatibilityValidator'
 import { validateSheetLabels } from '@/lib/sheetLabelUtils'

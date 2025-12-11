@@ -244,6 +244,17 @@ const blockTypes: BlockType[] = [
     icon: 'A.B',
     vectorSupport: 'full'
   },
+
+  // Aerospace
+  {
+    id: 'orientation_conversion',
+    name: 'Orientation Conversion',
+    category: 'Aerospace',
+    description: 'Convert between Euler angles, DCM, and Quaternion representations',
+    icon: 'E↔q',
+    vectorSupport: 'full'
+  },
+
   // Control Flow
   { 
     id: 'if', 

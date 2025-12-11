@@ -38,6 +38,7 @@ import ConditionConfig from '@/components/ConditionConfig'
 import EvaluateConfig from '@/components/EvaluateConfig'
 import LimitConfig from '@/components/LimitConfig'
 import IntegratorConfig from '@/components/IntegratorConfig'
+import OrientationConversionConfig from '@/components/OrientationConversionConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
@@ -1427,7 +1428,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'mux' ||
       block.type === 'trig' ||
       block.type === 'condition' ||
-      block.type === 'evaluate'
+      block.type === 'evaluate' ||
+      block.type === 'orientation_conversion'
     )) {
       console.log('Setting config block:', block)
       setConfigBlock(block)
@@ -2103,6 +2105,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'integrator' && (
             <IntegratorConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'orientation_conversion' && (
+            <OrientationConversionConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

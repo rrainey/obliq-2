@@ -32,6 +32,7 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
   const [editingSheetId, setEditingSheetId] = useState<string | null>(null)
   const [editingSheetName, setEditingSheetName] = useState('')
   const [showEnableInput, setShowEnableInput] = useState(block.parameters?.showEnableInput || false)
+  const [showPortNames, setShowPortNames] = useState(block.parameters?.showPortNames || false)
   const [codeGenStrategy, setCodeGenStrategy] = useState<CodeGenStrategy>(block.parameters?.codeGenStrategy || 'flatten')
 
   // Helper to escape special regex characters
@@ -63,6 +64,7 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
       inputPorts: inputPorts.filter((port: string) => port.trim() !== ''),
       outputPorts: outputPorts.filter((port: string) => port.trim() !== ''),
       showEnableInput,
+      showPortNames,
       codeGenStrategy
     }
     onUpdate(parameters)
@@ -367,6 +369,24 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
             <p className="mt-1 ml-6 text-xs text-gray-500">
               When enabled, adds a special boolean input port that controls whether the subsystem is active.
               When false, the subsystem's state is frozen.
+            </p>
+          </div>
+
+          {/* Show Port Names Checkbox */}
+          <div className="border-t pt-4">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={showPortNames}
+                onChange={(e) => setShowPortNames(e.target.checked)}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                Show Port Names
+              </span>
+            </label>
+            <p className="mt-1 ml-6 text-xs text-gray-500">
+              When enabled, displays the names of connected Input/Output Port blocks next to each port.
             </p>
           </div>
 

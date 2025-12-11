@@ -67,6 +67,9 @@ export const BlockTypes = {
   // Integrator block
   INTEGRATOR: 'integrator',
 
+  // Aerospace blocks
+  ORIENTATION_CONVERSION: 'orientation_conversion',
+
 } as const;
 
 export type BlockType = typeof BlockTypes[keyof typeof BlockTypes];
@@ -465,6 +468,22 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [{ name: 'input' }],
     outputs: [{ name: 'output' }],
     description: 'Integrator block (equivalent to 1/s transfer function)'
+  },
+
+  [BlockTypes.ORIENTATION_CONVERSION]: {
+    type: BlockTypes.ORIENTATION_CONVERSION,
+    displayName: 'Orientation Conversion',
+    category: 'Aerospace',
+    defaultParameters: {
+      conversionType: 'euler_to_dcm'
+    },
+    inputs: [
+      { name: 'Phi_rad' },
+      { name: 'Theta_rad' },
+      { name: 'Psi_rad' }
+    ],
+    outputs: [{ name: 'DCM' }],
+    description: 'Converts between Euler angles, DCM, and Quaternion representations (AIAA/ANSI aerospace convention)'
   },
 
 };

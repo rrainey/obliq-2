@@ -12,6 +12,7 @@ interface SumConfigProps {
 export default function SumConfig({ block, onUpdate, onClose }: SumConfigProps) {
   const [signs, setSigns] = useState(block?.parameters?.signs || '++')
   const [signsError, setSignsError] = useState<string>('')
+  const [showPortNames, setShowPortNames] = useState(block?.parameters?.showPortNames || false)
 
   // Validate signs string
   useEffect(() => {
@@ -40,7 +41,8 @@ export default function SumConfig({ block, onUpdate, onClose }: SumConfigProps) 
     const parameters = {
       signs,
       numInputs: signs.length, // Update numInputs to match
-      inputs: signs // Legacy support
+      inputs: signs, // Legacy support
+      showPortNames
     }
     onUpdate(parameters)
     onClose()
@@ -169,6 +171,25 @@ export default function SumConfig({ block, onUpdate, onClose }: SumConfigProps) 
               <br />• "+-" - Subtract second input from first
               <br />• "+++" - Add three inputs
               <br />• "+-+" - First + third - second
+            </p>
+          </div>
+
+          {/* Show Port Names Checkbox */}
+          <div className="border-t pt-4">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={showPortNames}
+                onChange={(e) => setShowPortNames(e.target.checked)}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                Show Port Names
+              </span>
+            </label>
+            <p className="mt-1 ml-6 text-xs text-gray-500">
+              When enabled, displays the names of connected Input/Output Port blocks next to each input port.
+              Note: Sum blocks only show input port names (the +/- signs are always shown).
             </p>
           </div>
         </div>

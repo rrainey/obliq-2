@@ -23,13 +23,24 @@ export interface PortInfo {
 }
 
 export interface BlockNodeProps {
-  data: BlockData
+  data: BlockData & Partial<Pick<BlockNodeData, 'allWires' | 'allBlocks'>>
   selected?: boolean
+}
+
+// Wire data interface (imported from Wire.tsx but redefined here to avoid circular deps)
+interface WireDataRef {
+  id: string
+  sourceBlockId: string
+  sourcePortIndex: number
+  targetBlockId: string
+  targetPortIndex: number
 }
 
 // Define custom node data structure that extends BlockData
 export interface BlockNodeData extends Omit<BlockData, 'position'> {
-  // Additional data can be added here if needed
+  // Additional data for port name rendering
+  allWires?: WireDataRef[]
+  allBlocks?: BlockData[]
 }
 
 // Port spacing configuration
@@ -45,6 +56,51 @@ const calculatePortPosition = (index: number, count: number, blockHeight: number
   const totalSpacing = (count - 1) * PORT_SPACING
   const startY = (blockHeight - totalSpacing) / 2
   return startY + index * PORT_SPACING
+}
+
+/**
+ * Get the name of a connected Input/Output Port block for port label display
+ * @param blockId - The current block's ID
+ * @param portIndex - The port index on the current block
+ * @param isInput - Whether this is an input port (true) or output port (false)
+ * @param wires - All wires in the sheet
+ * @param allBlocks - All blocks in the sheet
+ * @returns The port name if connected to an input_port or output_port block, null otherwise
+ */
+const getConnectedPortName = (
+  blockId: string,
+  portIndex: number,
+  isInput: boolean,
+  wires: WireDataRef[],
+  allBlocks: BlockData[]
+): string | null => {
+  if (!wires || !allBlocks) return null
+
+  // Find the wire connected to this port
+  const wire = wires.find(w => {
+    if (isInput) {
+      // For inputs: find wire where this block is the target
+      return w.targetBlockId === blockId && w.targetPortIndex === portIndex
+    } else {
+      // For outputs: find wire where this block is the source
+      return w.sourceBlockId === blockId && w.sourcePortIndex === portIndex
+    }
+  })
+
+  if (!wire) return null
+
+  // Get the connected block
+  const connectedBlockId = isInput ? wire.sourceBlockId : wire.targetBlockId
+  const connectedBlock = allBlocks.find(b => b.id === connectedBlockId)
+
+  if (!connectedBlock) return null
+
+  // Only return name if connected to an input_port or output_port block
+  if (connectedBlock.type === 'input_port' || connectedBlock.type === 'output_port') {
+    return connectedBlock.parameters?.portName || connectedBlock.parameters?.signalName || connectedBlock.name
+  }
+
+  return null
 }
 
 
@@ -293,6 +349,25 @@ const getBlockSymbol = (data: BlockNodeData) => {
     )
   }
 
+  // Handle orientation conversion block
+  if (data.type === 'orientation_conversion') {
+    type ConversionType = 'euler_to_dcm' | 'dcm_to_euler' | 'euler_to_quat' | 'dcm_to_quat' | 'quat_to_euler' | 'quat_to_dcm'
+    const convType: string = data.parameters?.conversionType || 'euler_to_dcm'
+    const convDisplay: Record<ConversionType, string> = {
+      'euler_to_dcm': 'E→DCM',
+      'dcm_to_euler': 'DCM→E',
+      'euler_to_quat': 'E→q',
+      'dcm_to_quat': 'DCM→q',
+      'quat_to_euler': 'q→E',
+      'quat_to_dcm': 'q→DCM'
+    }
+    return (
+      <div className="text-xs font-mono">
+        { convDisplay[convType as ConversionType] || convType }
+      </div>
+    )
+  }
+
   // Regular symbols for other blocks
   const symbols: Record<string, string> = {
     'sum': '∑',
@@ -321,6 +396,7 @@ const getBlockSymbol = (data: BlockNodeData) => {
     'transpose': 'Aᵀ',
     'evaluate': 'f(x)', // Fallback if no expression
     'condition': 'x1?', // Fallback if no condition
+    'orientation_conversion': 'E↔DCM', // Fallback for orientation conversion
   }
 
   return symbols[data.type] || '?'
@@ -456,13 +532,34 @@ const portSignStyles = `
     font-weight: bold;
     pointer-events: none;
   }
-  
+
   .port-sign.positive {
     color: #555555; /* green */
   }
-  
+
   .port-sign.negative {
     color: #555555; /* red */
+  }
+
+  .port-name-label {
+    position: absolute;
+    font-size: 0.375rem;
+    line-height: 0.5rem;
+    color: #4b5563;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .port-name-label.input {
+    right: 100%;
+    text-align: right;
+    margin-right: 4px;
+  }
+
+  .port-name-label.output {
+    left: 100%;
+    text-align: left;
+    margin-left: 4px;
   }
 `
 
@@ -502,9 +599,18 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
 
   const { inputCount, outputCount } = getPortCounts()
   const portLabels = getPortLabels()
-  const blockWidth = getBlockWidth(data)
   const isTerminator = data.type === 'input_port' || data.type === 'output_port'
-  const minHeight = isTerminator ? TERMINATOR_HEIGHT : Math.max(MIN_HEIGHT, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
+  const isSubsystem = data.type === 'subsystem'
+
+  // For subsystems, use stored dimensions if available
+  const blockWidth = isSubsystem && data.parameters?.width
+    ? data.parameters.width
+    : getBlockWidth(data)
+  const minHeight = isTerminator
+    ? TERMINATOR_HEIGHT
+    : isSubsystem && data.parameters?.height
+      ? data.parameters.height
+      : Math.max(MIN_HEIGHT, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
   const [updateTrigger, setUpdateTrigger] = useState(0);
 
   // Get sum block signs
@@ -695,7 +801,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
         <style>
           {portSignStyles}
         </style>
-        
+
         {/* Block Name - positioned above the block */}
         <div
           className="absolute left-0 right-0 text-center text-gray-800 font-medium pointer-events-none"
@@ -811,6 +917,58 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             {sign}
           </div>
         ))}
+
+        {/* Port Name Labels - shown when showPortNames is enabled */}
+        {/* Skip multiply blocks entirely, skip enable/reset ports */}
+        {data.type !== 'multiply' && data.parameters?.showPortNames && (
+          <>
+            {/* Input port name labels */}
+            {Array.from({ length: inputCount }).map((_, index) => {
+              const portName = getConnectedPortName(
+                data.id,
+                index,
+                true, // isInput
+                data.allWires || [],
+                data.allBlocks || []
+              )
+              if (!portName) return null
+              return (
+                <div
+                  key={`input-label-${index}`}
+                  className="port-name-label input"
+                  style={{
+                    top: calculatePortPosition(index, inputCount, minHeight) - 8,
+                  }}
+                >
+                  {portName}
+                </div>
+              )
+            })}
+
+            {/* Output port name labels - skip for sum blocks */}
+            {data.type !== 'sum' && Array.from({ length: outputCount }).map((_, index) => {
+              const portName = getConnectedPortName(
+                data.id,
+                index,
+                false, // isOutput
+                data.allWires || [],
+                data.allBlocks || []
+              )
+              if (!portName) return null
+              return (
+                <div
+                  key={`output-label-${index}`}
+                  className="port-name-label output"
+                  style={{
+                    top: calculatePortPosition(index, outputCount, minHeight) - 8,
+                  }}
+                >
+                  {portName}
+                </div>
+              )
+            })}
+          </>
+        )}
 
         {/* Enable Handle - Special port at top center for blocks with showEnableInput (subsystem, integrator) */}
         {(data.type === 'subsystem' || data.type === 'integrator') && data.parameters?.showEnableInput && (
@@ -937,7 +1095,11 @@ export const nodeTypes = {
 } as const
 
 // Helper function to convert BlockData to ReactFlow node format
-export const blockDataToNode = (block: BlockData) => {
+export const blockDataToNode = (
+  block: BlockData,
+  allWires?: WireDataRef[],
+  allBlocks?: BlockData[]
+) => {
   return {
     id: block.id,
     type: 'customBlock',
@@ -947,6 +1109,8 @@ export const blockDataToNode = (block: BlockData) => {
       type: block.type,
       name: block.name,
       parameters: block.parameters,
+      allWires,
+      allBlocks,
     },
   }
 }

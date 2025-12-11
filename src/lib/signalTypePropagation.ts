@@ -432,7 +432,68 @@ export function propagateSignalTypes(
       }
       continue
     }
-    
+
+    // Special handling for orientation_conversion blocks
+    if (currentBlock.type === 'orientation_conversion') {
+      const conversionType = currentBlock.parameters?.conversionType || 'euler_to_dcm'
+      let outputTypes: string[] = []
+
+      switch (conversionType) {
+        case 'euler_to_dcm':
+        case 'quat_to_dcm':
+          outputTypes = ['double[3][3]']  // Single DCM output
+          break
+        case 'euler_to_quat':
+        case 'dcm_to_quat':
+          outputTypes = ['double[4][1]']  // Single quaternion output
+          break
+        case 'dcm_to_euler':
+        case 'quat_to_euler':
+          outputTypes = ['double', 'double', 'double']  // Three Euler angle outputs
+          break
+        default:
+          outputTypes = ['double']
+      }
+
+      for (let portIndex = 0; portIndex < outputTypes.length; portIndex++) {
+        const outputKey = `${currentBlockId}:${portIndex}`
+        const outputType = outputTypes[portIndex]
+
+        blockOutputTypes.set(outputKey, outputType)
+
+        // Propagate to connected wires
+        const connectedWires = wiresBySource.get(outputKey) || []
+        for (const wire of connectedWires) {
+          try {
+            const parsedType = parseType(outputType)
+            signalTypes.set(wire.id, {
+              wireId: wire.id,
+              sourceBlockId: wire.sourceBlockId,
+              sourcePortIndex: wire.sourcePortIndex,
+              targetBlockId: wire.targetBlockId,
+              targetPortIndex: wire.targetPortIndex,
+              type: outputType,
+              parsedType
+            })
+
+            // Add target block to processing queue
+            const targetBlock = blockMap.get(wire.targetBlockId)
+            if (targetBlock && !processedBlocks.has(wire.targetBlockId)) {
+              processingQueue.push(wire.targetBlockId)
+              processedBlocks.add(wire.targetBlockId)
+            }
+          } catch (error) {
+            errors.push({
+              wireId: wire.id,
+              message: `Invalid signal type from orientation_conversion: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              severity: 'error'
+            })
+          }
+        }
+      }
+      continue
+    }
+
     // Process all output ports of the current block
     const outputPortCount = getBlockOutputPortCount(currentBlock)
     
@@ -911,6 +972,15 @@ function getBlockOutputPortCount(block: BlockData): number {
       return 0
     case 'sheet_label_source':
       return 1
+    case 'orientation_conversion': {
+      const conversionType = block.parameters?.conversionType || 'euler_to_dcm'
+      // dcm_to_euler, quat_to_euler: 3 outputs (Phi, Theta, Psi)
+      // All others: 1 output (DCM or quaternion)
+      if (conversionType === 'dcm_to_euler' || conversionType === 'quat_to_euler') {
+        return 3
+      }
+      return 1
+    }
     default:
       return 0
   }
@@ -952,6 +1022,15 @@ function getBlockInputPortCount(block: BlockData): number {
       return 1
     case 'sheet_label_source':
       return 0
+    case 'orientation_conversion': {
+      const conversionType = block.parameters?.conversionType || 'euler_to_dcm'
+      // euler_to_dcm, euler_to_quat: 3 inputs (Phi, Theta, Psi)
+      // All others: 1 input (DCM or quaternion)
+      if (conversionType === 'euler_to_dcm' || conversionType === 'euler_to_quat') {
+        return 3
+      }
+      return 1
+    }
     default:
       return 1
   }
