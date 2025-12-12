@@ -1171,19 +1171,19 @@ export async function POST(request: NextRequest) {
     
     // Handle create sheet action
     if (action === ModelBuilderActions.CREATE_SHEET) {
-      const { modelId, name } = body;
-      
+      const { modelId, name, subsystemBlockId, parentSheetId } = body;
+
       // Validate required parameters
       if (!modelId) {
         return ErrorResponses.missingParameter('modelId');
       }
-      
+
       // Initialize Supabase client
       const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
       );
-      
+
       // Get the latest version of the model
       const { data: versionData, error: versionError } = await supabase
         .from('model_versions')
@@ -1192,21 +1192,72 @@ export async function POST(request: NextRequest) {
         .order('version', { ascending: false })
         .limit(1)
         .single();
-        
+
       if (versionError || !versionData) {
         return ErrorResponses.modelNotFound(modelId);
       }
-      
+
       // Extract current model data
       const modelData = versionData.data;
       const sheets = modelData.sheets || [];
-      
+
       // Generate a unique sheet ID
       const sheetId = `sheet_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+
+      // Helper function to find a block recursively in all sheets (including nested subsystems)
+      const findBlockRecursively = (sheetsToSearch: any[], blockId: string): { block: any, parentSheet: any } | null => {
+        for (const sheet of sheetsToSearch) {
+          for (const block of (sheet.blocks || [])) {
+            if (block.id === blockId) {
+              return { block, parentSheet: sheet };
+            }
+            // If this is a subsystem, search its nested sheets
+            if (block.type === 'subsystem' && block.parameters?.sheets) {
+              const found = findBlockRecursively(block.parameters.sheets, blockId);
+              if (found) return found;
+            }
+          }
+        }
+        return null;
+      };
+
+      // Determine target sheets array and sheet name
+      let targetSheetsArray: any[];
+      let subsystemBlock: any = null;
+
+      if (subsystemBlockId) {
+        // Find the subsystem block (searching recursively if parentSheetId not provided)
+        const found = findBlockRecursively(sheets, subsystemBlockId);
+
+        if (!found) {
+          return errorResponse(`Subsystem block not found: ${subsystemBlockId}`, 'SUBSYSTEM_NOT_FOUND', 404);
+        }
+
+        subsystemBlock = found.block;
+
+        if (subsystemBlock.type !== 'subsystem') {
+          return errorResponse(`Block ${subsystemBlockId} is not a subsystem`, 'NOT_A_SUBSYSTEM', 400);
+        }
+
+        // Ensure the subsystem has a sheets array
+        if (!subsystemBlock.parameters) {
+          subsystemBlock.parameters = {};
+        }
+        if (!subsystemBlock.parameters.sheets) {
+          subsystemBlock.parameters.sheets = [];
+        }
+
+        targetSheetsArray = subsystemBlock.parameters.sheets;
+      } else {
+        // Add to model's root sheets
+        targetSheetsArray = modelData.sheets;
+      }
+
       // Generate sheet name if not provided
-      const sheetName = name || `Sheet ${sheets.length + 1}`;
-      
+      const sheetName = name || (subsystemBlockId
+        ? `${subsystemBlock?.name || 'Subsystem'} Sheet ${targetSheetsArray.length + 1}`
+        : `Sheet ${targetSheetsArray.length + 1}`);
+
       // Create new sheet
       const newSheet = {
         id: sheetId,
@@ -1218,13 +1269,13 @@ export async function POST(request: NextRequest) {
           height: 2000
         }
       };
-      
-      // Add sheet to model data
-      modelData.sheets.push(newSheet);
-      
+
+      // Add sheet to target array
+      targetSheetsArray.push(newSheet);
+
       // Create a new version with the updated data
       const nextVersion = versionData.version + 1;
-      
+
       const { error: insertError } = await supabase
         .from('model_versions')
         .insert({
@@ -1232,28 +1283,28 @@ export async function POST(request: NextRequest) {
           version: nextVersion,
           data: modelData
         });
-        
+
       if (insertError) {
         console.error('Error creating new version:', insertError);
         return errorResponse('Failed to create sheet', 'CREATE_SHEET_FAILED', 500);
       }
-      
+
       // Update model's latest version
       const { error: updateError } = await supabase
         .from('models')
-        .update({ 
+        .update({
           latest_version: nextVersion,
           updated_at: new Date().toISOString()
         })
         .eq('id', modelId);
-        
+
       if (updateError) {
         console.error('Error updating model:', updateError);
         return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
       }
-      
-      // Return the created sheet
-      return successResponse({
+
+      // Build response
+      const response: any = {
         modelId,
         newVersion: nextVersion,
         sheet: {
@@ -1263,7 +1314,16 @@ export async function POST(request: NextRequest) {
           connectionCount: 0,
           extents: newSheet.extents
         }
-      }, 201);
+      };
+
+      // Include subsystem info if sheet was added to a subsystem
+      if (subsystemBlockId && subsystemBlock) {
+        response.subsystemBlockId = subsystemBlockId;
+        response.subsystemName = subsystemBlock.name;
+      }
+
+      // Return the created sheet
+      return successResponse(response, 201);
     }
     
     // Handle batch operations
@@ -1770,12 +1830,75 @@ export async function POST(request: NextRequest) {
       
       // Create the new block instance
       const newBlock = createBlockInstance(blockType, blockId, blockName, blockPosition);
-      
+
       // Override with any provided parameters
       if (parameters) {
         newBlock.parameters = { ...newBlock.parameters, ...parameters };
       }
-      
+
+      // Special handling for subsystem blocks - automatically create their main sheet
+      // This mirrors the UI behavior when dropping a subsystem on the canvas
+      let createdSheet = null;
+      if (blockType === 'subsystem') {
+        const subsystemMainSheetId = `${newBlock.id}_main`;
+
+        // Create default input and output ports for the subsystem's main sheet
+        const defaultInputPort = {
+          id: `${subsystemMainSheetId}_input1`,
+          type: 'input_port',
+          name: 'Input1',
+          position: { x: 100, y: 200 },
+          parameters: {
+            portName: 'Input1',
+            dataType: 'double',
+            defaultValue: 0
+          }
+        };
+
+        const defaultOutputPort = {
+          id: `${subsystemMainSheetId}_output1`,
+          type: 'output_port',
+          name: 'Output1',
+          position: { x: 400, y: 200 },
+          parameters: {
+            portName: 'Output1'
+          }
+        };
+
+        const subsystemMainSheet = {
+          id: subsystemMainSheetId,
+          name: `${newBlock.name} Main`,
+          blocks: [defaultInputPort, defaultOutputPort],
+          connections: [],
+          extents: {
+            width: 1000,
+            height: 800
+          }
+        };
+
+        // Update the subsystem parameters to embed the sheet
+        newBlock.parameters = {
+          ...newBlock.parameters,
+          sheets: [subsystemMainSheet],
+          inputPorts: ['Input1'],
+          outputPorts: ['Output1']
+        };
+
+        // Store created sheet info for the response
+        createdSheet = {
+          id: subsystemMainSheetId,
+          name: subsystemMainSheet.name,
+          inputPort: {
+            id: defaultInputPort.id,
+            name: defaultInputPort.name
+          },
+          outputPort: {
+            id: defaultOutputPort.id,
+            name: defaultOutputPort.name
+          }
+        };
+      }
+
       // Add block to sheet
       sheet.blocks.push(newBlock);
       
@@ -1809,8 +1932,8 @@ export async function POST(request: NextRequest) {
         return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
       }
       
-      // Return the created block
-      return successResponse({
+      // Return the created block (with subsystem sheet info if applicable)
+      const response: any = {
         modelId,
         sheetId,
         newVersion: nextVersion,
@@ -1825,7 +1948,14 @@ export async function POST(request: NextRequest) {
             outputs: newBlock.outputs
           }
         }
-      }, 201);
+      };
+
+      // Include subsystem sheet information for better MCP guidance
+      if (createdSheet) {
+        response.subsystemSheet = createdSheet;
+      }
+
+      return successResponse(response, 201);
     }
     
     // Handle add connection action

@@ -5,7 +5,7 @@ import { config } from '../config.js';
 
 export const addSheetTool: ToolWithHandler = {
   name: 'add_sheet',
-  description: 'Add a new sheet to a model',
+  description: 'Add a new sheet to a model or to a subsystem block. If subsystemBlockId is provided, the sheet is added to that subsystem\'s internal sheets collection rather than the model\'s top-level sheets.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -16,20 +16,24 @@ export const addSheetTool: ToolWithHandler = {
       name: {
         type: 'string',
         description: 'Name for the new sheet (optional)'
+      },
+      subsystemBlockId: {
+        type: 'string',
+        description: 'ID of a subsystem block to add the sheet to (optional). If provided, the sheet will be added inside the subsystem rather than at the model\'s top level.'
       }
     },
     required: ['modelId']
   },
   handler: async (args: any) => {
     try {
-      const { modelId, name } = args;
-      
+      const { modelId, name, subsystemBlockId } = args;
+
       if (config.debug) {
-        console.error('[add_sheet] Adding sheet:', { modelId, name });
+        console.error('[add_sheet] Adding sheet:', { modelId, name, subsystemBlockId });
       }
 
-      const response = await modelBuilderClient.addSheet(modelId, name);
-      
+      const response = await modelBuilderClient.addSheet(modelId, name, subsystemBlockId);
+
       if (!response.success) {
         return {
           success: false,
@@ -38,11 +42,20 @@ export const addSheetTool: ToolWithHandler = {
         };
       }
 
-      return {
+      const result: any = {
         success: true,
-        sheetId: (response.data as any)?.id,
-        sheet: response.data
+        sheetId: (response.data as any)?.sheet?.id,
+        sheet: (response.data as any)?.sheet
       };
+
+      // Include subsystem info if sheet was added to a subsystem
+      if ((response.data as any)?.subsystemBlockId) {
+        result.subsystemBlockId = (response.data as any).subsystemBlockId;
+        result.subsystemName = (response.data as any).subsystemName;
+        result.hint = `Sheet added to subsystem '${result.subsystemName}'. Use this sheetId to add blocks inside the subsystem.`;
+      }
+
+      return result;
     } catch (error) {
       console.error('[add_sheet] Error:', error);
       return {
@@ -55,7 +68,7 @@ export const addSheetTool: ToolWithHandler = {
 
 export const addBlockTool: ToolWithHandler = {
   name: 'add_block',
-  description: 'Add a block to a sheet',
+  description: 'Add a block to a sheet. For subsystem blocks, a main sheet with default input/output ports is automatically created. The response will include the subsystemSheet info with the sheetId needed to add blocks inside the subsystem.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -115,11 +128,19 @@ export const addBlockTool: ToolWithHandler = {
         };
       }
 
-      return {
+      const result: any = {
         success: true,
-        blockId: (response.data as any)?.id,
-        block: response.data
+        blockId: (response.data as any)?.block?.id,
+        block: (response.data as any)?.block
       };
+
+      // Include subsystem sheet info for better guidance when creating subsystems
+      if ((response.data as any)?.subsystemSheet) {
+        result.subsystemSheet = (response.data as any).subsystemSheet;
+        result.hint = `Subsystem created with main sheet '${result.subsystemSheet.name}' (ID: ${result.subsystemSheet.id}). To add blocks inside the subsystem, use this sheetId. The sheet has default Input1 and Output1 ports.`;
+      }
+
+      return result;
     } catch (error) {
       console.error('[add_block] Error:', error);
       return {

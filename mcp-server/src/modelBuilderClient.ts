@@ -183,8 +183,11 @@ export class ModelBuilderAPIClient {
   }
 
   // Sheet operations
-  async addSheet(modelId: string, name?: string) {
-    return this.request('POST', '', { action: 'createSheet', modelId, name });
+  async addSheet(modelId: string, name?: string, subsystemBlockId?: string) {
+    const body: any = { action: 'createSheet', modelId };
+    if (name) body.name = name;
+    if (subsystemBlockId) body.subsystemBlockId = subsystemBlockId;
+    return this.request('POST', '', body);
   }
 
   async listSheets(modelId: string) {
