@@ -17,8 +17,8 @@ const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
 })
 
 interface AutomationRequest {
-  action: 'generateCode' | 'simulate' | 'validateModel'
-  modelId: string
+  action: 'generateCode' | 'simulate' | 'validateModel' | 'listModels'
+  modelId?: string
   version?: number
   parameters?: Record<string, any>
 }
@@ -88,16 +88,31 @@ async function automationHandler(
   }
 
   // Validate required fields
-  validateRequiredFields(body, ['action', 'modelId'])
+  validateRequiredFields(body, ['action'])
 
   // Validate action type
-  const validActions = ['generateCode', 'simulate', 'validateModel']
+  const validActions = ['generateCode', 'simulate', 'validateModel', 'listModels']
   if (!validActions.includes(body.action)) {
     throw new AppError(
       `Invalid action: ${body.action}. Valid actions are: ${validActions.join(', ')}`,
       400,
       ErrorTypes.VALIDATION_ERROR,
       { providedAction: body.action, validActions }
+    )
+  }
+
+  // Handle listModels action separately (doesn't require modelId)
+  if (body.action === 'listModels') {
+    const result = await handleListModels(userId)
+    return NextResponse.json(result)
+  }
+
+  // For other actions, modelId is required
+  if (!body.modelId) {
+    throw new AppError(
+      'Missing required field: modelId',
+      400,
+      ErrorTypes.VALIDATION_ERROR
     )
   }
 
@@ -505,6 +520,46 @@ async function handleValidateModel(model: any, versionData: any, baseResponse: A
       }
     },
     errors: errors.length > 0 ? errors : undefined
+  }
+}
+
+async function handleListModels(userId: string): Promise<AutomationResponse> {
+  const baseResponse: AutomationResponse = {
+    success: false,
+    action: 'listModels',
+    modelId: '',
+    timestamp: new Date().toISOString()
+  }
+
+  try {
+    // Fetch all models for the authenticated user
+    const { data: models, error: dbError } = await supabaseServer
+      .from('models')
+      .select('id, name, latest_version, created_at, updated_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+
+    if (dbError) {
+      return {
+        ...baseResponse,
+        errors: [`Database error: ${dbError.message}`]
+      }
+    }
+
+    return {
+      ...baseResponse,
+      success: true,
+      data: {
+        models: models || [],
+        count: models?.length || 0
+      }
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return {
+      ...baseResponse,
+      errors: [`Failed to list models: ${errorMessage}`]
+    }
   }
 }
 

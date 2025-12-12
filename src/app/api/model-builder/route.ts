@@ -1157,7 +1157,7 @@ export async function POST(request: NextRequest) {
         return errorResponse('Failed to create model version', 'VERSION_CREATE_FAILED', 500);
       }
       
-      // Return the created model
+      // Return the created model with explicit main sheet info for MCP guidance
       return successResponse({
         id: newModel.id,
         name: newModel.name,
@@ -1165,7 +1165,12 @@ export async function POST(request: NextRequest) {
         latest_version: newModel.latest_version,
         created_at: newModel.created_at,
         updated_at: newModel.updated_at,
-        initialData: initialModelData
+        initialData: initialModelData,
+        // Explicit main sheet info for easier MCP usage
+        mainSheet: {
+          id: 'main',
+          name: 'Main'
+        }
       }, 201);
     }
     

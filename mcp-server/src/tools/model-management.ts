@@ -1,11 +1,12 @@
 // mcp-server/src/tools/model-management.ts
 import { ToolWithHandler } from '../types.js';
 import { modelBuilderClient } from '../modelBuilderClient.js';
+import { apiClient } from '../client.js';
 import { config } from '../config.js';
 
 export const createModelTool: ToolWithHandler = {
   name: 'create_model',
-  description: 'Create a new empty model. The owner will be determined by the API token used.',
+  description: 'Create a new model with an initial "Main" sheet. The owner will be determined by the API token used. The response includes mainSheet info with the sheetId needed to add blocks.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -26,7 +27,7 @@ export const createModelTool: ToolWithHandler = {
 
       // userId is derived from the API token - never passed explicitly
       const response = await modelBuilderClient.createModel(name);
-      
+
       if (!response.success) {
         return {
           success: false,
@@ -35,11 +36,25 @@ export const createModelTool: ToolWithHandler = {
         };
       }
 
-      return {
+      const data = response.data as any;
+      const result: any = {
         success: true,
-        modelId: (response.data as any)?.id,
-        model: response.data
+        modelId: data?.id,
+        model: {
+          id: data?.id,
+          name: data?.name,
+          latest_version: data?.latest_version,
+          created_at: data?.created_at
+        }
       };
+
+      // Include main sheet info for easier guidance
+      if (data?.mainSheet) {
+        result.mainSheet = data.mainSheet;
+        result.hint = `Model created with main Sheet '${data.mainSheet.name}' (ID: ${data.mainSheet.id}). Start with this sheetId to add blocks to the Model. You mey add more Sheets and interconnect signals with Sheet Labels to accomodate a larger Model.`;
+      }
+
+      return result;
     } catch (error) {
       console.error('[create_model] Error:', error);
       return {
@@ -97,19 +112,32 @@ export const getModelTool: ToolWithHandler = {
 
 export const listModelsTool: ToolWithHandler = {
   name: 'list_models',
-  description: 'List all models owned by the authenticated user (derived from API token)',
+  description: 'List all Models owned by the authenticated user (derived from API token)',
   inputSchema: {
     type: 'object',
     properties: {}
   },
   handler: async (_args: any) => {
     try {
-      // Note: The Model Builder API doesn't have a list models endpoint
-      // This would need to be implemented in the main app first
+      if (config.debug) {
+        console.error('[list_models] Fetching models for authenticated user');
+      }
+
+      const response = await apiClient.listModels();
+
+      if (!response.success) {
+        return {
+          success: false,
+          error: response.error || 'Failed to list models',
+          errors: response.errors
+        };
+      }
+
+      const data = response.data as any;
       return {
-        success: false,
-        error: 'List models operation not yet supported by Model Builder API',
-        note: 'This operation requires direct database access or a new API endpoint'
+        success: true,
+        models: data?.models || [],
+        count: data?.count || 0
       };
     } catch (error) {
       console.error('[list_models] Error:', error);
@@ -123,7 +151,7 @@ export const listModelsTool: ToolWithHandler = {
 
 export const deleteModelTool: ToolWithHandler = {
   name: 'delete_model',
-  description: 'Delete a model and all its data',
+  description: 'Delete a Model and all its data',
   inputSchema: {
     type: 'object',
     properties: {

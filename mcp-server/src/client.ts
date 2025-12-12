@@ -17,8 +17,8 @@ export interface APIResponse<T = any> {
 }
 
 export interface AutomationRequest {
-  action: 'generateCode' | 'simulate' | 'validateModel';
-  modelId: string;
+  action: 'generateCode' | 'simulate' | 'validateModel' | 'listModels';
+  modelId?: string;
   version?: number;
   parameters?: Record<string, any>;
 }
@@ -165,6 +165,87 @@ export class AutomationAPIClient {
    */
   async validateModel(modelId: string, version?: number): Promise<APIResponse> {
     return this.request('validateModel', modelId, undefined, version);
+  }
+
+  /**
+   * List all models owned by the authenticated user
+   */
+  async listModels(): Promise<APIResponse> {
+    const url = `${this.baseUrl}/api/automations`;
+
+    if (config.debug) {
+      console.error(`[AutomationAPI] Making listModels request:`, {
+        url,
+        token: maskToken(this.token)
+      });
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.token}`
+        },
+        body: JSON.stringify({
+          action: 'listModels'
+        })
+      });
+
+      const responseText = await response.text();
+
+      if (config.debug) {
+        console.error(`[AutomationAPI] Response status: ${response.status}`);
+        console.error(`[AutomationAPI] Response body length: ${responseText.length} chars`);
+      }
+
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (e) {
+        if (!response.ok) {
+          return {
+            success: false,
+            error: `API request failed: ${response.status} ${response.statusText}`,
+            errors: [responseText]
+          };
+        }
+        return {
+          success: true,
+          data: responseText
+        };
+      }
+
+      if (config.debug) {
+        console.error(`[AutomationAPI] Parsed response:`, JSON.stringify(responseData, null, 2));
+      }
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: responseData.error || `API request failed: ${response.status}`,
+          errors: responseData.errors || [responseData.error || 'Unknown error'],
+          code: responseData.code,
+          details: responseData.details
+        };
+      }
+
+      return {
+        success: responseData.success !== false,
+        data: responseData.data || responseData,
+        errors: responseData.errors,
+        code: responseData.code,
+        details: responseData.details
+      };
+
+    } catch (error) {
+      console.error('[AutomationAPI] listModels request failed:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errors: [error instanceof Error ? error.message : 'Unknown error']
+      };
+    }
   }
 
   /**
