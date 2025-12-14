@@ -11,9 +11,9 @@
 'use client'
 
 import { useState } from 'react'
-import { Alert, Stack, Text, List, Button, Collapse, Code, Badge, Group } from '@mantine/core'
-import { IconAlertTriangle, IconAlertCircle, IconChevronDown, IconChevronUp, IconBug } from '@tabler/icons-react'
-import { parseWasmError, getErrorSummary, shouldShowDetails, type ParsedWasmError } from '@/lib/wasm/WasmErrorParser'
+import { Alert, Stack, Text, List, Button, Code, Badge, Group, Modal, ActionIcon, ScrollArea } from '@mantine/core'
+import { IconAlertTriangle, IconAlertCircle, IconBug, IconCopy, IconCheck, IconX } from '@tabler/icons-react'
+import { parseWasmError, type ParsedWasmError } from '@/lib/wasm/WasmErrorParser'
 
 interface WasmErrorDisplayProps {
   error: string
@@ -22,13 +22,44 @@ interface WasmErrorDisplayProps {
 }
 
 export default function WasmErrorDisplay({ error, details, onDismiss }: WasmErrorDisplayProps) {
-  const [showDetails, setShowDetails] = useState(false)
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   // Parse the error
   const parsedError: ParsedWasmError = parseWasmError(error, details)
 
-  // Auto-show details for non-user-fixable errors
-  const autoShowDetails = shouldShowDetails(parsedError)
+  const handleCopyAll = async () => {
+    const parts: string[] = [
+      `WASM Compilation Error`,
+      `${'='.repeat(25)}`,
+      `Category: ${parsedError.category}`,
+      `Severity: ${parsedError.severity}`,
+      ``,
+      `Title: ${parsedError.title}`,
+      `Message: ${parsedError.message}`,
+    ]
+
+    if (parsedError.blockName) {
+      parts.push(`Affected Block: ${parsedError.blockName}`)
+    }
+
+    if (parsedError.suggestions.length > 0) {
+      parts.push(``, `Suggestions:`)
+      parsedError.suggestions.forEach((s, i) => parts.push(`  ${i + 1}. ${s}`))
+    }
+
+    if (parsedError.rawError) {
+      parts.push(``, `Technical Details:`, parsedError.rawError)
+    }
+
+    if (parsedError.lineNumber) {
+      parts.push(``, `Error at line ${parsedError.lineNumber} in generated C code`)
+    }
+
+    await navigator.clipboard.writeText(parts.join('\n'))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const severityColor = parsedError.severity === 'error' ? 'red' : 'orange'
   const severityIcon = parsedError.severity === 'error' ? <IconAlertCircle size={20} /> : <IconAlertTriangle size={20} />
@@ -76,30 +107,16 @@ export default function WasmErrorDisplay({ error, details, onDismiss }: WasmErro
           </div>
         )}
 
-        {/* Technical details (expandable) */}
+        {/* Show Details button */}
         {parsedError.rawError && (
-          <div>
-            <Button
-              variant="subtle"
-              size="xs"
-              leftSection={showDetails || autoShowDetails ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
-              rightSection={<IconBug size={14} />}
-              onClick={() => setShowDetails(!showDetails)}
-            >
-              {showDetails || autoShowDetails ? 'Hide' : 'Show'} Technical Details
-            </Button>
-
-            <Collapse in={showDetails || autoShowDetails} mt="xs">
-              <Code block style={{ maxHeight: '200px', overflow: 'auto', fontSize: '11px' }}>
-                {parsedError.rawError}
-              </Code>
-              {parsedError.lineNumber && (
-                <Text size="xs" c="dimmed" mt="xs">
-                  Error at line {parsedError.lineNumber} in generated C code
-                </Text>
-              )}
-            </Collapse>
-          </div>
+          <Button
+            variant="subtle"
+            size="xs"
+            leftSection={<IconBug size={14} />}
+            onClick={() => setDetailsModalOpen(true)}
+          >
+            Show Details
+          </Button>
         )}
 
         {/* Fallback notice */}
@@ -109,6 +126,84 @@ export default function WasmErrorDisplay({ error, details, onDismiss }: WasmErro
           </Text>
         )}
       </Stack>
+
+      {/* Details Modal */}
+      <Modal
+        opened={detailsModalOpen}
+        onClose={() => setDetailsModalOpen(false)}
+        title={
+          <Group gap="xs">
+            <IconBug size={20} />
+            <Text fw={600}>WASM Error Details</Text>
+            <Badge size="xs" color={severityColor} variant="dot">
+              {parsedError.category}
+            </Badge>
+          </Group>
+        }
+        size="lg"
+        centered
+        closeButtonProps={{
+          icon: <IconX size={16} />
+        }}
+      >
+        <Stack gap="md">
+          {/* Header with copy button */}
+          <Group justify="space-between">
+            <Text fw={500}>{parsedError.title}</Text>
+            <ActionIcon
+              variant="subtle"
+              color={copied ? 'green' : 'gray'}
+              onClick={handleCopyAll}
+              title="Copy error details to clipboard"
+            >
+              {copied ? <IconCheck size={18} /> : <IconCopy size={18} />}
+            </ActionIcon>
+          </Group>
+
+          {/* Error message */}
+          <Text size="sm">{parsedError.message}</Text>
+
+          {/* Block name if available */}
+          {parsedError.blockName && (
+            <Text size="sm" c="dimmed">
+              Affected block: <Text span fw={600}>{parsedError.blockName}</Text>
+            </Text>
+          )}
+
+          {/* Suggestions */}
+          {parsedError.suggestions.length > 0 && (
+            <div>
+              <Text size="sm" fw={600} mb="xs">
+                {parsedError.isUserFixable ? 'How to fix:' : 'What to try:'}
+              </Text>
+              <List size="sm" spacing="xs">
+                {parsedError.suggestions.map((suggestion, index) => (
+                  <List.Item key={index}>
+                    <Text size="sm">{suggestion}</Text>
+                  </List.Item>
+                ))}
+              </List>
+            </div>
+          )}
+
+          {/* Technical details */}
+          {parsedError.rawError && (
+            <div>
+              <Text size="sm" fw={600} mb="xs">Technical Details:</Text>
+              <ScrollArea h={300}>
+                <Code block style={{ fontSize: '11px' }}>
+                  {parsedError.rawError}
+                </Code>
+              </ScrollArea>
+              {parsedError.lineNumber && (
+                <Text size="xs" c="dimmed" mt="xs">
+                  Error at line {parsedError.lineNumber} in generated C code
+                </Text>
+              )}
+            </div>
+          )}
+        </Stack>
+      </Modal>
     </Alert>
   )
 }
