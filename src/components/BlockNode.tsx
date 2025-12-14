@@ -545,9 +545,9 @@ const portSignStyles = `
 
   .port-name-label {
     position: absolute;
-    font-size: 0.375rem;
-    line-height: 0.5rem;
-    color: #4b5563;
+    font-size: 0.5rem;
+    line-height: 0.625rem;
+    color: #374151;
     pointer-events: none;
     white-space: nowrap;
   }
@@ -555,13 +555,13 @@ const portSignStyles = `
   .port-name-label.input {
     right: 100%;
     text-align: right;
-    margin-right: 4px;
+    margin-right: 6px;
   }
 
   .port-name-label.output {
     left: 100%;
     text-align: left;
-    margin-left: 4px;
+    margin-left: 6px;
   }
 `
 
@@ -926,20 +926,27 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           <>
             {/* Input port name labels */}
             {Array.from({ length: inputCount }).map((_, index) => {
-              const portName = getConnectedPortName(
-                data.id,
-                index,
-                true, // isInput
-                data.allWires || [],
-                data.allBlocks || []
-              )
+              // For subsystems, use the port labels from parameters directly
+              let portName: string | null = null
+              if (isSubsystem) {
+                const inputPorts = data.parameters?.inputPorts || []
+                portName = inputPorts[index] || null
+              } else {
+                portName = getConnectedPortName(
+                  data.id,
+                  index,
+                  true, // isInput
+                  data.allWires || [],
+                  data.allBlocks || []
+                )
+              }
               if (!portName) return null
               return (
                 <div
                   key={`input-label-${index}`}
                   className="port-name-label input"
                   style={{
-                    top: calculatePortPosition(index, inputCount, minHeight) - 8,
+                    top: calculatePortPosition(index, inputCount, minHeight) - 10,
                   }}
                 >
                   {portName}
@@ -949,20 +956,27 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
 
             {/* Output port name labels - skip for sum blocks */}
             {data.type !== 'sum' && Array.from({ length: outputCount }).map((_, index) => {
-              const portName = getConnectedPortName(
-                data.id,
-                index,
-                false, // isOutput
-                data.allWires || [],
-                data.allBlocks || []
-              )
+              // For subsystems, use the port labels from parameters directly
+              let portName: string | null = null
+              if (isSubsystem) {
+                const outputPorts = data.parameters?.outputPorts || []
+                portName = outputPorts[index] || null
+              } else {
+                portName = getConnectedPortName(
+                  data.id,
+                  index,
+                  false, // isOutput
+                  data.allWires || [],
+                  data.allBlocks || []
+                )
+              }
               if (!portName) return null
               return (
                 <div
                   key={`output-label-${index}`}
                   className="port-name-label output"
                   style={{
-                    top: calculatePortPosition(index, outputCount, minHeight) - 8,
+                    top: calculatePortPosition(index, outputCount, minHeight) - 12,
                   }}
                 >
                   {portName}
