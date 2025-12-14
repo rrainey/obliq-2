@@ -118,13 +118,6 @@ export default function WasmErrorDisplay({ error, details, onDismiss }: WasmErro
             Show Details
           </Button>
         )}
-
-        {/* Fallback notice */}
-        {parsedError.severity === 'error' && (
-          <Text size="xs" c="dimmed" fs="italic">
-            The simulation will automatically fall back to the JavaScript engine.
-          </Text>
-        )}
       </Stack>
 
       {/* Details Modal */}
