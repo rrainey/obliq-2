@@ -2,7 +2,7 @@
 
 A web-based visual modeling and simulation tool that enables users to construct, test, and simulate block diagram models directly in the browser, then generate C code for embedded deployment.
 
-> **Note**: This project was almost entirely generated using Claude Opus 4 LLM.
+> **Important Note**: This project was almost entirely generated using Claude Opus and Sonnet 4 LLMs.  It is an exploration of how LLMs might help humans generate - the code this application generates and the overall security of the application have not been formally verified. **In short, you'd be crazy to try to use this application for anything other than research.**
 
 ## Overview
 
@@ -16,24 +16,24 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 - **Drag-and-drop interface** for building block diagrams
 - **Multiple block types** including:
   - Mathematical operations (Sum, Multiply, Matrix Multiply, Scale, Trig functions, Vector functions, general math expressions)
-  - Dynamic systems (Laplace Transfer Functions with RK4 integration)
-  - Signal routing (Input/Output Ports, Sheet Labels)
+  - Dynamic systems (Integrators and Laplace Transfer Functions)
   - Data operations (1D/2D Lookup Tables)
   - Visualization (Signal Display with plotting)
   - Signal generation (Source blocks for constants and generators)
   - Hierarchical composition (Subsystem blocks)
   - Conditional Signal Flow Control
+  - Signal type conversion
 
-### Signal Type System
+### Multiple Signal Types: Scalars, Vectors, and Matricies
 - Support for C-style data types: `float`, `double`, `long`, `bool`
 - 1D vector and 2D matrix support (e.g., `double[3]`, `float[3][3]`)
 - Automatic type propagation through connections
 - Type validation with visual error indicators
 
 ### Simulation Engine
-- **Client-side simulation** for responsive interaction
+- **Client-side simulation** - Models are compiled dynamically and executed as [Web Assemblies](https://webassembly.org/)
 - Real-time signal visualization with Recharts
-- Configurable time steps and duration
+- Configurable time steps, duration, and integration methods
 - Signal logging with CSV export capability
 - Support for both continuous and discrete-time systems
 
@@ -41,7 +41,7 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 - **PlatformIO-compatible C code** generation
 - Preserves signal and block names for readable code
 - Generates structured APIs with input/output/state structs
-- Support for Runge-Kutta 4th order integration in generated code
+- Support for Runge-Kutta 4th order or Euler integration in generated code
 
 ### Multi-User Support
 - User authentication via Supabase
@@ -49,15 +49,16 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 - Auto-save functionality every 5 minutes
 - Model management dashboard
 
-### Automation API
-- RESTful API for CI/CD integration
-- Supports automated validation, simulation, and code generation
+### Automation and Model Building APIs + MCP Server
+- RESTful API for CI/CD integration and model building
+- Supports construction, automated validation, simulation, and code generation
 - Token-based authentication for external systems
 - per-user API Key management
+- Includes an MCP server capable of interacting with these APIs
 
 ## Tech Stack
 
-- **Frontend**: Next.js (App Router), React, ReactFlow, TypeScript
+- **Frontend**: Mantine, Next.js (App Router), React, ReactFlow, TypeScript
 - **Backend**: Next.js API Routes (serverless functions)
 - **Database**: Supabase (PostgreSQL with JSONB for model storage)
 - **Authentication**: Supabase Auth
@@ -68,14 +69,14 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 ## Installation
 
 ### Prerequisites
-- Node.js 18+ and npm/yarn
+- Node.js 20+ and npm/yarn
 - Supabase account (or local Supabase instance)
 
 ### Setup
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/obliq-2.git
+git clone https://github.com/rrainey/obliq-2.git
 cd obliq-2
 ```
 
@@ -161,131 +162,103 @@ npm run lint
 ## Project Structure
 
 ```
-Directory structure:
-└── obliq-2/
-    ├── README.md
-    ├── eslint.config.mjs
-    ├── jest.config.js
-    ├── jest.setup.js
-    ├── LICENSE
-    ├── next-env.d.ts
-    ├── next.config.ts
-    ├── package.json
-    ├── postcss.config.mjs
-    ├── tsconfig.json
-    ├── __tests__/
-    │   ├── modelBuilderApi.test.ts
-    │   ├── modelBuilderApi.unit.test.ts
-    │   ├── modelMigration.test.ts
-    │   ├── modelSchema.test.ts
-    │   ├── multiSheetSimulation.test.ts
-    │   ├── sheetLabels.test.ts
-    │   ├── signalTypeIntegration.test.ts
-    │   ├── signalTypePropagator.test.ts
-    │   ├── typeCompatibityValidator.ts
-    │   ├── typeValidator.test.ts
-    │   └── integration/
-    │       └── code-generation/
-    │           ├── code-compilation.test.ts
-    │           ├── Dockerfile.platformio
-    │           ├── setup-docker-tests.sh
-    │           ├── models/
-    │           └── platformio-test/
-    ├── database-scripts/
-    │   ├── setup.sql
-    │   └── versioning.sql
-    ├── design/
-    │   ├── architecture.md
-    │   ├── expanded-code-generation.md
-    │   ├── expanded-simulation.md
-    │   ├── subsystem-tasks.md
-    │   └── tasks.md
-    ├── docs/
-    │   ├── automation-api.md
-    │   └── model-builder-api.md
-    ├── examples/
-    ├── mcp-server/
-    └── src/
-        ├── app/
-        │   ├── globals.css
-        │   ├── layout.tsx
-        │   ├── page.tsx
-        │   ├── admin/
-        │   │   └── api-metrics/
-        │   │       └── page.tsx
-        │   ├── api/
-        │   │   ├── automations/
-        │   │   │   └── [token]/
-        │   │   │       └── route.ts
-        │   │   ├── generate-code/
-        │   │   │   └── route.ts
-        │   │   └── model-builder/
-        │   │       └── [token]/
-        │   │           └── route.ts
-        │   ├── login/
-        │   │   └── page.tsx
-        │   └── models/
-        │       ├── page.tsx
-        │       └── [id]/
-        │           └── page.tsx
-        ├── components/
-        │   ├── BlockContextMenu.tsx
-        │   ├── BlockLibrarySidebar.tsx
-        │   ├── BlockNode.tsx
-        │   ├── CanvasReactFlow.tsx
-        │   ├── CustomEdge.tsx
-        │   ├── InputPortConfig.tsx
-        │   ├── Lookup1DConfig.tsx
-        │   ├── Lookup2DConfig.tsx
-        │   ├── ModelBuilderMetricsViewer.tsx
-        │   ├── ModelValidationButton.tsx
-        │   ├── ModelValidationModal.tsx
-        │   ├── ScaleConfig.tsx
-        │   ├── SheetBreadcrumbs.tsx
-        │   ├── SheetLabelSinkConfig.tsx
-        │   ├── SheetLabelSourceConfig.tsx
-        │   ├── SheetTabs.tsx
-        │   ├── SignalDisplay.tsx
-        │   ├── SimulationDisplayPanel.tsx
-        │   ├── SourceConfig.tsx
-        │   ├── SubsystemConfig.tsx
-        │   ├── ThemeToggle.tsx
-        │   ├── TransferFunctionConfig.tsx
-        │   └── Wire.tsx
-        ├── hooks/
-        │   └── useWireValidation.ts
-        ├── lib/
-        │   ├── apiErrorHandler.ts
-        │   ├── auth.tsx
-        │   ├── blockParameterValidator.ts
-        │   ├── blockTypeRegistry.ts
-        │   ├── codeGeneration.ts
-        │   ├── connectionValidation.ts
-        │   ├── defaultModel.ts
-        │   ├── middleware.ts
-        │   ├── modelBuilderApiClient.ts
-        │   ├── modelBuilderApiErrorCodes.ts
-        │   ├── modelBuilderApiHelpers.ts
-        │   ├── modelBuilderApiMetrics.ts
-        │   ├── modelBuilderApiTypes.ts
-        │   ├── modelSchema.ts
-        │   ├── modelStore.ts
-        │   ├── multiSheetSimulation.ts
-        │   ├── multiSheetTypeValidator.ts
-        │   ├── navigationUtils.ts
-        │   ├── sheetLabelUtils.ts
-        │   ├── signalTypePropagation.ts
-        │   ├── simulationEngine.ts
-        │   ├── supabaseClient.ts
-        │   ├── themeContext.tsx
-        │   ├── typeCompatibilityValidator.ts
-        │   ├── types.ts
-        │   ├── typeValidator.ts
-        │   └── useAutoSave.ts
-        └── types/
-            └── env.d.ts
-
-
+obliq-2/
+├── src/
+│   ├── app/                          # Next.js App Router pages
+│   │   ├── api/
+│   │   │   ├── automations/          # Automation API (CI/CD, external triggers)
+│   │   │   ├── compile-wasm/         # WASM compilation endpoint
+│   │   │   ├── compile-wasm-stream/  # SSE-based WASM compilation
+│   │   │   ├── generate-code/        # C code generation endpoint
+│   │   │   ├── model-builder/        # Model Builder API (programmatic model construction)
+│   │   │   └── tokens/               # API token management
+│   │   ├── admin/                    # Admin pages (API metrics)
+│   │   ├── login/                    # Authentication page
+│   │   ├── models/                   # Model editor and dashboard
+│   │   └── tokens/                   # Token management UI
+│   │
+│   ├── components/                   # React components
+│   │   ├── BlockNode.tsx             # Main block rendering component
+│   │   ├── CanvasReactFlow.tsx       # ReactFlow canvas wrapper
+│   │   ├── BlockLibrarySidebar.tsx   # Drag-and-drop block palette
+│   │   ├── SignalDisplay.tsx         # Real-time signal visualization
+│   │   ├── SimulationDisplayPanel.tsx
+│   │   ├── *Config.tsx               # Block configuration dialogs
+│   │   └── ...
+│   │
+│   ├── lib/
+│   │   ├── blocks/                   # Block module implementations
+│   │   │   ├── BlockModule.ts        # Base block interface
+│   │   │   ├── BlockModuleFactory.ts # Factory for creating block modules
+│   │   │   └── *BlockModule.ts       # Individual block implementations
+│   │   │
+│   │   ├── codegen/                  # C code generation pipeline
+│   │   │   ├── CodeGenerator.ts      # Main code generator orchestrator
+│   │   │   ├── ModelFlattener.ts     # Flattens hierarchical models
+│   │   │   ├── AlgebraicEvaluator.ts # Topological sort and evaluation order
+│   │   │   ├── StateIntegrator.ts    # RK4 integration code generation
+│   │   │   ├── HeaderGenerator.ts    # Header file generation
+│   │   │   ├── SubsystemCodeGenerator.ts  # Segregated subsystem support
+│   │   │   └── ...
+│   │   │
+│   │   ├── simulation/               # Browser-side simulation engine
+│   │   │   ├── WasmSimulationEngine.ts    # WASM-based simulation
+│   │   │   ├── SimulationWorker.ts        # Web Worker for off-main-thread
+│   │   │   ├── SimulationWorkerManager.ts # Worker lifecycle management
+│   │   │   └── SimulationEngineFactory.ts # Factory for engine creation
+│   │   │
+│   │   ├── wasm/                     # WebAssembly infrastructure
+│   │   │   ├── ServerWasmExecutor.ts # Server-side WASM execution
+│   │   │   ├── WasmErrorParser.ts    # Emscripten error parsing
+│   │   │   ├── cache/                # WASM module caching (Supabase Storage)
+│   │   │   └── codegen/              # WASM-specific code generation
+│   │   │
+│   │   ├── blockTypeRegistry.ts      # Block type definitions and metadata
+│   │   ├── blockFactory.ts           # Unified block creation
+│   │   ├── blockParameterValidator.ts # Parameter validation/sanitization
+│   │   ├── modelStore.ts             # Zustand state management
+│   │   ├── signalTypePropagation.ts  # Type inference through connections
+│   │   ├── connectionValidation.ts   # Wire validation logic
+│   │   ├── c99Expression*.ts         # C99 expression parser/evaluator
+│   │   └── ...
+│   │
+│   ├── hooks/                        # React hooks
+│   └── types/                        # TypeScript type definitions
+│
+├── mcp-server/                       # MCP Server (Model Context Protocol)
+│   └── src/
+│       ├── index.ts                  # Server entry point (STDIO + HTTP modes)
+│       ├── tools/
+│       │   ├── model-management.ts   # create_model, get_model, list_models
+│       │   ├── model-construction.ts # add_block, add_connection, etc.
+│       │   ├── block-types.ts        # list_block_types (parameter discovery)
+│       │   ├── simulation.ts         # run_simulation
+│       │   ├── code-generation.ts    # generate_code
+│       │   ├── validation.ts         # validate_model
+│       │   └── batch-operations.ts   # batch_execute
+│       ├── modelBuilderClient.ts     # Model Builder API client
+│       └── client.ts                 # Automation API client
+│
+├── __tests__/                        # Test suites
+│   ├── blocks/                       # Block module unit tests
+│   ├── codegen/                      # Code generation tests
+│   ├── simulation/                   # Simulation engine tests
+│   ├── wasm/                         # WASM compilation and execution tests
+│   ├── integration/                  # Integration tests (Docker/PlatformIO)
+│   └── utils/                        # Test utilities (TestModelBuilder, etc.)
+│
+├── design/                           # Architecture documentation
+│   └── 00-architecture.md            # Comprehensive system architecture
+│
+├── docs/                             # API documentation
+│   ├── automation-api.md
+│   ├── model-builder-api.md
+│   └── wasm-*.md                     # WASM documentation
+│
+├── examples/                         # Example scripts
+│   └── model-builder-api/            # API usage examples
+│
+└── database-scripts/                 # Supabase SQL setup
 ```
 
 ## Testing
