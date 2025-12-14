@@ -287,7 +287,7 @@ export const deleteBlockTool: ToolWithHandler = {
 
 export const addConnectionTool: ToolWithHandler = {
   name: 'add_connection',
-  description: 'Add a wire connection between two blocks',
+  description: 'Add a wire connection between two blocks. Specify ports by index (preferred) or by name.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -303,25 +303,47 @@ export const addConnectionTool: ToolWithHandler = {
         type: 'string',
         description: 'ID of the source block'
       },
+      sourcePortIndex: {
+        type: 'number',
+        description: 'Index of the source output port (0-based, preferred)'
+      },
       sourcePort: {
         type: 'string',
-        description: 'Name/index of the source port'
+        description: 'Name of the source port (alternative to sourcePortIndex)'
       },
       targetBlockId: {
         type: 'string',
         description: 'ID of the target block'
       },
+      targetPortIndex: {
+        type: 'number',
+        description: 'Index of the target input port (0-based, preferred)'
+      },
       targetPort: {
         type: 'string',
-        description: 'Name/index of the target port'
+        description: 'Name of the target port (alternative to targetPortIndex)'
       }
     },
-    required: ['modelId', 'sheetId', 'sourceBlockId', 'sourcePort', 'targetBlockId', 'targetPort']
+    required: ['modelId', 'sheetId', 'sourceBlockId', 'targetBlockId']
   },
   handler: async (args: any) => {
     try {
-      const { modelId, sheetId, sourceBlockId, sourcePort, targetBlockId, targetPort } = args;
-      
+      const { modelId, sheetId, sourceBlockId, sourcePortIndex, sourcePort, targetBlockId, targetPortIndex, targetPort } = args;
+
+      // Validate that at least one port specifier is provided for each end
+      if (sourcePortIndex === undefined && !sourcePort) {
+        return {
+          success: false,
+          error: 'Either sourcePortIndex or sourcePort must be provided'
+        };
+      }
+      if (targetPortIndex === undefined && !targetPort) {
+        return {
+          success: false,
+          error: 'Either targetPortIndex or targetPort must be provided'
+        };
+      }
+
       if (config.debug) {
         console.error('[add_connection] Adding connection:', args);
       }
@@ -330,11 +352,13 @@ export const addConnectionTool: ToolWithHandler = {
         modelId,
         sheetId,
         sourceBlockId,
+        sourcePortIndex,
         sourcePort,
         targetBlockId,
+        targetPortIndex,
         targetPort
       );
-      
+
       if (!response.success) {
         return {
           success: false,
@@ -345,8 +369,8 @@ export const addConnectionTool: ToolWithHandler = {
 
       return {
         success: true,
-        connectionId: (response.data as any)?.id,
-        connection: response.data
+        connectionId: (response.data as any)?.connection?.id,
+        connection: (response.data as any)?.connection
       };
     } catch (error) {
       console.error('[add_connection] Error:', error);

@@ -3,6 +3,7 @@
 import { Sheet } from '@/lib/simulationEngine'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
+import { createBlock } from '@/lib/blockFactory'
 
 export interface TestModelMetadata {
   testInputs?: { [portName: string]: number | number[] | boolean }
@@ -132,7 +133,7 @@ export class TestModelBuilder {
    * Add an input port block
    */
   addInput(portName: string, dataType: string = 'double'): this {
-    const block = this.createBlock('input_port', portName, {
+    const block = this.createBlockInstance('input_port', portName, {
       portName,
       dataType,
       defaultValue: 0
@@ -145,7 +146,7 @@ export class TestModelBuilder {
    * Add an output port block
    */
   addOutput(portName: string, result?: BlockData[]): this {
-    const block = this.createBlock('output_port', portName, {
+    const block = this.createBlockInstance('output_port', portName, {
       portName
     })
     this.addBlockToCurrentSheet(block)
@@ -179,7 +180,7 @@ export class TestModelBuilder {
         }
         parameters.dataType = dataType
 
-        const block = this.createBlock(blockType, name, parameters)
+        const block = this.createBlockInstance(blockType, name, parameters)
         this.addBlockToCurrentSheet(block)
 
         if (result) {
@@ -192,7 +193,7 @@ export class TestModelBuilder {
      * Add a sum block
      */
     addSum(signs: string = '++', result?: BlockData[]): this {
-        const block = this.createBlock('sum', this.generateBlockName('sum'), {
+        const block = this.createBlockInstance('sum', this.generateBlockName('sum'), {
             signs,
             numInputs: signs.length
         })
@@ -207,7 +208,7 @@ export class TestModelBuilder {
    * Add a multiply block
    */
   addMultiply(numInputs: number = 2, result?: BlockData[]): this {
-    const block = this.createBlock('multiply', this.generateBlockName('multiply'), { 
+    const block = this.createBlockInstance('multiply', this.generateBlockName('multiply'), { 
       inputs: numInputs 
     })
     this.addBlockToCurrentSheet(block)
@@ -221,7 +222,7 @@ export class TestModelBuilder {
    * Add a scale block
    */
   addScale(gain: number, result?: BlockData[]): this {
-    const block = this.createBlock('scale', this.generateBlockName('scale'), { gain })
+    const block = this.createBlockInstance('scale', this.generateBlockName('scale'), { gain })
     this.addBlockToCurrentSheet(block)
     if (result) {
       result.push(block)
@@ -233,7 +234,7 @@ export class TestModelBuilder {
    * Add a transfer function block
    */
   addTransferFunction(numerator: number[], denominator: number[], result?: BlockData[]): this {
-    const block = this.createBlock('transfer_function', this.generateBlockName('transfer_function'), {
+    const block = this.createBlockInstance('transfer_function', this.generateBlockName('transfer_function'), {
       numerator,
       denominator
     })
@@ -248,7 +249,7 @@ export class TestModelBuilder {
    * Add a 1D lookup table
    */
   addLookup1D(inputValues: number[], outputValues: number[], extrapolation: string = 'clamp', result?: BlockData[]): this {
-    const block = this.createBlock('lookup_1d', this.generateBlockName('lookup_1d'), {
+    const block = this.createBlockInstance('lookup_1d', this.generateBlockName('lookup_1d'), {
       inputValues,
       outputValues,
       extrapolation
@@ -270,7 +271,7 @@ export class TestModelBuilder {
         extrapolation: string = 'clamp',
         result?: BlockData[]
     ): this {
-        const block = this.createBlock('lookup_2d', this.generateBlockName('lookup_2d'), {
+        const block = this.createBlockInstance('lookup_2d', this.generateBlockName('lookup_2d'), {
             input1Values,
             input2Values,
             outputTable,
@@ -290,7 +291,7 @@ export class TestModelBuilder {
      * Add a matrix multiply block
      */
     addMatrixMultiply(result?: BlockData[]): this {
-        const block = this.createBlock('matrix_multiply', this.generateBlockName('matrix_multiply'), {})
+        const block = this.createBlockInstance('matrix_multiply', this.generateBlockName('matrix_multiply'), {})
         this.addBlockToCurrentSheet(block)
         if (result) {
             result.push(block)
@@ -302,7 +303,7 @@ export class TestModelBuilder {
    * Add a mux block
    */
   addMux(rows: number, cols: number, result?: BlockData[]): this {
-    const block = this.createBlock('mux', this.generateBlockName('mux'), {
+    const block = this.createBlockInstance('mux', this.generateBlockName('mux'), {
       rows,
       cols
     })
@@ -317,7 +318,7 @@ export class TestModelBuilder {
    * Add a demux block
    */
   addDemux(result?: BlockData[]): this {
-    const block = this.createBlock('demux', this.generateBlockName('demux'), {})
+    const block = this.createBlockInstance('demux', this.generateBlockName('demux'), {})
     this.addBlockToCurrentSheet(block)
     if (result) {
       result.push(block)
@@ -329,7 +330,7 @@ export class TestModelBuilder {
    * Add a sheet label sink
    */
   addSheetLabelSink(signalName: string, result?: BlockData[]): this {
-    const block = this.createBlock('sheet_label_sink', this.generateBlockName('sheet_label_sink'), {
+    const block = this.createBlockInstance('sheet_label_sink', this.generateBlockName('sheet_label_sink'), {
       signalName
     })
     this.addBlockToCurrentSheet(block)
@@ -343,7 +344,7 @@ export class TestModelBuilder {
    * Add a sheet label source
    */
   addSheetLabelSource(signalName: string, result?: BlockData[]): this {
-    const block = this.createBlock('sheet_label_source', this.generateBlockName('sheet_label_source'), {
+    const block = this.createBlockInstance('sheet_label_source', this.generateBlockName('sheet_label_source'), {
       signalName
     })
     this.addBlockToCurrentSheet(block)
@@ -364,7 +365,7 @@ export class TestModelBuilder {
     showEnableInput: boolean = false, 
     result?: BlockData[]
   ): this {
-    const block = this.createBlock('subsystem', name, {
+    const block = this.createBlockInstance('subsystem', name, {
       inputPorts,
       outputPorts,
       sheets,
@@ -512,10 +513,9 @@ export class TestModelBuilder {
   }
 
   // Private helper methods
-  private createBlock(type: string, name: string, parameters: any): BlockData {
-    const id = `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  private createBlockInstance(type: string, name: string, parameters: any): BlockData {
     const position = { ...this.nextPosition }
-    
+
     // Update position for next block
     this.nextPosition.x += this.positionIncrement.x
     if (this.nextPosition.x > 800) {
@@ -523,13 +523,12 @@ export class TestModelBuilder {
       this.nextPosition.y += this.positionIncrement.y
     }
 
-    return {
-      id,
-      type,
+    // Use the unified block factory, merging provided parameters with defaults
+    return createBlock(type, {
       name,
       position,
       parameters
-    }
+    }) as BlockData
   }
 
   private addBlockToCurrentSheet(block: BlockData): void {

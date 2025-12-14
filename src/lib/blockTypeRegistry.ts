@@ -80,21 +80,35 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     displayName: 'Source',
     category: 'Sources',
     defaultParameters: {
-      value: '0.0',
+      signalType: 'constant',
+      value: 1,
+      stepTime: 1.0,
+      stepValue: 1.0,
+      slope: 1.0,
+      startTime: 0,
+      frequency: 1.0,
+      amplitude: 1.0,
+      phase: 0,
+      offset: 0,
+      f0: 0.1,
+      f1: 10,
+      duration: 10,
+      mean: 0,
       dataType: 'double'
     },
     inputs: [],
     outputs: [{ name: 'output' }],
     description: 'Provides a constant or signal generator output'
   },
-  
+
   [BlockTypes.INPUT_PORT]: {
     type: BlockTypes.INPUT_PORT,
     displayName: 'Input Port',
     category: 'Ports',
     defaultParameters: {
-      signalName: 'input',
-      dataType: 'double'
+      portName: 'Input',
+      dataType: 'double',
+      defaultValue: 0
     },
     inputs: [],
     outputs: [{ name: 'output' }],
@@ -137,7 +151,7 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     displayName: 'Scale',
     category: 'Math',
     defaultParameters: {
-      factor: 1.0
+      gain: 1
     },
     inputs: [{ name: 'input' }],
     outputs: [{ name: 'output' }],
@@ -214,7 +228,7 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     displayName: 'Output Port',
     category: 'Ports',
     defaultParameters: {
-      signalName: 'output'
+      portName: 'Output'
     },
     inputs: [{ name: 'input' }],
     outputs: [],
@@ -237,7 +251,9 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     type: BlockTypes.SIGNAL_LOGGER,
     displayName: 'Signal Logger',
     category: 'Sinks',
-    defaultParameters: {},
+    defaultParameters: {
+      maxSamples: 1000
+    },
     inputs: [{ name: 'input' }],
     outputs: [],
     description: 'Logs signal values for export'
@@ -315,14 +331,12 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     displayName: 'Demux',
     category: 'Matrix',
     defaultParameters: {
-      outputCount: 4 // Will be updated based on input
+      outputCount: 1,
+      inputDimensions: [1]
     },
     inputs: [{ name: 'input' }],
     outputs: [
-      { name: 'output1' },
-      { name: 'output2' },
-      { name: 'output3' },
-      { name: 'output4' }
+      { name: 'output1' }
     ], // Dynamic based on input dimensions
     description: 'Demultiplexer: splits a matrix into scalar outputs'
   },
@@ -332,7 +346,10 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     displayName: 'Subsystem',
     category: 'Hierarchical',
     defaultParameters: {
-      linkedSheetId: null
+      sheetId: '',
+      sheetName: 'Subsystem',
+      inputPorts: ['Input1'],
+      outputPorts: ['Output1']
     },
     inputs: [], // Dynamic based on subsystem content
     outputs: [], // Dynamic based on subsystem content
@@ -344,8 +361,9 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     displayName: 'Trig',
     category: 'Math',
     defaultParameters: {
-      numInputs: 1,
-      function: 'sin' 
+      function: 'sin',
+      inputPortName: 'Input1',
+      outputPortName: 'Output1'
     },
     inputs: [
       { name: 'input1' },
@@ -445,8 +463,8 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     displayName: 'Limit',
     category: 'Math',
     defaultParameters: {
-      lowerLimit: -Infinity,
-      upperLimit: Infinity
+      lowerLimit: -1,
+      upperLimit: 1
     },
     inputs: [{ name: 'input' }],
     outputs: [{ name: 'output' }],

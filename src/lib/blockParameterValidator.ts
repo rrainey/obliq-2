@@ -405,15 +405,52 @@ export function validateBlockParameters(
       break;
       
     case BlockTypes.SUBSYSTEM:
-      // Validate linkedSheetId
-      if (parameters.linkedSheetId !== undefined) {
-        if (parameters.linkedSheetId !== null && typeof parameters.linkedSheetId !== 'string') {
-          errors.push('linkedSheetId must be a string or null');
+      // Validate sheets array - subsystems must have embedded sheets
+      if (parameters.sheets !== undefined) {
+        if (!Array.isArray(parameters.sheets)) {
+          errors.push('sheets must be an array');
+        } else if (parameters.sheets.length === 0) {
+          errors.push('subsystem must have at least one sheet');
         } else {
-          sanitized.linkedSheetId = parameters.linkedSheetId;
+          sanitized.sheets = parameters.sheets;
         }
       } else {
-        sanitized.linkedSheetId = defaults.linkedSheetId;
+        errors.push('subsystem must have a sheets array');
+      }
+
+      // Validate inputPorts array
+      if (parameters.inputPorts !== undefined) {
+        if (!Array.isArray(parameters.inputPorts)) {
+          errors.push('inputPorts must be an array of strings');
+        } else if (!parameters.inputPorts.every((p: unknown) => typeof p === 'string')) {
+          errors.push('inputPorts must contain only strings');
+        } else {
+          sanitized.inputPorts = parameters.inputPorts;
+        }
+      } else {
+        sanitized.inputPorts = defaults.inputPorts;
+      }
+
+      // Validate outputPorts array
+      if (parameters.outputPorts !== undefined) {
+        if (!Array.isArray(parameters.outputPorts)) {
+          errors.push('outputPorts must be an array of strings');
+        } else if (!parameters.outputPorts.every((p: unknown) => typeof p === 'string')) {
+          errors.push('outputPorts must contain only strings');
+        } else {
+          sanitized.outputPorts = parameters.outputPorts;
+        }
+      } else {
+        sanitized.outputPorts = defaults.outputPorts;
+      }
+
+      // Validate showEnableInput (optional)
+      if (parameters.showEnableInput !== undefined) {
+        if (typeof parameters.showEnableInput !== 'boolean') {
+          errors.push('showEnableInput must be a boolean');
+        } else {
+          sanitized.showEnableInput = parameters.showEnableInput;
+        }
       }
       break;
 

@@ -5,9 +5,8 @@ import { useUser } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
 import { BlockData, PortInfo } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
-import { MultiSheetSimulationEngine } from '@/lib/multiSheetSimulation'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
-import { createSimulationEngine, getWasmPreference, createWorkerSimulation, isWorkerSimulationAvailable, type SimulationProgress } from '@/lib/simulation/SimulationEngineFactory'
+import { getWasmPreference, createWorkerSimulation, isWorkerSimulationAvailable, type SimulationProgress } from '@/lib/simulation/SimulationEngineFactory'
 import { WasmSimulationEngine } from '@/lib/simulation/WasmSimulationEngine'
 import type { SimulationWorkerManager } from '@/lib/simulation/SimulationWorkerManager'
 import { convertWasmToUIFormat, WasmDataCollector } from '@/lib/simulation/WasmResultConverter'
@@ -47,6 +46,7 @@ import { parseType } from '@/lib/typeValidator'
 import { propagateSignalTypes } from '@/lib/signalTypePropagation'
 import { migrateToHierarchicalSheets } from '@/lib/modelStore'
 import { useModelStore } from '@/lib/modelStore'
+import { createBlock } from '@/lib/blockFactory'
 
 import { useAutoSave } from '@/lib/useAutoSave'
 import { use, useEffect, useState, useCallback, useRef } from 'react'
@@ -204,16 +204,20 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }, [user, id, requestedVersion])
 
+  // Check if the model has any blocks on top-level sheets (worth compiling)
+  const hasTopLevelBlocks = sheets.some(sheet => sheet.blocks && sheet.blocks.length > 0)
+
   // Pre-warming: Compile WASM in background when model loads (for faster first simulation)
   // Don't pre-warm if model is dirty - the user will trigger compilation via "Run Simulation"
+  // Don't pre-warm if there are no blocks on top-level sheets - nothing to compile
   // Note: With "always recompile" approach, pre-warming is less critical but still provides a warm cache
   useEffect(() => {
-    if (model && getWasmPreference() && !compiledWasmData && !isCompiling && !isDirty) {
+    if (model && getWasmPreference() && !compiledWasmData && !isCompiling && !isDirty && hasTopLevelBlocks) {
       // Start background compilation
       console.log('[Pre-warming] Starting background WASM compilation for model:', model.id, model.name)
       setIsCompiling(true)
     }
-  }, [model, compiledWasmData, isDirty]) // Don't include isCompiling to avoid re-triggering when it changes
+  }, [model, compiledWasmData, isDirty, hasTopLevelBlocks]) // Don't include isCompiling to avoid re-triggering when it changes
 
   // Invalidate compiled WASM when model becomes dirty (user made edits)
   // Don't trigger wasteful pre-warming - just clear the cached WASM
@@ -498,168 +502,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }
 
-  const getDefaultParameters = (blockType: string) => {
-    switch (blockType) {
-      case 'source':
-        return { 
-          signalType: 'constant',
-          value: 1,
-          stepTime: 1.0,
-          stepValue: 1.0,
-          slope: 1.0,
-          startTime: 0,
-          frequency: 1.0,
-          amplitude: 1.0,
-          phase: 0,
-          offset: 0,
-          f0: 0.1,
-          f1: 10,
-          duration: 10,
-          mean: 0
-        }
-      case 'input_port':
-        return { 
-          portName: 'Input',
-          defaultValue: 0
-        }
-      case 'output_port':
-        return {
-          portName: 'Output'
-        }
-      case 'scale':
-        return { gain: 1 }
-      case 'limit':
-        return { lowerLimit: -1, upperLimit: 1 }
-      case 'integrator':
-        return {
-          initialValue: 0,
-          showEnableInput: false,
-          showResetInput: false,
-          useLimits: false,
-          lowerLimit: -Infinity,
-          upperLimit: Infinity
-        }
-      case 'transfer_function':
-        return { 
-          numerator: [1], 
-          denominator: [1, 1]
-        }
-      case 'lookup_1d':
-        return {
-          inputValues: [0, 1, 2],
-          outputValues: [0, 1, 4]
-        }
-      case 'lookup_2d':
-        return {
-          input1Values: [0, 1],
-          input2Values: [0, 1],
-          outputTable: [[0, 1], [2, 3]]
-        }
-      case 'mux':
-        return {
-          rows: 2,
-          cols: 2,
-          outputType: 'double[2][2]',
-          baseType: 'double'
-        }
-      case 'signal_display':
-      case 'signal_logger':
-        return { maxSamples: 1000 }
-      case 'subsystem':
-        return { 
-          sheetId: '',
-          sheetName: 'Subsystem',
-          inputPorts: ['Input1'],
-          outputPorts: ['Output1']
-        }
-      case 'sheet_label_sink':
-        return {
-          signalName: ''  // Empty string, user must specify
-        }
-      case 'sheet_label_source':
-        return {
-          signalName: ''  // Will be populated from available sinks
-        }
-      case 'sum':
-        return {
-          signs: '++',
-          numInputs: 2, // Default to 2 inputs
-          inputs: ['Input1', 'Input2'] // Legacy support
-        }
-      case 'trig':
-        return {
-          function: 'sin', // Default to sine function
-          inputPortName: 'Input1',
-          outputPortName: 'Output1'
-        }
-      case 'if':
-        return {
-        }
-      default:
-        return {}
-    }
-  }
-
   const handleCanvasDrop = (x: number, y: number, blockType: string) => {
-    const newBlock: BlockData = {
-      id: `${blockType}_${Date.now()}`,
-      type: blockType,
-      name: `${blockType.charAt(0).toUpperCase() + blockType.slice(1).replace('_', ' ')}${blocks.length + 1}`,
+    // Use the unified block factory for consistent block creation
+    // This handles all default parameters and special cases like subsystem sheet creation
+    const newBlock = createBlock(blockType, {
       position: { x, y },
-      parameters: getDefaultParameters(blockType)
-    }
-    
-    // Special handling for subsystem blocks - automatically create their main sheet
-    if (blockType === 'subsystem') {
-      const subsystemMainSheetId = `${newBlock.id}_main`
-      
-      // Create default input and output ports for the subsystem's main sheet
-      const defaultInputPort: BlockData = {
-        id: `${subsystemMainSheetId}_input1`,
-        type: 'input_port',
-        name: 'Input1',
-        position: { x: 100, y: 200 },
-        parameters: {
-          portName: 'Input1',
-          dataType: 'double',
-          defaultValue: 0
-        }
-      }
-      
-      const defaultOutputPort: BlockData = {
-        id: `${subsystemMainSheetId}_output1`,
-        type: 'output_port',
-        name: 'Output1',
-        position: { x: 400, y: 200 },
-        parameters: {
-          portName: 'Output1'
-        }
-      }
-      
-      const subsystemMainSheet: Sheet = {
-        id: subsystemMainSheetId,
-        name: `${newBlock.name} Main`,
-        blocks: [defaultInputPort, defaultOutputPort],
-        connections: [],
-        extents: {
-          width: 1000,
-          height: 800
-        }
-      }
-      
-      // Update the subsystem parameters to embed the sheet
-      newBlock.parameters = {
-        ...newBlock.parameters,
-        sheets: [subsystemMainSheet], // Embed sheet in parameters
-        inputPorts: ['Input1'],
-        outputPorts: ['Output1']
-        // Remove sheetId and sheetName - no longer needed
-      }
-      
-      // Don't add sheet to root level - it's embedded in the subsystem
-      // Remove: addSheet(subsystemMainSheet)
-    }
-    
+      existingBlockCount: blocks.length + 1
+    }) as BlockData
+
     addBlock(newBlock)
     updateCurrentSheet({ blocks: [...blocks, newBlock] })
     console.log('Block added:', newBlock)
@@ -975,22 +825,33 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       if (!proceed) return
     }
 
+    // Check if there are any blocks to simulate
+    if (!hasTopLevelBlocks) {
+      notifications.show({
+        title: 'Nothing to simulate',
+        message: 'Add blocks to your model before running a simulation',
+        color: 'yellow',
+        icon: <IconAlertTriangle size={20} />
+      })
+      return
+    }
+
     setIsSimulating(true)
     setCompilationError(null)
 
-    const useWasm = getWasmPreference()
-
     try {
+      if (!model) {
+        throw new Error('No model loaded')
+      }
+
       const config = {
         timeStep: settingsValidation.timeStep,
         duration: settingsValidation.duration
       }
 
       let allResults: Map<string, any>
-      let multiEngine: MultiSheetSimulationEngine | null = null
 
-      if (useWasm && model) {
-        // WASM execution path - always recompile before running
+      // WASM execution path - always recompile before running
 
         // If model has unsaved changes, auto-save first
         if (isDirty) {
@@ -1220,8 +1081,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             } catch (mainThreadError) {
               console.error('Main thread WASM error:', mainThreadError)
               wasmEngine.destroy()
-              multiEngine = new MultiSheetSimulationEngine(sheets, config, parameters)
-              allResults = multiEngine.run()
+              throw mainThreadError
             }
           }
 
@@ -1270,41 +1130,12 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           } catch (error) {
             console.error('WASM simulation error:', error)
             wasmEngine.destroy()
-
-            // Fallback to JavaScript
-            notifications.show({
-              title: 'WASM execution failed',
-              message: 'Falling back to JavaScript engine',
-              color: 'orange',
-              icon: <IconAlertCircle size={20} />,
-              autoClose: 5000
-            })
-
-            multiEngine = new MultiSheetSimulationEngine(sheets, config, parameters)
-            allResults = multiEngine.run()
+            throw error
           }
         }
 
-      } else {
-        // JavaScript path (current implementation)
-        multiEngine = new MultiSheetSimulationEngine(sheets, config, parameters)
-
-        // Run simulation across ALL sheets - this returns results for all sheets
-        allResults = multiEngine.run()
-      }
-
       // Store ALL results globally
       setGlobalSimulationResults(allResults)
-
-      // Also set the current sheet's engine for CSV export and other operations
-      // (only available when using JavaScript engine)
-      if (multiEngine) {
-        const currentSheetEngine = multiEngine.getSheetEngine(activeSheetId)
-        if (currentSheetEngine) {
-          setSimulationEngine(currentSheetEngine)
-          setOutputPortValues(multiEngine.getOutputPortValues(activeSheetId) || new Map())
-        }
-      }
 
       console.log('Simulation completed for all sheets:', {
         totalSheets: allResults.size,
@@ -1322,7 +1153,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
       notifications.show({
         title: 'Simulation completed',
-        message: `Simulation ran successfully across all sheets${useWasm && compiledWasmData ? ' (WASM)' : ''}`,
+        message: 'Simulation ran successfully across all sheets',
         color: 'green',
         icon: <IconCircleCheck size={20} />
       })

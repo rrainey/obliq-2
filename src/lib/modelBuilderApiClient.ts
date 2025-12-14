@@ -262,14 +262,14 @@ export class ModelBuilderApiClient {
     modelId: string,
     sheetId: string,
     sourceBlockId: string,
-    sourcePort: string,
+    sourcePortIndex: number,
     targetBlockId: string,
-    targetPort: string
+    targetPortIndex: number
   ): Promise<ModelBuilderResponse<AddConnectionResponse>> {
     return this.request<AddConnectionResponse>(
       'POST',
       ``,
-      { action: 'addConnection', modelId, sheetId, sourceBlockId, sourcePort, targetBlockId, targetPort }
+      { action: 'addConnection', modelId, sheetId, sourceBlockId, sourcePortIndex, targetBlockId, targetPortIndex }
     );
   }
 

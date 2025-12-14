@@ -10,7 +10,7 @@ import {
 
 export const runSimulationTool: ToolWithHandler = {
   name: 'run_simulation',
-  description: 'Run a simulation on a model',
+  description: 'Run a WASM-compiled simulation on a model. The model is compiled to WebAssembly and executed server-side for high performance.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -24,7 +24,7 @@ export const runSimulationTool: ToolWithHandler = {
       },
       timeStep: {
         type: 'number',
-        description: 'Simulation time step (default: 0.01)',
+        description: 'Simulation time step in seconds (default: 0.01)',
         minimum: 0.0001,
         maximum: 1.0
       },
@@ -33,13 +33,32 @@ export const runSimulationTool: ToolWithHandler = {
         description: 'Simulation duration in seconds (default: 10.0)',
         minimum: 0.1,
         maximum: 3600
+      },
+      inputs: {
+        type: 'object',
+        description: 'Input values to set before simulation. Keys are input port names, values are numbers.',
+        additionalProperties: { type: 'number' }
+      },
+      optimizationLevel: {
+        type: 'string',
+        description: 'WASM compilation optimization level (default: O2)',
+        enum: ['O0', 'O1', 'O2', 'O3']
+      },
+      includeTimeSeries: {
+        type: 'boolean',
+        description: 'Include full time series data in signal results (default: false, only returns statistics)'
+      },
+      sampleRate: {
+        type: 'number',
+        description: 'Sample rate for time series (every N steps, default: 1). Only used if includeTimeSeries is true.',
+        minimum: 1
       }
     },
     required: ['modelId']
   },
   handler: async (args: unknown): Promise<RunSimulationOutput> => {
     const input = args as RunSimulationInput;
-    
+
     try {
       // Validate model ID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -49,8 +68,8 @@ export const runSimulationTool: ToolWithHandler = {
           error: 'Invalid model ID format. Must be a valid UUID.'
         };
       }
-      
-      // Prepare simulation parameters
+
+      // Prepare simulation parameters - pass all supported options
       const parameters: any = {};
       if (input.timeStep !== undefined) {
         parameters.timeStep = input.timeStep;
@@ -58,10 +77,22 @@ export const runSimulationTool: ToolWithHandler = {
       if (input.duration !== undefined) {
         parameters.duration = input.duration;
       }
-      
-      // Call the automation API to run simulation
+      if (input.inputs !== undefined) {
+        parameters.inputs = input.inputs;
+      }
+      if (input.optimizationLevel !== undefined) {
+        parameters.optimizationLevel = input.optimizationLevel;
+      }
+      if (input.includeTimeSeries !== undefined) {
+        parameters.includeTimeSeries = input.includeTimeSeries;
+      }
+      if (input.sampleRate !== undefined) {
+        parameters.sampleRate = input.sampleRate;
+      }
+
+      // Call the automation API to run WASM simulation
       const response = await apiClient.simulate(input.modelId, parameters, input.version);
-      
+
       if (!response.success) {
         return {
           success: false,
@@ -74,18 +105,20 @@ export const runSimulationTool: ToolWithHandler = {
           }
         };
       }
-      
+
       // Extract simulation results
       const data = response.data;
-      
+
       return {
         success: true,
         simulationDuration: data.simulationDuration,
         timePoints: data.timePoints,
         outputPorts: data.outputPorts || {},
-        signals: data.signals || {}
+        signals: data.signals || {},
+        // Include performance metrics from WASM execution
+        performance: data.performance
       };
-      
+
     } catch (error) {
       return {
         success: false,
@@ -97,7 +130,7 @@ export const runSimulationTool: ToolWithHandler = {
 
 export const getSimulationResultsTool: ToolWithHandler = {
   name: 'get_simulation_results',
-  description: 'Get detailed simulation results',
+  description: 'Get detailed simulation results. Note: For time series data, use run_simulation with includeTimeSeries=true instead.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -114,7 +147,7 @@ export const getSimulationResultsTool: ToolWithHandler = {
   },
   handler: async (args: unknown): Promise<GetSimulationResultsOutput> => {
     const input = args as GetSimulationResultsInput;
-    
+
     try {
       // Validate model ID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -124,7 +157,7 @@ export const getSimulationResultsTool: ToolWithHandler = {
           error: 'Invalid model ID format. Must be a valid UUID.'
         };
       }
-      
+
       // Validate block ID if provided
       if (input.blockId && !uuidRegex.test(input.blockId)) {
         return {
@@ -132,25 +165,15 @@ export const getSimulationResultsTool: ToolWithHandler = {
           error: 'Invalid block ID format. Must be a valid UUID.'
         };
       }
-      
-      // The automation API returns summary results, not detailed time series
-      // A full implementation would need to either:
-      // 1. Store simulation results temporarily
-      // 2. Return results as part of run_simulation
-      // 3. Add a new API endpoint for detailed results
-      
+
+      // Time series data is now available through run_simulation with includeTimeSeries=true
       return {
         success: false,
-        error: 'Detailed simulation results are not available through the automation API. ' +
-               'The run_simulation tool returns summary statistics. ' +
-               'For detailed time series data, consider implementing result storage or use the web UI.'
+        error: 'Use run_simulation with includeTimeSeries=true to get time series data. ' +
+               'Example: run_simulation({ modelId: "...", duration: 10, includeTimeSeries: true }). ' +
+               'The signals field in the response will include a "data" array for each signal.'
       };
-      
-      // In a full implementation, this would return:
-      // - timePoints: array of simulation time values
-      // - signalData: map of blockId to array of values at each time point
-      // - Filtered by blockId if specified
-      
+
     } catch (error) {
       return {
         success: false,

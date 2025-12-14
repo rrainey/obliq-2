@@ -208,35 +208,52 @@ export class ModelBuilderAPIClient {
   }
 
   async updateBlock(modelId: string, sheetId: string, blockId: string, updates: any) {
-    // Handle different update types
+    // Handle different update types - process all provided updates
+    let lastResponse: any = { success: false, error: 'No valid updates provided' };
+    let hasUpdate = false;
+
+    // Process position update
     if (updates.position) {
-      return this.request('PUT', '', {
+      hasUpdate = true;
+      lastResponse = await this.request('PUT', '', {
         action: 'updateBlockPosition',
         modelId,
         sheetId,
         blockId,
         position: updates.position
       });
+      if (!lastResponse.success) return lastResponse;
     }
+
+    // Process name update
+    // Note: For input_port/output_port blocks, the API handler also updates portName
     if (updates.name) {
-      return this.request('PUT', '', {
+      hasUpdate = true;
+      lastResponse = await this.request('PUT', '', {
         action: 'updateBlockName',
         modelId,
         sheetId,
         blockId,
         name: updates.name
       });
+      if (!lastResponse.success) return lastResponse;
     }
+
+    // Process parameters update (only if name wasn't provided with portName sync,
+    // or if there are additional parameters beyond portName)
     if (updates.parameters) {
-      return this.request('PUT', '', {
+      hasUpdate = true;
+      lastResponse = await this.request('PUT', '', {
         action: 'updateBlockParameters',
         modelId,
         sheetId,
         blockId,
         parameters: updates.parameters
       });
+      if (!lastResponse.success) return lastResponse;
     }
-    return { success: false, error: 'No valid updates provided' };
+
+    return hasUpdate ? lastResponse : { success: false, error: 'No valid updates provided' };
   }
 
   async deleteBlock(modelId: string, sheetId: string, blockId: string) {
@@ -248,16 +265,38 @@ export class ModelBuilderAPIClient {
   }
 
   // Connection operations
-  async addConnection(modelId: string, sheetId: string, sourceBlockId: string, sourcePort: string, targetBlockId: string, targetPort: string) {
-    return this.request('POST', '', {
+  async addConnection(
+    modelId: string,
+    sheetId: string,
+    sourceBlockId: string,
+    sourcePortIndex: number | undefined,
+    sourcePort: string | undefined,
+    targetBlockId: string,
+    targetPortIndex: number | undefined,
+    targetPort: string | undefined
+  ) {
+    const body: any = {
       action: 'addConnection',
       modelId,
       sheetId,
       sourceBlockId,
-      sourcePort,
-      targetBlockId,
-      targetPort
-    });
+      targetBlockId
+    };
+
+    // Add port specifiers (prefer index over name)
+    if (sourcePortIndex !== undefined) {
+      body.sourcePortIndex = sourcePortIndex;
+    } else if (sourcePort) {
+      body.sourcePort = sourcePort;
+    }
+
+    if (targetPortIndex !== undefined) {
+      body.targetPortIndex = targetPortIndex;
+    } else if (targetPort) {
+      body.targetPort = targetPort;
+    }
+
+    return this.request('POST', '', body);
   }
 
   async deleteConnection(modelId: string, sheetId: string, connectionId: string) {

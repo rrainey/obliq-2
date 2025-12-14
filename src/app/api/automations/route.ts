@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { CodeGenerator } from '@/lib/codeGenerationNew'
-import { SimulationEngine } from '@/lib/simulationEngine'
+import { executeServerSimulation, type SimulationConfig } from '@/lib/wasm/ServerWasmExecutor'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
 import { authenticateApiRequest } from '@/lib/apiAuthMiddleware'
 
@@ -294,32 +294,14 @@ async function handleSimulate(
   baseResponse: AutomationResponse,
   parameters?: Record<string, any>
 ): Promise<AutomationResponse> {
-  const sheets = versionData.data.sheets || []
-  const mainSheet = sheets.find((s: any) => s.id === 'main') || sheets[0]
-
-  if (!mainSheet) {
-    return {
-      ...baseResponse,
-      errors: ['No sheets found in model']
-    }
-  }
-
-  const blocks = mainSheet.blocks || []
-  const wires = mainSheet.connections || []
-
-  if (blocks.length === 0) {
-    return {
-      ...baseResponse,
-      errors: ['Cannot simulate: model contains no blocks']
-    }
-  }
-
-  // Validate and use simulation parameters
-  const config = {
+  // Build simulation configuration
+  const simConfig: SimulationConfig = {
     timeStep: 0.01,
-    duration: 10.0
+    duration: 10.0,
+    optimizationLevel: 'O2'
   }
 
+  // Validate and apply user-provided parameters
   if (parameters) {
     if (parameters.timeStep !== undefined) {
       if (typeof parameters.timeStep !== 'number' || parameters.timeStep <= 0) {
@@ -328,7 +310,7 @@ async function handleSimulate(
           errors: ['Invalid timeStep parameter: must be a positive number']
         }
       }
-      config.timeStep = parameters.timeStep
+      simConfig.timeStep = parameters.timeStep
     }
 
     if (parameters.duration !== undefined) {
@@ -338,61 +320,66 @@ async function handleSimulate(
           errors: ['Invalid duration parameter: must be a positive number']
         }
       }
-      config.duration = parameters.duration
+      simConfig.duration = parameters.duration
+    }
+
+    // Pass through input values if provided
+    if (parameters.inputs && typeof parameters.inputs === 'object') {
+      simConfig.inputs = parameters.inputs
+    }
+
+    // Optional: include full time series data
+    if (parameters.includeTimeSeries === true) {
+      simConfig.includeTimeSeries = true
+      if (typeof parameters.sampleRate === 'number' && parameters.sampleRate > 0) {
+        simConfig.timeSeriesSampleRate = parameters.sampleRate
+      }
+    }
+
+    // Optional: optimization level
+    if (parameters.optimizationLevel && ['O0', 'O1', 'O2', 'O3'].includes(parameters.optimizationLevel)) {
+      simConfig.optimizationLevel = parameters.optimizationLevel
     }
   }
 
   // Use model defaults if no parameters provided
   if (!parameters) {
-    config.timeStep = versionData.data.globalSettings?.simulationTimeStep || 0.01
-    config.duration = versionData.data.globalSettings?.simulationDuration || 10.0
+    simConfig.timeStep = versionData.data.globalSettings?.simulationTimeStep || 0.01
+    simConfig.duration = versionData.data.globalSettings?.simulationDuration || 10.0
   }
 
-  let engine: SimulationEngine
-  let results: any
+  // Execute WASM-based simulation
+  const result = await executeServerSimulation(model.id, simConfig)
 
-  try {
-    engine = new SimulationEngine(blocks, wires, config, undefined, sheets)
-    results = engine.run()
-  } catch (error) {
+  if (!result.success) {
     return {
       ...baseResponse,
-      errors: [`Simulation failed: ${error instanceof Error ? error.message : 'Unknown error'}`]
+      errors: [result.error || 'Simulation failed']
     }
   }
 
-  // Collect output port values
-  const outputPortValues = engine.getOutputPortValues()
-  const outputSummary: Record<string, any> = {}
-  outputPortValues.forEach((value, portName) => {
-    outputSummary[portName] = value
-  })
-
-  // Collect signal display/logger summaries
-  const signalSummaries: Record<string, any> = {}
-  for (const [blockId, data] of results.signalData.entries()) {
-    const block = blocks.find((b: any) => b.id === blockId)
-    if (block && Array.isArray(data) && data.length > 0) {
-      signalSummaries[block.name] = {
-        type: block.type,
-        samples: data.length,
-        finalValue: data[data.length - 1] || 0,
-        min: Math.min(...data),
-        max: Math.max(...data),
-        average: data.reduce((a: number, b: number) => a + b, 0) / data.length
-      }
-    }
-  }
+  // Calculate number of time points
+  const timePoints = result.timeSteps || Math.ceil((simConfig.duration || 10) / (simConfig.timeStep || 0.01))
 
   return {
     ...baseResponse,
     success: true,
     data: {
-      simulationDuration: results.finalTime,
-      timePoints: results.timePoints.length,
-      outputPorts: outputSummary,
-      signals: signalSummaries,
-      config: config
+      simulationDuration: result.finalTime,
+      timePoints,
+      outputPorts: result.outputs || {},
+      signals: result.signals || {},
+      config: {
+        timeStep: simConfig.timeStep,
+        duration: simConfig.duration
+      },
+      // Additional metadata from WASM execution
+      performance: {
+        compilationTimeMs: result.compilationTimeMs,
+        executionTimeMs: result.executionTimeMs,
+        totalTimeMs: result.totalTimeMs,
+        cacheHit: result.cacheHit
+      }
     }
   }
 }

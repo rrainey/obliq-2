@@ -162,6 +162,80 @@ export interface ModelActions {
 
 export type ModelStore = ModelState & ModelActions
 
+/**
+ * Synchronize a subsystem block's inputPorts and outputPorts arrays
+ * based on the input_port and output_port blocks within its sheets.
+ */
+function syncSubsystemPortsFromSheets(subsystemBlock: BlockData): void {
+  if (subsystemBlock.type !== 'subsystem' || !subsystemBlock.parameters?.sheets) {
+    return
+  }
+
+  const inputPorts: string[] = []
+  const outputPorts: string[] = []
+
+  // Scan all sheets within the subsystem for input_port and output_port blocks
+  for (const sheet of subsystemBlock.parameters.sheets) {
+    if (!sheet.blocks) continue
+
+    for (const block of sheet.blocks) {
+      if (block.type === 'input_port') {
+        // Use portName from parameters if available, otherwise use block name
+        const portName = block.parameters?.portName || block.name
+        if (portName && !inputPorts.includes(portName)) {
+          inputPorts.push(portName)
+        }
+      } else if (block.type === 'output_port') {
+        // Use portName from parameters if available, otherwise use block name
+        const portName = block.parameters?.portName || block.name
+        if (portName && !outputPorts.includes(portName)) {
+          outputPorts.push(portName)
+        }
+      }
+    }
+  }
+
+  // Update the subsystem's port arrays in parameters
+  subsystemBlock.parameters.inputPorts = inputPorts
+  subsystemBlock.parameters.outputPorts = outputPorts
+
+  // CRITICAL: Also update the block's inputs/outputs arrays
+  // These are what the connection validation checks when wiring to/from a subsystem
+  subsystemBlock.inputs = inputPorts
+  subsystemBlock.outputs = outputPorts
+}
+
+/**
+ * Find the parent subsystem block that contains a given sheet ID.
+ * Returns the subsystem block if found, null if the sheet is a top-level sheet.
+ */
+function findParentSubsystemForSheet(
+  sheets: Sheet[],
+  sheetId: string
+): BlockData | null {
+  for (const sheet of sheets) {
+    if (!sheet.blocks) continue
+
+    for (const block of sheet.blocks) {
+      if (block.type === 'subsystem' && block.parameters?.sheets) {
+        // Check if the target sheet is directly in this subsystem
+        const foundSheet = block.parameters.sheets.find((s: Sheet) => s.id === sheetId)
+        if (foundSheet) {
+          return block
+        }
+
+        // Recursively search in nested subsystems
+        const nestedResult = findParentSubsystemForSheet(block.parameters.sheets, sheetId)
+        if (nestedResult) {
+          return nestedResult
+        }
+      }
+    }
+  }
+
+  return null
+}
+
 export const useModelStore = create<ModelStore>()(
   subscribeWithSelector((set, get) => ({
     // Initial state
@@ -1340,7 +1414,7 @@ export const useModelStore = create<ModelStore>()(
     saveCurrentSheetData: () => {
       const state = get()
 
-      // Helper to recursively update a specific sheet
+      // Helper to recursively update a specific sheet and sync subsystem ports
       const updateSheetRecursively = (sheets: Sheet[]): Sheet[] => {
         return sheets.map(sheet => {
           if (sheet.id === state.activeSheetId) {
@@ -1351,35 +1425,39 @@ export const useModelStore = create<ModelStore>()(
               connections: state.wires
             }
           }
-          
+
           // Check subsystem blocks
           const updatedBlocks = sheet.blocks.map(block => {
             if (block.type === 'subsystem' && block.parameters?.sheets) {
               // Recursively update sheets in subsystem
               const updatedSubsheets = updateSheetRecursively(block.parameters.sheets)
-              
+
               // Check if any sheet was actually updated
               const wasUpdated = updatedSubsheets !== block.parameters.sheets
-              
+
               if (wasUpdated) {
-                return {
+                // Create an updated block with the new sheets
+                const updatedBlock = {
                   ...block,
                   parameters: {
                     ...block.parameters,
                     sheets: updatedSubsheets
                   }
                 }
+                // Sync the subsystem's inputPorts/outputPorts based on the updated sheets
+                syncSubsystemPortsFromSheets(updatedBlock)
+                return updatedBlock
               }
             }
             return block
           })
-          
+
           // Return sheet with potentially updated blocks
           const blocksChanged = updatedBlocks !== sheet.blocks
           return blocksChanged ? { ...sheet, blocks: updatedBlocks } : sheet
         })
       }
-      
+
       const updatedSheets = updateSheetRecursively(state.sheets)
       set({ sheets: updatedSheets })
     },
@@ -1637,11 +1715,64 @@ function findSheetInSubsystems(sheets: Sheet[], sheetId: string): Sheet | null {
   return null
 }
 
+/**
+ * Normalize connections to ensure they have port indices (sourcePortIndex/targetPortIndex).
+ *
+ * This handles the case where connections were created via the API with port names,
+ * converting them to indices. Port names are stripped from the data model as they
+ * can be derived from block metadata when needed.
+ */
+function normalizeConnections(sheet: Sheet): void {
+  if (!sheet.connections || !sheet.blocks) return
+
+  const blockMap = new Map(sheet.blocks.map(b => [b.id, b]))
+
+  for (const conn of sheet.connections) {
+    const sourceBlock = blockMap.get(conn.sourceBlockId)
+    const targetBlock = blockMap.get(conn.targetBlockId)
+
+    // Convert port names to indices if provided (API compatibility)
+    const connAny = conn as any
+    if (conn.sourcePortIndex === undefined && connAny.sourcePort && sourceBlock?.outputs) {
+      conn.sourcePortIndex = sourceBlock.outputs.indexOf(connAny.sourcePort)
+    }
+    if (conn.targetPortIndex === undefined && connAny.targetPort && targetBlock?.inputs) {
+      conn.targetPortIndex = targetBlock.inputs.indexOf(connAny.targetPort)
+    }
+
+    // Remove port name fields if present (clean up redundant data)
+    delete connAny.sourcePort
+    delete connAny.targetPort
+  }
+}
+
+/**
+ * Recursively normalize connections in all sheets, including subsystem embedded sheets.
+ */
+function normalizeAllConnections(sheets: Sheet[]): void {
+  for (const sheet of sheets) {
+    normalizeConnections(sheet)
+
+    // Also normalize connections in subsystem embedded sheets
+    for (const block of sheet.blocks) {
+      if (block.type === 'subsystem' && block.parameters?.sheets) {
+        normalizeAllConnections(block.parameters.sheets)
+      }
+    }
+  }
+}
+
 // Migration function to convert old format to new
 export function migrateToHierarchicalSheets(modelData: any) {
-  // If already hierarchical (v2.0+), return as-is
+  // If already hierarchical (v2.0+), normalize connections and return
   // V2.x models already have subsystem sheets nested inside subsystem block parameters
-  if (modelData.version && modelData.version.startsWith("2.")) return modelData
+  if (modelData.version && modelData.version.startsWith("2.")) {
+    // Still need to normalize connections for models created via API
+    if (modelData.sheets) {
+      normalizeAllConnections(modelData.sheets)
+    }
+    return modelData
+  }
   
   const rootSheets: Sheet[] = []
   const subsystemSheets = new Map<string, Sheet[]>()
@@ -1688,7 +1819,10 @@ export function migrateToHierarchicalSheets(modelData: any) {
   }
 
   attachSubsystemSheets(rootSheets)
-  
+
+  // Normalize connections for v1 models as well
+  normalizeAllConnections(rootSheets)
+
   return {
     ...modelData,
     version: "2.0",

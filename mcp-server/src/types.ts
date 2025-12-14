@@ -209,6 +209,10 @@ export interface RunSimulationInput {
   version?: number;
   timeStep?: number;
   duration?: number;
+  inputs?: Record<string, number>;
+  optimizationLevel?: 'O0' | 'O1' | 'O2' | 'O3';
+  includeTimeSeries?: boolean;
+  sampleRate?: number;
 }
 
 export interface RunSimulationOutput {
@@ -224,6 +228,13 @@ export interface RunSimulationOutput {
     emccError?: string;
     errors?: string[];
     [key: string]: any;
+  };
+  /** Performance metrics from WASM execution */
+  performance?: {
+    compilationTimeMs?: number;
+    executionTimeMs?: number;
+    totalTimeMs?: number;
+    cacheHit?: boolean;
   };
 }
 

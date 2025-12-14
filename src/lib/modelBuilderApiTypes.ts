@@ -41,9 +41,11 @@ export interface BlockSummary {
 export interface ConnectionSummary {
   id: string;
   sourceBlockId: string;
-  sourcePort: string;
+  sourcePortIndex: number;
+  sourcePort?: string;  // Computed from block metadata for display
   targetBlockId: string;
-  targetPort: string;
+  targetPortIndex: number;
+  targetPort?: string;  // Computed from block metadata for display
 }
 
 export interface SheetSummary {
@@ -128,9 +130,11 @@ export interface AddConnectionRequest {
   modelId: string;
   sheetId: string;
   sourceBlockId: string;
-  sourcePort: string;
+  sourcePortIndex?: number;  // Port index (preferred)
+  sourcePort?: string;       // Port name (convenience, converted to index)
   targetBlockId: string;
-  targetPort: string;
+  targetPortIndex?: number;  // Port index (preferred)
+  targetPort?: string;       // Port name (convenience, converted to index)
 }
 
 export interface ValidateModelRequest {

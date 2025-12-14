@@ -94,8 +94,8 @@ describe.skip('WASM Execution Integration', () => {
             id: 'conn-1',
             sourceBlockId: 'block-1',
             targetBlockId: 'logger-1',
-            sourcePort: 0,
-            targetPort: 0
+            sourcePortIndex: 0,
+            targetPortIndex: 0
           }
         ]
       }

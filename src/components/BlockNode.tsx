@@ -14,6 +14,8 @@ export interface BlockData {
   name: string
   position: { x: number; y: number }
   parameters?: Record<string, any>
+  inputs?: string[]   // Input port names for this block
+  outputs?: string[]  // Output port names for this block
 }
 
 export interface PortInfo {

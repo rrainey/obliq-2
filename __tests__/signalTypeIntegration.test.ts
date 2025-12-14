@@ -407,9 +407,9 @@ describe('Model Builder API Integration Tests', () => {
         modelId,
         sheetId,
         sourceBlockId: blockIds[0], // Source
-        sourcePort: 'output',
+        sourcePortIndex: 0,
         targetBlockId: blockIds[1], // Scale
-        targetPort: 'input'
+        targetPortIndex: 0
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
@@ -430,9 +430,9 @@ describe('Model Builder API Integration Tests', () => {
         modelId,
         sheetId,
         sourceBlockId: blockIds[1], // Scale
-        sourcePort: 'output',
+        sourcePortIndex: 0,
         targetBlockId: blockIds[2], // Output
-        targetPort: 'input'
+        targetPortIndex: 0
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
@@ -730,25 +730,25 @@ describe('Model Builder API Integration Tests', () => {
         modelId,
         sheetId: 'main',
         sourceBlockId: block1Id,
-        sourcePort: 'output',
+        sourcePortIndex: 0,
         targetBlockId: block2Id,
-        targetPort: 'input'
+        targetPortIndex: 0
       };
-      
+
       const connReq1 = createMockRequest('POST', `${baseUrl}`, conn1Body, validToken);
       const connRes1 = await POST(connReq1 as any);
-      
+
       expect(connRes1.status).toBe(201);
-      
+
       // Try to connect to the same input port again (should fail)
       const conn2Body = {
         action: 'addConnection',
         modelId,
         sheetId: 'main',
         sourceBlockId: block1Id,
-        sourcePort: 'output',
+        sourcePortIndex: 0,
         targetBlockId: block2Id,
-        targetPort: 'input'
+        targetPortIndex: 0
       };
       
       const connReq2 = createMockRequest('POST', `${baseUrl}`, conn2Body, validToken);
@@ -792,9 +792,9 @@ describe('Model Builder API Integration Tests', () => {
         modelId,
         sheetId: 'main',
         sourceBlockId: blockId,
-        sourcePort: 'output',
+        sourcePortIndex: 0,
         targetBlockId: blockId,
-        targetPort: 'input'
+        targetPortIndex: 0
       };
       
       const connReq = createMockRequest('POST', `${baseUrl}`, connBody, validToken);
