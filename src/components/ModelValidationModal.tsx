@@ -24,7 +24,9 @@ import {
   IconAlertTriangle,
   IconCircleCheck,
   IconX,
-  IconChevronRight
+  IconChevronRight,
+  IconCopy,
+  IconCheck
 } from '@tabler/icons-react'
 
 interface ModelValidationModalProps {
@@ -47,6 +49,7 @@ export default function ModelValidationModal({
   onSelectWire
 }: ModelValidationModalProps) {
   const [selectedTab, setSelectedTab] = useState<string | null>('errors')
+  const [copied, setCopied] = useState(false)
   
   // Create a map of block IDs to names for better display
   const blockNameMap = new Map(blocks.map(b => [b.id, b.name]))
@@ -118,7 +121,39 @@ export default function ModelValidationModal({
 
   const hasErrors = errors.length > 0
   const hasWarnings = warnings.length > 0
-  const activeItems = selectedTab === 'errors' ? errors : warnings
+
+  const formatItemForCopy = (item: TypeCompatibilityError): string => {
+    const location = getLocationDescription(item)
+    const formattedError = formatTypeError(item)
+    const severity = item.severity === 'error' ? 'ERROR' : 'WARNING'
+
+    let text = `[${severity}] ${location}: ${formattedError}`
+
+    // Add context details if available
+    if (item.details) {
+      const details: string[] = []
+      if (item.details.expectedType) details.push(`Expected: ${item.details.expectedType}`)
+      if (item.details.actualType) details.push(`Actual: ${item.details.actualType}`)
+      if (item.details.sourceType) details.push(`Source Type: ${item.details.sourceType}`)
+      if (item.details.targetType) details.push(`Target Type: ${item.details.targetType}`)
+      if (details.length > 0) {
+        text += `\n    ${details.join(', ')}`
+      }
+    }
+
+    return text
+  }
+
+  const handleCopyAll = async () => {
+    const allItems = [...errors, ...warnings]
+    const text = allItems.map(formatItemForCopy).join('\n\n')
+
+    const header = `Model Validation Results\n${'='.repeat(25)}\nErrors: ${errors.length}, Warnings: ${warnings.length}\n\n`
+
+    await navigator.clipboard.writeText(header + text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
     <Modal
@@ -133,27 +168,39 @@ export default function ModelValidationModal({
     >
       <Stack>
         {/* Summary */}
-        <Group gap="md">
-          {hasErrors ? (
-            <Group gap={4}>
-              <IconAlertCircle size={20} color="var(--mantine-color-red-6)" />
-              <Text c="red" fw={500}>
-                {errors.length} {errors.length === 1 ? 'Error' : 'Errors'}
-              </Text>
-            </Group>
-          ) : (
-            <Group gap={4}>
-              <IconCircleCheck size={20} color="var(--mantine-color-green-6)" />
-              <Text c="green" fw={500}>No Errors</Text>
-            </Group>
-          )}
-          {hasWarnings && (
-            <Group gap={4}>
-              <IconAlertTriangle size={20} color="var(--mantine-color-yellow-6)" />
-              <Text c="yellow.7" fw={500}>
-                {warnings.length} {warnings.length === 1 ? 'Warning' : 'Warnings'}
-              </Text>
-            </Group>
+        <Group justify="space-between">
+          <Group gap="md">
+            {hasErrors ? (
+              <Group gap={4}>
+                <IconAlertCircle size={20} color="var(--mantine-color-red-6)" />
+                <Text c="red" fw={500}>
+                  {errors.length} {errors.length === 1 ? 'Error' : 'Errors'}
+                </Text>
+              </Group>
+            ) : (
+              <Group gap={4}>
+                <IconCircleCheck size={20} color="var(--mantine-color-green-6)" />
+                <Text c="green" fw={500}>No Errors</Text>
+              </Group>
+            )}
+            {hasWarnings && (
+              <Group gap={4}>
+                <IconAlertTriangle size={20} color="var(--mantine-color-yellow-6)" />
+                <Text c="yellow.7" fw={500}>
+                  {warnings.length} {warnings.length === 1 ? 'Warning' : 'Warnings'}
+                </Text>
+              </Group>
+            )}
+          </Group>
+          {(hasErrors || hasWarnings) && (
+            <ActionIcon
+              variant="subtle"
+              color={copied ? 'green' : 'gray'}
+              onClick={handleCopyAll}
+              title="Copy all errors and warnings to clipboard"
+            >
+              {copied ? <IconCheck size={18} /> : <IconCopy size={18} />}
+            </ActionIcon>
           )}
         </Group>
 
