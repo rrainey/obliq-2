@@ -8,10 +8,19 @@
 jest.mock('next/server', () => ({
   NextRequest: jest.fn().mockImplementation((url, init) => {
     const urlObj = new URL(url);
+    // Handle Headers object properly - Headers has a forEach method we can use
+    let headersObj: Headers;
+    if (init?.headers instanceof Headers) {
+      headersObj = init.headers;
+    } else if (init?.headers) {
+      headersObj = new Headers(init.headers as Record<string, string>);
+    } else {
+      headersObj = new Headers();
+    }
     return {
       url,
       method: init?.method || 'GET',
-      headers: new Map(Object.entries(init?.headers || {})),
+      headers: headersObj,
       text: async () => init?.body || '',
       json: async () => init?.body ? JSON.parse(init.body) : {},
       nextUrl: urlObj
@@ -274,16 +283,16 @@ describe('Model Builder API Integration Tests', () => {
   // Helper to create mock request with Authorization header
   const createMockRequest = (method: string, url: string, body?: any, token?: string) => {
     const urlObj = new URL(url);
-    const headersMap = new Map<string, string>([['content-type', 'application/json']]);
+    // Use a real Headers object so it works with NextRequest constructor in batch operations
+    const headers = new Headers();
+    headers.set('content-type', 'application/json');
     if (token) {
-      headersMap.set('authorization', `Bearer ${token}`);
+      headers.set('authorization', `Bearer ${token}`);
     }
     return {
       url,
       method,
-      headers: {
-        get: (key: string) => headersMap.get(key.toLowerCase()) || null
-      },
+      headers,
       text: async () => body ? JSON.stringify(body) : '',
       json: async () => body || {},
       nextUrl: urlObj
@@ -527,7 +536,7 @@ describe('Model Builder API Integration Tests', () => {
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
       const response = await POST(request as any);
       const data = await response.json();
-      
+
       expect(response.status).toBe(200);
       expect(data.data.successCount).toBe(3);
       expect(data.data.failureCount).toBe(0);
