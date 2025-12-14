@@ -6,7 +6,9 @@ import { config } from '../config.js';
 
 export const createModelTool: ToolWithHandler = {
   name: 'create_model',
-  description: 'Create a new model with an initial "Main" sheet. The owner will be determined by the API token used. The response includes mainSheet info with the sheetId needed to add blocks.',
+  description: `Create a new model with an initial "Main" sheet. The owner will be determined by the API token used. The response includes mainSheet info with the sheetId needed to add blocks.
+
+IMPORTANT: Before adding blocks, use list_block_types to discover available block types and their configurable parameters. This ensures you use correct parameter names and valid values.`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -51,8 +53,16 @@ export const createModelTool: ToolWithHandler = {
       // Include main sheet info for easier guidance
       if (data?.mainSheet) {
         result.mainSheet = data.mainSheet;
-        result.hint = `Model created with main Sheet '${data.mainSheet.name}' (ID: ${data.mainSheet.id}). Start with this sheetId to add blocks to the Model. You mey add more Sheets and interconnect signals with Sheet Labels to accomodate a larger Model.`;
+        result.hint = `Model created with main sheet '${data.mainSheet.name}' (ID: ${data.mainSheet.id}). Use this sheetId to add blocks.`;
       }
+
+      // Always include workflow guidance
+      result.nextSteps = {
+        discoverBlocks: 'Use list_block_types to see available block types and their parameters',
+        addBlocks: 'Use add_block with the sheetId to add blocks to the model',
+        connect: 'Use add_connection to wire blocks together (use port indices: sourcePortIndex, targetPortIndex)',
+        simulate: 'Use run_simulation to execute and test the model'
+      };
 
       return result;
     } catch (error) {

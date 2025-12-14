@@ -68,7 +68,17 @@ export const addSheetTool: ToolWithHandler = {
 
 export const addBlockTool: ToolWithHandler = {
   name: 'add_block',
-  description: 'Add a block to a sheet. For subsystem blocks, a main sheet with default input/output ports is automatically created. The response will include the subsystemSheet info with the sheetId needed to add blocks inside the subsystem.',
+  description: `Add a block to a sheet. For subsystem blocks, a main sheet with default input/output ports is automatically created. The response will include the subsystemSheet info with the sheetId needed to add blocks inside the subsystem.
+
+IMPORTANT: Use list_block_types tool first to discover available block types and their parameters. Each block type has specific configurable parameters with defaults and constraints.
+
+Block-specific parameters for subsystem blocks:
+- codeGenStrategy: Code generation strategy ('flatten' | 'segregated' | 'segregated_atomic'). Default: 'flatten'.
+  - 'flatten': Subsystem blocks are inlined into parent during code generation
+  - 'segregated': Subsystem generates separate init/step functions that are called from parent
+  - 'segregated_atomic': Like segregated, but guarantees atomic execution
+- inputPorts: Array of input port names (e.g., ['Input1', 'Input2']). Default: ['Input1']
+- outputPorts: Array of output port names (e.g., ['Output1']). Default: ['Output1']`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -82,7 +92,7 @@ export const addBlockTool: ToolWithHandler = {
       },
       blockType: {
         type: 'string',
-        description: 'Type of block to add (e.g., sum, multiply, transfer_function)'
+        description: 'Type of block to add (e.g., sum, multiply, transfer_function, subsystem)'
       },
       name: {
         type: 'string',
@@ -98,7 +108,7 @@ export const addBlockTool: ToolWithHandler = {
       },
       parameters: {
         type: 'object',
-        description: 'Block-specific parameters'
+        description: 'Block-specific parameters. For subsystem blocks, see tool description for codeGenStrategy and port options.'
       }
     },
     required: ['modelId', 'sheetId', 'blockType']

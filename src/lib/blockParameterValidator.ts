@@ -452,6 +452,28 @@ export function validateBlockParameters(
           sanitized.showEnableInput = parameters.showEnableInput;
         }
       }
+
+      // Validate codeGenStrategy
+      const validStrategies = ['flatten', 'segregated', 'segregated_atomic'];
+      if (parameters.codeGenStrategy !== undefined) {
+        if (typeof parameters.codeGenStrategy !== 'string') {
+          errors.push('codeGenStrategy must be a string');
+        } else if (!validStrategies.includes(parameters.codeGenStrategy)) {
+          errors.push(`codeGenStrategy must be one of: ${validStrategies.join(', ')}`);
+        } else {
+          sanitized.codeGenStrategy = parameters.codeGenStrategy;
+        }
+      } else if (parameters.segregated !== undefined) {
+        // Handle legacy 'segregated: true/false' parameter - convert to codeGenStrategy
+        if (parameters.segregated === true) {
+          sanitized.codeGenStrategy = 'segregated';
+        } else {
+          sanitized.codeGenStrategy = 'flatten';
+        }
+        // Warn about deprecated parameter (not an error, just normalize it)
+      } else {
+        sanitized.codeGenStrategy = defaults.codeGenStrategy || 'flatten';
+      }
       break;
 
     case BlockTypes.CONDITION:

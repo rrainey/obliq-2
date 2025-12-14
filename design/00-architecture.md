@@ -358,6 +358,10 @@ Each block type has a distinct visual appearance designed to convey its function
 - Single connection allowed per input port
 - Multiple connections allowed from output ports
 - Visual feedback during connection dragging
+- **Connection Storage**: Connections are stored using port indices (`sourcePortIndex`, `targetPortIndex`) as the canonical format. Port names are computed from block metadata when needed for display. This approach:
+  - Ensures consistency regardless of port naming changes
+  - Simplifies serialization and storage
+  - Makes the wire data self-contained without requiring block lookups for validation
 
 #### Responsive Behavior
 
@@ -442,14 +446,35 @@ The WASM simulation pipeline:
 1. **Code Generation**: Model JSON is transformed into C code via the code generation layer (`lib/codegen/`)
 2. **Compilation**: C code is compiled to WASM using Emscripten in a Docker container
 3. **Caching**: Compiled WASM modules are cached in Supabase Storage for fast subsequent loads
-4. **Execution**: WASM modules run in the browser with near-native performance
+4. **Execution**: WASM modules run in the browser with near-native performance, or on the server via Node.js
 
 Key components:
-- `lib/simulation/WasmSimulationEngine.ts` - Main WASM simulation engine
+- `lib/simulation/WasmSimulationEngine.ts` - Browser-based WASM simulation engine
 - `lib/simulation/SimulationWorker.ts` - Web Worker for off-main-thread execution
 - `lib/simulation/SimulationEngineFactory.ts` - Factory for creating WASM engines
 - `lib/wasm/cache/` - WASM module caching system
+- `lib/wasm/ServerWasmExecutor.ts` - Server-side WASM execution for API/MCP clients
 - `app/api/compile-wasm-stream/` - SSE-based compilation API
+
+#### Server-Side WASM Execution
+
+For programmatic access via the Automation API or MCP server, simulations run server-side using `ServerWasmExecutor`. This module:
+
+1. **Fetches model data** from Supabase using the service role key
+2. **Compiles to WASM** or retrieves from cache via the `/api/compile-wasm` endpoint
+3. **Loads the WASM module** using Node.js Buffer for base64 decoding
+4. **Executes the simulation** step-by-step, collecting outputs and signal data
+5. **Returns comprehensive results** including performance metrics
+
+The server-side executor supports all simulation parameters:
+- `timeStep`: Simulation time step in seconds (default: 0.01)
+- `duration`: Simulation duration in seconds (default: 10.0)
+- `inputs`: Input port values as name-value pairs
+- `optimizationLevel`: WASM compilation level (O0, O1, O2, O3; default: O2)
+- `includeTimeSeries`: Whether to include full time series data (default: false)
+- `timeSeriesSampleRate`: Sample every N steps when collecting time series (default: 1)
+
+This enables MCP clients and CI/CD pipelines to run simulations without a browser, making automated testing and validation workflows practical.
 
 #### Circular Buffer Sample Collection
 
@@ -793,7 +818,7 @@ To support workflows like continuous integration (CI), automated model validatio
 **Functionality:** The Automation API can be designed to handle various actions:
 
 * **Trigger Code Generation:** For example, a CI pipeline could call `POST /api/automations/[token]` with a JSON body like `{ "action": "generateCode", "modelId": "<uuid>" }`. The API route would verify the token, then fetch the model JSON from the database (using a Supabase service role key that has read access to all models, since this is a trusted environment operation) and run the code generation. It could respond with a URL to the generated code bundle or even directly attach the zip (similar to the user flow). This way, the latest code can be pulled into a firmware build process automatically.
-* **Run Simulation/Tests:** Another use might be `{ "action": "simulate", "modelId": "..." }`, which triggers a server-side simulation of the model (especially if the simulation can run headless and perhaps check for certain conditions or verify outputs). The results could be returned as data (or perhaps stored to a log). This could be used for automated regression testing of models.
+* **Run Simulation/Tests:** Another use might be `{ "action": "simulate", "modelId": "...", parameters: { timeStep: 0.01, duration: 10.0, inputs: { "InputPort1": 5.0 }, includeTimeSeries: true } }`. Simulations are executed server-side using WASM (via `ServerWasmExecutor`), providing the same high-performance execution as the browser. Results include output port values, signal statistics, and optionally full time series data. This enables automated regression testing and validation workflows.
 * **Validate Model:** `{ "action": "validateModel", "modelId": "..." }` could trigger a series of model checks (using `lib/validation.ts` if implemented) to ensure the model meets certain criteria (no missing connections, etc.), and return a pass/fail or report.
 
 The Automation API responses are designed to be machine-readable (JSON responses with status and data), since the consumer is likely another software service. We keep these routes lightweight – they mostly orchestrate calls to the same simulation or codegen logic used by the interactive app, just without a UI. Because these run on the server, they might be allowed to take slightly longer (a CI job could wait for code generation or simulation results a few seconds), whereas the interactive UI tries to be as real-time as possible.
@@ -840,6 +865,39 @@ The MCP server is implemented as a Node.js application that interfaces with the 
 - Test complex multi-sheet scenarios
 
 The MCP server maintains no state of its own, instead delegating all operations to the existing backend services. This ensures consistency between MCP operations and UI operations.
+
+### MCP Simulation Tools
+
+The MCP server provides the `run_simulation` tool for executing WASM-based simulations:
+
+**Input Parameters:**
+- `modelId` (required): UUID of the model to simulate
+- `version` (optional): Specific version number to simulate
+- `timeStep` (optional): Simulation time step in seconds (default: 0.01)
+- `duration` (optional): Simulation duration in seconds (default: 10.0)
+- `inputs` (optional): Object mapping input port names to numeric values
+- `optimizationLevel` (optional): WASM compilation level ('O0', 'O1', 'O2', 'O3')
+- `includeTimeSeries` (optional): Include full time series data in results
+- `sampleRate` (optional): Sample every N steps when collecting time series
+
+**Output:**
+- `success`: Boolean indicating success/failure
+- `simulationDuration`: Actual simulated time
+- `timePoints`: Number of simulation steps
+- `outputPorts`: Final values of all output ports
+- `signals`: Signal statistics (samples, min, max, average, finalValue) with optional time series data
+- `performance`: Execution metrics (compilationTimeMs, executionTimeMs, totalTimeMs, cacheHit)
+
+This enables MCP clients to run comprehensive simulations with input variations and retrieve detailed results for analysis or validation.
+
+### MCP Connection API
+
+The MCP `add_connection` tool accepts both port indices (preferred) and port names for flexibility:
+
+- When port indices are provided, they are used directly
+- When port names are provided, they are resolved to indices using block metadata
+- Connections are stored using indices as the canonical format
+- The `get_connection` response includes computed port names for readability
 
 ## State Management and Data Flow
 

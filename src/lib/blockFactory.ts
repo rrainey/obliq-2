@@ -177,7 +177,8 @@ export function getDefaultBlockParameters(blockType: string): Record<string, any
         sheetId: '',
         sheetName: 'Subsystem',
         inputPorts: ['Input1'],
-        outputPorts: ['Output1']
+        outputPorts: ['Output1'],
+        codeGenStrategy: 'flatten'  // 'flatten' | 'segregated' | 'segregated_atomic'
       };
 
     case BlockTypes.SHEET_LABEL_SINK:

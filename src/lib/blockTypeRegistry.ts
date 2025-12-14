@@ -349,7 +349,8 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
       sheetId: '',
       sheetName: 'Subsystem',
       inputPorts: ['Input1'],
-      outputPorts: ['Output1']
+      outputPorts: ['Output1'],
+      codeGenStrategy: 'flatten'  // 'flatten' | 'segregated' | 'segregated_atomic'
     },
     inputs: [], // Dynamic based on subsystem content
     outputs: [], // Dynamic based on subsystem content

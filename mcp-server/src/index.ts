@@ -45,6 +45,10 @@ import {
 import {
   batchExecuteTool
 } from './tools/batch-operations.js';
+import {
+  listBlockTypesTool,
+  listBlockTypesSummaryTool
+} from './tools/block-types.js';
 
 // Determine transport mode from command line or environment
 const useHttpMode = process.argv.includes('--http') || process.env.MCP_HTTP_MODE === 'true';
@@ -78,7 +82,10 @@ const tools: ToolWithHandler[] = [
   generateCodeTool,
   getGeneratedFilesTool,
   // Batch operations
-  batchExecuteTool
+  batchExecuteTool,
+  // Block type information
+  listBlockTypesTool,
+  listBlockTypesSummaryTool
 ];
 
 // Export tools for batch operations

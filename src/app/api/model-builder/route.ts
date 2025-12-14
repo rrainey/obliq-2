@@ -1262,8 +1262,9 @@ export async function POST(request: NextRequest) {
       }
       
       // Create the initial model data structure
+      // Use version 2.1 to indicate hierarchical sheet structure (subsystems contain embedded sheets)
       const initialModelData = {
-        version: "1.0",
+        version: "2.1",
         metadata: {
           created: new Date().toISOString(),
           description: `Model ${name}`
@@ -1976,6 +1977,21 @@ export async function POST(request: NextRequest) {
         parameters: parameters || undefined,
         existingBlocksOfType: existingBlocksOfType + 1
       });
+
+      // Validate and sanitize block parameters after creation
+      // This handles conversions like 'segregated: true' -> 'codeGenStrategy: segregated'
+      const validation = validateBlockParameters(blockType, newBlock.parameters);
+      if (!validation.valid) {
+        return NextResponse.json({
+          success: false,
+          timestamp: new Date().toISOString(),
+          error: 'Parameter validation failed',
+          code: 'VALIDATION_FAILED',
+          details: { errors: validation.errors }
+        }, { status: 400 });
+      }
+      // Apply sanitized parameters (includes legacy parameter conversions)
+      newBlock.parameters = validation.sanitizedParameters!;
 
       // For subsystem blocks, extract sheet info for the response
       let createdSheet = null;
