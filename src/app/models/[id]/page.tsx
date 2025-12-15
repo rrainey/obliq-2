@@ -38,6 +38,7 @@ import EvaluateConfig from '@/components/EvaluateConfig'
 import LimitConfig from '@/components/LimitConfig'
 import IntegratorConfig from '@/components/IntegratorConfig'
 import OrientationConversionConfig from '@/components/OrientationConversionConfig'
+import CommentConfig from '@/components/CommentConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
@@ -787,7 +788,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     const errors = validationResult.errors
     const warnings = validationResult.warnings
 
-    // Block on errors
+    // Block on errors - do not attempt WASM compilation if model has validation errors
     if (errors.length > 0) {
       const errorMessages = errors.slice(0, 5).map(e => {
         const sheetName = sheets.find(s => s.id === e.sheetId)?.name || 'Unknown Sheet'
@@ -795,12 +796,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       }).join('\n')
 
       notifications.show({
-        title: `Cannot run simulation due to ${errors.length} type compatibility error${errors.length > 1 ? 's' : ''}`,
+        title: 'This is not a valid Model so it will not be compiled',
         message: (
           <div>
+            <div style={{ marginBottom: 8 }}>{errors.length} validation error{errors.length > 1 ? 's' : ''} found:</div>
             {errorMessages}
             {errors.length > 5 && <div>...and {errors.length - 5} more errors</div>}
-            <div style={{ marginTop: 8 }}>Please fix these errors before running the simulation. Use the "Validate Model" button to see all issues.</div>
+            <div style={{ marginTop: 12, fontWeight: 500 }}>Correct the Model Validation errors and run the simulation again.</div>
+            <div style={{ marginTop: 4, fontSize: '0.9em', color: '#666' }}>Use the "Validate Model" button to see all issues.</div>
           </div>
         ),
         color: 'red',
@@ -1319,7 +1322,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'trig' ||
       block.type === 'condition' ||
       block.type === 'evaluate' ||
-      block.type === 'orientation_conversion'
+      block.type === 'orientation_conversion' ||
+      block.type === 'comment'
     )) {
       console.log('Setting config block:', block)
       setConfigBlock(block)
@@ -1755,7 +1759,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                 // Show error notification
                 notifications.show({
                   title: 'WASM Compilation Failed',
-                  message: 'Will use JavaScript engine instead',
+                  message: 'Check your model',
                   color: 'orange',
                   icon: <IconAlertCircle size={20} />,
                   autoClose: 5000
@@ -2074,6 +2078,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
           {configBlock.type === 'trig' && (
             <TrigConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+
+          {configBlock.type === 'comment' && (
+            <CommentConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

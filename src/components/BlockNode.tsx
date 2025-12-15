@@ -7,6 +7,7 @@ import { Handle, Position, NodeProps } from 'reactflow'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
 import { IconMathIntegral, IconMathMaxMin } from '@tabler/icons-react'
+import CommentNode from './CommentNode'
 
 export interface BlockData {
   id: string
@@ -1108,6 +1109,7 @@ export default BlockNode
 // Export node types configuration for ReactFlow
 export const nodeTypes = {
   customBlock: BlockNode,
+  comment: CommentNode,
 } as const
 
 // Helper function to convert BlockData to ReactFlow node format
@@ -1116,9 +1118,12 @@ export const blockDataToNode = (
   allWires?: WireDataRef[],
   allBlocks?: BlockData[]
 ) => {
+  // Use 'comment' node type for comment blocks (special rendering)
+  const nodeType = block.type === 'comment' ? 'comment' : 'customBlock'
+
   return {
     id: block.id,
-    type: 'customBlock',
+    type: nodeType,
     position: block.position,
     data: {
       id: block.id,

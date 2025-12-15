@@ -264,13 +264,22 @@ const blockTypes: BlockType[] = [
     icon: '?:',
     vectorSupport: 'full'
   },
-  { 
-    id: 'condition', 
-    name: 'Condition', 
-    category: 'Control', 
-    description: 'Compare signal to constant', 
+  {
+    id: 'condition',
+    name: 'Condition',
+    category: 'Control',
+    description: 'Compare signal to constant',
     icon: 'x1 ? c',
     vectorSupport: 'scalar-only'
+  },
+
+  // Annotation
+  {
+    id: 'comment',
+    name: 'Comment',
+    category: 'Annotation',
+    description: 'Text annotation with Markdown/LaTeX',
+    icon: '📝'
   },
 
 ]

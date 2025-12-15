@@ -685,6 +685,47 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     inputs: ['Phi_rad', 'Theta_rad', 'Psi_rad'],
     outputs: ['DCM'],
     dynamicPorts: 'Inputs and outputs change based on conversionType'
+  },
+
+  // === Annotation ===
+  {
+    type: 'comment',
+    displayName: 'Comment',
+    category: 'Annotation',
+    description: 'Text annotation block with Markdown support including LaTeX math. No inputs or outputs - purely for documentation. The block name is never rendered on the canvas.',
+    parameters: {
+      text: {
+        type: 'string',
+        description: 'Markdown text content. Supports GFM (tables, task lists) and LaTeX math ($...$ for inline, $$...$$ for block)',
+        default: '# Comment\n\nAdd your notes here...'
+      },
+      width: {
+        type: 'number',
+        description: 'Width of the comment block in pixels',
+        default: 200,
+        minimum: 100,
+        maximum: 800
+      },
+      height: {
+        type: 'number',
+        description: 'Minimum height of the comment block in pixels',
+        default: 100,
+        minimum: 50,
+        maximum: 600
+      },
+      backgroundColor: {
+        type: 'string',
+        description: 'Background color. Use any CSS color value (e.g., "#fffde7"), or use the special value "canvas" for transparent background',
+        default: '#fffde7'
+      },
+      borderColor: {
+        type: 'string',
+        description: 'Border color. Use any CSS color value (e.g., "#ffd54f"), or use the special value "none" for no border',
+        default: '#ffd54f'
+      }
+    },
+    inputs: [],
+    outputs: []
   }
 ];
 
@@ -712,7 +753,7 @@ You can filter by category to see related blocks together.`,
     properties: {
       category: {
         type: 'string',
-        description: 'Filter by category (optional). Available categories: Sources, Ports, Math, Dynamic, Lookup, Matrix, Vector, Control, Sinks, Sheet Labels, Hierarchical, Aerospace'
+        description: 'Filter by category (optional). Available categories: Sources, Ports, Math, Dynamic, Lookup, Matrix, Vector, Control, Sinks, Sheet Labels, Hierarchical, Aerospace, Annotation'
       },
       blockType: {
         type: 'string',

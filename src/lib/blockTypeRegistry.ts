@@ -70,6 +70,9 @@ export const BlockTypes = {
   // Aerospace blocks
   ORIENTATION_CONVERSION: 'orientation_conversion',
 
+  // Annotation blocks
+  COMMENT: 'comment',
+
 } as const;
 
 export type BlockType = typeof BlockTypes[keyof typeof BlockTypes];
@@ -503,6 +506,22 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     ],
     outputs: [{ name: 'DCM' }],
     description: 'Converts between Euler angles, DCM, and Quaternion representations (AIAA/ANSI aerospace convention)'
+  },
+
+  [BlockTypes.COMMENT]: {
+    type: BlockTypes.COMMENT,
+    displayName: 'Comment',
+    category: 'Annotation',
+    defaultParameters: {
+      text: '# Comment\n\nAdd your notes here...',
+      width: 200,
+      height: 100,
+      backgroundColor: '#fffde7',  // Use 'canvas' for transparent background
+      borderColor: '#ffd54f'       // Use 'none' for no border
+    },
+    inputs: [],
+    outputs: [],
+    description: 'Text annotation block with Markdown support (including LaTeX math). Use backgroundColor: "canvas" for transparent, borderColor: "none" for no border.'
   },
 
 };

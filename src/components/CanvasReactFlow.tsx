@@ -744,7 +744,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         )}
 
         {/* Custom Controls Panel */}
-        <Panel position="bottom-right" className="bg-white dark:bg-gray-800 rounded-md shadow-md px-2 py-1 text-xs text-gray-600">
+        <Panel position="bottom-right" className="bg-white dark:bg-gray-800 rounded-md shadow-md px-2 py-1 text-xs text-gray-200">
           <div className="flex items-center gap-2">
             <span>Zoom: {Math.round(viewport.zoom * 100)}%</span>
           </div>

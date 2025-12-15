@@ -468,6 +468,26 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
     baseOffset: 0,
   })
 
+  // Ref to track hover clear timeout - prevents losing hover when moving to drag handle
+  const hoverClearTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Clear any pending hover timeout
+  const clearHoverTimeout = useCallback(() => {
+    if (hoverClearTimeoutRef.current) {
+      clearTimeout(hoverClearTimeoutRef.current)
+      hoverClearTimeoutRef.current = null
+    }
+  }, [])
+
+  // Cleanup hover timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverClearTimeoutRef.current) {
+        clearTimeout(hoverClearTimeoutRef.current)
+      }
+    }
+  }, [])
+
   // Memoize segments to avoid recalculating on every render
   const segments = useMemo(() => {
     const effectiveOffset = isDragging ? currentOffset : (data?.routing?.midpointOffset ?? 0)
@@ -503,6 +523,9 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
     e.preventDefault()
     e.stopPropagation()
 
+    // Clear any pending hover timeout to prevent state changes during drag
+    clearHoverTimeout()
+
     // Store drag state in ref
     dragStateRef.current = {
       segmentIndex: 1, // Always the middle segment for now
@@ -513,7 +536,7 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
 
     setCurrentOffset(data?.routing?.midpointOffset ?? 0)
     setIsDragging(true)
-  }, [zoom, data?.routing?.midpointOffset])
+  }, [zoom, data?.routing?.midpointOffset, clearHoverTimeout])
 
   // Handle mouse move during drag - use effect that only depends on isDragging
   useEffect(() => {
@@ -620,6 +643,7 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
           style={getSegmentStyle(index)}
           markerEnd={index === segments.length - 1 ? customMarkerEnd : undefined}
           onMouseEnter={() => {
+            clearHoverTimeout()
             setIsHovered(true)
             if (canDragSegment(index)) {
               setHoveredSegmentIndex(index)
@@ -628,7 +652,12 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
           onMouseLeave={() => {
             // Don't clear hover state during drag - mouse may leave segment while dragging
             if (!isDragging && hoveredSegmentIndex === index) {
-              setHoveredSegmentIndex(null)
+              // Use a small delay to allow mouse to reach the drag handle
+              // before clearing the hover state
+              clearHoverTimeout()
+              hoverClearTimeoutRef.current = setTimeout(() => {
+                setHoveredSegmentIndex(null)
+              }, 150)
             }
           }}
         />
@@ -651,6 +680,7 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
                   r={12}
                   fill="transparent"
                   style={{ cursor: 'ew-resize', pointerEvents: 'all' }}
+                  onMouseEnter={clearHoverTimeout}
                   onMouseDown={handleDragHandleMouseDown}
                 />
                 {/* Visible handle */}
