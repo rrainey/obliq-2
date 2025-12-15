@@ -2,7 +2,7 @@
 
 ## Overview and Technology Stack
 
-This application is a web-based visual modeling and simulation tool, similar in spirit to Simulink. It enables users to **construct, test, and simulate block diagram models** in the browser, then generate C code for embedded deployment. The solution is built with **Next.js** as the frontend framework (leveraging its full-stack capabilities) and **Supabase** as the backend-as-a-service (handling database storage and user authentication). The primary data model (the user-created diagrams) is stored as JSON in a Postgres database (via Supabase). Using Supabase simplifies backend infrastructure since it provides authentication and a Postgres database with built-in JSON support (using JSONB columns) and row-level security for multi-user data separation. The system includes both a traditional web interface and a **Model Context Protocol (MCP) server** for programmatic access, enabling efficient testing and automation workflows. The architecture prioritizes clarity, simplicity, and performance, avoiding complex collaborative features and focusing on single-user editing sessions.
+This application is a web-based visual modeling and simulation tool, similar in spirit to Scicos or Simulink. It enables users to **construct, test, and simulate block diagram models** in the browser, then generate C code for embedded deployment. The solution is built with **Next.js** as the frontend framework (leveraging its full-stack capabilities) and **Supabase** as the backend-as-a-service (handling database storage and user authentication). The primary data model (the user-created diagrams) is stored as JSON in a Postgres database (via Supabase). Using Supabase simplifies backend infrastructure since it provides authentication and a Postgres database with built-in JSON support (using JSONB columns) and row-level security for multi-user data separation. The system includes both a traditional web interface and a **Model Context Protocol (MCP) server** for programmatic access, enabling efficient testing and automation workflows. The architecture prioritizes clarity, simplicity, and performance, avoiding complex collaborative features and focusing on single-user editing sessions.
 
 ## High-Level System Architecture
 
@@ -34,8 +34,11 @@ The project follows a clean, modular folder structure to organize different conc
   * **`components/CanvasReactFlow.tsx`** – The **visual modeling canvas** component. This component provides a drawing area (using HTML5 Canvas or SVG/React components) where block diagram elements (blocks and connecting wires) are rendered. It handles drag-and-drop placement of blocks, drawing of connection lines between ports, and selection/highlighting of elements. The Canvas component uses internal state or context to track what's being dragged or selected, and it delegates events (like drop or wire connection) to higher-level handlers.
   * **`components/BlockNode.tsx`** – A component representing an individual **Block** (e.g., a Sum block, Multiplication block, etc.). Each Block knows how to render its icon/symbol and has defined input/output ports. It might be implemented as a draggable item. This component might also include UI for configuring block parameters (for blocks that have parameters, such as a Laplace Transfer Function which has coefficients).
   * **`components/Port.tsx`** – A sub-component for an input or output port on a block. Ports are anchor points for connections. This component might handle user interactions for starting or ending a wire connection (e.g., click and drag from an output port to an input port).
-  * **`components/Wire.tsx`** – A component (or an SVG path) representing a **wire connection** between blocks. Wires can be drawn as SVG lines or Bezier curves connecting an output port to an input port.  It may also handle user interaction (e.g., clicking a wire might highlight it or allow deletion).
-  * **`components/BlockLibrarySidebar.tsx`** – A sidebar component that lists all available primitive blocks (Sum, Multiply, Transfer Function, Signal Display, Logger, Input/Output ports, etc.) and possibly user-defined Subsystems. Users can drag new blocks from this palette onto the canvas. This component organizes blocks into categories and provides a search or filter for convenience if the library grows.
+  * **`components/Wire.tsx`** – A component (or an SVG path) representing a **wire connection** between blocks. Wires can be drawn as SVG lines or Bezier curves connecting an output port to an input port. It may also handle user interaction (e.g., clicking a wire might highlight it or allow deletion). Includes WireData interface with routing information for custom wire paths.
+  * **`components/WireContextMenu.tsx`** – Context menu component displayed on right-click of a wire, providing options for Highlight Connections (shows all wires from the same source), Remove Custom Routing (resets wire path), and Delete.
+  * **`components/CommentNode.tsx`** – React component for rendering Comment blocks on the canvas. Displays configurable text with background color, font size, and width settings. Double-click opens the configuration dialog.
+  * **`components/CommentConfig.tsx`** – Configuration dialog for Comment blocks, allowing users to edit text content, background color, font size, and width.
+  * **`components/BlockLibrarySidebar.tsx`** – A sidebar component that lists all available primitive blocks (Sum, Multiply, Transfer Function, Signal Display, Logger, Input/Output ports, Comment, etc.) and possibly user-defined Subsystems. Users can drag new blocks from this palette onto the canvas. This component organizes blocks into categories and provides a search or filter for convenience if the library grows.
   * **`components/AutoSaveRecoveryDialog.tsx`** – Modal dialog shown when opening a model that has an auto-saved version. Displays timestamps of both the auto-save and last saved version, allowing users to choose which to open. When recovering auto-save, the system loads the auto-saved content but maintains the latest version number to ensure proper UI behavior.
 
   * **`components/AutoSaveStatusIndicator.tsx`** – Small component that displays the auto-save status in the header, showing when auto-save last ran and providing visual feedback when saves complete.
@@ -73,6 +76,7 @@ The project follows a clean, modular folder structure to organize different conc
   * **`lib/wasm/cache/`** – WASM module caching system including cache key generation (`cacheKey.ts`) and Supabase storage management (`SupabaseCacheManager.ts`).
 
   * **`lib/sheetLabelUtils.ts`** – Utilities for handling sheet label connections, validation, and scoping within subsystems.
+  * **`lib/wireRoutingUtils.ts`** – Utilities for wire routing calculations, including path segment generation, midpoint calculations, and handling of custom waypoints for user-adjusted wire paths.
   * **`lib/codeGeneration.ts`** – The **C Code generation service**. This module includes functions that transform a model JSON into C code files. It iterates through the blocks and connections to produce C structures and functions. For example, it may generate a `init()` function to initialize all blocks, an `update(step_time)` function to update the simulation each tick, and data structures for each block's state. It uses the preserved signal names from the model for variable and function names to ensure the generated code is understandable. The code generation could use templates for PlatformIO (e.g., generating a library with a `library.properties` if targeting Arduino, or a PlatformIO `src/` folder with code). This module can be used both on the server (for the API route that delivers a file) and potentially on the client (if we wanted to preview code). However, generating a downloadable library (especially if it involves bundling multiple files into a zip) is better done server-side. The output of code generation is not stored in the database; it's generated on-demand and provided to the user (or external caller) for download.
   * **`lib/modelSchema.ts`** – Definition of the **Model JSON schema** or TypeScript types for the model. This defines how a model is structured as JSON: e.g., a model object containing metadata and an array of **Sheets**, each Sheet containing a list of **Blocks** (with properties like id, type, position, parameters, etc.) and **Connections** (wires linking block outputs to inputs). It also defines how Subsystems are represented (possibly as a special block type that contains a reference to another list of blocks internally or a child sheet). Defining a clear schema (and perhaps using a validation library like Zod for it) helps maintain consistency between the front-end, simulation, and code generation logic so all interpret the model the same way. This module also defines the `ModelParameter` interface for model-level parameters (name, type, value, description) that can be referenced by Source and Evaluate blocks.
   * **`lib/validation.ts`** – (Optional) If needed, this module could contain functions to validate a model (e.g., to ensure there are no unconnected required ports, no algebraic loops without feedback blocks, etc.). This might be used in the automation API to run model checks.
@@ -237,6 +241,18 @@ Each primitive block type is defined with specific behavior:
 * **Trig Block** - this block supports any one of several common trigonometry functions: sin(), cos(), tan(), atan(), atan2(), and sincos(). Inputs and outputs are "double" scalar data types.
 * **Evaluate Block** - a block that evaluates a mathematical expression combining its inputs with model parameters. Inputs are referenced as `in0`, `in1`, etc., and model parameters are referenced by name. Supports standard math functions (sin, cos, sqrt, abs, pow, exp, log, etc.) and arithmetic operators. The number of input ports is configurable. Output type is inferred from the expression and input types. Example expression: `in0 * gain + offset` where `gain` and `offset` are model parameters.
 
+### Annotation Blocks
+
+* **Comment Block** – a special block type for adding notes and documentation directly on the canvas. Comment blocks have no input or output ports and do not participate in simulation or code generation. They are purely for annotation purposes. Features include:
+  - Configurable text content with multi-line support
+  - Adjustable font size (small, medium, large)
+  - Background color options (yellow, blue, green, pink, gray, white)
+  - Configurable width to fit content
+  - Double-click to edit the comment text
+  - Visual styling with rounded corners and subtle shadow
+
+  Comment blocks are stored in the model JSON with their text content and display settings, but are ignored during model flattening, simulation, and C code generation.
+
 ### Matrix Operation Blocks
 
 * **Matrix Multiply Block** – performs matrix multiplication following standard linear algebra rules. It has two inputs and one output. The block supports:
@@ -362,6 +378,22 @@ Each block type has a distinct visual appearance designed to convey its function
   - Ensures consistency regardless of port naming changes
   - Simplifies serialization and storage
   - Makes the wire data self-contained without requiring block lookups for validation
+
+**Wire Routing Adjustments:**
+Users can adjust the routing of connection wires to improve diagram clarity:
+- **Draggable Segments**: The middle vertical segment of step-edge wires can be dragged horizontally to adjust the routing path
+- **Visual Feedback**: A drag handle appears when hovering over draggable segments, with bidirectional arrows indicating the drag direction
+- **Persistent Storage**: Custom routing is stored in the wire's `routing` property with `midpointOffset` (relative offset from auto-calculated midpoint) and optional `waypoints` (absolute coordinates for complex paths)
+- **Zoom-Aware**: Drag operations correctly account for canvas zoom level
+- The routing can be reset via the wire context menu
+
+**Wire Context Menu:**
+Right-clicking on a wire displays a context menu with the following options:
+- **Highlight Connections**: Highlights the selected wire and all other wires sharing the same source port (same origination block and port) in **magenta**. This helps users visualize signal nets - all connections driven by the same output. Selecting the option again (or highlighting a different net) clears the previous highlight. Only one net can be highlighted at a time.
+- **Remove Custom Routing**: Clears any user-adjusted routing on the wire, returning it to the default auto-calculated path. This option is disabled if the wire has no custom routing.
+- **Delete**: Removes the connection from the model.
+
+The context menu closes automatically when clicking elsewhere on the canvas or pressing Escape.
 
 #### Responsive Behavior
 
@@ -866,6 +898,27 @@ The MCP server is implemented as a Node.js application that interfaces with the 
 
 The MCP server maintains no state of its own, instead delegating all operations to the existing backend services. This ensures consistency between MCP operations and UI operations.
 
+### MCP Block Type Discovery Tools
+
+The MCP server provides the `list_block_types` tool for discovering available block types and their configurations:
+
+**Input Parameters:**
+- `category` (optional): Filter by block category (e.g., 'math', 'sources', 'sinks', 'routing', 'dynamics', 'matrix', 'annotation')
+- `includeParameters` (optional): Include detailed parameter specifications (default: true)
+
+**Output:**
+- `blockTypes`: Array of block type definitions, each containing:
+  - `type`: Block type identifier
+  - `displayName`: Human-readable name
+  - `category`: Block category
+  - `description`: Detailed description of block functionality
+  - `inputPorts`: Number and description of input ports
+  - `outputPorts`: Number and description of output ports
+  - `parameters`: Parameter definitions with types, defaults, and validation rules
+  - `hints`: Usage hints for AI assistants and developers
+
+This tool is particularly useful for AI assistants building models programmatically, as it provides comprehensive information about each block type's capabilities, required parameters, and proper configuration. The hints field includes guidance on common use cases and subsystem handling.
+
 ### MCP Simulation Tools
 
 The MCP server provides the `run_simulation` tool for executing WASM-based simulations:
@@ -954,6 +1007,25 @@ The application provides a seamless auto-save experience that protects users' wo
 - All user actions that modify the model immediately update the dirty state
 
 This design ensures that auto-save is truly transparent - it's a safety net that catches unsaved work without adding complexity to the user's workflow.
+
+### Error and Validation Display Improvements
+
+The application provides enhanced error display capabilities to help users diagnose and fix issues:
+
+**Model Validation Modal:**
+- Displays validation errors and warnings in a structured format
+- **Copy to Clipboard**: A dedicated button copies all validation errors to the clipboard in a formatted text format, making it easy to share errors or paste them into documentation
+- Errors are grouped by severity and include detailed context
+
+**WASM Compilation Error Display:**
+- Enhanced error viewer for WebAssembly compilation failures
+- **Expandable Details**: Each error can be expanded to show the full compiler output
+- **Copy Individual Errors**: Each error message has a copy button for quick clipboard access
+- **Copy All Errors**: A button to copy the complete error output including all details
+- Improved formatting makes it easier to identify the source of compilation issues
+- Line numbers and file references are preserved for traceability
+
+These improvements make debugging and error resolution more efficient, especially when working with complex models or when seeking help from others.
 
 ## Code Generation Architecture
 
