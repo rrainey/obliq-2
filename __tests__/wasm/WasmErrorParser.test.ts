@@ -116,7 +116,7 @@ describe('WasmErrorParser', () => {
       const parsed = parseWasmError(error)
 
       expect(parsed.category).toBe('cache')
-      expect(parsed.title).toBe('Cache Error')
+      expect(parsed.title).toBe('The Model will not Compile')
       expect(parsed.severity).toBe('warning')
     })
   })

@@ -32,6 +32,8 @@ export interface CustomEdgeData {
   routing?: WireRouting
   // Callback for routing changes
   onRoutingChange?: (wireId: string, routing: WireRouting | undefined) => void
+  // Net highlighting - true if this wire is part of the highlighted net
+  isHighlighted?: boolean
 }
 
 // Helper to extract matrix dimensions from type string
@@ -503,6 +505,7 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
   const fullPath = segmentsToPath(segments)
   const hasError = !!data?.typeError
   const isMatrix = !!extractMatrixDimensions(data?.sourceType)
+  const isHighlighted = !!data?.isHighlighted
 
   // Determine which segment can be dragged (middle vertical segment for simple step)
   const canDragSegment = useCallback((segmentIndex: number): boolean => {
@@ -594,12 +597,23 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
     const isSegmentHovered = hoveredSegmentIndex === segmentIndex
     const isBeingDragged = isDragging && dragSegmentIndex === segmentIndex
 
+    // Determine stroke color with highlighting priority
+    let strokeColor = '#374151' // default gray
+    if (hasError) {
+      strokeColor = '#ef4444' // red for errors
+    } else if (isHighlighted) {
+      strokeColor = '#d946ef' // magenta for highlighted nets
+    } else if (isBeingDragged) {
+      strokeColor = '#2563eb' // blue when dragging
+    } else if (selected || isSegmentHovered) {
+      strokeColor = '#3b82f6' // blue when selected/hovered
+    } else if (isHovered) {
+      strokeColor = '#6b7280' // gray on hover
+    }
+
     return {
-      stroke: hasError ? '#ef4444' :
-              isBeingDragged ? '#2563eb' :
-              (selected || isSegmentHovered) ? '#3b82f6' :
-              isHovered ? '#6b7280' : '#374151',
-      strokeWidth: (selected || isSegmentHovered || isBeingDragged) ? 3 : (isMatrix ? 3 : 2),
+      stroke: strokeColor,
+      strokeWidth: (selected || isSegmentHovered || isBeingDragged || isHighlighted) ? 3 : (isMatrix ? 3 : 2),
       strokeDasharray: hasError ? '5,5' : (isMatrix && !isHovered && !selected ? '10,3' : 'none'),
       cursor: isDragTarget ? (isBeingDragged ? 'grabbing' : 'ew-resize') : 'pointer',
       transition: isBeingDragged ? 'none' : 'stroke 0.2s, stroke-width 0.2s',
@@ -608,6 +622,7 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
 
   // Custom marker based on state
   const customMarkerEnd = hasError ? 'url(#arrow-error)' :
+                         isHighlighted ? 'url(#arrow-highlighted)' :
                          selected ? 'url(#arrow-selected)' :
                          isHovered ? 'url(#arrow-hover)' :
                          isMatrix ? 'url(#arrow-matrix)' :
@@ -874,6 +889,17 @@ export function CustomEdgeWrapper() {
           orient="auto"
         >
           <path d="M 0 5 L 20 10 L 0 15 Z" fill="#dc2626" />
+        </marker>
+        <marker
+          id="arrow-highlighted"
+          viewBox="0 0 20 20"
+          refX="20"
+          refY="10"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto"
+        >
+          <path d="M 0 5 L 20 10 L 0 15 Z" fill="#d946ef" />
         </marker>
       </defs>
     </svg>

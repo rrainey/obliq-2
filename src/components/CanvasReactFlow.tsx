@@ -37,6 +37,7 @@ import { validateConnection, detectAlgebraicLoop } from '@/lib/connectionValidat
 import { propagateSignalTypes, SignalType } from '@/lib/signalTypePropagation'
 import { validateWireConnection, TypeCompatibilityError } from '@/lib/typeCompatibilityValidator'
 import BlockContextMenu from './BlockContextMenu'
+import WireContextMenu from './WireContextMenu'
 
 interface CanvasReactFlowProps {
   blocks?: BlockData[]
@@ -76,6 +77,21 @@ type ContextMenu = {
   bottom?: number
 }
 
+// Wire context menu state type
+type WireContextMenu = {
+  wireId: string
+  top?: number
+  left?: number
+  right?: number
+  bottom?: number
+}
+
+// Highlighted net identifier (source block + port)
+type HighlightedNet = {
+  sourceBlockId: string
+  sourcePortIndex: number
+} | null
+
 // Inner component that has access to ReactFlow instance
 function CanvasReactFlowInner({
   blocks = [],
@@ -111,6 +127,12 @@ function CanvasReactFlowInner({
 
   // Context menu state - following ReactFlow pattern
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
+
+  // Wire context menu state
+  const [wireContextMenu, setWireContextMenu] = useState<WireContextMenu | null>(null)
+
+  // Highlighted net state - tracks which source port's connections are highlighted
+  const [highlightedNet, setHighlightedNet] = useState<HighlightedNet>(null)
 
   // Feature 7: Rename dialog state
   const [renameDialog, setRenameDialog] = useState<{
@@ -301,6 +323,13 @@ function CanvasReactFlowInner({
       edgeData.routing = wire.routing
       edgeData.onRoutingChange = handleWireRoutingChange
 
+      // Add highlighting info - wire is highlighted if it shares the same source as highlightedNet
+      if (highlightedNet &&
+          wire.sourceBlockId === highlightedNet.sourceBlockId &&
+          wire.sourcePortIndex === highlightedNet.sourcePortIndex) {
+        edgeData.isHighlighted = true
+      }
+
       return {
         ...wireDataToEdge(wire),
         type: 'editableStep',
@@ -308,7 +337,7 @@ function CanvasReactFlowInner({
       }
     })
     setEdges(newEdges)
-  }, [wires, blocks, setEdges, handleWireRoutingChange])
+  }, [wires, blocks, setEdges, handleWireRoutingChange, highlightedNet])
 
   // Handle connection validation
   const isValidConnection = useCallback((connection: Connection) => {
@@ -479,9 +508,58 @@ const handleEdgesChange = useCallback((changes: any[]) => {
     [setContextMenu]
   )
 
+  // Handle edge/wire context menu
+  const onEdgeContextMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.preventDefault()
+
+      if (!reactFlowWrapper.current) return
+
+      const pane = reactFlowWrapper.current.getBoundingClientRect()
+
+      // Close any open block context menu
+      setContextMenu(null)
+
+      setWireContextMenu({
+        wireId: edge.id,
+        top: event.clientY - pane.top,
+        left: event.clientX - pane.left,
+      })
+    },
+    [setWireContextMenu, setContextMenu]
+  )
+
+  // Handle highlight connections toggle
+  const handleHighlightConnections = useCallback((wireId: string) => {
+    const wire = wires.find(w => w.id === wireId)
+    if (!wire) return
+
+    // Check if this net is already highlighted
+    if (highlightedNet &&
+        highlightedNet.sourceBlockId === wire.sourceBlockId &&
+        highlightedNet.sourcePortIndex === wire.sourcePortIndex) {
+      // Toggle off - clear highlighting
+      setHighlightedNet(null)
+    } else {
+      // Highlight this net (all wires from same source port)
+      setHighlightedNet({
+        sourceBlockId: wire.sourceBlockId,
+        sourcePortIndex: wire.sourcePortIndex,
+      })
+    }
+  }, [wires, highlightedNet])
+
+  // Handle remove custom routing
+  const handleRemoveCustomRouting = useCallback((wireId: string) => {
+    if (onWireRoutingChange) {
+      onWireRoutingChange(wireId, undefined)
+    }
+  }, [onWireRoutingChange])
+
   // Close context menu when clicking on the pane - Feature 4: Clear all selection
   const onPaneClick = useCallback(() => {
     setContextMenu(null)
+    setWireContextMenu(null)
     // Feature 4: Use clearSelection if available, otherwise fall back to individual clears
     if (onClearSelection) {
       onClearSelection()
@@ -499,8 +577,9 @@ const handleEdgesChange = useCallback((changes: any[]) => {
 
   // Handle node drag
   const onNodeDrag: NodeDragHandler = useCallback((event, node) => {
-    // Close context menu when dragging starts
+    // Close context menus when dragging starts
     setContextMenu(null)
+    setWireContextMenu(null)
   }, [])
 
   // Note: We handle drag stop through onNodesChange instead of onNodeDragStop/onSelectionDragStop
@@ -687,6 +766,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         onSelectionChange={onSelectionChange}
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
+        onEdgeContextMenu={onEdgeContextMenu}
         onDragOver={onDragOver}
         onDrop={onDropHandler}
 
@@ -791,6 +871,43 @@ const handleEdgesChange = useCallback((changes: any[]) => {
               onSheetNavigate(sheetId)
             }
             setContextMenu(null)
+          }}
+        />
+      )}
+
+      {/* Wire context menu */}
+      {wireContextMenu && (
+        <WireContextMenu
+          wireId={wireContextMenu.wireId}
+          top={wireContextMenu.top}
+          left={wireContextMenu.left}
+          right={wireContextMenu.right}
+          bottom={wireContextMenu.bottom}
+          isHighlighted={
+            highlightedNet !== null &&
+            (() => {
+              const wire = wires.find(w => w.id === wireContextMenu.wireId)
+              return wire !== undefined &&
+                wire.sourceBlockId === highlightedNet.sourceBlockId &&
+                wire.sourcePortIndex === highlightedNet.sourcePortIndex
+            })()
+          }
+          hasCustomRouting={
+            (() => {
+              const wire = wires.find(w => w.id === wireContextMenu.wireId)
+              return wire !== undefined && wire.routing !== undefined &&
+                (wire.routing.midpointOffset !== undefined ||
+                 (wire.routing.waypoints !== undefined && wire.routing.waypoints.length > 0))
+            })()
+          }
+          onClose={() => setWireContextMenu(null)}
+          onHighlightConnections={handleHighlightConnections}
+          onRemoveCustomRouting={handleRemoveCustomRouting}
+          onDelete={(wireId) => {
+            if (onWireDelete) {
+              onWireDelete(wireId)
+            }
+            setWireContextMenu(null)
           }}
         />
       )}
