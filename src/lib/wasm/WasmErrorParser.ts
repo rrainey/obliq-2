@@ -51,8 +51,7 @@ export function parseWasmError(errorMessage: string, details?: string): ParsedWa
       suggestions: [
         'Start Docker Desktop and try again',
         'Ensure Docker is installed and configured correctly',
-        'Check Docker daemon is running: docker ps',
-        'Use JavaScript engine instead (disable WASM in settings)'
+        'Check Docker daemon is running: docker ps'
       ],
       isUserFixable: true,
       severity: 'error'
@@ -67,9 +66,8 @@ export function parseWasmError(errorMessage: string, details?: string): ParsedWa
       message: 'Failed to fetch or cache compilation result.',
       rawError: fullError,
       suggestions: [
+        'Select Force Recompile',
         'Check your internet connection',
-        'Retry the compilation',
-        'Clear browser cache and reload',
         'Check Supabase service status'
       ],
       isUserFixable: true,
@@ -81,13 +79,12 @@ export function parseWasmError(errorMessage: string, details?: string): ParsedWa
   if (lowerError.includes('cache') || lowerError.includes('storage')) {
     return {
       category: 'cache',
-      title: 'Cache Error',
-      message: 'Failed to store or retrieve compilation from cache.',
+      title: 'The Model will not Compile',
+      message: 'Failed to build or retrieve compilation from cache.',
       rawError: fullError,
       suggestions: [
-        'Clear browser cache and try again',
-        'Check available disk space',
-        'Compilation will work but won\'t be cached'
+        'Select Force Recompile',
+        'Check available disk space'
       ],
       isUserFixable: true,
       severity: 'warning'
@@ -178,10 +175,7 @@ export function parseWasmError(errorMessage: string, details?: string): ParsedWa
       lineNumber,
       suggestions: [
         'This is likely a code generation bug',
-        'Try simplifying the model and test again',
-        'Check for unusual block parameter values',
-        'Report this issue with your model structure',
-        'Use JavaScript engine as workaround'
+        'Report this issue along with your exported model to the LLM'
       ],
       isUserFixable: false,
       severity: 'error'
@@ -198,9 +192,7 @@ export function parseWasmError(errorMessage: string, details?: string): ParsedWa
       suggestions: [
         'Model may be too large for WASM compilation',
         'Try reducing model complexity',
-        'Close other browser tabs to free memory',
-        'Use JavaScript engine for very large models',
-        'Contact support for memory limit increases'
+        'Close other browser tabs to free memory'
       ],
       isUserFixable: true,
       severity: 'error'
@@ -217,9 +209,7 @@ export function parseWasmError(errorMessage: string, details?: string): ParsedWa
       suggestions: [
         'Model may be too complex',
         'Try a lower optimization level (O0 or O1)',
-        'Reduce model size or complexity',
-        'Retry - first compilation is slower',
-        'Use JavaScript engine for complex models'
+        'Reduce model size or complexity'
       ],
       isUserFixable: true,
       severity: 'error'
@@ -235,9 +225,7 @@ export function parseWasmError(errorMessage: string, details?: string): ParsedWa
       rawError: fullError,
       suggestions: [
         'Verify Docker image is built correctly',
-        'Rebuild Docker image: docker build -t obliq-emscripten .',
-        'Check Dockerfile includes Emscripten installation',
-        'Contact system administrator if hosted'
+        'Rebuild Docker image: docker build -t obliq-emscripten .'
       ],
       isUserFixable: false,
       severity: 'error'
@@ -259,9 +247,7 @@ export function parseWasmError(errorMessage: string, details?: string): ParsedWa
       lineNumber,
       suggestions: [
         'Check model for invalid block parameters',
-        'Review error details below for specifics',
-        'Try using JavaScript engine instead',
-        'Report persistent errors with model structure'
+        'Review error details below for specifics'
       ],
       isUserFixable: true,
       severity: 'error'
@@ -276,7 +262,6 @@ export function parseWasmError(errorMessage: string, details?: string): ParsedWa
     rawError: fullError,
     suggestions: [
       'Try reloading the page and compiling again',
-      'Use JavaScript engine as alternative',
       'Check browser console for additional details',
       'Report this error with full details'
     ],

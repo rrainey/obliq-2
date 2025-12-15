@@ -118,7 +118,7 @@ export function validateModelTypeCompatibility(
     // Get the signal type for this wire
     const signalType = propagationResult.signalTypes.get(wire.id)
     if (!signalType) {
-      warnings.push({
+      errors.push({
         wireId: wire.id,
         sourceBlockId: sourceBlock.id,
         targetBlockId: targetBlock.id,
@@ -248,7 +248,7 @@ export function validateModelTypeCompatibilityMultiSheet(
         const targetBlock = sheet.blocks.find(b => b.id === wire.targetBlockId)
         
         if (sourceBlock && targetBlock) {
-          allWarnings.push({
+          allErrors.push({
             message: `Unable to determine signal type for connection from ${sourceBlock.name} to ${targetBlock.name}`,
             wireId: wire.id,
             severity: 'warning'

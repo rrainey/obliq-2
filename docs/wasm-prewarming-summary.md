@@ -67,7 +67,7 @@ onError={(error) => {
 
   notifications.show({
     title: 'WASM Compilation Failed',
-    message: 'Will use JavaScript engine instead',
+    message: 'Possible Code Generation issue',
     color: 'orange',
     icon: <IconAlertCircle size={20} />,
     autoClose: 5000
@@ -181,7 +181,7 @@ wasm_abc-123-def_sha256hash_O2
 2. Page renders immediately
 3. CompilationProgress appears
 4. Compilation fails (Docker issue, invalid model, etc.)
-5. **Orange notification:** "WASM Compilation Failed - Will use JavaScript engine"
+5. **Orange notification:** "WASM Compilation Failed - Will use JavaScript engine" (No the JS Engine has since been removed - 2025-12-10)
 6. User clicks "Run Simulation"
 7. Falls back to JavaScript engine (slower but functional)
 
