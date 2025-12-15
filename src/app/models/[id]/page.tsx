@@ -115,7 +115,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     // Actions
     setModel, setError, setModelLoading, saveModel,
     switchToSheet, addSheet, renameSheet, deleteSheet,
-    addBlock, updateBlock, updateBlocks, deleteBlock, addWire, deleteWire, renameBlock,
+    addBlock, updateBlock, updateBlocks, deleteBlock, addWire, deleteWire, updateWireRouting, renameBlock,
     setSelectedBlockId, setSelectedBlocks, setSelectedWireId, setConfigBlock, clearSelection,
     // Feature 5: Clipboard actions
     copySelection, cutSelection, pasteFromClipboard, checkClipboardDependencies,
@@ -1672,6 +1672,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onWireCreate={handleWireCreate}
               onWireSelect={setSelectedWireId}
               onWireDelete={handleWireDelete}
+              onWireRoutingChange={(wireId, routing) => {
+                updateWireRouting(wireId, routing)
+                saveCurrentSheetData()
+              }}
               onSheetNavigate={switchToSheet}
               onClearSelection={clearSelection}
               onCopy={handleCopy}

@@ -104,6 +104,7 @@ export interface ModelActions {
   deleteBlock: (blockId: string) => void
   addWire: (wire: WireData) => void
   deleteWire: (wireId: string) => void
+  updateWireRouting: (wireId: string, routing: WireData['routing']) => void
   // Feature 7: Block rename
   renameBlock: (blockId: string, newName: string) => { success: boolean; error?: string }
   validateBlockName: (name: string, excludeBlockId?: string) => { valid: boolean; error?: string }
@@ -765,6 +766,15 @@ export const useModelStore = create<ModelStore>()(
 
     deleteWire: (wireId) => set((state) => ({
       wires: state.wires.filter(wire => wire.id !== wireId),
+      isDirty: true
+    })),
+
+    updateWireRouting: (wireId, routing) => set((state) => ({
+      wires: state.wires.map(wire =>
+        wire.id === wireId
+          ? { ...wire, routing }
+          : wire
+      ),
       isDirty: true
     })),
 

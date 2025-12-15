@@ -4,12 +4,22 @@
 import { useState, useEffect, useRef } from 'react'
 import { TypeCompatibilityError } from '@/lib/typeCompatibilityValidator'
 
+// Wire routing for custom path control
+export interface WireRouting {
+  // For simple cases: relative offset from auto-calculated midpoint (in pixels)
+  midpointOffset?: number
+  // For complex cases: absolute waypoint coordinates for full path control
+  waypoints?: { x: number; y: number }[]
+}
+
 export interface WireData {
   id: string
   sourceBlockId: string
   sourcePortIndex: number
   targetBlockId: string
   targetPortIndex: number
+  // Optional custom routing - when absent, auto-routing is used
+  routing?: WireRouting
 }
 
 interface WireProps {

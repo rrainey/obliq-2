@@ -56,6 +56,7 @@ interface CanvasReactFlowProps {
   onWireCreate?: (sourcePort: PortInfo, targetPort: PortInfo) => void
   onWireSelect?: (wireId: string | null) => void
   onWireDelete?: (wireId: string) => void
+  onWireRoutingChange?: (wireId: string, routing: { midpointOffset?: number; waypoints?: { x: number; y: number }[] } | undefined) => void
   onSheetNavigate?: (sheetId: string) => void
   onClearSelection?: () => void  // Feature 4: Clear selection callback
   // Feature 5: Clipboard callbacks
@@ -94,6 +95,7 @@ function CanvasReactFlowInner({
   onWireCreate,
   onWireSelect,
   onWireDelete,
+  onWireRoutingChange,
   onSheetNavigate,
   onClearSelection,       // Feature 4
   onCopy,                 // Feature 5
@@ -243,15 +245,22 @@ function CanvasReactFlowInner({
     })))
   }, [blocks, wires, selectedBlockId, selectedBlockIds, setNodes])
 
+  // Handler for wire routing changes from editable edges
+  const handleWireRoutingChange = useCallback((wireId: string, routing: CustomEdgeData['routing']) => {
+    if (onWireRoutingChange) {
+      onWireRoutingChange(wireId, routing)
+    }
+  }, [onWireRoutingChange])
+
   useEffect(() => {
     // Run type propagation once for all wires
     const propagationResult = propagateSignalTypes(blocks, wires)
-    
+
     const newEdges = wires.map(wire => {
       const signalType = propagationResult.signalTypes.get(wire.id)
-      
+
       let edgeData: CustomEdgeData = {}
-      
+
       if (signalType) {
         // Check for type errors
         const wireError = propagationResult.errors.find(e => e.wireId === wire.id)
@@ -265,17 +274,17 @@ function CanvasReactFlowInner({
             } : undefined
           }
         }
-        
+
         edgeData.sourceType = signalType.type
         edgeData.targetType = signalType.type
-        
+
         // Add signal name if it's from a named port
         const sourceBlock = blocks.find(b => b.id === wire.sourceBlockId)
         if (sourceBlock?.type === 'input_port' || sourceBlock?.type === 'output_port') {
           edgeData.signalName = sourceBlock.parameters?.signalName || sourceBlock.name
         }
       }
-      
+
       // Special styling for enable connections
       if (wire.targetPortIndex === -1) {
         edgeData.sourceType = 'bool' // Enable ports always expect boolean
@@ -288,14 +297,18 @@ function CanvasReactFlowInner({
         edgeData.isResetConnection = true
       }
 
+      // Add routing data and callback for editable edges
+      edgeData.routing = wire.routing
+      edgeData.onRoutingChange = handleWireRoutingChange
+
       return {
         ...wireDataToEdge(wire),
-        type: 'step',
+        type: 'editableStep',
         data: edgeData,
       }
     })
     setEdges(newEdges)
-  }, [wires, blocks, setEdges])
+  }, [wires, blocks, setEdges, handleWireRoutingChange])
 
   // Handle connection validation
   const isValidConnection = useCallback((connection: Connection) => {

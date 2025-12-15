@@ -73,13 +73,26 @@ const BlockSchema = z.discriminatedUnion('type', [
   })
 ])
 
+// Wire routing schema for custom path control
+const WireRoutingSchema = z.object({
+  // For simple cases: relative offset from auto-calculated midpoint (in pixels)
+  // Positive = right/down, Negative = left/up depending on path orientation
+  midpointOffset: z.number().optional(),
+
+  // For complex cases: absolute waypoint coordinates for full path control
+  // When present, defines all turn points between source and target
+  waypoints: z.array(PositionSchema).optional(),
+}).optional()
+
 // Wire/Connection schema
 const WireSchema = z.object({
   id: z.string().min(1, 'Wire ID cannot be empty'),
   sourceBlockId: z.string().min(1, 'Source block ID cannot be empty'),
   sourcePortIndex: z.number().min(0, 'Source port index must be non-negative'),
   targetBlockId: z.string().min(1, 'Target block ID cannot be empty'),
-  targetPortIndex: z.number().min(0, 'Target port index must be non-negative')
+  targetPortIndex: z.number().min(0, 'Target port index must be non-negative'),
+  // Optional custom routing - when absent, auto-routing is used
+  routing: WireRoutingSchema,
 })
 
 // Signal type information schema (for propagated types)
@@ -202,6 +215,7 @@ export type ModelData = z.infer<typeof ModelDataSchema>
 export type ModelParameter = z.infer<typeof ModelParameterSchema>
 export type Block = z.infer<typeof BlockSchema>
 export type Wire = z.infer<typeof WireSchema>
+export type WireRouting = z.infer<typeof WireRoutingSchema>
 export type Sheet = z.infer<typeof SheetSchemaDefinition>
 export type Position = z.infer<typeof PositionSchema>
 export type Extents = z.infer<typeof ExtentsSchema>

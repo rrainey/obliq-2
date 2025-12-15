@@ -2,7 +2,7 @@
 
 'use client'
 
-import { FC, useState, useRef, useEffect } from 'react'
+import { FC, useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import {
   EdgeProps,
   getBezierPath,
@@ -10,8 +10,15 @@ import {
   BaseEdge,
   MarkerType,
   getStraightPath,
+  useStore,
 } from 'reactflow'
 import { TypeCompatibilityError } from '@/lib/typeCompatibilityValidator'
+
+// Wire routing type (matches modelSchema)
+export interface WireRouting {
+  midpointOffset?: number
+  waypoints?: { x: number; y: number }[]
+}
 
 // Custom edge data structure
 export interface CustomEdgeData {
@@ -21,6 +28,10 @@ export interface CustomEdgeData {
   signalName?: string
   isEnableConnection?: boolean
   isResetConnection?: boolean
+  // Custom routing data
+  routing?: WireRouting
+  // Callback for routing changes
+  onRoutingChange?: (wireId: string, routing: WireRouting | undefined) => void
 }
 
 // Helper to extract matrix dimensions from type string
@@ -324,7 +335,7 @@ export const StepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
 // Smart edge that avoids overlapping with nodes
 export const SmartEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition } = props
-  
+
   // Simple implementation - can be enhanced with actual pathfinding
   const [edgePath] = getBezierPath({
     sourceX,
@@ -339,12 +350,384 @@ export const SmartEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
   return <DefaultEdge {...props} />
 }
 
+// Path segment for editable step edge
+interface PathSegment {
+  index: number
+  start: { x: number; y: number }
+  end: { x: number; y: number }
+  orientation: 'horizontal' | 'vertical'
+  path: string
+}
+
+// Calculate default midpoint X for step edge
+const calculateDefaultMidpointX = (sourceX: number, targetX: number): number => {
+  return sourceX + (targetX - sourceX) / 2
+}
+
+// Generate path segments for step edge with optional routing
+const generatePathSegments = (
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  routing?: WireRouting
+): PathSegment[] => {
+  // If we have explicit waypoints, use them
+  if (routing?.waypoints && routing.waypoints.length > 0) {
+    const segments: PathSegment[] = []
+    const allPoints = [
+      { x: sourceX, y: sourceY },
+      ...routing.waypoints,
+      { x: targetX, y: targetY }
+    ]
+
+    for (let i = 0; i < allPoints.length - 1; i++) {
+      const start = allPoints[i]
+      const end = allPoints[i + 1]
+      const orientation = Math.abs(end.y - start.y) < 1 ? 'horizontal' : 'vertical'
+      segments.push({
+        index: i,
+        start,
+        end,
+        orientation,
+        path: `M ${start.x} ${start.y} L ${end.x} ${end.y}`
+      })
+    }
+    return segments
+  }
+
+  // Standard 3-segment step path with optional midpoint offset
+  const defaultMidX = calculateDefaultMidpointX(sourceX, targetX)
+  const midX = defaultMidX + (routing?.midpointOffset ?? 0)
+
+  return [
+    {
+      index: 0,
+      start: { x: sourceX, y: sourceY },
+      end: { x: midX, y: sourceY },
+      orientation: 'horizontal',
+      path: `M ${sourceX} ${sourceY} L ${midX} ${sourceY}`
+    },
+    {
+      index: 1,
+      start: { x: midX, y: sourceY },
+      end: { x: midX, y: targetY },
+      orientation: 'vertical',
+      path: `M ${midX} ${sourceY} L ${midX} ${targetY}`
+    },
+    {
+      index: 2,
+      start: { x: midX, y: targetY },
+      end: { x: targetX, y: targetY },
+      orientation: 'horizontal',
+      path: `M ${midX} ${targetY} L ${targetX} ${targetY}`
+    }
+  ]
+}
+
+// Generate full SVG path string from segments
+const segmentsToPath = (segments: PathSegment[]): string => {
+  if (segments.length === 0) return ''
+  let path = `M ${segments[0].start.x} ${segments[0].start.y}`
+  for (const segment of segments) {
+    path += ` L ${segment.end.x} ${segment.end.y}`
+  }
+  return path
+}
+
+// Editable step edge with segment dragging support
+export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
+  const {
+    id,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    data,
+    selected,
+  } = props
+
+  // Get viewport zoom to correctly scale mouse movement
+  const zoom = useStore((state) => state.transform[2])
+
+  const [isHovered, setIsHovered] = useState(false)
+  const [hoveredSegmentIndex, setHoveredSegmentIndex] = useState<number | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [currentOffset, setCurrentOffset] = useState<number>(0)
+
+  // Use refs for values that change during drag to avoid effect re-runs
+  const dragStateRef = useRef<{
+    segmentIndex: number | null
+    startPos: { x: number; y: number } | null
+    startZoom: number
+    baseOffset: number
+  }>({
+    segmentIndex: null,
+    startPos: null,
+    startZoom: 1,
+    baseOffset: 0,
+  })
+
+  // Memoize segments to avoid recalculating on every render
+  const segments = useMemo(() => {
+    const effectiveOffset = isDragging ? currentOffset : (data?.routing?.midpointOffset ?? 0)
+    return generatePathSegments(
+      sourceX,
+      sourceY,
+      targetX,
+      targetY,
+      { ...data?.routing, midpointOffset: effectiveOffset }
+    )
+  }, [sourceX, sourceY, targetX, targetY, data?.routing, isDragging, currentOffset])
+
+  const fullPath = segmentsToPath(segments)
+  const hasError = !!data?.typeError
+  const isMatrix = !!extractMatrixDimensions(data?.sourceType)
+
+  // Determine which segment can be dragged (middle vertical segment for simple step)
+  const canDragSegment = useCallback((segmentIndex: number): boolean => {
+    // For simple 3-segment step path, only the middle vertical segment is draggable
+    if (!data?.routing?.waypoints && segments.length === 3) {
+      return segmentIndex === 1 // Middle vertical segment
+    }
+    // For waypoint-based paths, any segment could potentially be draggable
+    // (future enhancement)
+    return false
+  }, [data?.routing?.waypoints, segments.length])
+
+  // Handle left-click on drag handle to start drag
+  const handleDragHandleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Only respond to left mouse button
+    if (e.button !== 0) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    // Store drag state in ref
+    dragStateRef.current = {
+      segmentIndex: 1, // Always the middle segment for now
+      startPos: { x: e.clientX, y: e.clientY },
+      startZoom: zoom,
+      baseOffset: data?.routing?.midpointOffset ?? 0,
+    }
+
+    setCurrentOffset(data?.routing?.midpointOffset ?? 0)
+    setIsDragging(true)
+  }, [zoom, data?.routing?.midpointOffset])
+
+  // Handle mouse move during drag - use effect that only depends on isDragging
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const { segmentIndex, startPos, startZoom, baseOffset } = dragStateRef.current
+      if (segmentIndex === null || !startPos) return
+
+      // For vertical segments, drag horizontally
+      // Divide by zoom to convert screen pixels to canvas coordinates
+      const delta = (e.clientX - startPos.x) / startZoom
+
+      // Update the offset
+      setCurrentOffset(baseOffset + delta)
+    }
+
+    const handleMouseUp = () => {
+      // Get the final offset value and commit the routing change
+      setCurrentOffset(prevOffset => {
+        // Commit the routing change
+        if (data?.onRoutingChange) {
+          const newRouting: WireRouting = {
+            ...data?.routing,
+            midpointOffset: prevOffset,
+          }
+          data.onRoutingChange(id, newRouting)
+        }
+        return prevOffset
+      })
+
+      // Reset drag state
+      dragStateRef.current = {
+        segmentIndex: null,
+        startPos: null,
+        startZoom: 1,
+        baseOffset: 0,
+      }
+      setIsDragging(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging, data, id])
+
+  // Dynamic styles based on state
+  const getSegmentStyle = (segmentIndex: number) => {
+    const isDragTarget = canDragSegment(segmentIndex)
+    const dragSegmentIndex = dragStateRef.current.segmentIndex
+    const isSegmentHovered = hoveredSegmentIndex === segmentIndex
+    const isBeingDragged = isDragging && dragSegmentIndex === segmentIndex
+
+    return {
+      stroke: hasError ? '#ef4444' :
+              isBeingDragged ? '#2563eb' :
+              (selected || isSegmentHovered) ? '#3b82f6' :
+              isHovered ? '#6b7280' : '#374151',
+      strokeWidth: (selected || isSegmentHovered || isBeingDragged) ? 3 : (isMatrix ? 3 : 2),
+      strokeDasharray: hasError ? '5,5' : (isMatrix && !isHovered && !selected ? '10,3' : 'none'),
+      cursor: isDragTarget ? (isBeingDragged ? 'grabbing' : 'ew-resize') : 'pointer',
+      transition: isBeingDragged ? 'none' : 'stroke 0.2s, stroke-width 0.2s',
+    }
+  }
+
+  // Custom marker based on state
+  const customMarkerEnd = hasError ? 'url(#arrow-error)' :
+                         selected ? 'url(#arrow-selected)' :
+                         isHovered ? 'url(#arrow-hover)' :
+                         isMatrix ? 'url(#arrow-matrix)' :
+                         'url(#arrow-default)'
+
+  // Calculate label position (midpoint of path)
+  const labelX = (sourceX + targetX) / 2
+  const labelY = (sourceY + targetY) / 2
+
+  return (
+    <>
+      {/* Invisible wider path for easier selection */}
+      <path
+        id={`${id}-interaction`}
+        style={{ fill: 'none', strokeWidth: 20, stroke: 'transparent', cursor: 'pointer' }}
+        d={fullPath}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => {
+          // Don't clear hover state during drag - mouse may leave segment while dragging
+          if (!isDragging) {
+            setIsHovered(false)
+            setHoveredSegmentIndex(null)
+          }
+        }}
+      />
+
+      {/* Render each segment separately for individual interaction */}
+      {segments.map((segment, index) => (
+        <path
+          key={`${id}-segment-${index}`}
+          d={segment.path}
+          fill="none"
+          style={getSegmentStyle(index)}
+          markerEnd={index === segments.length - 1 ? customMarkerEnd : undefined}
+          onMouseEnter={() => {
+            setIsHovered(true)
+            if (canDragSegment(index)) {
+              setHoveredSegmentIndex(index)
+            }
+          }}
+          onMouseLeave={() => {
+            // Don't clear hover state during drag - mouse may leave segment while dragging
+            if (!isDragging && hoveredSegmentIndex === index) {
+              setHoveredSegmentIndex(null)
+            }
+          }}
+        />
+      ))}
+
+      {/* Draggable handle for middle segment */}
+      {hoveredSegmentIndex !== null && canDragSegment(hoveredSegmentIndex) && !isDragging && (
+        <g>
+          {/* Drag handle at segment midpoint - LEFT CLICK to drag */}
+          {(() => {
+            const segment = segments[hoveredSegmentIndex]
+            const midX = (segment.start.x + segment.end.x) / 2
+            const midY = (segment.start.y + segment.end.y) / 2
+            return (
+              <>
+                {/* Larger invisible hit area for easier grabbing */}
+                <circle
+                  cx={midX}
+                  cy={midY}
+                  r={12}
+                  fill="transparent"
+                  style={{ cursor: 'ew-resize', pointerEvents: 'all' }}
+                  onMouseDown={handleDragHandleMouseDown}
+                />
+                {/* Visible handle */}
+                <circle
+                  cx={midX}
+                  cy={midY}
+                  r={6}
+                  fill="#3b82f6"
+                  stroke="#ffffff"
+                  strokeWidth={2}
+                  style={{ cursor: 'ew-resize', pointerEvents: 'none' }}
+                />
+                {/* Arrows indicating drag direction */}
+                <path
+                  d={`M ${midX - 10} ${midY} L ${midX - 6} ${midY - 3} L ${midX - 6} ${midY + 3} Z`}
+                  fill="#3b82f6"
+                  style={{ pointerEvents: 'none' }}
+                />
+                <path
+                  d={`M ${midX + 10} ${midY} L ${midX + 6} ${midY - 3} L ${midX + 6} ${midY + 3} Z`}
+                  fill="#3b82f6"
+                  style={{ pointerEvents: 'none' }}
+                />
+              </>
+            )
+          })()}
+        </g>
+      )}
+
+      {/* Type label for matrix types */}
+      <EdgeLabelRenderer>
+        {(isMatrix || isHovered) && data?.sourceType && !hasError && (
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+            }}
+            className={`
+              ${isMatrix ? 'bg-purple-100 border-purple-300' : 'bg-white border-gray-200'}
+              px-2 py-1 rounded shadow-md border text-xs font-mono
+            `}
+          >
+            <div className={`${isMatrix ? 'text-purple-700 font-medium' : 'text-gray-700'}`}>
+              {formatTypeForDisplay(data.sourceType)}
+            </div>
+          </div>
+        )}
+
+        {/* Drag instruction tooltip */}
+        {hoveredSegmentIndex !== null && canDragSegment(hoveredSegmentIndex) && !isDragging && (
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -100%) translate(${
+                (segments[hoveredSegmentIndex].start.x + segments[hoveredSegmentIndex].end.x) / 2
+              }px,${
+                Math.min(segments[hoveredSegmentIndex].start.y, segments[hoveredSegmentIndex].end.y) - 10
+              }px)`,
+              pointerEvents: 'none',
+            }}
+            className="bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap"
+          >
+            Drag to move
+          </div>
+        )}
+      </EdgeLabelRenderer>
+    </>
+  )
+}
+
 // Export edge types configuration
 export const edgeTypes = {
   default: DefaultEdge,
   animated: AnimatedEdge,
   step: StepEdge,
   smart: SmartEdge,
+  editableStep: EditableStepEdge,
 } as const
 
 // Helper function to create edge with custom data
