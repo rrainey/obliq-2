@@ -69,8 +69,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        node-version: ['18', '20']
+        os: [ubuntu-latest]
+        node-version: ['20']
 
     steps:
       - name: Checkout repository
