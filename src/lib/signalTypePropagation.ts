@@ -3,7 +3,15 @@
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { areTypesCompatible, getTypeCompatibilityError, parseType, ParsedType, typeToString, isMatrixType, getMatrixDimensions } from './typeValidator'
-import { ca } from 'zod/v4/locales'
+
+// Debug flag for verbose logging - set to true to enable detailed trace output
+const DEBUG_PROPAGATION = true
+
+function debugLog(...args: unknown[]) {
+  if (DEBUG_PROPAGATION) {
+    console.log('[SignalPropagation]', ...args)
+  }
+}
 
 /**
  * Represents the type information for a signal (wire)
@@ -113,7 +121,28 @@ function getBlockOutputType(block: BlockData): string | null {
     case 'sheet_label_source':
       // Sheet label sources will get their type from the associated sink
       return null
-    
+
+    // Trig blocks always output double
+    case 'trig':
+    case 'mag':  // Magnitude always outputs scalar double
+    case 'dot':  // Dot product always outputs scalar double
+      return 'double'
+
+    // Condition block always outputs bool
+    case 'condition':
+      return 'bool'
+
+    // Cross product always outputs double[3]
+    case 'cross':
+      return 'double[3]'
+
+    // These blocks pass through their input type - determined during propagation
+    case 'if':
+    case 'abs':
+    case 'uminus':
+    case 'transpose':
+      return null
+
     default:
       return null
   }
@@ -231,12 +260,31 @@ function determineProcessingBlockOutputType(
       }
       
       return null // Unsupported combination
-    
+
+    case 'if':
+      // If block passes through input1's type (first input)
+      // Control is second input, input2 is third
+      return typeToString(parsedTypes[0])
+
+    case 'abs':
+    case 'uminus':
+      // Pass-through blocks: output type matches input type exactly
+      return typeToString(parsedTypes[0])
+
+    case 'transpose':
+      // Transpose swaps rows and cols for matrices
+      const transposeInput = parsedTypes[0]
+      if (transposeInput.isMatrix && transposeInput.rows && transposeInput.cols) {
+        return `${transposeInput.baseType}[${transposeInput.cols}][${transposeInput.rows}]`
+      }
+      // For non-matrices, return as-is
+      return typeToString(transposeInput)
+
     case 'demux':
       // Demux always outputs the base type as scalar
       const inputType = parsedTypes[0]
       return inputType.baseType
-    
+
     default:
       return null
   }
@@ -249,32 +297,35 @@ export function propagateSignalTypes(
   blocks: BlockData[],
   wires: WireData[]
 ): TypePropagationResult {
+  debugLog('  [propagateSignalTypes] Starting - blocks:', blocks.length, 'wires:', wires.length)
+
   const signalTypes: SignalTypeMap = new Map()
   const blockOutputTypes: BlockOutputTypes = new Map()
   const errors: TypePropagationError[] = []
-  const sheetLabelSinkTypes: SheetLabelSinkTypes = new Map() 
-  
+  const sheetLabelSinkTypes: SheetLabelSinkTypes = new Map()
+
   // Create maps for quick lookup
   const blockMap = new Map(blocks.map(b => [b.id, b]))
   const wiresByTarget = new Map<string, WireData[]>() // key: "targetBlockId:targetPortIndex"
   const wiresBySource = new Map<string, WireData[]>() // key: "sourceBlockId:sourcePortIndex"
-  
+
   for (const wire of wires) {
     const targetKey = `${wire.targetBlockId}:${wire.targetPortIndex}`
     const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
-    
+
     if (!wiresByTarget.has(targetKey)) {
       wiresByTarget.set(targetKey, [])
     }
     wiresByTarget.get(targetKey)!.push(wire)
-    
+
     if (!wiresBySource.has(sourceKey)) {
       wiresBySource.set(sourceKey, [])
     }
     wiresBySource.get(sourceKey)!.push(wire)
   }
-  
+
   // Step 1: Initialize types for source blocks (blocks with explicit types)
+  debugLog('  Step 1: Initialize types for blocks with explicit types')
   for (const block of blocks) {
     const outputType = getBlockOutputType(block)
     if (outputType) {
@@ -283,6 +334,7 @@ export function propagateSignalTypes(
         const parsedType = parseType(outputType)
         const key = `${block.id}:0` // Source blocks have single output at port 0
         blockOutputTypes.set(key, outputType)
+        debugLog(`    "${block.name}" (${block.type}): ${key} = ${outputType}`)
       } catch (error) {
         errors.push({
           blockId: block.id,
@@ -292,12 +344,12 @@ export function propagateSignalTypes(
       }
     }
   }
-  
+
   // Step 2: Propagate types through the network
   // Use a queue-based approach to handle dependencies
   const processingQueue: string[] = [] // Block IDs to process
   const processedBlocks = new Set<string>()
-  
+
   // Start with blocks that have known output types
   for (const [key, _] of blockOutputTypes) {
     const blockId = key.split(':')[0]
@@ -306,12 +358,28 @@ export function propagateSignalTypes(
       processedBlocks.add(blockId)
     }
   }
-  
+
+  // Add subsystems to the initial queue - they can be processed independently
+  // because their internal input_port blocks have explicit dataType parameters
+  for (const block of blocks) {
+    if (block.type === 'subsystem' && !processedBlocks.has(block.id)) {
+      processingQueue.push(block.id)
+      processedBlocks.add(block.id)
+    }
+  }
+
+  debugLog(`  Step 2: Propagate. Initial queue: ${processingQueue.length} blocks`)
+  debugLog(`    Queue: ${processingQueue.map(id => blockMap.get(id)?.name || id).join(', ')}`)
+
   // Process blocks in topological order
+  let iterCount = 0
   while (processingQueue.length > 0) {
+    iterCount++
     const currentBlockId = processingQueue.shift()!
     const currentBlock = blockMap.get(currentBlockId)
     if (!currentBlock) continue
+
+    debugLog(`    [${iterCount}] Processing "${currentBlock.name}" (${currentBlock.type})`)
 
     // Special handling for Sheet Label Sink blocks
     if (currentBlock.type === 'sheet_label_sink') {
@@ -319,6 +387,7 @@ export function propagateSignalTypes(
       if (signalName) {
         // Get the input type from connected wire
         const inputTypes = getBlockInputTypes(currentBlock, wiresByTarget, blockOutputTypes)
+        debugLog(`      sheet_label_sink "${signalName}": inputTypes=[${inputTypes.join(', ')}]`)
         if (inputTypes.length > 0) {
           // Store the sink's input type indexed by signal name
           sheetLabelSinkTypes.set(signalName, inputTypes[0])
@@ -326,18 +395,21 @@ export function propagateSignalTypes(
       }
       continue // Sinks don't have outputs
     }
-    
+
     // Special handling for Sheet Label Source blocks
     if (currentBlock.type === 'sheet_label_source') {
       const signalName = currentBlock.parameters?.signalName
+      debugLog(`      sheet_label_source "${signalName}": looking for sink type...`)
       if (signalName && sheetLabelSinkTypes.has(signalName)) {
         // Get type from associated sink
         const sinkType = sheetLabelSinkTypes.get(signalName)!
         const outputKey = `${currentBlockId}:0`
         blockOutputTypes.set(outputKey, sinkType)
-        
+        debugLog(`      Found sink type: ${sinkType}`)
+
         // Continue processing connected blocks
         const connectedWires = wiresBySource.get(outputKey) || []
+        debugLog(`      Connected to ${connectedWires.length} wires`)
         for (const wire of connectedWires) {
           try {
             const parsedType = parseType(sinkType)
@@ -496,37 +568,48 @@ export function propagateSignalTypes(
 
     // Process all output ports of the current block
     const outputPortCount = getBlockOutputPortCount(currentBlock)
-    
+    debugLog(`      Output ports: ${outputPortCount}`)
+
     for (let portIndex = 0; portIndex < outputPortCount; portIndex++) {
       const outputKey = `${currentBlockId}:${portIndex}`
-      const outputType = blockOutputTypes.get(outputKey)
-      
+      let outputType = blockOutputTypes.get(outputKey)
+
       if (!outputType) {
         // Try to determine output type based on inputs
         const inputTypes = getBlockInputTypes(currentBlock, wiresByTarget, blockOutputTypes)
+        debugLog(`      Port ${portIndex}: No preset type. inputTypes=[${inputTypes.join(', ')}]`)
         const determinedType = determineProcessingBlockOutputType(currentBlock.type, inputTypes)
-        
+
         if (determinedType) {
           blockOutputTypes.set(outputKey, determinedType)
+          outputType = determinedType
+          debugLog(`      Port ${portIndex}: Determined type = ${determinedType}`)
         } else if (inputTypes.length > 0) {
           // We have inputs but couldn't determine output type
+          debugLog(`      Port ${portIndex}: FAILED to determine type with inputs`)
           errors.push({
             blockId: currentBlock.id,
             message: `Cannot determine output type for ${currentBlock.name}. Check input type compatibility.`,
             severity: 'error'
           })
           continue
+        } else {
+          debugLog(`      Port ${portIndex}: No inputs available yet`)
         }
+      } else {
+        debugLog(`      Port ${portIndex}: Already has type = ${outputType}`)
       }
-      
+
       // Propagate type to connected wires
       const connectedWires = wiresBySource.get(outputKey) || []
+      const wireType = blockOutputTypes.get(outputKey)
+      debugLog(`      Port ${portIndex}: Propagating ${wireType || 'NO TYPE'} to ${connectedWires.length} wires`)
+
       for (const wire of connectedWires) {
-        const wireType = blockOutputTypes.get(outputKey)
         if (wireType) {
           try {
             const parsedType = parseType(wireType)
-            
+
             // Special validation for enable port connections
             if (wire.targetPortIndex === -1) {
               // This is an enable port connection
@@ -550,7 +633,7 @@ export function propagateSignalTypes(
                 continue
               }
             }
-            
+
             signalTypes.set(wire.id, {
               wireId: wire.id,
               sourceBlockId: wire.sourceBlockId,
@@ -560,19 +643,26 @@ export function propagateSignalTypes(
               type: wireType,
               parsedType
             })
-            
+
             // Add target block to processing queue if not already processed
             const targetBlock = blockMap.get(wire.targetBlockId)
             if (targetBlock && !processedBlocks.has(wire.targetBlockId)) {
               // Check if all inputs are available before processing
               const targetInputs = getBlockInputTypes(targetBlock, wiresByTarget, blockOutputTypes)
               const expectedInputs = getBlockInputPortCount(targetBlock)
-              
-              if (targetInputs.length === expectedInputs || 
-                  ['signal_display', 'signal_logger', 'output_port'].includes(targetBlock.type)) {
+
+              debugLog(`        -> Target "${targetBlock.name}" (${targetBlock.type}): ${targetInputs.length}/${expectedInputs} inputs`)
+              // Subsystems can be processed independently - their internal input_ports have explicit types
+              if (targetInputs.length === expectedInputs ||
+                  ['signal_display', 'signal_logger', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
                 processingQueue.push(wire.targetBlockId)
                 processedBlocks.add(wire.targetBlockId)
+                debugLog(`           Added to queue`)
+              } else {
+                debugLog(`           NOT added (waiting for ${expectedInputs - targetInputs.length} more inputs)`)
               }
+            } else if (targetBlock) {
+              debugLog(`        -> Target "${targetBlock.name}" already processed`)
             }
           } catch (error) {
             errors.push({
@@ -585,6 +675,8 @@ export function propagateSignalTypes(
       }
     }
   }
+
+  debugLog(`  [propagateSignalTypes] Complete: ${blockOutputTypes.size} output types, ${signalTypes.size} signal types`)
   
   // Step 3: Check for type mismatches on multi-input blocks
   for (const block of blocks) {
@@ -851,26 +943,40 @@ function getSubsystemOutputType(
 export function propagateSignalTypesMultiSheet(
   sheets: Array<{ blocks: BlockData[], connections: WireData[] }>
 ): TypePropagationResult {
+  debugLog('=== propagateSignalTypesMultiSheet START ===')
+  debugLog(`Processing ${sheets.length} sheets`)
+
   const allErrors: TypePropagationError[] = []
   const signalTypes: SignalTypeMap = new Map()
   const blockOutputTypes: BlockOutputTypes = new Map()
-  
+
   // First pass: propagate types within each sheet and collect sheet label sink types
+  debugLog('--- PASS 1: Initial propagation within each sheet ---')
   const sheetLabelSinkTypes: Map<string, string> = new Map()
-  
-  for (const sheet of sheets) {
+
+  for (let sheetIdx = 0; sheetIdx < sheets.length; sheetIdx++) {
+    const sheet = sheets[sheetIdx]
+    debugLog(`\nSheet ${sheetIdx}: ${sheet.blocks.length} blocks, ${sheet.connections.length} connections`)
+
+    // Log block summary
+    const blockSummary = sheet.blocks.map(b => `${b.name}(${b.type})`).join(', ')
+    debugLog(`  Blocks: ${blockSummary}`)
+
     // Run type propagation on each sheet
     const sheetResult = propagateSignalTypes(sheet.blocks, sheet.connections)
-    
+
+    debugLog(`  Pass 1 result: ${sheetResult.blockOutputTypes.size} output types, ${sheetResult.signalTypes.size} signal types, ${sheetResult.errors.length} errors`)
+
     // Merge results
     for (const [key, value] of sheetResult.blockOutputTypes) {
       blockOutputTypes.set(key, value)
+      debugLog(`    BlockOutputType: ${key} = ${value}`)
     }
     for (const [key, value] of sheetResult.signalTypes) {
       signalTypes.set(key, value)
     }
     allErrors.push(...sheetResult.errors)
-    
+
     // Collect sheet label sink types
     for (const block of sheet.blocks) {
       if (block.type === 'sheet_label_sink' && block.parameters?.signalName) {
@@ -879,70 +985,335 @@ export function propagateSignalTypesMultiSheet(
         if (inputWire) {
           const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
           const sourceType = blockOutputTypes.get(sourceKey)
+          debugLog(`  SheetLabelSink "${block.parameters.signalName}": sourceKey=${sourceKey}, sourceType=${sourceType || 'NOT FOUND'}`)
           if (sourceType) {
             sheetLabelSinkTypes.set(block.parameters.signalName, sourceType)
           }
+        } else {
+          debugLog(`  SheetLabelSink "${block.parameters.signalName}": NO INPUT WIRE FOUND`)
         }
       }
     }
   }
-  
-  // Second pass: propagate sheet label source types and re-propagate affected blocks
-  let changed = true
-  while (changed) {
-    changed = false
-    
-    for (const sheet of sheets) {
-      for (const block of sheet.blocks) {
-        if (block.type === 'sheet_label_source' && block.parameters?.signalName) {
-          const sinkType = sheetLabelSinkTypes.get(block.parameters.signalName)
-          if (sinkType) {
-            const outputKey = `${block.id}:0`
-            const currentType = blockOutputTypes.get(outputKey)
-            
-            if (currentType !== sinkType) {
-              changed = true
-              blockOutputTypes.set(outputKey, sinkType)
-              
-              // Update any wires from this source
-              const outputWires = sheet.connections.filter(w => w.sourceBlockId === block.id)
-              for (const wire of outputWires) {
-                try {
-                  const parsedType = parseType(sinkType)
-                  signalTypes.set(wire.id, {
-                    wireId: wire.id,
-                    sourceBlockId: wire.sourceBlockId,
-                    sourcePortIndex: wire.sourcePortIndex,
-                    targetBlockId: wire.targetBlockId,
-                    targetPortIndex: wire.targetPortIndex,
-                    type: sinkType,
-                    parsedType
-                  })
-                  
-                  // Re-propagate to connected blocks
-                  const targetBlock = sheet.blocks.find(b => b.id === wire.targetBlockId)
-                  if (targetBlock) {
-                    // This will be handled in the next iteration
-                  }
-                } catch (error) {
-                  allErrors.push({
-                    wireId: wire.id,
-                    message: `Invalid signal type from sheet label: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                    severity: 'error'
-                  })
-                }
-              }
-            }
-          }
+
+  debugLog('\n--- PASS 2: Set sheet label source types from sink types ---')
+  debugLog(`SheetLabelSinkTypes collected: ${Array.from(sheetLabelSinkTypes.entries()).map(([k,v]) => `${k}=${v}`).join(', ')}`)
+
+  // Second pass: Set sheet label source types from sink types
+  // This pre-populates the source types before re-running propagation
+  for (const sheet of sheets) {
+    for (const block of sheet.blocks) {
+      if (block.type === 'sheet_label_source' && block.parameters?.signalName) {
+        const sinkType = sheetLabelSinkTypes.get(block.parameters.signalName)
+        debugLog(`  SheetLabelSource "${block.name}" (signal="${block.parameters.signalName}"): sinkType=${sinkType || 'NOT FOUND'}`)
+        if (sinkType) {
+          const outputKey = `${block.id}:0`
+          blockOutputTypes.set(outputKey, sinkType)
+          debugLog(`    Set blockOutputType: ${outputKey} = ${sinkType}`)
         }
       }
     }
   }
-  
+
+  debugLog('\n--- PASS 3: Re-run propagation with preset types ---')
+  debugLog(`BlockOutputTypes before pass 3: ${blockOutputTypes.size} entries`)
+
+  // Third pass: Re-run propagation with sheet label source types now set
+  // This allows downstream blocks to get their types resolved
+  for (let sheetIdx = 0; sheetIdx < sheets.length; sheetIdx++) {
+    const sheet = sheets[sheetIdx]
+    debugLog(`\nSheet ${sheetIdx} pass 3:`)
+
+    const sheetResult = propagateSignalTypesWithPreset(
+      sheet.blocks,
+      sheet.connections,
+      blockOutputTypes,
+      sheetLabelSinkTypes
+    )
+
+    debugLog(`  Pass 3 result: ${sheetResult.blockOutputTypes.size} output types, ${sheetResult.signalTypes.size} signal types`)
+
+    // Merge results (overwriting previous incomplete results)
+    for (const [key, value] of sheetResult.blockOutputTypes) {
+      const oldValue = blockOutputTypes.get(key)
+      if (oldValue !== value) {
+        debugLog(`    BlockOutputType UPDATED: ${key} = ${oldValue} -> ${value}`)
+      }
+      blockOutputTypes.set(key, value)
+    }
+    for (const [key, value] of sheetResult.signalTypes) {
+      signalTypes.set(key, value)
+    }
+    // Don't add duplicate errors
+  }
+
+  debugLog('\n=== propagateSignalTypesMultiSheet END ===')
+  debugLog(`Final: ${blockOutputTypes.size} block output types, ${signalTypes.size} signal types, ${allErrors.length} errors`)
+
   return {
     signalTypes,
     blockOutputTypes,
     errors: allErrors
+  }
+}
+
+/**
+ * Propagates signal types with pre-populated block output types and sheet label sink types.
+ * This allows sheet label sources to have their types already set before propagation.
+ */
+function propagateSignalTypesWithPreset(
+  blocks: BlockData[],
+  wires: WireData[],
+  presetBlockOutputTypes: BlockOutputTypes,
+  presetSheetLabelSinkTypes: SheetLabelSinkTypes
+): TypePropagationResult {
+  debugLog('  [propagateSignalTypesWithPreset] Starting with', presetBlockOutputTypes.size, 'preset types')
+
+  const signalTypes: SignalTypeMap = new Map()
+  const blockOutputTypes: BlockOutputTypes = new Map(presetBlockOutputTypes)
+  const errors: TypePropagationError[] = []
+  const sheetLabelSinkTypes: SheetLabelSinkTypes = new Map(presetSheetLabelSinkTypes)
+
+  // Create maps for quick lookup
+  const blockMap = new Map(blocks.map(b => [b.id, b]))
+  const wiresByTarget = new Map<string, WireData[]>()
+  const wiresBySource = new Map<string, WireData[]>()
+
+  for (const wire of wires) {
+    const targetKey = `${wire.targetBlockId}:${wire.targetPortIndex}`
+    const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+
+    if (!wiresByTarget.has(targetKey)) {
+      wiresByTarget.set(targetKey, [])
+    }
+    wiresByTarget.get(targetKey)!.push(wire)
+
+    if (!wiresBySource.has(sourceKey)) {
+      wiresBySource.set(sourceKey, [])
+    }
+    wiresBySource.get(sourceKey)!.push(wire)
+  }
+
+  // Initialize types for source blocks (blocks with explicit types)
+  for (const block of blocks) {
+    const outputType = getBlockOutputType(block)
+    if (outputType) {
+      try {
+        parseType(outputType)
+        const key = `${block.id}:0`
+        if (!blockOutputTypes.has(key)) {
+          blockOutputTypes.set(key, outputType)
+          debugLog(`    Init block "${block.name}" (${block.type}): ${key} = ${outputType}`)
+        }
+      } catch (error) {
+        errors.push({
+          blockId: block.id,
+          message: `Invalid data type in ${block.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          severity: 'error'
+        })
+      }
+    }
+  }
+
+  // Process sheet_label_source blocks with preset sink types
+  for (const block of blocks) {
+    if (block.type === 'sheet_label_source' && block.parameters?.signalName) {
+      const sinkType = sheetLabelSinkTypes.get(block.parameters.signalName)
+      if (sinkType) {
+        const outputKey = `${block.id}:0`
+        blockOutputTypes.set(outputKey, sinkType)
+        debugLog(`    SheetLabelSource "${block.name}": ${outputKey} = ${sinkType}`)
+      }
+    }
+  }
+
+  // Build processing queue starting with blocks that have known output types
+  const processingQueue: string[] = []
+  const processedBlocks = new Set<string>()
+
+  // Only add blocks from THIS sheet to the queue
+  const blockIdsInSheet = new Set(blocks.map(b => b.id))
+
+  for (const [key, _] of blockOutputTypes) {
+    const blockId = key.split(':')[0]
+    // Only process blocks that are in this sheet
+    if (blockIdsInSheet.has(blockId) && !processedBlocks.has(blockId)) {
+      processingQueue.push(blockId)
+      processedBlocks.add(blockId)
+    }
+  }
+
+  // Add subsystems to the initial queue - they can be processed independently
+  // because their internal input_port blocks have explicit dataType parameters
+  for (const block of blocks) {
+    if (block.type === 'subsystem' && !processedBlocks.has(block.id)) {
+      processingQueue.push(block.id)
+      processedBlocks.add(block.id)
+    }
+  }
+
+  debugLog(`    Initial queue: ${processingQueue.length} blocks`)
+  debugLog(`    Queue contents: ${processingQueue.map(id => blockMap.get(id)?.name || id).join(', ')}`)
+
+  // Process blocks in topological order
+  let iterationCount = 0
+  while (processingQueue.length > 0) {
+    iterationCount++
+    const currentBlockId = processingQueue.shift()!
+    const currentBlock = blockMap.get(currentBlockId)
+    if (!currentBlock) {
+      debugLog(`    [Iter ${iterationCount}] Block ${currentBlockId} not found in blockMap, skipping`)
+      continue
+    }
+
+    debugLog(`    [Iter ${iterationCount}] Processing "${currentBlock.name}" (${currentBlock.type})`)
+
+    // Skip sink blocks and sources (they don't produce outputs or already have types)
+    if (currentBlock.type === 'sheet_label_sink') {
+      const signalName = currentBlock.parameters?.signalName
+      if (signalName) {
+        const inputTypes = getBlockInputTypes(currentBlock, wiresByTarget, blockOutputTypes)
+        debugLog(`      sheet_label_sink "${signalName}": inputTypes=[${inputTypes.join(', ')}]`)
+        if (inputTypes.length > 0 && !sheetLabelSinkTypes.has(signalName)) {
+          sheetLabelSinkTypes.set(signalName, inputTypes[0])
+        }
+      }
+      continue
+    }
+
+    if (currentBlock.type === 'sheet_label_source') {
+      const signalName = currentBlock.parameters?.signalName
+      if (signalName && sheetLabelSinkTypes.has(signalName)) {
+        const sinkType = sheetLabelSinkTypes.get(signalName)!
+        const outputKey = `${currentBlockId}:0`
+        blockOutputTypes.set(outputKey, sinkType)
+        debugLog(`      sheet_label_source "${signalName}": output=${sinkType}`)
+
+        // Propagate to connected wires
+        const connectedWires = wiresBySource.get(outputKey) || []
+        debugLog(`      Connected to ${connectedWires.length} wires`)
+        for (const wire of connectedWires) {
+          try {
+            const parsedType = parseType(sinkType)
+            signalTypes.set(wire.id, {
+              wireId: wire.id,
+              sourceBlockId: wire.sourceBlockId,
+              sourcePortIndex: wire.sourcePortIndex,
+              targetBlockId: wire.targetBlockId,
+              targetPortIndex: wire.targetPortIndex,
+              type: sinkType,
+              parsedType
+            })
+
+            // Add target block to processing queue
+            const targetBlock = blockMap.get(wire.targetBlockId)
+            if (targetBlock && !processedBlocks.has(wire.targetBlockId)) {
+              const targetInputs = getBlockInputTypes(targetBlock, wiresByTarget, blockOutputTypes)
+              const expectedInputs = getBlockInputPortCount(targetBlock)
+
+              debugLog(`        Target "${targetBlock.name}": has ${targetInputs.length}/${expectedInputs} inputs`)
+              // Subsystems can be processed independently - their internal input_ports have explicit types
+              if (targetInputs.length === expectedInputs ||
+                  ['signal_display', 'signal_logger', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
+                processingQueue.push(wire.targetBlockId)
+                processedBlocks.add(wire.targetBlockId)
+                debugLog(`        -> Added to queue`)
+              } else {
+                debugLog(`        -> NOT added (waiting for more inputs)`)
+              }
+            }
+          } catch (error) {
+            errors.push({
+              wireId: wire.id,
+              message: `Invalid signal type from sheet label: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              severity: 'error'
+            })
+          }
+        }
+      } else {
+        debugLog(`      sheet_label_source "${signalName}": NO SINK TYPE AVAILABLE`)
+      }
+      continue
+    }
+
+    // Process all output ports of the current block
+    const outputPortCount = getBlockOutputPortCount(currentBlock)
+    debugLog(`      Output ports: ${outputPortCount}`)
+
+    for (let portIndex = 0; portIndex < outputPortCount; portIndex++) {
+      const outputKey = `${currentBlockId}:${portIndex}`
+      let outputType = blockOutputTypes.get(outputKey)
+
+      if (!outputType) {
+        // Try to determine output type based on inputs
+        const inputTypes = getBlockInputTypes(currentBlock, wiresByTarget, blockOutputTypes)
+        debugLog(`      Port ${portIndex}: No preset type. inputTypes=[${inputTypes.join(', ')}]`)
+        const determinedType = determineProcessingBlockOutputType(currentBlock.type, inputTypes)
+
+        if (determinedType) {
+          blockOutputTypes.set(outputKey, determinedType)
+          outputType = determinedType
+          debugLog(`      Port ${portIndex}: Determined type = ${determinedType}`)
+        } else {
+          debugLog(`      Port ${portIndex}: Could NOT determine type`)
+        }
+      } else {
+        debugLog(`      Port ${portIndex}: Already has type = ${outputType}`)
+      }
+
+      // Propagate type to connected wires
+      if (outputType) {
+        const connectedWires = wiresBySource.get(outputKey) || []
+        debugLog(`      Port ${portIndex}: Propagating to ${connectedWires.length} connected wires`)
+        for (const wire of connectedWires) {
+          try {
+            const parsedType = parseType(outputType)
+
+            signalTypes.set(wire.id, {
+              wireId: wire.id,
+              sourceBlockId: wire.sourceBlockId,
+              sourcePortIndex: wire.sourcePortIndex,
+              targetBlockId: wire.targetBlockId,
+              targetPortIndex: wire.targetPortIndex,
+              type: outputType,
+              parsedType
+            })
+
+            // Add target block to processing queue if not already processed
+            const targetBlock = blockMap.get(wire.targetBlockId)
+            if (targetBlock && !processedBlocks.has(wire.targetBlockId)) {
+              const targetInputs = getBlockInputTypes(targetBlock, wiresByTarget, blockOutputTypes)
+              const expectedInputs = getBlockInputPortCount(targetBlock)
+
+              debugLog(`        -> Target "${targetBlock.name}" (${targetBlock.type}): ${targetInputs.length}/${expectedInputs} inputs`)
+              // Subsystems can be processed independently - their internal input_ports have explicit types
+              if (targetInputs.length === expectedInputs ||
+                  ['signal_display', 'signal_logger', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
+                processingQueue.push(wire.targetBlockId)
+                processedBlocks.add(wire.targetBlockId)
+                debugLog(`           Added to queue`)
+              } else {
+                debugLog(`           NOT added (waiting for ${expectedInputs - targetInputs.length} more inputs)`)
+              }
+            } else if (targetBlock) {
+              debugLog(`        -> Target "${targetBlock.name}" already processed`)
+            }
+          } catch (error) {
+            errors.push({
+              wireId: wire.id,
+              message: `Invalid signal type: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              severity: 'error'
+            })
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    signalTypes,
+    blockOutputTypes,
+    errors
   }
 }
 /**
@@ -961,7 +1332,21 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'input_port':
     case 'source':
     case 'matrix_multiply':
+    case 'evaluate':
+    case 'if':
+    case 'condition':
+    case 'mag':
+    case 'cross':
+    case 'dot':
+    case 'abs':
+    case 'uminus':
+    case 'transpose':
       return 1
+    case 'trig': {
+      // sincos has 2 outputs, all others have 1
+      const func = block.parameters?.function || 'sin'
+      return func === 'sincos' ? 2 : 1
+    }
     case 'output_port':
     case 'signal_display':
     case 'signal_logger':
@@ -1011,7 +1396,26 @@ function getBlockInputPortCount(block: BlockData): number {
     }
     case 'lookup_2d':
     case 'matrix_multiply':
+    case 'cross':  // Cross product takes 2 vectors
+    case 'dot':    // Dot product takes 2 vectors
       return 2
+    case 'if':
+      // If block takes 3 inputs: input1, control, input2
+      return 3
+    case 'evaluate':
+      // Evaluate blocks have configurable number of inputs
+      return block.parameters?.numInputs || 1
+    case 'condition':
+    case 'mag':      // Magnitude takes 1 vector
+    case 'abs':      // Absolute value takes 1 input
+    case 'uminus':   // Unary minus takes 1 input
+    case 'transpose': // Transpose takes 1 matrix
+      return 1
+    case 'trig': {
+      // atan2 requires 2 inputs (y, x), all others require 1
+      const func = block.parameters?.function || 'sin'
+      return func === 'atan2' ? 2 : 1
+    }
     case 'input_port':
     case 'source':
       return 0

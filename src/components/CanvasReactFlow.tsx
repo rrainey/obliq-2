@@ -34,7 +34,8 @@ import { edgeTypes, createCustomEdge, updateEdgeData, CustomEdgeData, CustomEdge
 import { BlockData, PortInfo } from './BlockNode'
 import { WireData } from './Wire'
 import { validateConnection, detectAlgebraicLoop } from '@/lib/connectionValidation'
-import { propagateSignalTypes, SignalType } from '@/lib/signalTypePropagation'
+import { propagateSignalTypesMultiSheet } from '@/lib/signalTypePropagation'
+import { useModelStore } from '@/lib/modelStore'
 import { validateWireConnection, TypeCompatibilityError } from '@/lib/typeCompatibilityValidator'
 import BlockContextMenu from './BlockContextMenu'
 import WireContextMenu from './WireContextMenu'
@@ -125,6 +126,9 @@ function CanvasReactFlowInner({
   const viewport = useViewport()
   const [connectionError, setConnectionError] = useState<string | null>(null)
 
+  // Get all sheets from model store for multi-sheet type propagation
+  const modelSheets = useModelStore(state => state.sheets)
+
   // Context menu state - following ReactFlow pattern
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
 
@@ -154,8 +158,11 @@ function CanvasReactFlowInner({
   // Convert blocks and wires to ReactFlow format with enhanced edge data
   const initialNodes = blocks.map((block) => blockDataToNode(block, wiresForNodes, blocks))
   const initialEdges = wires.map(wire => {
-    // Run type propagation to get signal types
-    const propagationResult = propagateSignalTypes(blocks, wires)
+    // Run type propagation to get signal types - use multi-sheet for proper sheet label handling
+    const sheetsForPropagation = modelSheets && modelSheets.length > 0
+      ? modelSheets.map(s => ({ blocks: s.blocks, connections: s.connections }))
+      : [{ blocks, connections: wires }]
+    const propagationResult = propagateSignalTypesMultiSheet(sheetsForPropagation)
     const signalType = propagationResult.signalTypes.get(wire.id)
     
     let edgeData: CustomEdgeData = {}
@@ -275,8 +282,11 @@ function CanvasReactFlowInner({
   }, [onWireRoutingChange])
 
   useEffect(() => {
-    // Run type propagation once for all wires
-    const propagationResult = propagateSignalTypes(blocks, wires)
+    // Run type propagation once for all wires - use multi-sheet for proper sheet label handling
+    const sheetsForPropagation = modelSheets && modelSheets.length > 0
+      ? modelSheets.map(s => ({ blocks: s.blocks, connections: s.connections }))
+      : [{ blocks, connections: wires }]
+    const propagationResult = propagateSignalTypesMultiSheet(sheetsForPropagation)
 
     const newEdges = wires.map(wire => {
       const signalType = propagationResult.signalTypes.get(wire.id)
@@ -337,7 +347,7 @@ function CanvasReactFlowInner({
       }
     })
     setEdges(newEdges)
-  }, [wires, blocks, setEdges, handleWireRoutingChange, highlightedNet])
+  }, [wires, blocks, modelSheets, setEdges, handleWireRoutingChange, highlightedNet])
 
   // Handle connection validation
   const isValidConnection = useCallback((connection: Connection) => {

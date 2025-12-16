@@ -3,8 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
-import { validateModelTypeCompatibility, TypeCompatibilityError, validateModelTypeCompatibilityMultiSheet } from '@/lib/typeCompatibilityValidator'
-import { validateSheetLabels } from '@/lib/sheetLabelUtils'
+import { TypeCompatibilityError, validateModelTypeCompatibilityMultiSheet } from '@/lib/typeCompatibilityValidator'
 import { useModelStore } from '@/lib/modelStore'
 
 interface UseWireValidationResult {
@@ -31,44 +30,22 @@ const validate = useMemo(() => {
     setIsValidating(true)
     
     try {
-      // Check if we should do multi-sheet validation
-      const shouldValidateMultiSheet = sheets && sheets.length > 1
-      
+      // Always use multi-sheet validation - it's a superset of single-sheet validation
+      // and properly handles sheet label source/sink type propagation
       let combinedErrors: TypeCompatibilityError[] = []
       let combinedWarnings: TypeCompatibilityError[] = []
-      
-      if (shouldValidateMultiSheet) {
-        // Multi-sheet validation for top-level
+
+      if (sheets && sheets.length > 0) {
+        // Multi-sheet validation handles all cases including single sheet
         const multiSheetResult = validateModelTypeCompatibilityMultiSheet(sheets)
         combinedErrors = multiSheetResult.errors
         combinedWarnings = multiSheetResult.warnings
       } else {
-        // Single sheet validation
-        const result = validateModelTypeCompatibility(blocks, wires)
-        
-        // Run sheet label validation for current sheet only
-        const sheetLabelIssues = validateSheetLabels(blocks)
-        const sheetLabelErrors: TypeCompatibilityError[] = sheetLabelIssues.map(issue => ({
-          type: issue.type === 'empty_signal_name' ? 'warning' : 'error',
-          message: issue.message,
-          location: issue.blockName,
-          blockId: issue.blockId,
-          severity: (issue.type === 'empty_signal_name' ? 'warning' : 'error') as 'error' | 'warning',
-          details: issue.signalName ? {
-            expectedType: issue.type === 'unmatched_source' ? 'Existing Sheet Label Sink' : 'Unique Signal Name',
-            actualType: issue.type === 'duplicate_sink' ? 'Duplicate' : issue.type === 'unmatched_source' ? 'None' : 'Empty'
-          } : undefined
-        }))
-        
-        combinedErrors = [
-          ...result.errors,
-          ...sheetLabelErrors.filter(e => e.severity === 'error')
-        ]
-        
-        combinedWarnings = [
-          ...result.warnings,
-          ...sheetLabelErrors.filter(e => e.severity === 'warning')
-        ]
+        // Fallback for when sheets aren't loaded yet - wrap current blocks/wires as single sheet
+        const singleSheetAsMulti = [{ blocks, connections: wires }]
+        const multiSheetResult = validateModelTypeCompatibilityMultiSheet(singleSheetAsMulti)
+        combinedErrors = multiSheetResult.errors
+        combinedWarnings = multiSheetResult.warnings
       }
       
       // Create a map of wire IDs to errors for quick lookup

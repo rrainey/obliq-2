@@ -558,6 +558,15 @@ export class IntegratorBlockModule implements IBlockModule {
     return ['Output']
   }
 
+  /**
+   * Integrators do NOT have direct feedthrough.
+   * The output is the integrated past values, not a function of the current input.
+   * This is critical for algebraic loop detection - integrators break algebraic loops.
+   */
+  isDirectFeedthrough(block: BlockData): boolean {
+    return false
+  }
+
   computeDerivatives(
     blockState: BlockState,
     inputs: (number | number[] | boolean | boolean[] | number[][])[],
