@@ -45,7 +45,6 @@ export async function authenticateApiRequest(token: string): Promise<AuthResult>
   // Check cache first
   const cachedUserId = tokenCache.get(tokenHash)
   if (cachedUserId) {
-    console.log('Token found in cache')
     
     // Still need to verify it's not expired
     const { data: tokenData, error } = await supabaseServer
