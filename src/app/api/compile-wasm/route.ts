@@ -269,7 +269,7 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
       `emcc ${sourceFiles} ` +
       `-I/workspace -o /workspace/${safeName}.js ` +
       `-s WASM=1 ` +
-      `-s "EXPORTED_FUNCTIONS=[\\"_wasm_init\\",\\"_wasm_set_input\\",\\"_wasm_get_output\\",\\"_wasm_step\\",\\"_wasm_get_time\\",\\"_wasm_get_collector_count\\",\\"_wasm_get_collector_name\\",\\"_wasm_get_sample_count\\",\\"_wasm_get_sample_write_index\\",\\"_wasm_get_max_samples\\",\\"_wasm_get_last_sample_time\\",\\"_wasm_get_samples\\",\\"_wasm_get_element_size\\",\\"_wasm_cleanup\\",\\"_malloc\\",\\"_free\\"]" ` +
+      `-s "EXPORTED_FUNCTIONS=[\\"_wasm_init\\",\\"_wasm_set_input\\",\\"_wasm_get_output\\",\\"_wasm_step\\",\\"_wasm_get_time\\",\\"_wasm_get_collector_count\\",\\"_wasm_get_collector_name\\",\\"_wasm_get_sample_count\\",\\"_wasm_get_sample_write_index\\",\\"_wasm_get_max_samples\\",\\"_wasm_get_last_sample_time\\",\\"_wasm_get_samples\\",\\"_wasm_get_element_size\\",\\"_wasm_get_output_port_count\\",\\"_wasm_get_output_port_name\\",\\"_wasm_cleanup\\",\\"_malloc\\",\\"_free\\"]" ` +
       `-s "EXPORTED_RUNTIME_METHODS=[\\"ccall\\",\\"cwrap\\",\\"UTF8ToString\\"]" ` +
       `-s MODULARIZE=1 ` +
       `-s "EXPORT_NAME=createModule" ` +

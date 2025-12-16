@@ -126,6 +126,10 @@ interface WasmModule {
   /** Optional: Get output name by index (if debug functions enabled) */
   _wasm_get_output_name?(index: number): string
 
+  /** Output port info functions (always available) */
+  _wasm_get_output_port_count?(): number
+  _wasm_get_output_port_name?(index: number): number
+
   /** Data collection functions */
   _wasm_get_collector_count?(): number
   _wasm_get_collector_name?(index: number): number

@@ -85,6 +85,8 @@ interface WasmModule {
   _wasm_get_time(): number
   _wasm_get_input_count?(): number
   _wasm_get_output_count?(): number
+  _wasm_get_output_port_count?(): number
+  _wasm_get_output_port_name?(index: number): number
   _wasm_get_collector_count?(): number
   _wasm_get_collector_name?(index: number): number
   _wasm_get_sample_count?(index: number): number

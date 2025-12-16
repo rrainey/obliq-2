@@ -386,6 +386,9 @@ static ${sanitizedName}_t ${sanitizedName}_instance = {0};
     // Data collector name array (for sample retrieval)
     wrapper += this.generateDataCollectorNameArray(outputMap)
 
+    // Output port name array (for output port enumeration)
+    wrapper += this.generateOutputPortNameArray(outputMap)
+
     // Initialize function
     wrapper += this.generateWasmInitFunction(sanitizedName)
 
@@ -403,6 +406,9 @@ static ${sanitizedName}_t ${sanitizedName}_instance = {0};
 
     // Data collection functions (for logger/display sample retrieval)
     wrapper += this.generateDataCollectionFunctions(sanitizedName, outputMap, collectorTypeMap)
+
+    // Output port info functions (for enumerating and displaying output port values)
+    wrapper += this.generateOutputPortInfoFunctions(sanitizedName, outputMap)
 
     // Cleanup function (always generate, but conditionally call C cleanup based on what was actually generated)
     wrapper += this.generateWasmCleanupFunction(sanitizedName, hasCleanupFunction)
@@ -628,7 +634,81 @@ ${keepalive}double wasm_get_time() {
   }
 
   /**
+   * Generate output port name array
+   * Only includes actual output ports (excludes logger_ and display_ entries)
+   */
+  private generateOutputPortNameArray(outputMap: Map<string, number>): string {
+    // Filter to only actual output ports (exclude logger and display)
+    const outputPorts = Array.from(outputMap.entries())
+      .filter(([name]) => !name.startsWith('logger_') && !name.startsWith('display_'))
+      .sort((a, b) => a[1] - b[1])
+
+    if (outputPorts.length === 0) {
+      return ''
+    }
+
+    let code = '// Output port name mappings\n'
+    code += `static const char* output_port_names[] = {\n`
+    outputPorts.forEach(([name], idx) => {
+      code += `    "${name}"${idx < outputPorts.length - 1 ? ',' : ''}\n`
+    })
+    code += `};\n\n`
+
+    return code
+  }
+
+  /**
+   * Generate output port info functions for enumerating and accessing output port values
+   * Always generates these functions (with stubs if no output ports)
+   */
+  private generateOutputPortInfoFunctions(
+    modelName: string,
+    outputMap: Map<string, number>
+  ): string {
+    const keepalive = this.wasmOptions.includeEmscriptenExports
+      ? 'EMSCRIPTEN_KEEPALIVE\n'
+      : ''
+
+    // Filter to only actual output ports (exclude logger and display)
+    const outputPorts = Array.from(outputMap.entries())
+      .filter(([name]) => !name.startsWith('logger_') && !name.startsWith('display_'))
+      .sort((a, b) => a[1] - b[1])
+
+    let code = '// Output port info functions\n\n'
+
+    // Get output port count
+    code += `// Get number of output ports
+${keepalive}int wasm_get_output_port_count() {
+    return ${outputPorts.length};
+}
+
+`
+
+    // Get output port name
+    if (outputPorts.length === 0) {
+      code += `// Get output port name by index
+${keepalive}const char* wasm_get_output_port_name(int index) {
+    (void)index; // Unused - no output ports
+    return NULL;
+}
+
+`
+    } else {
+      code += `// Get output port name by index
+${keepalive}const char* wasm_get_output_port_name(int index) {
+    if (index < 0 || index >= ${outputPorts.length}) return NULL;
+    return output_port_names[index];
+}
+
+`
+    }
+
+    return code
+  }
+
+  /**
    * Generate data collection functions for sample retrieval
+   * Always generates these functions (with stubs if no collectors) since WASM exports them unconditionally
    */
   private generateDataCollectionFunctions(
     modelName: string,
@@ -644,13 +724,9 @@ ${keepalive}double wasm_get_time() {
       .filter(([name]) => name.startsWith('logger_') || name.startsWith('display_'))
       .sort((a, b) => a[1] - b[1])
 
-    if (collectors.length === 0) {
-      return ''
-    }
-
     let code = '// Data collection functions\n\n'
 
-    // Get collector count
+    // Get collector count - always generate, returns 0 if no collectors
     code += `// Get number of data collectors (loggers and displays)
 ${keepalive}int wasm_get_collector_count() {
     return ${collectors.length};
@@ -658,119 +734,185 @@ ${keepalive}int wasm_get_collector_count() {
 
 `
 
-    // Get collector name
-    code += `// Get data collector name by index
+    // Get collector name - always generate, returns NULL if no collectors
+    if (collectors.length === 0) {
+      code += `// Get data collector name by index
+${keepalive}const char* wasm_get_collector_name(int index) {
+    (void)index; // Unused - no collectors
+    return NULL;
+}
+
+`
+    } else {
+      code += `// Get data collector name by index
 ${keepalive}const char* wasm_get_collector_name(int index) {
     if (index < 0 || index >= ${collectors.length}) return NULL;
     return collector_names[index];
 }
 
 `
+    }
 
-    // Get sample count (number of valid samples in circular buffer)
-    code += `// Get sample count for a collector (actual number of samples collected, capped at max)
+    // Generate remaining functions - with stubs when no collectors
+    if (collectors.length === 0) {
+      // Generate stub functions that just return default values
+      code += `// Get sample count for a collector (actual number of samples collected, capped at max)
+${keepalive}int wasm_get_sample_count(int collector_index) {
+    (void)collector_index; // Unused - no collectors
+    return 0;
+}
+
+`
+
+      code += `// Get current write index for a collector (for circular buffer extraction)
+${keepalive}int wasm_get_sample_write_index(int collector_index) {
+    (void)collector_index; // Unused - no collectors
+    return 0;
+}
+
+`
+
+      code += `// Get maximum sample capacity for a collector
+${keepalive}int wasm_get_max_samples(int collector_index) {
+    (void)collector_index; // Unused - no collectors
+    return 0;
+}
+
+`
+
+      code += `// Get simulation time of the last recorded sample for a collector
+${keepalive}double wasm_get_last_sample_time(int collector_index) {
+    (void)collector_index; // Unused - no collectors
+    return -1.0;
+}
+
+`
+
+      code += `// Get samples array pointer for a collector
+// Returns pointer to flat array of doubles (cast from any array type)
+${keepalive}double* wasm_get_samples(int collector_index) {
+    (void)collector_index; // Unused - no collectors
+    return NULL;
+}
+
+`
+
+      code += `// Get element size per sample for a collector
+// Returns 1 for scalars, array size for vectors, rows*cols for matrices
+${keepalive}int wasm_get_element_size(int collector_index) {
+    (void)collector_index; // Unused - no collectors
+    return 1;
+}
+
+`
+    } else {
+      // Generate real functions with switch statements
+
+      // Get sample count (number of valid samples in circular buffer)
+      code += `// Get sample count for a collector (actual number of samples collected, capped at max)
 ${keepalive}int wasm_get_sample_count(int collector_index) {
     switch(collector_index) {\n`
 
-    collectors.forEach(([name], idx) => {
-      // Remove prefix to get sanitized block name
-      const blockName = name.replace(/^(logger_|display_)/, '')
-      code += `        case ${idx}: return ${modelName}_instance.${blockName}_num_samples;\n`
-    })
+      collectors.forEach(([name], idx) => {
+        // Remove prefix to get sanitized block name
+        const blockName = name.replace(/^(logger_|display_)/, '')
+        code += `        case ${idx}: return ${modelName}_instance.${blockName}_num_samples;\n`
+      })
 
-    code += `        default: return 0;
+      code += `        default: return 0;
     }
 }
 
 `
 
-    // Get sample write index (current write position in circular buffer)
-    code += `// Get current write index for a collector (for circular buffer extraction)
+      // Get sample write index (current write position in circular buffer)
+      code += `// Get current write index for a collector (for circular buffer extraction)
 ${keepalive}int wasm_get_sample_write_index(int collector_index) {
     switch(collector_index) {\n`
 
-    collectors.forEach(([name], idx) => {
-      const blockName = name.replace(/^(logger_|display_)/, '')
-      code += `        case ${idx}: return ${modelName}_instance.${blockName}_sample_index;\n`
-    })
+      collectors.forEach(([name], idx) => {
+        const blockName = name.replace(/^(logger_|display_)/, '')
+        code += `        case ${idx}: return ${modelName}_instance.${blockName}_sample_index;\n`
+      })
 
-    code += `        default: return 0;
+      code += `        default: return 0;
     }
 }
 
 `
 
-    // Get max samples (buffer capacity)
-    code += `// Get maximum sample capacity for a collector
+      // Get max samples (buffer capacity)
+      code += `// Get maximum sample capacity for a collector
 ${keepalive}int wasm_get_max_samples(int collector_index) {
     switch(collector_index) {\n`
 
-    collectors.forEach(([name], idx) => {
-      const blockName = name.replace(/^(logger_|display_)/, '')
-      code += `        case ${idx}: return ${modelName}_instance.${blockName}_max_samples;\n`
-    })
+      collectors.forEach(([name], idx) => {
+        const blockName = name.replace(/^(logger_|display_)/, '')
+        code += `        case ${idx}: return ${modelName}_instance.${blockName}_max_samples;\n`
+      })
 
-    code += `        default: return 0;
+      code += `        default: return 0;
     }
 }
 
 `
 
-    // Get last sample time
-    code += `// Get simulation time of the last recorded sample for a collector
+      // Get last sample time
+      code += `// Get simulation time of the last recorded sample for a collector
 ${keepalive}double wasm_get_last_sample_time(int collector_index) {
     switch(collector_index) {\n`
 
-    collectors.forEach(([name], idx) => {
-      const blockName = name.replace(/^(logger_|display_)/, '')
-      code += `        case ${idx}: return ${modelName}_instance.${blockName}_last_sample_time;\n`
-    })
+      collectors.forEach(([name], idx) => {
+        const blockName = name.replace(/^(logger_|display_)/, '')
+        code += `        case ${idx}: return ${modelName}_instance.${blockName}_last_sample_time;\n`
+      })
 
-    code += `        default: return -1.0;
+      code += `        default: return -1.0;
     }
 }
 
 `
 
-    // Get samples pointer
-    code += `// Get samples array pointer for a collector
+      // Get samples pointer
+      code += `// Get samples array pointer for a collector
 // Returns pointer to flat array of doubles (cast from any array type)
 ${keepalive}double* wasm_get_samples(int collector_index) {
     switch(collector_index) {\n`
 
-    collectors.forEach(([name], idx) => {
-      // Remove prefix to get sanitized block name
-      const blockName = name.replace(/^(logger_|display_)/, '')
-      // Cast to double* to handle both scalar (double*) and vector/matrix (double (*)[N])
-      code += `        case ${idx}: return (double*)${modelName}_instance.${blockName}_samples;\n`
-    })
+      collectors.forEach(([name], idx) => {
+        // Remove prefix to get sanitized block name
+        const blockName = name.replace(/^(logger_|display_)/, '')
+        // Cast to double* to handle both scalar (double*) and vector/matrix (double (*)[N])
+        code += `        case ${idx}: return (double*)${modelName}_instance.${blockName}_samples;\n`
+      })
 
-    code += `        default: return NULL;
+      code += `        default: return NULL;
     }
 }
 
 `
 
-    // Get element size (for vector/matrix signals)
-    code += `// Get element size per sample for a collector
+      // Get element size (for vector/matrix signals)
+      code += `// Get element size per sample for a collector
 // Returns 1 for scalars, array size for vectors, rows*cols for matrices
 ${keepalive}int wasm_get_element_size(int collector_index) {
     switch(collector_index) {\n`
 
-    console.log(`[WasmCodeGenerator] collectorTypeMap entries:`, Array.from(collectorTypeMap.entries()))
+      console.log(`[WasmCodeGenerator] collectorTypeMap entries:`, Array.from(collectorTypeMap.entries()))
 
-    collectors.forEach(([name], idx) => {
-      const signalType = collectorTypeMap.get(name) || 'double'
-      const elementSize = this.calculateElementSize(signalType)
-      console.log(`[WasmCodeGenerator] Collector ${name}: signalType=${signalType}, elementSize=${elementSize}`)
-      code += `        case ${idx}: return ${elementSize};\n`
-    })
+      collectors.forEach(([name], idx) => {
+        const signalType = collectorTypeMap.get(name) || 'double'
+        const elementSize = this.calculateElementSize(signalType)
+        console.log(`[WasmCodeGenerator] Collector ${name}: signalType=${signalType}, elementSize=${elementSize}`)
+        code += `        case ${idx}: return ${elementSize};\n`
+      })
 
-    code += `        default: return 1;
+      code += `        default: return 1;
     }
 }
 
 `
+    }
 
     return code
   }

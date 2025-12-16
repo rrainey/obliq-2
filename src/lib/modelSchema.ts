@@ -23,13 +23,28 @@ const SheetSchema: z.ZodType<any> = z.lazy(() => SheetSchemaDefinition)
 // Code generation strategy for subsystems
 const CodeGenStrategySchema = z.enum(['flatten', 'segregated', 'segregated_atomic']).default('flatten')
 
+// Model parameter schema (used by both model and subsystem parameters)
+const ModelParameterSchema = z.object({
+  name: z.string()
+    .min(1, 'Parameter name cannot be empty')
+    .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, 'Parameter name must be a valid identifier (alphanumeric + underscore, no spaces)'),
+  signalType: SignalTypeSchema,
+  value: z.union([
+    z.number(),                          // Scalar
+    z.array(z.number()),                 // Vector
+    z.array(z.array(z.number()))         // Matrix
+  ])
+})
+
 // Subsystem-specific parameters schema
 const SubsystemParametersSchema = z.object({
   inputPorts: z.array(z.string()).min(1, 'Subsystem must have at least one input port'),
   outputPorts: z.array(z.string()).min(1, 'Subsystem must have at least one output port'),
   sheets: z.array(SheetSchema).min(1, 'Subsystem must have at least one sheet'),
   showEnableInput: z.boolean().optional().default(false),
-  codeGenStrategy: CodeGenStrategySchema.optional().default('flatten')
+  codeGenStrategy: CodeGenStrategySchema.optional().default('flatten'),
+  // Subsystem-level parameters (only used for segregated subsystems)
+  parameters: z.array(ModelParameterSchema).optional().default([])
 })
 
 // Block parameters schema with type validation for specific block types
@@ -141,19 +156,6 @@ const GlobalSettingsSchema = z.object({
 const MetadataSchema = z.object({
   created: z.string().datetime('Invalid created timestamp'),
   description: z.string().optional()
-})
-
-// Model parameter schema (Feature 1)
-const ModelParameterSchema = z.object({
-  name: z.string()
-    .min(1, 'Parameter name cannot be empty')
-    .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, 'Parameter name must be a valid identifier (alphanumeric + underscore, no spaces)'),
-  signalType: SignalTypeSchema,
-  value: z.union([
-    z.number(),                          // Scalar
-    z.array(z.number()),                 // Vector
-    z.array(z.array(z.number()))         // Matrix
-  ])
 })
 
 // Main model data schema - only contains root-level sheets

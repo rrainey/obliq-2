@@ -321,9 +321,13 @@ export class ModelFlattener {
     parentPath: string[],
     parentEnableScope: string | null
   ): SubsystemInfo {
+    // Extract subsystem-level parameters (if any)
+    const subsystemParameters: ModelParameter[] = block.parameters?.parameters || []
+
     // Create a sub-flattener for the subsystem's internal structure
+    // Pass subsystem's parameters (not parent model parameters) for this scope
     const subFlattener = new ModelFlattener(this.options)
-    const subResult = subFlattener.flattenModel(subsystemSheets, block.name)
+    const subResult = subFlattener.flattenModel(subsystemSheets, block.name, subsystemParameters)
 
     // Collect warnings from sub-flattening
     this.warnings.push(...subResult.warnings.map(w => `[${block.name}] ${w}`))
@@ -387,6 +391,7 @@ export class ModelFlattener {
       hasState,
       stateCount,
       typeMap,
+      parameters: subsystemParameters,
       parentPath,
       enableScope: parentEnableScope
     }

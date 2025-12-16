@@ -1,6 +1,7 @@
 // lib/codegen/SubsystemInfo.ts
 
 import { Sheet } from '@/lib/simulationEngine'
+import { ModelParameter } from '@/lib/modelSchema'
 import { FlattenedModel } from './ModelFlattener'
 
 /**
@@ -83,6 +84,11 @@ export interface SubsystemInfo {
 
   /** Type map for blocks within the subsystem (block originalId -> output type) */
   typeMap?: Map<string, string>
+
+  // === Subsystem Parameters ===
+
+  /** Subsystem-level parameters (for segregated subsystems) */
+  parameters?: ModelParameter[]
 
   // === Parent Context ===
 
