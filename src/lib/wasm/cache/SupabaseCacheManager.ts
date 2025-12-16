@@ -414,9 +414,13 @@ export class SupabaseCacheManager {
           0
         ) || 0
 
-      const avgTime =
-        metadata?.reduce((sum, m) => sum + m.compilation_time_ms, 0) /
-          (metadata?.length || 1) || 0
+      let avgTime = 0;
+
+      if (metadata) {
+        avgTime =
+          metadata?.reduce((sum, m) => sum + m.compilation_time_ms, 0) /
+            (metadata?.length || 1) || 0
+      }
 
       const cacheHits = metrics?.filter(m => m.cache_hit).length || 0
       const totalRequests = metrics?.length || 1
