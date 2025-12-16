@@ -5,6 +5,7 @@ import { FlattenedBlock } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { TypePropagator } from './TypePropagator'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
+import { CodeGenContext } from '../blocks/BlockModule'
 
 /**
  * Result of subsystem code generation
@@ -401,13 +402,18 @@ export class SubsystemCodeGenerator {
 
       let code = `\n    /* ${block.block.name} */\n`
 
+      // Create context with model parameter names for expression validation
+      const context: CodeGenContext = {
+        parameterNames: this.info.flattenedModel.parameters.map(p => p.name)
+      }
+
       // Handle transfer functions specially (need state access)
       if (block.block.type === 'transfer_function') {
         const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
         const modifiedInputs = [...inputs, `model->states.${safeName}_states`]
-        code += generator.generateComputation(block.block, modifiedInputs, inputTypes)
+        code += generator.generateComputation(block.block, modifiedInputs, inputTypes, context)
       } else {
-        code += generator.generateComputation(block.block, inputs, inputTypes)
+        code += generator.generateComputation(block.block, inputs, inputTypes, context)
       }
 
       return code

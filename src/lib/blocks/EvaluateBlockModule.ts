@@ -2,14 +2,14 @@
 
 import { BlockData } from '@/components/BlockNode'
 import { BlockState, SimulationState } from '@/lib/simulationEngine'
-import { IBlockModule, BlockModuleUtils } from './BlockModule'
+import { IBlockModule, BlockModuleUtils, CodeGenContext } from './BlockModule'
 import { C99ExpressionParser } from '@/lib/c99ExpressionParser'
 import { C99ExpressionValidator } from '@/lib/c99ExpressionValidator'
 import { C99ExpressionEvaluator } from '@/lib/c99ExpressionEvaluator'
 import { c99ExpressionToCode } from '@/lib/c99ExpressionCodeGen'
 
 export class EvaluateBlockModule implements IBlockModule {
-  generateComputation(block: BlockData, inputs: string[]): string {
+  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[], context?: CodeGenContext): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     const expression = block.parameters?.expression || '0'
     const numInputs = block.parameters?.numInputs || 1
@@ -42,9 +42,10 @@ export class EvaluateBlockModule implements IBlockModule {
       // Parse the expression
       const parser = new C99ExpressionParser(expression)
       const ast = parser.parse()
-      
-      // Validate it
-      const validator = new C99ExpressionValidator(numInputs)
+
+      // Validate it - pass parameter names so they're recognized as valid identifiers
+      const parameterNames = context?.parameterNames || []
+      const validator = new C99ExpressionValidator(numInputs, parameterNames)
       const validation = validator.validate(ast)
       
       if (!validation.valid) {

@@ -4,6 +4,7 @@ import { FlattenedModel, FlattenedBlock } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 import { SubsystemInfo } from './SubsystemInfo'
+import { CodeGenContext } from '../blocks/BlockModule'
 
 /**
  * Generates the algebraic evaluation function for a flattened model.
@@ -236,12 +237,17 @@ export class AlgebraicEvaluator {
           name: block.flattenedName
         }
 
+        // Create context with model parameter names for expression validation
+        const context: CodeGenContext = {
+          parameterNames: this.model.parameters.map(p => p.name)
+        }
+
         // For transfer functions, we need special handling to use states
         if (block.block.type === 'transfer_function') {
           const modifiedInputs = this.getTransferFunctionInputs(block, inputs)
-          code += generator.generateComputation(blockWithFlattenedName, modifiedInputs, inputTypes)
+          code += generator.generateComputation(blockWithFlattenedName, modifiedInputs, inputTypes, context)
         } else {
-          code += generator.generateComputation(blockWithFlattenedName, inputs, inputTypes)
+          code += generator.generateComputation(blockWithFlattenedName, inputs, inputTypes, context)
         }
 
       } catch (error) {

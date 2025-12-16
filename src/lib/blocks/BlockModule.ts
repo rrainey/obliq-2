@@ -5,6 +5,14 @@ import { BlockState, SimulationState } from '@/lib/simulationEngine'
 import { parseType, normalizeType, isValidType } from '@/lib/typeValidator'
 
 /**
+ * Context passed to code generation methods containing model-level information
+ */
+export interface CodeGenContext {
+  /** Names of model parameters that can be used in expressions (validated as identifiers) */
+  parameterNames?: string[]
+}
+
+/**
  * Interface for block-specific code generation and simulation modules.
  * Each block type implements this interface to provide its specific
  * behavior for code generation, simulation execution, and port management.
@@ -15,9 +23,10 @@ export interface IBlockModule {
    * @param block - The block data containing parameters and configuration
    * @param inputs - Array of C expressions for input values (e.g., "model->signals.Input1")
    * @param inputTypes - Optional array of C type strings for inputs (e.g., "double", "double[3]")
+   * @param context - Optional context containing model-level info like parameter names
    * @returns C code that computes the block's output(s)
    */
-  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string
+  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[], context?: CodeGenContext): string
 
   /**
    * Determine the output type(s) of this block based on input types.
