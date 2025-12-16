@@ -157,20 +157,22 @@ function CanvasReactFlowInner({
 
   // Convert blocks and wires to ReactFlow format with enhanced edge data
   const initialNodes = blocks.map((block) => blockDataToNode(block, wiresForNodes, blocks))
+
+  // Run type propagation ONCE for all wires (not inside the map!)
+  const sheetsForInitialPropagation = modelSheets && modelSheets.length > 0
+    ? modelSheets.map(s => ({ blocks: s.blocks, connections: s.connections }))
+    : [{ blocks, connections: wires }]
+  const initialPropagationResult = propagateSignalTypesMultiSheet(sheetsForInitialPropagation)
+
   const initialEdges = wires.map(wire => {
-    // Run type propagation to get signal types - use multi-sheet for proper sheet label handling
-    const sheetsForPropagation = modelSheets && modelSheets.length > 0
-      ? modelSheets.map(s => ({ blocks: s.blocks, connections: s.connections }))
-      : [{ blocks, connections: wires }]
-    const propagationResult = propagateSignalTypesMultiSheet(sheetsForPropagation)
-    const signalType = propagationResult.signalTypes.get(wire.id)
-    
+    const signalType = initialPropagationResult.signalTypes.get(wire.id)
+
     let edgeData: CustomEdgeData = {}
-    
+
     // Add type error information if available
     if (signalType) {
       // Check for type errors in the propagation result
-      const wireError = propagationResult.errors.find(e => e.wireId === wire.id)
+      const wireError = initialPropagationResult.errors.find(e => e.wireId === wire.id)
       if (wireError) {
         edgeData.typeError = {
           message: wireError.message,
@@ -181,11 +183,11 @@ function CanvasReactFlowInner({
           } : undefined
         }
       }
-      
+
       edgeData.sourceType = signalType.type
       edgeData.targetType = signalType.type // Same type flows through the wire
     }
-    
+
     return {
       ...wireDataToEdge(wire),
       type: 'default', // Use custom default edge

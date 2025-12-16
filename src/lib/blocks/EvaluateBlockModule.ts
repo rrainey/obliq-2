@@ -27,10 +27,11 @@ export class EvaluateBlockModule implements IBlockModule {
     // Create sanitized input variables
     const sanitizedInputs: string[] = []
     const inputDeclarations: string[] = []
-    
-    // Generate temporary variables with sanitized names
+
+    // Generate temporary variables with sanitized names - include block name to avoid collisions
+    const blockSuffix = BlockModuleUtils.sanitizeIdentifier(block.name)
     for (let i = 0; i < inputs.length; i++) {
-      const tempVarName = `_eval_in${i}`
+      const tempVarName = `_eval_${blockSuffix}_in${i}`
       sanitizedInputs.push(tempVarName)
       // QUIRK: Had to manually replace spaces with '_' in inputs[i]
       const sanitized_rhs = inputs[i].replace(/\s+/g, '_')

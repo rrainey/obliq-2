@@ -5,7 +5,7 @@ import { WireData } from '@/components/Wire'
 import { areTypesCompatible, getTypeCompatibilityError, parseType, ParsedType, typeToString, isMatrixType, getMatrixDimensions } from './typeValidator'
 
 // Debug flag for verbose logging - set to true to enable detailed trace output
-const DEBUG_PROPAGATION = true
+const DEBUG_PROPAGATION = false
 
 function debugLog(...args: unknown[]) {
   if (DEBUG_PROPAGATION) {
