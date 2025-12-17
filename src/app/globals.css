@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+/* Configure dark mode to use Mantine's color scheme attribute */
+@variant dark (&:where([data-mantine-color-scheme="dark"], [data-mantine-color-scheme="dark"] *));
 
 :root {
   /* CSS HEX */
@@ -62,4 +64,98 @@ select {
   position: relative;
   min-height: 0;
   overflow: hidden;
+}
+
+/* ReactFlow Dark Mode Styles - Using Mantine's neutral dark palette */
+/* dark.7: #1A1B1E, dark.6: #25262B, dark.5: #2C2E33, dark.4: #373A40 */
+.react-flow-dark .react-flow__pane {
+  background-color: #1A1B1E;
+}
+
+.react-flow-dark .react-flow__background {
+  background-color: #1A1B1E;
+}
+
+.react-flow-dark .react-flow__background-pattern {
+  fill: #373A40;
+}
+
+.react-flow-dark .react-flow__edge-path {
+  stroke: #909296;
+}
+
+.react-flow-dark .react-flow__edge.selected .react-flow__edge-path {
+  stroke: #6366f1;
+}
+
+.react-flow-dark .react-flow__controls {
+  background-color: #25262B;
+  border-color: #373A40;
+}
+
+.react-flow-dark .react-flow__controls-button {
+  background-color: #25262B;
+  border-color: #373A40;
+  fill: #C1C2C5;
+}
+
+.react-flow-dark .react-flow__controls-button:hover {
+  background-color: #2C2E33;
+}
+
+.react-flow-dark .react-flow__minimap {
+  background-color: #25262B;
+}
+
+.react-flow-dark .react-flow__selection {
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px dashed #6366f1;
+}
+
+/* Block text colors in dark mode */
+.react-flow-dark .text-gray-900 {
+  color: #f3f4f6 !important;
+}
+
+.react-flow-dark .text-gray-800 {
+  color: #e5e7eb !important;
+}
+
+.react-flow-dark .text-gray-600 {
+  color: #9ca3af !important;
+}
+
+.react-flow-dark .text-purple-700 {
+  color: #a78bfa !important;
+}
+
+.react-flow-dark .border-gray-800 {
+  border-color: #9ca3af !important;
+}
+
+/* Port sign and label colors in dark mode */
+.react-flow-dark .port-sign.positive,
+.react-flow-dark .port-sign.negative {
+  color: #9ca3af !important;
+}
+
+.react-flow-dark .port-name-label {
+  color: #d1d5db !important;
+}
+
+/* Comment node markdown content in dark mode */
+.react-flow-dark .comment-node .text-gray-700 {
+  color: #d1d5db !important;
+}
+
+.react-flow-dark .comment-node .bg-gray-100 {
+  background-color: #374151 !important;
+}
+
+.react-flow-dark .comment-node .border-gray-300 {
+  border-color: #4b5563 !important;
+}
+
+.react-flow-dark .comment-node .text-gray-600 {
+  color: #9ca3af !important;
 }

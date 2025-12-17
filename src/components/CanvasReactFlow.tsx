@@ -26,8 +26,8 @@ import ReactFlow, {
   useViewport,
   SelectionMode,
 } from 'reactflow'
-import  type ColorMode  from 'reactflow'
 import 'reactflow/dist/style.css'
+import { useComputedColorScheme } from '@mantine/core'
 
 import BlockNode, { nodeTypes, blockDataToNode, wireDataToEdge, BlockNodeData } from './BlockNode'
 import { edgeTypes, createCustomEdge, updateEdgeData, CustomEdgeData, CustomEdgeWrapper } from './CustomEdge'
@@ -125,6 +125,9 @@ function CanvasReactFlowInner({
   const store = useStoreApi()
   const viewport = useViewport()
   const [connectionError, setConnectionError] = useState<string | null>(null)
+
+  // Get color scheme from Mantine for ReactFlow theming
+  const colorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true })
 
   // Get all sheets from model store for multi-sheet type propagation
   const modelSheets = useModelStore(state => state.sheets)
@@ -766,7 +769,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
   }, [])
 
   return (
-    <div className="w-full h-full" ref={reactFlowWrapper}>
+    <div className={`w-full h-full ${colorScheme === 'dark' ? 'react-flow-dark' : ''}`} ref={reactFlowWrapper}>
       <CustomEdgeWrapper />
       <ReactFlow
         nodes={nodes}
@@ -781,7 +784,6 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         onEdgeContextMenu={onEdgeContextMenu}
         onDragOver={onDragOver}
         onDrop={onDropHandler}
-
         onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}

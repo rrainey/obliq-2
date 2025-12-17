@@ -8,15 +8,15 @@ import { createDefaultModel } from '@/lib/defaultModel'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { 
-  Container, 
-  Title, 
-  Text, 
-  Button, 
-  Grid, 
-  Card, 
-  Select, 
-  Menu, 
+import {
+  Container,
+  Title,
+  Text,
+  Button,
+  Grid,
+  Card,
+  Select,
+  Menu,
   ActionIcon,
   Modal,
   TextInput,
@@ -24,7 +24,9 @@ import {
   Stack,
   Center,
   Loader,
-  Box
+  Box,
+  useMantineColorScheme,
+  useComputedColorScheme
 } from '@mantine/core'
 import {
   IconDotsVertical,
@@ -33,12 +35,16 @@ import {
   IconPlus,
   IconKey,
   IconArrowRight,
-  IconCopy
+  IconCopy,
+  IconSun,
+  IconMoon
 } from '@tabler/icons-react'
 
 export default function ModelsPage() {
   const { user, loading } = useUser()
   const router = useRouter()
+  const { setColorScheme } = useMantineColorScheme()
+  const computedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true })
   const [models, setModels] = useState<ModelWithVersion[]>([])
   const [modelsLoading, setModelsLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -310,8 +316,12 @@ export default function ModelsPage() {
     )
   }
 
+  const toggleColorScheme = () => {
+    setColorScheme(computedColorScheme === 'light' ? 'dark' : 'light')
+  }
+
   return (
-    <Box mih="100vh" style={{ backgroundColor: '#f8f9fa' }}>
+    <Box mih="100vh" bg={computedColorScheme === 'dark' ? 'dark.8' : 'gray.0'}>
       <Container size="xl" py="xl">
         <Group justify="space-between" mb="xl">
           <div>
@@ -321,6 +331,14 @@ export default function ModelsPage() {
             </Text>
           </div>
           <Group>
+            <ActionIcon
+              onClick={toggleColorScheme}
+              variant="default"
+              size="lg"
+              aria-label="Toggle color scheme"
+            >
+              {computedColorScheme === 'light' ? <IconMoon size={18} /> : <IconSun size={18} />}
+            </ActionIcon>
             <Button
               leftSection={<IconPlus size={16} />}
               onClick={() => setShowNewModelDialog(true)}

@@ -7,6 +7,7 @@ import { Handle, Position, NodeProps } from 'reactflow'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
 import { IconMathIntegral, IconMathMaxMin } from '@tabler/icons-react'
+import { useComputedColorScheme } from '@mantine/core'
 import CommentNode from './CommentNode'
 
 export interface BlockData {
@@ -566,10 +567,11 @@ const portSignStyles = `
   }
 `
 
-const getBlockStyle = (data: BlockNodeData, selected: boolean | undefined) => {
+const getBlockStyle = (data: BlockNodeData, selected: boolean | undefined, isDark: boolean = false) => {
+    // Using Mantine's dark palette: dark.6 = #25262B, dark.4 = #373A40
     const baseStyle = `
       relative rounded-lg border-2 flex items-center justify-center
-      bg-white border-gray-400
+      ${isDark ? 'bg-[#25262B] border-[#373A40]' : 'bg-white border-gray-400'}
       ${selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''}
       transition-shadow
     `
@@ -584,6 +586,9 @@ const getBlockStyle = (data: BlockNodeData, selected: boolean | undefined) => {
 
 // Custom node component
 export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
+  const colorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true })
+  const isDark = colorScheme === 'dark'
+
   const getPortCounts = () => {
     let x = PortCountAdapter.getPortCounts(data)
     if (data.type === 'output_port' ) {
@@ -807,19 +812,19 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
 
         {/* Block Name - positioned above the block */}
         <div
-          className="absolute left-0 right-0 text-center text-gray-800 font-medium pointer-events-none"
-          style={{ 
-            width: blockWidth, 
-            fontSize: '0.5rem', 
+          className={`absolute left-0 right-0 text-center font-medium pointer-events-none ${isDark ? 'text-gray-200' : 'text-gray-800'}`}
+          style={{
+            width: blockWidth,
+            fontSize: '0.5rem',
             lineHeight: '0.75rem',
             top: isTerminator ? '-0.7rem' : '-0.75rem'
           }}
         >
           {data.name}
           {/* Signal name indicator for sheet labels */}
-          {(data.type === 'sheet_label_sink' || data.type === 'sheet_label_source') && 
+          {(data.type === 'sheet_label_sink' || data.type === 'sheet_label_source') &&
           data.parameters?.signalName && (
-            <div className="text-purple-600 mt-0.5" style={{ fontSize: '0.5rem' }}>
+            <div className={`mt-0.5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} style={{ fontSize: '0.5rem' }}>
               "{data.parameters.signalName}"
             </div>
           )}
@@ -877,8 +882,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
                   A ${minHeight/2 - 2} ${minHeight/2 - 2} 0 0 1 ${minHeight/2} 2
                   Z
                 `}
-                fill="white"
-                stroke="#9ca3af"
+                fill={isDark ? '#25262B' : 'white'}
+                stroke={isDark ? '#373A40' : '#9ca3af'}
                 strokeWidth="2"
               />
             </svg>
@@ -894,14 +899,14 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
         ) : (
           /* Regular rectangular block */
           <div
-            className={getBlockStyle(data, selected)}
+            className={getBlockStyle(data, selected, isDark)}
             style={{
               width: blockWidth,
               height: minHeight,
             }}
           >
             {/* Block Symbol */}
-            <div className="text-xl text-gray-900 pointer-events-none flex items-center justify-center w-full h-full">
+            <div className={`text-xl pointer-events-none flex items-center justify-center w-full h-full ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
               {getBlockSymbol(data)}
             </div>
           </div>

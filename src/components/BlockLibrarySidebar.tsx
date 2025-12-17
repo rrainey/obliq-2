@@ -1,6 +1,19 @@
 'use client'
 
 import { useState } from 'react'
+import {
+  Box,
+  Text,
+  TextInput,
+  Button,
+  Badge,
+  Group,
+  Stack,
+  ScrollArea,
+  Paper,
+  Flex
+} from '@mantine/core'
+import { IconSearch } from '@tabler/icons-react'
 
 interface BlockType {
   id: string
@@ -13,55 +26,55 @@ interface BlockType {
 
 const blockTypes: BlockType[] = [
   // Math Operations
-  { 
-    id: 'sum', 
-    name: 'Sum', 
-    category: 'Math', 
-    description: 'Add multiple inputs', 
+  {
+    id: 'sum',
+    name: 'Sum',
+    category: 'Math',
+    description: 'Add multiple inputs',
     icon: '∑',
     vectorSupport: 'full'
   },
-  { 
-    id: 'multiply', 
-    name: 'Multiply', 
-    category: 'Math', 
-    description: 'Multiply inputs', 
+  {
+    id: 'multiply',
+    name: 'Multiply',
+    category: 'Math',
+    description: 'Multiply inputs',
     icon: '×',
     vectorSupport: 'full'
   },
-  { 
-    id: 'scale', 
-    name: 'Scale', 
-    category: 'Math', 
-    description: 'Multiply by constant', 
+  {
+    id: 'scale',
+    name: 'Scale',
+    category: 'Math',
+    description: 'Multiply by constant',
     icon: 'K',
     vectorSupport: 'full'
   },
-  { 
-    id: 'evaluate', 
-    name: 'Evaluate', 
-    category: 'Math', 
-    description: 'Custom expression evaluator', 
+  {
+    id: 'evaluate',
+    name: 'Evaluate',
+    category: 'Math',
+    description: 'Custom expression evaluator',
     icon: 'f(x)',
     vectorSupport: 'scalar-only'
   },
-   { 
-    id: 'abs', 
-    name: 'Absolute Value', 
-    category: 'Math', 
-    description: 'Absolute value of scalar input', 
+   {
+    id: 'abs',
+    name: 'Absolute Value',
+    category: 'Math',
+    description: 'Absolute value of scalar input',
     icon: '|x|',
     vectorSupport: 'scalar-only'
   },
-  { 
-    id: 'uminus', 
-    name: 'Unary Minus', 
-    category: 'Math', 
-    description: 'Negates input signal', 
+  {
+    id: 'uminus',
+    name: 'Unary Minus',
+    category: 'Math',
+    description: 'Negates input signal',
     icon: '-x',
     vectorSupport: 'full'
   },
-  
+
   // Signal Processing
   {
     id: 'limit',
@@ -89,142 +102,142 @@ const blockTypes: BlockType[] = [
     icon: '∫',
     vectorSupport: 'element-wise'
   },
-  
+
   // Sources & Sinks
-  { 
-    id: 'input_port', 
-    name: 'Input Port', 
-    category: 'Ports', 
-    description: 'External input', 
+  {
+    id: 'input_port',
+    name: 'Input Port',
+    category: 'Ports',
+    description: 'External input',
     icon: '→',
     vectorSupport: 'full'
   },
-  { 
-    id: 'output_port', 
-    name: 'Output Port', 
-    category: 'Ports', 
-    description: 'External output', 
+  {
+    id: 'output_port',
+    name: 'Output Port',
+    category: 'Ports',
+    description: 'External output',
     icon: '⇥',
     vectorSupport: 'full'
   },
-  { 
-    id: 'source', 
-    name: 'Source', 
-    category: 'Sources', 
-    description: 'Constant or signal generator', 
+  {
+    id: 'source',
+    name: 'Source',
+    category: 'Sources',
+    description: 'Constant or signal generator',
     icon: '◦',
     vectorSupport: 'full'
   },
-  
+
   // Display & Logging
-  { 
-    id: 'signal_display', 
-    name: 'Signal Display', 
-    category: 'Display', 
-    description: 'Plot signal values', 
+  {
+    id: 'signal_display',
+    name: 'Signal Display',
+    category: 'Display',
+    description: 'Plot signal values',
     icon: '📊',
     vectorSupport: 'full'
   },
-  { 
-    id: 'signal_logger', 
-    name: 'Signal Logger', 
-    category: 'Display', 
-    description: 'Log signal data', 
+  {
+    id: 'signal_logger',
+    name: 'Signal Logger',
+    category: 'Display',
+    description: 'Log signal data',
     icon: '📝',
     vectorSupport: 'full'
   },
-  
+
   // Lookup Tables
-  { 
-    id: 'lookup_1d', 
-    name: '1-D Lookup', 
-    category: 'Lookup', 
-    description: '1D interpolation table (scalar only)', 
+  {
+    id: 'lookup_1d',
+    name: '1-D Lookup',
+    category: 'Lookup',
+    description: '1D interpolation table (scalar only)',
     icon: '1D',
     vectorSupport: 'scalar-only'
   },
-  { 
-    id: 'lookup_2d', 
-    name: '2-D Lookup', 
-    category: 'Lookup', 
-    description: '2D interpolation table (scalar only)', 
+  {
+    id: 'lookup_2d',
+    name: '2-D Lookup',
+    category: 'Lookup',
+    description: '2D interpolation table (scalar only)',
     icon: '2D',
     vectorSupport: 'scalar-only'
   },
-  
+
   // Subsystems
-  { 
-    id: 'subsystem', 
-    name: 'Subsystem', 
-    category: 'Hierarchy', 
-    description: 'Nested model block', 
+  {
+    id: 'subsystem',
+    name: 'Subsystem',
+    category: 'Hierarchy',
+    description: 'Nested model block',
     icon: '📦',
     vectorSupport: 'full'
   },
-  { 
-    id: 'sheet_label_sink', 
-    name: 'Sheet Label Sink', 
-    category: 'Sheet Labels', 
-    description: 'Capture a signal and make it available by name across sheets', 
+  {
+    id: 'sheet_label_sink',
+    name: 'Sheet Label Sink',
+    category: 'Sheet Labels',
+    description: 'Capture a signal and make it available by name across sheets',
     icon: '↓L',
     vectorSupport: 'full'
   },
-  { 
-    id: 'sheet_label_source', 
-    name: 'Sheet Label Source', 
-    category: 'Sheet Labels', 
-    description: 'Output a signal captured by a Sheet Label Sink with matching name', 
+  {
+    id: 'sheet_label_source',
+    name: 'Sheet Label Source',
+    category: 'Sheet Labels',
+    description: 'Output a signal captured by a Sheet Label Sink with matching name',
     icon: '↑L',
     vectorSupport: 'full'
   },
 
-  { 
-    id: 'trig', 
-    name: 'Trig Function', 
-    category: 'Math', 
-    description: 'Compute trigonometric functions; angles are radians', 
+  {
+    id: 'trig',
+    name: 'Trig Function',
+    category: 'Math',
+    description: 'Compute trigonometric functions; angles are radians',
     icon: 'sin(x)',
     vectorSupport: 'scalar-only'
   },
-  
+
   // Matrix Operations
-  { 
-    id: 'matrix_multiply', 
-    name: 'Matrix Multiply', 
-    category: 'Matrix', 
-    description: 'Matrix multiplication (scalar×matrix or matrix×matrix)', 
+  {
+    id: 'matrix_multiply',
+    name: 'Matrix Multiply',
+    category: 'Matrix',
+    description: 'Matrix multiplication (scalar×matrix or matrix×matrix)',
     icon: '⊗',
     vectorSupport: 'full'
   },
-   { 
-    id: 'transpose', 
-    name: 'Transpose', 
-    category: 'Matrix', 
-    description: 'Matrix/vector transpose operation', 
+   {
+    id: 'transpose',
+    name: 'Transpose',
+    category: 'Matrix',
+    description: 'Matrix/vector transpose operation',
     icon: 'Aᵀ',
     vectorSupport: 'full'
   },
-  { 
-    id: 'mux', 
-    name: 'Mux', 
-    category: 'Matrix', 
-    description: 'Combine scalars into vector/matrix', 
+  {
+    id: 'mux',
+    name: 'Mux',
+    category: 'Matrix',
+    description: 'Combine scalars into vector/matrix',
     icon: '▦',
     vectorSupport: 'full'
   },
-  { 
-    id: 'demux', 
-    name: 'Demux', 
-    category: 'Matrix', 
-    description: 'Split vector/matrix into scalars', 
+  {
+    id: 'demux',
+    name: 'Demux',
+    category: 'Matrix',
+    description: 'Split vector/matrix into scalars',
     icon: '▥',
     vectorSupport: 'full'
   },
-  { 
-    id: 'mag', 
-    name: 'Magnitude', 
-    category: 'Vector', 
-    description: 'Calculate magnitude of a vector', 
+  {
+    id: 'mag',
+    name: 'Magnitude',
+    category: 'Vector',
+    description: 'Calculate magnitude of a vector',
     icon: '|v|',
     vectorSupport: 'full'
   },
@@ -256,11 +269,11 @@ const blockTypes: BlockType[] = [
   },
 
   // Control Flow
-  { 
-    id: 'if', 
-    name: 'If', 
-    category: 'Control', 
-    description: 'Conditional signal selection', 
+  {
+    id: 'if',
+    name: 'If',
+    category: 'Control',
+    description: 'Conditional signal selection',
     icon: '?:',
     vectorSupport: 'full'
   },
@@ -296,7 +309,7 @@ function DraggableBlock({ blockType }: DraggableBlockProps) {
     e.dataTransfer.setData('text/plain', blockType.id)
     e.dataTransfer.setData('application/reactflow', blockType.id)
     e.dataTransfer.effectAllowed = 'copy'
-    
+
     // Create a custom drag image
     const dragImage = document.createElement('div')
     dragImage.className = 'p-2 bg-blue-500 text-white rounded shadow-lg'
@@ -304,9 +317,9 @@ function DraggableBlock({ blockType }: DraggableBlockProps) {
     dragImage.style.position = 'absolute'
     dragImage.style.top = '-1000px'
     document.body.appendChild(dragImage)
-    
+
     e.dataTransfer.setDragImage(dragImage, 0, 0)
-    
+
     // Clean up the drag image after a short delay
     setTimeout(() => {
       document.body.removeChild(dragImage)
@@ -318,21 +331,21 @@ function DraggableBlock({ blockType }: DraggableBlockProps) {
     switch (blockType.vectorSupport) {
       case 'full':
         return (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800" title="Supports scalar and vector signals">
+          <Badge size="xs" color="green" variant="light" title="Supports scalar and vector signals">
             V
-          </span>
+          </Badge>
         )
       case 'element-wise':
         return (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800" title="Processes vectors element-wise">
+          <Badge size="xs" color="blue" variant="light" title="Processes vectors element-wise">
             E
-          </span>
+          </Badge>
         )
       case 'scalar-only':
         return (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800" title="Scalar inputs only">
+          <Badge size="xs" color="yellow" variant="light" title="Scalar inputs only">
             S
-          </span>
+          </Badge>
         )
       default:
         return null
@@ -357,29 +370,45 @@ function DraggableBlock({ blockType }: DraggableBlockProps) {
   }
 
   return (
-    <div
+    <Paper
       draggable
       onDragStart={handleDragStart}
-      className="p-3 bg-white border border-gray-200 rounded-lg cursor-move hover:bg-gray-50 hover:border-blue-300 hover:shadow-md transition-all group active:cursor-grabbing"
+      p="sm"
+      withBorder
+      shadow="xs"
+      style={{ cursor: 'grab' }}
       title={getTooltip()}
     >
-      <div className="flex items-center space-x-3 pointer-events-none">
-        <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center text-blue-700 font-mono text-sm group-hover:bg-blue-200 transition-colors">
+      <Flex align="center" gap="sm" style={{ pointerEvents: 'none' }}>
+        <Box
+          w={32}
+          h={32}
+          style={(theme) => ({
+            backgroundColor: theme.colors.blue[1],
+            borderRadius: theme.radius.sm,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: 'monospace',
+            fontSize: theme.fontSizes.sm,
+            color: theme.colors.blue[7],
+          })}
+        >
           {blockType.icon}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="text-sm font-medium text-gray-900 truncate">
+        </Box>
+        <Box style={{ flex: 1, minWidth: 0 }}>
+          <Group gap={8}>
+            <Text size="sm" fw={500} truncate>
               {blockType.name}
-            </div>
+            </Text>
             {getVectorBadge()}
-          </div>
-          <div className="text-xs text-gray-500 truncate">
+          </Group>
+          <Text size="xs" c="dimmed" truncate>
             {blockType.description}
-          </div>
-        </div>
-      </div>
-    </div>
+          </Text>
+        </Box>
+      </Flex>
+    </Paper>
   )
 }
 
@@ -395,87 +424,86 @@ export default function BlockLibrarySidebar() {
   })
 
   return (
-    <div className="w-full h-full bg-white border-r border-gray-200 flex flex-col">
+    <Box w="100%" h="100%" style={{ display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <div className="p-4 border-b border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Block Library</h2>
-        
+      <Box p="md" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+        <Text size="lg" fw={600} mb="sm">Block Library</Text>
+
         {/* Search */}
-        <input
-          type="text"
+        <TextInput
           placeholder="Search blocks..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          onChange={(e) => setSearchTerm(e.currentTarget.value)}
+          leftSection={<IconSearch size={16} />}
+          size="sm"
         />
-      </div>
+      </Box>
 
       {/* Category Filter */}
-      <div className="p-4 border-b border-gray-200">
-        <div className="flex flex-wrap gap-1">
-          <button
+      <Box p="md" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+        <Group gap={4}>
+          <Button
+            size="xs"
+            variant={!selectedCategory ? 'light' : 'subtle'}
+            color={!selectedCategory ? 'blue' : 'gray'}
             onClick={() => setSelectedCategory(null)}
-            className={`px-2 py-1 text-xs rounded-full ${
-              !selectedCategory
-                ? 'bg-blue-100 text-blue-700'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
+            radius="xl"
           >
             All
-          </button>
+          </Button>
           {categories.map(category => (
-            <button
+            <Button
               key={category}
+              size="xs"
+              variant={selectedCategory === category ? 'light' : 'subtle'}
+              color={selectedCategory === category ? 'blue' : 'gray'}
               onClick={() => setSelectedCategory(category)}
-              className={`px-2 py-1 text-xs rounded-full ${
-                selectedCategory === category
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              radius="xl"
             >
               {category}
-            </button>
+            </Button>
           ))}
-        </div>
-      </div>
+        </Group>
+      </Box>
 
       {/* Block List */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-3">
+      <ScrollArea style={{ flex: 1 }} p="md">
+        <Stack gap="sm">
           {filteredBlocks.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <div className="text-sm">No blocks found</div>
-              <div className="text-xs mt-1">Try adjusting your search or filter</div>
-            </div>
+            <Box py="xl" ta="center">
+              <Text size="sm" c="dimmed">No blocks found</Text>
+              <Text size="xs" c="dimmed" mt={4}>Try adjusting your search or filter</Text>
+            </Box>
           ) : (
             filteredBlocks.map(blockType => (
               <DraggableBlock key={blockType.id} blockType={blockType} />
             ))
           )}
-        </div>
-      </div>
+        </Stack>
+      </ScrollArea>
 
       {/* Footer with Legend and Instructions */}
-      <div className="p-4 border-t border-gray-200 bg-gray-50">
-        <div className="text-xs text-gray-600 text-center mb-3">
-          <div className="font-medium mb-1">Drag blocks onto the canvas</div>
-          <div className="text-gray-500">Click and hold to drag • Release over canvas to place</div>
-        </div>
-        <div className="flex justify-center gap-3 text-xs">
-          <div className="flex items-center gap-1">
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded font-medium bg-green-100 text-green-800">V</span>
-            <span className="text-gray-600">Vector</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded font-medium bg-blue-100 text-blue-800">E</span>
-            <span className="text-gray-600">Element-wise</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded font-medium bg-yellow-100 text-yellow-800">S</span>
-            <span className="text-gray-600">Scalar only</span>
-          </div>
-        </div>
-      </div>
-    </div>
+      <Box p="md" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
+        <Text size="xs" c="dimmed" ta="center" mb="xs">
+          <Text span fw={500}>Drag blocks onto the canvas</Text>
+          <br />
+          Click and hold to drag - Release over canvas to place
+        </Text>
+        <Group justify="center" gap="md">
+          <Group gap={4}>
+            <Badge size="xs" color="green" variant="light">V</Badge>
+            <Text size="xs" c="dimmed">Vector</Text>
+          </Group>
+          <Group gap={4}>
+            <Badge size="xs" color="blue" variant="light">E</Badge>
+            <Text size="xs" c="dimmed">Element-wise</Text>
+          </Group>
+          <Group gap={4}>
+            <Badge size="xs" color="yellow" variant="light">S</Badge>
+            <Text size="xs" c="dimmed">Scalar only</Text>
+          </Group>
+        </Group>
+      </Box>
+    </Box>
   )
 }
