@@ -17,6 +17,7 @@ export interface CommentNodeData {
     text?: string
     width?: number
     height?: number
+    autoHeight?: boolean      // When true, height auto-expands to fit text
     backgroundColor?: string  // 'canvas' for transparent background
     borderColor?: string      // 'none' for no border
   }
@@ -36,6 +37,7 @@ export const CommentNode: React.FC<CommentNodeProps> = memo(({ data, selected })
     text = '# Comment\n\nAdd your notes here...',
     width = 200,
     height = 100,
+    autoHeight = true,
     backgroundColor = '#fffde7',
     borderColor = '#ffd54f'
   } = data.parameters || {}
@@ -47,7 +49,7 @@ export const CommentNode: React.FC<CommentNodeProps> = memo(({ data, selected })
   const containerStyle: CSSProperties = {
     position: 'relative',
     width: width,
-    minHeight: height,
+    minHeight: autoHeight ? undefined : height,
     backgroundColor: isTransparent ? 'transparent' : backgroundColor,
     border: hasNoBorder ? 'none' : `2px solid ${borderColor}`,
     borderRadius: hasNoBorder ? '0' : '8px',
@@ -134,7 +136,10 @@ export const CommentNode: React.FC<CommentNodeProps> = memo(({ data, selected })
   return (
     <div style={containerStyle} className="comment-node">
       {/* Markdown content - Comment blocks never show their name */}
-      <div className="markdown-content overflow-y-auto" style={{ maxHeight: height - 24 }}>
+      <div
+        className={autoHeight ? 'markdown-content' : 'markdown-content overflow-y-auto'}
+        style={autoHeight ? undefined : { maxHeight: height - 24 }}
+      >
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkMath]}
           rehypePlugins={[rehypeKatex]}

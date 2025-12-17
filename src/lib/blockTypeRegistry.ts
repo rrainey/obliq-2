@@ -516,6 +516,7 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
       text: '# Comment\n\nAdd your notes here...',
       width: 200,
       height: 100,
+      autoHeight: true,           // When true, height auto-expands to fit text
       backgroundColor: '#fffde7',  // Use 'canvas' for transparent background
       borderColor: '#ffd54f'       // Use 'none' for no border
     },

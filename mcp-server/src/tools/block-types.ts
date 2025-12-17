@@ -708,10 +708,15 @@ const blockTypeSchemas: BlockTypeInfo[] = [
       },
       height: {
         type: 'number',
-        description: 'Minimum height of the comment block in pixels',
+        description: 'Minimum height of the comment block in pixels. Ignored when autoHeight is true.',
         default: 100,
         minimum: 50,
         maximum: 600
+      },
+      autoHeight: {
+        type: 'boolean',
+        description: 'When true, the comment block automatically expands to fit all text content. Height parameter is ignored.',
+        default: true
       },
       backgroundColor: {
         type: 'string',

@@ -19,17 +19,22 @@ export default function CommentConfig({ block, onUpdate, onClose }: CommentConfi
   const [text, setText] = useState(block.parameters?.text || '# Comment\n\nAdd your notes here...')
   const [width, setWidth] = useState<number>(block.parameters?.width || 200)
   const [height, setHeight] = useState<number>(block.parameters?.height || 100)
+  const [autoHeight, setAutoHeight] = useState<boolean>(block.parameters?.autoHeight ?? true)
   const [backgroundColor, setBackgroundColor] = useState(block.parameters?.backgroundColor || '#fffde7')
   const [borderColor, setBorderColor] = useState(block.parameters?.borderColor || '#ffd54f')
   const [showPreview, setShowPreview] = useState(true)
 
   const handleSave = () => {
-    const parameters = {
+    const parameters: Record<string, any> = {
       text,
       width,
-      height,
+      autoHeight,
       backgroundColor,
       borderColor
+    }
+    // Only include height if autoHeight is false
+    if (!autoHeight) {
+      parameters.height = height
     }
     onUpdate(parameters)
     onClose()
@@ -79,13 +84,23 @@ export default function CommentConfig({ block, onUpdate, onClose }: CommentConfi
               min={100}
               max={800}
             />
-            <NumberInput
-              label="Min Height (px)"
-              value={height}
-              onChange={(val) => setHeight(typeof val === 'number' ? val : 100)}
-              min={50}
-              max={600}
-            />
+            <div>
+              <Checkbox
+                label="Auto-fit height"
+                checked={autoHeight}
+                onChange={(e) => setAutoHeight(e.currentTarget.checked)}
+                mb="xs"
+              />
+              {!autoHeight && (
+                <NumberInput
+                  label="Min Height (px)"
+                  value={height}
+                  onChange={(val) => setHeight(typeof val === 'number' ? val : 100)}
+                  min={50}
+                  max={600}
+                />
+              )}
+            </div>
           </SimpleGrid>
 
           <div>
@@ -171,17 +186,13 @@ export default function CommentConfig({ block, onUpdate, onClose }: CommentConfi
             <div
               style={{
                 width: Math.min(width, 360),
-                minHeight: Math.min(height, 300),
-                maxHeight: 400,
-                overflow: 'auto',
+                minHeight: autoHeight ? undefined : Math.min(height, 300),
+                maxHeight: autoHeight ? undefined : 400,
+                overflow: autoHeight ? 'visible' : 'auto',
                 padding: 12,
                 backgroundColor: isTransparent ? 'transparent' : backgroundColor,
                 border: hasNoBorder ? 'none' : `2px solid ${borderColor}`,
                 borderRadius: hasNoBorder ? '0' : '8px',
-                backgroundImage: isTransparent
-                  ? 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)'
-                  : 'none',
-                backgroundSize: isTransparent ? '20px 20px' : 'auto',
               }}
             >
               <ReactMarkdown

@@ -701,7 +701,18 @@ export function validateBlockParameters(
         sanitized.width = defaults.width;
       }
 
-      // Validate height
+      // Validate autoHeight (must be validated before height)
+      if (parameters.autoHeight !== undefined) {
+        if (typeof parameters.autoHeight !== 'boolean') {
+          errors.push('autoHeight must be a boolean');
+        } else {
+          sanitized.autoHeight = parameters.autoHeight;
+        }
+      } else {
+        sanitized.autoHeight = defaults.autoHeight;
+      }
+
+      // Validate height (optional when autoHeight is true)
       if (parameters.height !== undefined) {
         const height = Number(parameters.height);
         if (isNaN(height) || height < 50 || height > 600) {
@@ -709,7 +720,8 @@ export function validateBlockParameters(
         } else {
           sanitized.height = height;
         }
-      } else {
+      } else if (!sanitized.autoHeight) {
+        // Only use default height when autoHeight is false
         sanitized.height = defaults.height;
       }
 
