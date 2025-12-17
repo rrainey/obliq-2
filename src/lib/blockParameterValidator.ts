@@ -653,6 +653,89 @@ export function validateBlockParameters(
       }
       break;
 
+    case BlockTypes.ORIENTATION_CONVERSION:
+      // Validate conversionType
+      const validConversionTypes = [
+        'euler_to_dcm',
+        'euler_to_quaternion',
+        'dcm_to_euler',
+        'dcm_to_quaternion',
+        'quaternion_to_dcm',
+        'quaternion_to_euler',
+        'body_to_quaternion_rates'
+      ];
+      if (parameters.conversionType !== undefined) {
+        if (typeof parameters.conversionType !== 'string') {
+          errors.push('conversionType must be a string');
+        } else if (!validConversionTypes.includes(parameters.conversionType)) {
+          errors.push(`conversionType must be one of: ${validConversionTypes.join(', ')}`);
+        } else {
+          sanitized.conversionType = parameters.conversionType;
+        }
+      } else {
+        sanitized.conversionType = defaults.conversionType;
+      }
+      break;
+
+    case BlockTypes.COMMENT:
+      // Validate text
+      if (parameters.text !== undefined) {
+        if (typeof parameters.text !== 'string') {
+          errors.push('text must be a string');
+        } else {
+          sanitized.text = parameters.text;
+        }
+      } else {
+        sanitized.text = defaults.text;
+      }
+
+      // Validate width
+      if (parameters.width !== undefined) {
+        const width = Number(parameters.width);
+        if (isNaN(width) || width < 100 || width > 800) {
+          errors.push('width must be a number between 100 and 800');
+        } else {
+          sanitized.width = width;
+        }
+      } else {
+        sanitized.width = defaults.width;
+      }
+
+      // Validate height
+      if (parameters.height !== undefined) {
+        const height = Number(parameters.height);
+        if (isNaN(height) || height < 50 || height > 600) {
+          errors.push('height must be a number between 50 and 600');
+        } else {
+          sanitized.height = height;
+        }
+      } else {
+        sanitized.height = defaults.height;
+      }
+
+      // Validate backgroundColor
+      if (parameters.backgroundColor !== undefined) {
+        if (typeof parameters.backgroundColor !== 'string') {
+          errors.push('backgroundColor must be a string');
+        } else {
+          sanitized.backgroundColor = parameters.backgroundColor;
+        }
+      } else {
+        sanitized.backgroundColor = defaults.backgroundColor;
+      }
+
+      // Validate borderColor
+      if (parameters.borderColor !== undefined) {
+        if (typeof parameters.borderColor !== 'string') {
+          errors.push('borderColor must be a string');
+        } else {
+          sanitized.borderColor = parameters.borderColor;
+        }
+      } else {
+        sanitized.borderColor = defaults.borderColor;
+      }
+      break;
+
     default:
       errors.push(`No validation rules defined for block type: ${blockType}`);
   }
