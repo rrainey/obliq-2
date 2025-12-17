@@ -3,6 +3,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Modal, NumberInput, Textarea, Button, Stack, Group, Alert, Text, Paper, SimpleGrid, Divider } from '@mantine/core'
+import { IconInfoCircle, IconCheck, IconAlertTriangle, IconX } from '@tabler/icons-react'
 import { BlockData } from './BlockNode'
 import { C99ExpressionParser } from '@/lib/c99ExpressionParser'
 import { C99ExpressionValidator } from '@/lib/c99ExpressionValidator'
@@ -16,25 +18,21 @@ interface EvaluateConfigProps {
 
 export default function EvaluateConfig({ block, onUpdate, onClose }: EvaluateConfigProps) {
   const parameters = useModelStore((state) => state.parameters)
-  const [numInputs, setNumInputs] = useState(block?.parameters?.numInputs || 2)
+  const [numInputs, setNumInputs] = useState<number>(block?.parameters?.numInputs || 2)
   const [expression, setExpression] = useState(block?.parameters?.expression || 'in(0) + in(1)')
   const [isValid, setIsValid] = useState(true)
   const [errors, setErrors] = useState<string[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
   const [usedInputs, setUsedInputs] = useState<number[]>([])
 
-  // Validate expression on change
   useEffect(() => {
     validateExpression()
   }, [expression, numInputs])
 
   const validateExpression = () => {
     try {
-      // Parse the expression
       const parser = new C99ExpressionParser(expression)
       const ast = parser.parse()
-
-      // Validate it - pass parameter names for validation
       const parameterNames = parameters.map(p => p.name)
       const validator = new C99ExpressionValidator(numInputs, parameterNames)
       const result = validator.validate(ast)
@@ -43,19 +41,11 @@ export default function EvaluateConfig({ block, onUpdate, onClose }: EvaluateCon
       setErrors(result.errors)
       setWarnings(result.warnings)
       setUsedInputs(Array.from(result.usedInputs).sort((a, b) => a - b))
-
     } catch (error) {
       setIsValid(false)
       setErrors([error instanceof Error ? error.message : 'Invalid expression'])
       setWarnings([])
       setUsedInputs([])
-    }
-  }
-
-  const handleNumInputsChange = (value: string) => {
-    const num = parseInt(value)
-    if (!isNaN(num) && num >= 1 && num <= 10) {
-      setNumInputs(num)
     }
   }
 
@@ -66,7 +56,6 @@ export default function EvaluateConfig({ block, onUpdate, onClose }: EvaluateCon
     }
   }
 
-  // Expression templates
   const templates = [
     { name: 'Sum', expr: 'in(0) + in(1)', inputs: 2 },
     { name: 'Difference', expr: 'in(0) - in(1)', inputs: 2 },
@@ -80,21 +69,15 @@ export default function EvaluateConfig({ block, onUpdate, onClose }: EvaluateCon
     { name: 'Logic OR', expr: 'in(0) || in(1)', inputs: 2 },
     { name: 'Threshold', expr: 'in(0) > 0.5 ? 1 : 0', inputs: 1 },
     { name: 'Deadband', expr: '(in(0) > -0.1 && in(0) < 0.1) ? 0 : in(0)', inputs: 1 },
-    { name: 'Rate Limiter', expr: 'in(1) > 0 ? (in(0) > in(2) ? in(2) : in(0)) : (in(0) < -in(2) ? -in(2) : in(0))', inputs: 3 },
-    { name: 'Schmitt Trigger', expr: 'in(2) ? (in(0) < in(1) ? 0 : in(2)) : (in(0) > in(1) + 0.1 ? 1 : in(2))', inputs: 3 },
     { name: 'Square Root', expr: 'sqrt(in(0))', inputs: 1 },
     { name: 'Power', expr: 'pow(in(0), in(1))', inputs: 2 },
     { name: 'Sine Wave', expr: 'sin(in(0))', inputs: 1 },
     { name: 'Cosine Wave', expr: 'cos(in(0))', inputs: 1 },
     { name: 'Magnitude', expr: 'sqrt(pow(in(0), 2) + pow(in(1), 2))', inputs: 2 },
     { name: 'Angle', expr: 'atan2(in(1), in(0))', inputs: 2 },
-    { name: 'Logarithmic', expr: 'log10(in(0))', inputs: 1 },
-    { name: 'Exponential', expr: 'pow(2.718281828, in(0))', inputs: 1 },
-    { name: 'Saturate', expr: 'fmax(fmin(in(0), in(1)), in(2))', inputs: 3 },
-    { name: 'Sign', expr: 'signbit(in(0)) ? -1 : 1', inputs: 1 },
     { name: 'Absolute Value', expr: 'fabs(in(0))', inputs: 1 },
-    { name: 'Round to Integer', expr: 'round(in(0))', inputs: 1 },
-    ]
+    { name: 'Round', expr: 'round(in(0))', inputs: 1 },
+  ]
 
   const applyTemplate = (template: typeof templates[0]) => {
     setNumInputs(template.inputs)
@@ -102,177 +85,132 @@ export default function EvaluateConfig({ block, onUpdate, onClose }: EvaluateCon
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-[700px] max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900">
-            Configure Evaluate: {block?.name || 'Evaluate'}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
+    <Modal
+      opened={true}
+      onClose={onClose}
+      title={`Configure Evaluate: ${block?.name || 'Evaluate'}`}
+      size="xl"
+      centered
+    >
+      <Stack gap="md">
+        <NumberInput
+          label="Number of Inputs"
+          value={numInputs}
+          onChange={(val) => setNumInputs(typeof val === 'number' ? Math.max(1, Math.min(10, val)) : 1)}
+          min={1}
+          max={10}
+          w={100}
+          description="Number of scalar input ports (1-10)"
+        />
 
-        <div className="space-y-4">
-          {/* Number of Inputs */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Number of Inputs
-            </label>
-            <input
-              type="number"
-              min="1"
-              max="10"
-              value={numInputs}
-              onChange={(e) => handleNumInputsChange(e.target.value)}
-              className="w-24 px-3 py-2 border-2 border-gray-400 rounded text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
-            />
-            <p className="text-xs text-gray-600 mt-1">
-              Number of scalar input ports (1-10)
-            </p>
-          </div>
+        <Textarea
+          label="Expression"
+          value={expression}
+          onChange={(e) => setExpression(e.target.value)}
+          minRows={3}
+          autosize
+          maxRows={6}
+          placeholder="e.g., in(0) + in(1) * 2"
+          error={!isValid}
+          styles={{ input: { fontFamily: 'monospace' } }}
+        />
 
-          {/* Expression Editor */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Expression
-            </label>
-            <textarea
-              value={expression}
-              onChange={(e) => setExpression(e.target.value)}
-              className={`w-full px-3 py-2 border-2 rounded text-sm font-mono bg-white text-gray-900 focus:outline-none ${
-                isValid 
-                  ? 'border-gray-400 focus:border-blue-600' 
-                  : 'border-red-500 focus:border-red-600'
-              }`}
-              rows={4}
-              placeholder="e.g., in(0) + in(1) * 2"
-            />
-            
-            {/* Validation Messages */}
-            {errors.length > 0 && (
-              <div className="mt-2 space-y-1">
-                {errors.map((error, i) => (
-                  <p key={i} className="text-sm text-red-600">❌ {error}</p>
-                ))}
-              </div>
+        {errors.length > 0 && (
+          <Stack gap={4}>
+            {errors.map((error, i) => (
+              <Group key={i} gap="xs">
+                <IconX size={16} color="var(--mantine-color-red-6)" />
+                <Text size="sm" c="red">{error}</Text>
+              </Group>
+            ))}
+          </Stack>
+        )}
+
+        {warnings.length > 0 && (
+          <Stack gap={4}>
+            {warnings.map((warning, i) => (
+              <Group key={i} gap="xs">
+                <IconAlertTriangle size={16} color="var(--mantine-color-yellow-6)" />
+                <Text size="sm" c="yellow.8">{warning}</Text>
+              </Group>
+            ))}
+          </Stack>
+        )}
+
+        {isValid && usedInputs.length > 0 && (
+          <Group gap="xs">
+            <IconCheck size={16} color="var(--mantine-color-green-6)" />
+            <Text size="sm" c="green">Valid expression using inputs: {usedInputs.map(i => `in(${i})`).join(', ')}</Text>
+          </Group>
+        )}
+
+        <SimpleGrid cols={4}>
+          <Paper p="xs" withBorder>
+            <Text size="xs" fw={500}>Input Access</Text>
+            <Text size="xs" c="dimmed">in(0) - First input</Text>
+            <Text size="xs" c="dimmed">in(1) - Second input</Text>
+            <Text size="xs" c="dimmed">in(n) - (n+1)th input</Text>
+          </Paper>
+          <Paper p="xs" withBorder>
+            <Text size="xs" fw={500}>Parameters</Text>
+            {parameters.length > 0 ? (
+              parameters.slice(0, 3).map((param) => (
+                <Text key={param.name} size="xs" c="dimmed">{param.name}</Text>
+              ))
+            ) : (
+              <Text size="xs" c="dimmed" fs="italic">No parameters</Text>
             )}
-            
-            {warnings.length > 0 && (
-              <div className="mt-2 space-y-1">
-                {warnings.map((warning, i) => (
-                  <p key={i} className="text-sm text-yellow-600">⚠️ {warning}</p>
-                ))}
-              </div>
+            {parameters.length > 3 && (
+              <Text size="xs" c="dimmed">... +{parameters.length - 3} more</Text>
             )}
-            
-            {isValid && usedInputs.length > 0 && (
-              <p className="text-sm text-green-600 mt-2">
-                ✓ Valid expression using inputs: {usedInputs.map(i => `in(${i})`).join(', ')}
-              </p>
-            )}
-          </div>
+          </Paper>
+          <Paper p="xs" withBorder>
+            <Text size="xs" fw={500}>Operators</Text>
+            <Text size="xs" c="dimmed">+ - * / % (arithmetic)</Text>
+            <Text size="xs" c="dimmed">{'<'} {'>'} == != (compare)</Text>
+            <Text size="xs" c="dimmed">&& || ! (logical)</Text>
+            <Text size="xs" c="dimmed">? : (conditional)</Text>
+          </Paper>
+          <Paper p="xs" withBorder>
+            <Text size="xs" fw={500}>Math Functions</Text>
+            <Text size="xs" c="dimmed">sqrt, pow, fabs</Text>
+            <Text size="xs" c="dimmed">sin, cos, tan, atan2</Text>
+            <Text size="xs" c="dimmed">ceil, floor, round</Text>
+            <Text size="xs" c="dimmed">fmin, fmax</Text>
+          </Paper>
+        </SimpleGrid>
 
-          {/* Quick Reference */}
-          <div className="grid grid-cols-4 gap-4 text-xs">
-            <div>
-              <h5 className="font-medium text-gray-900 mb-1">Input Access</h5>
-              <p className="text-gray-600">• in(0) - First input</p>
-              <p className="text-gray-600">• in(1) - Second input</p>
-              <p className="text-gray-600">• in(n) - (n+1)th input</p>
-            </div>
-            <div>
-              <h5 className="font-medium text-gray-900 mb-1">Parameters</h5>
-              {parameters.length > 0 ? (
-                parameters.slice(0, 4).map((param) => (
-                  <p key={param.name} className="text-gray-600">• {param.name} ({param.signalType})</p>
-                ))
-              ) : (
-                <p className="text-gray-500 italic">No parameters defined</p>
-              )}
-              {parameters.length > 4 && (
-                <p className="text-gray-500">• ... and {parameters.length - 4} more</p>
-              )}
-            </div>
-            <div>
-              <h5 className="font-medium text-gray-900 mb-1">Operators</h5>
-              <p className="text-gray-600">• + - * / % (arithmetic)</p>
-              <p className="text-gray-600">• {'<'} {'>'} {'<='} {'>='} == != (comparison)</p>
-              <p className="text-gray-600">• && || ! (logical)</p>
-              <p className="text-gray-600">• & | ^ ~ {'<<'} {'>>'} (bitwise)</p>
-              <p className="text-gray-600">• ? : (conditional)</p>
-            </div>
-            <div>
-              <h5 className="font-medium text-gray-900 mb-1">Math Functions</h5>
-              <p className="text-gray-600">• sqrt, pow, abs, fabs</p>
-              <p className="text-gray-600">• sin, cos, tan, atan, atan2</p>
-              <p className="text-gray-600">• ceil, floor, round, trunc</p>
-              <p className="text-gray-600">• log, log2, log10</p>
-              <p className="text-gray-600">• fmin, fmax, signbit</p>
-            </div>
-          </div>
+        <Divider label="Expression Templates" labelPosition="left" />
 
-          {/* Expression Templates */}
-          <div className="border-t pt-4">
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Expression Templates</h4>
-            <div className="grid grid-cols-3 gap-2">
-              {templates.map((template) => (
-                <button
-                  key={template.name}
-                  onClick={() => applyTemplate(template)}
-                  className="px-3 py-2 text-xs border border-gray-300 rounded hover:bg-gray-50 text-left"
-                  title={template.expr}
-                >
-                  <div className="font-medium text-gray-900">{template.name}</div>
-                  <div className="text-gray-500">({template.inputs} inputs)</div>
-                </button>
-              ))}
-            </div>
-          </div>
+        <SimpleGrid cols={4} spacing="xs">
+          {templates.map((template) => (
+            <Paper
+              key={template.name}
+              p="xs"
+              withBorder
+              style={{ cursor: 'pointer' }}
+              onClick={() => applyTemplate(template)}
+            >
+              <Text size="xs" fw={500}>{template.name}</Text>
+              <Text size="xs" c="dimmed">({template.inputs} inputs)</Text>
+            </Paper>
+          ))}
+        </SimpleGrid>
 
-          {/* Help Text */}
-          <div className="bg-blue-50 p-3 rounded-md border border-blue-200">
-            <p className="text-sm text-blue-800">
-              <strong>Evaluate Block:</strong> Computes an output value using a C-style arithmetic/logical expression.
-              Use in(n) to access the nth input (0-indexed). You can also reference model parameters by name.
-            </p>
-            <p className="text-sm text-blue-800 mt-2">
-              <strong>Examples:</strong>
-            </p>
-            <p className="text-sm text-blue-800">
-              • "(in(0) + in(1)) / 2" - Average of two inputs
-            </p>
-            {parameters.length > 0 && (
-              <p className="text-sm text-blue-800">
-                • "{parameters[0].name} * in(0)" - Multiply input by parameter {parameters[0].name}
-              </p>
-            )}
-          </div>
-        </div>
+        <Alert variant="light" color="blue" icon={<IconInfoCircle />} title="Evaluate Block">
+          Computes an output value using a C-style arithmetic/logical expression.
+          Use in(n) to access the nth input (0-indexed). You can also reference model parameters by name.
+        </Alert>
 
-        <div className="flex justify-end space-x-3 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!isValid}
-            className={`px-4 py-2 rounded-md text-sm font-medium ${
-              isValid
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
+          </Button>
+          <Button onClick={handleSave} disabled={!isValid}>
             Save
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   )
 }

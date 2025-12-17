@@ -30,6 +30,7 @@ import TrigConfig from '@/components/TrigConfig'
 import Lookup1DConfig from '@/components/Lookup1DConfig'
 import Lookup2DConfig from '@/components/Lookup2DConfig'
 import MuxConfig from '@/components/MuxConfig'
+import DemuxConfig from '@/components/DemuxConfig'
 import SheetLabelSinkConfig from '@/components/SheetLabelSinkConfig'
 import SheetLabelSourceConfig from '@/components/SheetLabelSourceConfig'
 import SumConfig from '@/components/SumConfig'
@@ -1319,6 +1320,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'sheet_label_source' ||
       block.type === 'sum' ||
       block.type === 'mux' ||
+      block.type === 'demux' ||
       block.type === 'trig' ||
       block.type === 'condition' ||
       block.type === 'evaluate' ||
@@ -2051,6 +2053,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'mux' && (
             <MuxConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'demux' && (
+            <DemuxConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

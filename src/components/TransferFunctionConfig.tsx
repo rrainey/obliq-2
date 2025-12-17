@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { Modal, NumberInput, Button, Stack, Group, Alert, Text, ActionIcon, Paper } from '@mantine/core'
+import { IconInfoCircle, IconPlus, IconX } from '@tabler/icons-react'
 import { BlockData } from './BlockNode'
 
 interface TransferFunctionConfigProps {
@@ -18,28 +20,27 @@ export default function TransferFunctionConfig({ block, onUpdate, onClose }: Tra
       numerator: numerator.filter(val => !isNaN(val)),
       denominator: denominator.filter(val => !isNaN(val))
     }
-    
-    // Validate that we have at least one coefficient in each
+
     if (parameters.numerator.length === 0) {
       parameters.numerator = [1]
     }
     if (parameters.denominator.length === 0) {
       parameters.denominator = [1]
     }
-    
+
     onUpdate(parameters)
     onClose()
   }
 
-  const updateNumerator = (index: number, value: string) => {
+  const updateNumerator = (index: number, value: string | number) => {
     const newNumerator = [...numerator]
-    newNumerator[index] = parseFloat(value) || 0
+    newNumerator[index] = typeof value === 'number' ? value : parseFloat(value) || 0
     setNumerator(newNumerator)
   }
 
-  const updateDenominator = (index: number, value: string) => {
+  const updateDenominator = (index: number, value: string | number) => {
     const newDenominator = [...denominator]
-    newDenominator[index] = parseFloat(value) || 0
+    newDenominator[index] = typeof value === 'number' ? value : parseFloat(value) || 0
     setDenominator(newDenominator)
   }
 
@@ -63,7 +64,6 @@ export default function TransferFunctionConfig({ block, onUpdate, onClose }: Tra
     }
   }
 
-  // Helper to render transfer function display
   const renderTransferFunction = () => {
     const numStr = numerator.map((coeff, idx) => {
       const power = numerator.length - 1 - idx
@@ -80,135 +80,114 @@ export default function TransferFunctionConfig({ block, onUpdate, onClose }: Tra
     }).join(' + ').replace(/\+ -/g, '- ')
 
     return (
-      <div className="text-center font-mono text-sm border p-2 rounded bg-gray-50">
-        <div className="border-b border-gray-400 pb-1 mb-1">
+      <Paper p="sm" withBorder style={{ textAlign: 'center', fontFamily: 'monospace' }}>
+        <Text size="sm" style={{ borderBottom: '1px solid var(--mantine-color-gray-4)', paddingBottom: 4, marginBottom: 4 }}>
           {numStr || '1'}
-        </div>
-        <div>
+        </Text>
+        <Text size="sm">
           {denStr || '1'}
-        </div>
-      </div>
+        </Text>
+      </Paper>
     )
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-[500px] max-h-[900px] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900">
-            Configure Transfer Function: {block.name}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
+    <Modal
+      opened={true}
+      onClose={onClose}
+      title={`Configure Transfer Function: ${block.name}`}
+      size="lg"
+      centered
+    >
+      <Stack gap="md">
+        <div>
+          <Text size="sm" fw={500} mb="xs">Transfer Function H(s)</Text>
+          {renderTransferFunction()}
         </div>
 
-        <div className="space-y-4">
-          {/* Transfer Function Display */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Transfer Function H(s)
-            </label>
-            {renderTransferFunction()}
-          </div>
-
-          {/* Numerator Coefficients */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Numerator Coefficients (highest to lowest power)
-            </label>
+        <div>
+          <Text size="sm" fw={500} mb="xs">Numerator Coefficients (highest to lowest power)</Text>
+          <Stack gap="xs">
             {numerator.map((coeff, index) => (
-              <div key={index} className="flex items-center space-x-2 mb-2">
-                <span className="text-sm text-gray-500 w-12">
-                  s^{numerator.length - 1 - index}:
-                </span>
-                <input
-                  type="number"
-                  step="any"
+              <Group key={index} gap="xs">
+                <Text size="sm" c="dimmed" w={50}>s^{numerator.length - 1 - index}:</Text>
+                <NumberInput
                   value={coeff}
-                  onChange={(e) => updateNumerator(index, e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  onChange={(val) => updateNumerator(index, val)}
+                  decimalScale={6}
+                  style={{ flex: 1 }}
                 />
-                <button
+                <ActionIcon
+                  variant="light"
+                  color="red"
                   onClick={() => removeNumeratorCoeff(index)}
                   disabled={numerator.length <= 1}
-                  className="px-2 py-2 text-red-600 hover:text-red-800 disabled:text-gray-400"
                 >
-                  ✕
-                </button>
-              </div>
+                  <IconX size={16} />
+                </ActionIcon>
+              </Group>
             ))}
-            <button
-              onClick={addNumeratorCoeff}
-              className="text-sm text-blue-600 hover:text-blue-800"
-            >
-              + Add Coefficient
-            </button>
-          </div>
+          </Stack>
+          <Button
+            variant="subtle"
+            size="xs"
+            leftSection={<IconPlus size={14} />}
+            onClick={addNumeratorCoeff}
+            mt="xs"
+          >
+            Add Coefficient
+          </Button>
+        </div>
 
-          {/* Denominator Coefficients */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Denominator Coefficients (highest to lowest power)
-            </label>
+        <div>
+          <Text size="sm" fw={500} mb="xs">Denominator Coefficients (highest to lowest power)</Text>
+          <Stack gap="xs">
             {denominator.map((coeff, index) => (
-              <div key={index} className="flex items-center space-x-2 mb-2">
-                <span className="text-sm text-gray-500 w-12">
-                  s^{denominator.length - 1 - index}:
-                </span>
-                <input
-                  type="number"
-                  step="any"
+              <Group key={index} gap="xs">
+                <Text size="sm" c="dimmed" w={50}>s^{denominator.length - 1 - index}:</Text>
+                <NumberInput
                   value={coeff}
-                  onChange={(e) => updateDenominator(index, e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  onChange={(val) => updateDenominator(index, val)}
+                  decimalScale={6}
+                  style={{ flex: 1 }}
                 />
-                <button
+                <ActionIcon
+                  variant="light"
+                  color="red"
                   onClick={() => removeDenominatorCoeff(index)}
                   disabled={denominator.length <= 1}
-                  className="px-2 py-2 text-red-600 hover:text-red-800 disabled:text-gray-400"
                 >
-                  ✕
-                </button>
-              </div>
+                  <IconX size={16} />
+                </ActionIcon>
+              </Group>
             ))}
-            <button
-              onClick={addDenominatorCoeff}
-              className="text-sm text-blue-600 hover:text-blue-800"
-            >
-              + Add Coefficient
-            </button>
-          </div>
-
-          <div className="bg-red-50 p-3 rounded-md">
-            <p className="text-sm text-red-800">
-              <strong>Transfer Function Block:</strong> Implements H(s) = N(s)/D(s) using RK4 integration. 
-              Coefficients are ordered from highest to lowest power of s.
-            </p>
-            <p className="text-xs text-red-600 mt-1">
-              Example: For H(s) = (2s + 1)/(s² + 3s + 2), enter Numerator: [2, 1], Denominator: [1, 3, 2]
-            </p>
-          </div>
+          </Stack>
+          <Button
+            variant="subtle"
+            size="xs"
+            leftSection={<IconPlus size={14} />}
+            onClick={addDenominatorCoeff}
+            mt="xs"
+          >
+            Add Coefficient
+          </Button>
         </div>
 
-        <div className="flex justify-end space-x-3 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+        <Alert variant="light" color="red" icon={<IconInfoCircle />} title="Transfer Function Block">
+          Implements H(s) = N(s)/D(s) using RK4 integration.
+          Coefficients are ordered from highest to lowest power of s.
+          Example: For H(s) = (2s + 1)/(s² + 3s + 2), enter Numerator: [2, 1], Denominator: [1, 3, 2]
+        </Alert>
+
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
-          >
+          </Button>
+          <Button onClick={handleSave}>
             Save
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   )
 }

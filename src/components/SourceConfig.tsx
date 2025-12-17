@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Modal, TextInput, NumberInput, Select, Button, Stack, Group, Alert } from '@mantine/core'
+import { IconInfoCircle } from '@tabler/icons-react'
 import { BlockData } from './BlockNode'
-import { isValidType, getTypeValidationError, parseType } from '@/lib/typeValidator'
+import { getTypeValidationError, parseType } from '@/lib/typeValidator'
 import { useModelStore } from '@/lib/modelStore'
 
 interface SourceConfigProps {
@@ -10,6 +12,17 @@ interface SourceConfigProps {
   onUpdate: (parameters: Record<string, any>) => void
   onClose: () => void
 }
+
+const SIGNAL_TYPES = [
+  { value: 'constant', label: 'Constant' },
+  { value: 'step', label: 'Step' },
+  { value: 'ramp', label: 'Ramp' },
+  { value: 'sine', label: 'Sine Wave' },
+  { value: 'square', label: 'Square Wave' },
+  { value: 'triangle', label: 'Triangle Wave' },
+  { value: 'noise', label: 'Noise' },
+  { value: 'chirp', label: 'Chirp' },
+]
 
 export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigProps) {
   const parameters = useModelStore((state) => state.parameters)
@@ -20,18 +33,18 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
   const [valueString, setValueString] = useState('')
   const [useParameter, setUseParameter] = useState(block?.parameters?.useParameter || false)
   const [parameterName, setParameterName] = useState(block?.parameters?.parameterName || '')
-  const [stepTime, setStepTime] = useState(block?.parameters?.stepTime || 1.0)
-  const [stepValue, setStepValue] = useState(block?.parameters?.stepValue || 1.0)
-  const [slope, setSlope] = useState(block?.parameters?.slope || 1.0)
-  const [startTime, setStartTime] = useState(block?.parameters?.startTime || 0)
-  const [frequency, setFrequency] = useState(block?.parameters?.frequency || 1.0)
-  const [amplitude, setAmplitude] = useState(block?.parameters?.amplitude || 1.0)
-  const [phase, setPhase] = useState(block?.parameters?.phase || 0)
-  const [offset, setOffset] = useState(block?.parameters?.offset || 0)
-  const [f0, setF0] = useState(block?.parameters?.f0 || 0.1)
-  const [f1, setF1] = useState(block?.parameters?.f1 || 10)
-  const [duration, setDuration] = useState(block?.parameters?.duration || 10)
-  const [mean, setMean] = useState(block?.parameters?.mean || 0)
+  const [stepTime, setStepTime] = useState<number>(block?.parameters?.stepTime || 1.0)
+  const [stepValue, setStepValue] = useState<number>(block?.parameters?.stepValue || 1.0)
+  const [slope, setSlope] = useState<number>(block?.parameters?.slope || 1.0)
+  const [startTime, setStartTime] = useState<number>(block?.parameters?.startTime || 0)
+  const [frequency, setFrequency] = useState<number>(block?.parameters?.frequency || 1.0)
+  const [amplitude, setAmplitude] = useState<number>(block?.parameters?.amplitude || 1.0)
+  const [phase, setPhase] = useState<number>(block?.parameters?.phase || 0)
+  const [offset, setOffset] = useState<number>(block?.parameters?.offset || 0)
+  const [f0, setF0] = useState<number>(block?.parameters?.f0 || 0.1)
+  const [f1, setF1] = useState<number>(block?.parameters?.f1 || 10)
+  const [duration, setDuration] = useState<number>(block?.parameters?.duration || 10)
+  const [mean, setMean] = useState<number>(block?.parameters?.mean || 0)
   const [typeError, setTypeError] = useState<string>('')
   const [valueError, setValueError] = useState<string>('')
   const [isVector, setIsVector] = useState(false)
@@ -40,17 +53,13 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
 
   // Initialize value string based on existing value
   useEffect(() => {
-    // If using a parameter, show the parameter name
     if (block?.parameters?.useParameter && block?.parameters?.parameterName) {
       setValueString(block.parameters.parameterName)
     } else if (Array.isArray(block?.parameters?.value)) {
-      // Check if it's a 2D array (matrix)
       if (block.parameters.value.length > 0 && Array.isArray(block.parameters.value[0])) {
-        // Format as matrix
         const rows = block.parameters.value.map((row: number[]) => `{${row.join(', ')}}`).join(', ')
         setValueString(`{${rows}}`)
       } else {
-        // Format as 1D array
         setValueString(`[${block.parameters.value.join(', ')}]`)
       }
     } else {
@@ -91,59 +100,41 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
     }
   }, [useParameter, parameterName, parameters])
 
-  // Check if a string is a valid parameter name
   const isParameterReference = (input: string): boolean => {
     const trimmed = input.trim()
-    // Valid identifier: starts with letter or underscore, contains only alphanumeric and underscore
     return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(trimmed)
   }
 
-  // Parse value string based on whether it's a matrix, vector, or scalar
   const parseValue = (input: string): { value: number | number[] | number[][], error: string, isParameter?: boolean } => {
     const trimmed = input.trim()
 
-    // For scalars, check if it's a parameter reference
     if (!isVector && !isMatrix && isParameterReference(trimmed)) {
-      // Check if parameter exists
       const param = parameters.find(p => p.name === trimmed)
       if (param) {
-        // Auto-sync dataType to match parameter type
         if (param.signalType !== dataType) {
-          // Update the block's dataType to match the parameter
           setDataType(param.signalType)
         }
-        // Use parameter value for display/validation, but mark as parameter reference
-        return {
-          value: param.value as number,
-          error: '',
-          isParameter: true
-        }
+        return { value: param.value as number, error: '', isParameter: true }
       } else {
-        return {
-          value: 0,
-          error: `Parameter "${trimmed}" not found`,
-          isParameter: true
-        }
+        return { value: 0, error: `Parameter "${trimmed}" not found`, isParameter: true }
       }
     }
 
     if (isMatrix && matrixDims) {
-      // Parse matrix value: {{1.0, 2.0}, {3.0, 4.0}}
       const matrixMatch = trimmed.match(/^\{\s*(.+)\s*\}$/)
       if (!matrixMatch) {
         return { value: 0, error: 'Matrix values must be enclosed in braces: {{1.0, 2.0}, {3.0, 4.0}}' }
       }
-      
-      // Extract the content and find row patterns
+
       const content = matrixMatch[1]
       const rowRegex = /\{([^}]+)\}/g
       const rows: number[][] = []
       let match
-      
+
       while ((match = rowRegex.exec(content)) !== null) {
         const rowContent = match[1]
         const elements = rowContent.split(',').map(s => s.trim())
-        
+
         const rowValues: number[] = []
         for (const element of elements) {
           const num = parseFloat(element)
@@ -152,30 +143,28 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
           }
           rowValues.push(num)
         }
-        
+
         if (rowValues.length !== matrixDims.cols) {
           return { value: 0, error: `Row ${rows.length + 1} has ${rowValues.length} columns, expected ${matrixDims.cols}` }
         }
-        
+
         rows.push(rowValues)
       }
-      
+
       if (rows.length !== matrixDims.rows) {
         return { value: 0, error: `Expected ${matrixDims.rows} rows, got ${rows.length}` }
       }
-      
+
       return { value: rows, error: '' }
     } else if (isVector) {
-      // Parse vector value: [1.0, 2.0, 3.0] or {1.0, 2.0, 3.0}
       const vectorMatch = trimmed.match(/^[\[\{]\s*(.+?)\s*[\]\}]$/)
       if (!vectorMatch) {
         return { value: 0, error: 'Vector values must be enclosed in brackets: [1.0, 2.0, 3.0]' }
       }
-      
+
       const elementsStr = vectorMatch[1]
       const elements = elementsStr.split(',').map(s => s.trim())
-      
-      // Parse each element
+
       const values: number[] = []
       for (const element of elements) {
         const num = parseFloat(element)
@@ -184,23 +173,18 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
         }
         values.push(num)
       }
-      
-      // Check array size if specified
+
       try {
         const parsedType = parseType(dataType)
         if (parsedType.arraySize && values.length !== parsedType.arraySize) {
-          return { 
-            value: 0, 
-            error: `Expected ${parsedType.arraySize} elements, got ${values.length}` 
-          }
+          return { value: 0, error: `Expected ${parsedType.arraySize} elements, got ${values.length}` }
         }
       } catch {
         // Type parsing error already handled elsewhere
       }
-      
+
       return { value: values, error: '' }
     } else {
-      // Parse scalar value
       const num = parseFloat(trimmed)
       if (isNaN(num)) {
         return { value: 0, error: 'Invalid number' }
@@ -209,13 +193,11 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
     }
   }
 
-  // Validate value when it changes
   useEffect(() => {
     const result = parseValue(valueString)
     setValue(result.value)
     setValueError(result.error)
 
-    // Update parameter reference state
     if (result.isParameter && !result.error) {
       setUseParameter(true)
       setParameterName(valueString.trim())
@@ -224,14 +206,6 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
       setParameterName('')
     }
   }, [valueString, isVector, isMatrix, dataType, parameters])
-
-  // Auto-focus first input when dialog opens
-  useEffect(() => {
-    const firstInput = document.querySelector('.fixed input, .fixed textarea') as HTMLElement
-    if (firstInput) {
-      firstInput.focus()
-    }
-  }, [])
 
   const handleSave = () => {
     const params = {
@@ -261,305 +235,182 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
     switch (signalType) {
       case 'constant':
         return (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Value
-              </label>
-              <input
-                type="text"
-                value={valueString}
-                onChange={(e) => setValueString(e.target.value)}
-                className={`w-full px-3 py-2 border-2 rounded-md text-sm bg-white text-gray-900 focus:outline-none ${
-                  valueError ? 'border-red-500 focus:border-red-600' : 'border-gray-400 focus:border-blue-600'
-                }`}
-                placeholder={
-                  isMatrix ? "{{1.0, 2.0}, {3.0, 4.0}}" : 
-                  isVector ? "[1.0, 2.0, 3.0]" : 
-                  "0.0"
-                }
-              />
-              {valueError ? (
-                <p className="text-xs text-red-600 mt-1">{valueError}</p>
-              ) : useParameter ? (
-                <p className="text-xs text-green-600 mt-1">
-                  ✓ Using parameter "{parameterName}" - type auto-synced to {dataType}
-                </p>
-              ) : (
-                <p className="text-xs text-gray-500 mt-1">
-                  {isMatrix
-                    ? `Matrix constant (e.g., {{1.0, 2.0}, {3.0, 4.0}} for ${matrixDims?.rows}×${matrixDims?.cols})`
-                    : isVector
-                    ? "Vector constant (e.g., [1.0, 2.0, 3.0])"
-                    : "Constant output value or parameter name (e.g., PI, GAIN). Type will auto-sync with parameter."}
-                </p>
-              )}
-            </div>
-          </div>
+          <TextInput
+            label="Value"
+            value={valueString}
+            onChange={(e) => setValueString(e.target.value)}
+            error={valueError}
+            placeholder={
+              isMatrix ? "{{1.0, 2.0}, {3.0, 4.0}}" :
+              isVector ? "[1.0, 2.0, 3.0]" :
+              "0.0"
+            }
+            description={
+              useParameter && !valueError
+                ? `Using parameter "${parameterName}" - type auto-synced to ${dataType}`
+                : isMatrix
+                ? `Matrix constant (e.g., {{1.0, 2.0}, {3.0, 4.0}} for ${matrixDims?.rows}x${matrixDims?.cols})`
+                : isVector
+                ? "Vector constant (e.g., [1.0, 2.0, 3.0])"
+                : "Constant output value or parameter name (e.g., PI, GAIN)"
+            }
+          />
         )
 
       case 'step':
         return (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Step Time (s)
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={stepTime}
-                onChange={(e) => setStepTime(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border-2 border-gray-300 rounded-md text-sm bg-white text-gray-800 focus:border-blue-500 focus:outline-none"
-              />
-              <p className="text-xs text-gray-500 mt-1">Time when step occurs</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Step Value
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={stepValue}
-                onChange={(e) => setStepValue(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                {isMatrix
-                  ? "Value applied to all matrix elements after step time"
-                  : isVector 
-                  ? "Value applied to all vector elements after step time" 
-                  : "Value after step time"}
-              </p>
-            </div>
-          </div>
+          <Stack gap="xs">
+            <NumberInput
+              label="Step Time (s)"
+              value={stepTime}
+              onChange={(val) => setStepTime(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description="Time when step occurs"
+            />
+            <NumberInput
+              label="Step Value"
+              value={stepValue}
+              onChange={(val) => setStepValue(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description={
+                isMatrix ? "Value applied to all matrix elements after step time" :
+                isVector ? "Value applied to all vector elements after step time" :
+                "Value after step time"
+              }
+            />
+          </Stack>
         )
 
       case 'ramp':
         return (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Slope
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={slope}
-                onChange={(e) => setSlope(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                {isMatrix
-                  ? "Rate of change for all matrix elements (units/second)"
-                  : isVector 
-                  ? "Rate of change for all elements (units/second)" 
-                  : "Rate of change (units/second)"}
-              </p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Start Time (s)
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={startTime}
-                onChange={(e) => setStartTime(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">Time when ramp begins</p>
-            </div>
-          </div>
+          <Stack gap="xs">
+            <NumberInput
+              label="Slope"
+              value={slope}
+              onChange={(val) => setSlope(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description={
+                isMatrix ? "Rate of change for all matrix elements (units/second)" :
+                isVector ? "Rate of change for all elements (units/second)" :
+                "Rate of change (units/second)"
+              }
+            />
+            <NumberInput
+              label="Start Time (s)"
+              value={startTime}
+              onChange={(val) => setStartTime(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description="Time when ramp begins"
+            />
+          </Stack>
         )
 
       case 'sine':
         return (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Frequency (Hz)
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={frequency}
-                onChange={(e) => setFrequency(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Amplitude
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={amplitude}
-                onChange={(e) => setAmplitude(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-              {(isVector || isMatrix) && (
-                <p className="text-xs text-gray-500 mt-1">Applied to all elements</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Phase (rad)
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={phase}
-                onChange={(e) => setPhase(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">Phase shift in radians</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Offset
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={offset}
-                onChange={(e) => setOffset(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">DC offset</p>
-            </div>
-          </div>
+          <Stack gap="xs">
+            <NumberInput
+              label="Frequency (Hz)"
+              value={frequency}
+              onChange={(val) => setFrequency(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+            />
+            <NumberInput
+              label="Amplitude"
+              value={amplitude}
+              onChange={(val) => setAmplitude(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description={(isVector || isMatrix) ? "Applied to all elements" : undefined}
+            />
+            <NumberInput
+              label="Phase (rad)"
+              value={phase}
+              onChange={(val) => setPhase(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description="Phase shift in radians"
+            />
+            <NumberInput
+              label="Offset"
+              value={offset}
+              onChange={(val) => setOffset(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description="DC offset"
+            />
+          </Stack>
         )
 
       case 'square':
       case 'triangle':
         return (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Frequency (Hz)
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={frequency}
-                onChange={(e) => setFrequency(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Amplitude
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={amplitude}
-                onChange={(e) => setAmplitude(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-              {(isVector || isMatrix) && (
-                <p className="text-xs text-gray-500 mt-1">Applied to all elements</p>
-              )}
-            </div>
-          </div>
+          <Stack gap="xs">
+            <NumberInput
+              label="Frequency (Hz)"
+              value={frequency}
+              onChange={(val) => setFrequency(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+            />
+            <NumberInput
+              label="Amplitude"
+              value={amplitude}
+              onChange={(val) => setAmplitude(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description={(isVector || isMatrix) ? "Applied to all elements" : undefined}
+            />
+          </Stack>
         )
 
       case 'noise':
         return (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Amplitude
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={amplitude}
-                onChange={(e) => setAmplitude(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                {isMatrix
-                  ? "Noise amplitude (±) for each matrix element"
-                  : isVector 
-                  ? "Noise amplitude (±) for each element" 
-                  : "Noise amplitude (±)"}
-              </p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Mean
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={mean}
-                onChange={(e) => setMean(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-1">Average value</p>
-            </div>
-          </div>
+          <Stack gap="xs">
+            <NumberInput
+              label="Amplitude"
+              value={amplitude}
+              onChange={(val) => setAmplitude(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description={
+                isMatrix ? "Noise amplitude for each matrix element" :
+                isVector ? "Noise amplitude for each element" :
+                "Noise amplitude"
+              }
+            />
+            <NumberInput
+              label="Mean"
+              value={mean}
+              onChange={(val) => setMean(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description="Average value"
+            />
+          </Stack>
         )
 
       case 'chirp':
         return (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Start Frequency (Hz)
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={f0}
-                onChange={(e) => setF0(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                End Frequency (Hz)
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={f1}
-                onChange={(e) => setF1(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Duration (s)
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={duration}
-                onChange={(e) => setDuration(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Amplitude
-              </label>
-              <input
-                type="number"
-                step="any"
-                value={amplitude}
-                onChange={(e) => setAmplitude(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-              {(isVector || isMatrix) && (
-                <p className="text-xs text-gray-500 mt-1">Applied to all elements</p>
-              )}
-            </div>
-          </div>
+          <Stack gap="xs">
+            <NumberInput
+              label="Start Frequency (Hz)"
+              value={f0}
+              onChange={(val) => setF0(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+            />
+            <NumberInput
+              label="End Frequency (Hz)"
+              value={f1}
+              onChange={(val) => setF1(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+            />
+            <NumberInput
+              label="Duration (s)"
+              value={duration}
+              onChange={(val) => setDuration(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+            />
+            <NumberInput
+              label="Amplitude"
+              value={amplitude}
+              onChange={(val) => setAmplitude(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description={(isVector || isMatrix) ? "Applied to all elements" : undefined}
+            />
+          </Stack>
         )
 
       default:
@@ -568,90 +419,47 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-[500px] max-h-[600px] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900">
-            Configure Source: {block?.name || 'Source Block'}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
+    <Modal
+      opened={true}
+      onClose={onClose}
+      title={`Configure Source: ${block?.name || 'Source Block'}`}
+      size="lg"
+      centered
+    >
+      <Stack gap="md">
+        <TextInput
+          label="Data Type"
+          value={dataType}
+          onChange={(e) => setDataType(e.target.value)}
+          error={typeError}
+          placeholder="e.g., double, float, double[3], double[2][3]"
+          description="C-style data type (e.g., float, double, long, bool, double[3], double[2][3])"
+        />
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Data Type
-            </label>
-            <input
-              type="text"
-              value={dataType}
-              onChange={(e) => setDataType(e.target.value)}
-              className={`w-full px-3 py-2 border-2 rounded-md text-sm bg-white text-gray-900 focus:outline-none ${
-                typeError ? 'border-red-500 focus:border-red-600' : 'border-gray-400 focus:border-blue-600'
-              }`}
-              placeholder="e.g., double, float, double[3], double[2][3]"
-            />
-            {typeError ? (
-              <p className="text-xs text-red-600 mt-1">{typeError}</p>
-            ) : (
-              <p className="text-xs text-gray-500 mt-1">
-                C-style data type (e.g., float, double, long, bool, double[3], double[2][3])
-              </p>
-            )}
-          </div>
+        <Select
+          label="Signal Type"
+          value={signalType}
+          onChange={(val) => setSignalType(val || 'constant')}
+          data={SIGNAL_TYPES}
+        />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Signal Type
-            </label>
-            <select
-              value={signalType}
-              onChange={(e) => setSignalType(e.target.value)}
-              className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
-            >
-              <option value="constant">Constant</option>
-              <option value="step">Step</option>
-              <option value="ramp">Ramp</option>
-              <option value="sine">Sine Wave</option>
-              <option value="square">Square Wave</option>
-              <option value="triangle">Triangle Wave</option>
-              <option value="noise">Noise</option>
-              <option value="chirp">Chirp</option>
-            </select>
-          </div>
+        {renderSignalSpecificControls()}
 
-          {renderSignalSpecificControls()}
+        <Alert variant="light" color="green" icon={<IconInfoCircle />} title="Source Block">
+          Generates time-varying signals for simulation testing and analysis.
+          {isMatrix && " For matrix types, use C-style notation: {{1.0, 2.0}, {3.0, 4.0}}"}
+          {isVector && " For vector types, use C-style array notation: [1.0, 2.0, 3.0]"}
+        </Alert>
 
-          <div className="bg-green-50 p-3 rounded-md">
-            <p className="text-sm text-green-800">
-              <strong>Source Block:</strong> Generates time-varying signals for simulation testing and analysis.
-              {isMatrix && " For matrix types, use C-style notation: {{1.0, 2.0}, {3.0, 4.0}}"}
-              {isVector && " For vector types, use C-style array notation: [1.0, 2.0, 3.0]"}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex justify-end space-x-3 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-            disabled={!!typeError || !!valueError}
-          >
+          </Button>
+          <Button onClick={handleSave} disabled={!!typeError || !!valueError}>
             Save
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   )
 }

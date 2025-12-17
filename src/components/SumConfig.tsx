@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Modal, TextInput, Button, Stack, Group, Alert, Checkbox, Text, ActionIcon, Badge } from '@mantine/core'
+import { IconInfoCircle, IconPlus, IconMinus } from '@tabler/icons-react'
 import { BlockData } from './BlockNode'
 
 interface SumConfigProps {
@@ -29,19 +31,11 @@ export default function SumConfig({ block, onUpdate, onClose }: SumConfigProps) 
     }
   }, [signs])
 
-  // Auto-focus first input when dialog opens
-  useEffect(() => {
-    const firstInput = document.querySelector('.fixed input') as HTMLElement
-    if (firstInput) {
-      firstInput.focus()
-    }
-  }, [])
-
   const handleSave = () => {
     const parameters = {
       signs,
-      numInputs: signs.length, // Update numInputs to match
-      inputs: signs, // Legacy support
+      numInputs: signs.length,
+      inputs: signs,
       showPortNames
     }
     onUpdate(parameters)
@@ -66,150 +60,100 @@ export default function SumConfig({ block, onUpdate, onClose }: SumConfigProps) 
     }
   }
 
-  const renderInputPreview = () => {
-    return (
-      <div className="space-y-2">
-        <div className="text-sm font-medium text-gray-700 mb-2">Input Configuration</div>
-        <div className="space-y-2">
-          {signs.split('').map((sign: any, index: number) => (
-            <div key={index} className="flex items-center space-x-3">
-              <span className="text-sm text-gray-600 w-16">Input {index + 1}:</span>
-              <button
-                type="button"
-                onClick={() => handleSignToggle(index)}
-                className={`w-10 h-10 rounded-md font-bold text-lg transition-colors ${
-                  sign === '+' 
-                    ? 'bg-green-100 text-green-700 hover:bg-green-200' 
-                    : 'bg-red-100 text-red-700 hover:bg-red-200'
-                }`}
-              >
-                {sign}
-              </button>
-              <span className="text-sm text-gray-500">
-                {sign === '+' ? 'Addition' : 'Subtraction'}
-              </span>
-            </div>
-          ))}
-        </div>
-        
-        <div className="flex items-center space-x-2 mt-4 pt-4 border-t border-gray-200">
-          <button
-            type="button"
-            onClick={handleAddInput}
-            disabled={signs.length >= 10}
-            className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 disabled:bg-gray-100 disabled:text-gray-400"
-          >
-            Add Input
-          </button>
-          <button
-            type="button"
-            onClick={handleRemoveInput}
-            disabled={signs.length <= 2}
-            className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded-md hover:bg-red-200 disabled:bg-gray-100 disabled:text-gray-400"
-          >
-            Remove Input
-          </button>
-          <span className="text-sm text-gray-500 ml-2">
-            {signs.length} input{signs.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-[500px] max-h-[600px] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900">
-            Configure Sum: {block?.name || 'Sum Block'}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
+    <Modal
+      opened={true}
+      onClose={onClose}
+      title={`Configure Sum: ${block?.name || 'Sum Block'}`}
+      size="lg"
+      centered
+    >
+      <Stack gap="md">
+        <TextInput
+          label="Input Signs Pattern"
+          value={signs}
+          onChange={(e) => setSigns(e.target.value)}
+          error={signsError}
+          placeholder="e.g., ++, +-, +-+"
+          description="Use + for addition, - for subtraction. Length determines number of inputs."
+        />
+
+        <div>
+          <Text size="sm" fw={500} mb="xs">Input Configuration</Text>
+          <Stack gap="xs">
+            {signs.split('').map((sign: string, index: number) => (
+              <Group key={index} gap="sm">
+                <Text size="sm" c="dimmed" w={60}>Input {index + 1}:</Text>
+                <ActionIcon
+                  variant="light"
+                  color={sign === '+' ? 'green' : 'red'}
+                  size="lg"
+                  onClick={() => handleSignToggle(index)}
+                >
+                  {sign === '+' ? <IconPlus size={18} /> : <IconMinus size={18} />}
+                </ActionIcon>
+                <Text size="sm" c="dimmed">
+                  {sign === '+' ? 'Addition' : 'Subtraction'}
+                </Text>
+              </Group>
+            ))}
+          </Stack>
+
+          <Group gap="sm" mt="md">
+            <Button
+              variant="light"
+              color="blue"
+              size="xs"
+              leftSection={<IconPlus size={14} />}
+              onClick={handleAddInput}
+              disabled={signs.length >= 10}
+            >
+              Add Input
+            </Button>
+            <Button
+              variant="light"
+              color="red"
+              size="xs"
+              leftSection={<IconMinus size={14} />}
+              onClick={handleRemoveInput}
+              disabled={signs.length <= 2}
+            >
+              Remove Input
+            </Button>
+            <Badge variant="light" color="gray">
+              {signs.length} inputs
+            </Badge>
+          </Group>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Input Signs Pattern
-            </label>
-            <input
-              type="text"
-              value={signs}
-              onChange={(e) => setSigns(e.target.value)}
-              className={`w-full px-3 py-2 border-2 rounded-md text-sm bg-white text-gray-900 focus:outline-none ${
-                signsError ? 'border-red-500 focus:border-red-600' : 'border-gray-400 focus:border-blue-600'
-              }`}
-              placeholder="e.g., ++, +-, +-+"
-            />
-            {signsError ? (
-              <p className="text-xs text-red-600 mt-1">{signsError}</p>
-            ) : (
-              <p className="text-xs text-gray-500 mt-1">
-                Use + for addition, - for subtraction. Length determines number of inputs.
-              </p>
-            )}
-          </div>
+        <Alert variant="light" color="blue" icon={<IconInfoCircle />} title="Sum Block">
+          Adds and/or subtracts multiple input signals based on the signs pattern.
+          Each character in the pattern creates an input port with the corresponding operation.
+        </Alert>
 
-          {renderInputPreview()}
+        <Alert variant="light" color="yellow" icon={<IconInfoCircle />} title="Example Patterns">
+          • "++" - Add two inputs (default)<br />
+          • "+-" - Subtract second input from first<br />
+          • "+++" - Add three inputs<br />
+          • "+-+" - First + third - second
+        </Alert>
 
-          <div className="bg-blue-50 p-3 rounded-md">
-            <p className="text-sm text-blue-800">
-              <strong>Sum Block:</strong> Adds and/or subtracts multiple input signals based on the signs pattern.
-              Each character in the pattern creates an input port with the corresponding operation.
-            </p>
-          </div>
+        <Checkbox
+          label="Show Port Names"
+          description="When enabled, displays the names of connected Input/Output Port blocks next to each input port."
+          checked={showPortNames}
+          onChange={(e) => setShowPortNames(e.currentTarget.checked)}
+        />
 
-          <div className="bg-yellow-50 p-3 rounded-md">
-            <p className="text-sm text-yellow-800">
-              <strong>Example Patterns:</strong>
-              <br />• "++" - Add two inputs (default)
-              <br />• "+-" - Subtract second input from first
-              <br />• "+++" - Add three inputs
-              <br />• "+-+" - First + third - second
-            </p>
-          </div>
-
-          {/* Show Port Names Checkbox */}
-          <div className="border-t pt-4">
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={showPortNames}
-                onChange={(e) => setShowPortNames(e.target.checked)}
-                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
-              />
-              <span className="text-sm font-medium text-gray-700">
-                Show Port Names
-              </span>
-            </label>
-            <p className="mt-1 ml-6 text-xs text-gray-500">
-              When enabled, displays the names of connected Input/Output Port blocks next to each input port.
-              Note: Sum blocks only show input port names (the +/- signs are always shown).
-            </p>
-          </div>
-        </div>
-
-        <div className="flex justify-end space-x-3 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-            disabled={!!signsError}
-          >
+          </Button>
+          <Button onClick={handleSave} disabled={!!signsError}>
             Save
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   )
 }

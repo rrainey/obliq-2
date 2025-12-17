@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { Modal, TextInput, NumberInput, Select, Button, Stack, Group, Alert, Text, Table, ActionIcon, SimpleGrid } from '@mantine/core'
+import { IconInfoCircle, IconPlus, IconX } from '@tabler/icons-react'
 import { BlockData } from './BlockNode'
 
 interface Lookup2DConfigProps {
@@ -28,13 +30,12 @@ export default function Lookup2DConfig({ block, onUpdate, onClose }: Lookup2DCon
       const values = value.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
       if (values.length > 0) {
         setInput1Values(values)
-        // Resize output table to match
-        const newTable = Array(values.length).fill(null).map((_, i) => 
+        const newTable = Array(values.length).fill(null).map((_, i) =>
           outputTable[i] ? [...outputTable[i]] : Array(input2Values.length).fill(0)
         )
         setOutputTable(newTable)
       }
-    } catch (error) {
+    } catch {
       // Invalid input, keep current values
     }
   }
@@ -44,7 +45,6 @@ export default function Lookup2DConfig({ block, onUpdate, onClose }: Lookup2DCon
       const values = value.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v))
       if (values.length > 0) {
         setInput2Values(values)
-        // Resize output table to match
         const newTable = outputTable.map(row => {
           const newRow = Array(values.length).fill(0)
           for (let j = 0; j < Math.min(row.length, values.length); j++) {
@@ -54,13 +54,13 @@ export default function Lookup2DConfig({ block, onUpdate, onClose }: Lookup2DCon
         })
         setOutputTable(newTable)
       }
-    } catch (error) {
+    } catch {
       // Invalid input, keep current values
     }
   }
 
-  const updateTableValue = (row: number, col: number, value: string) => {
-    const numValue = value === '' || value === '-' ? 0 : parseFloat(value)
+  const updateTableValue = (row: number, col: number, value: number | string) => {
+    const numValue = typeof value === 'number' ? value : parseFloat(value) || 0
     const newTable = [...outputTable]
     if (!newTable[row]) {
       newTable[row] = Array(input2Values.length).fill(0)
@@ -71,55 +71,39 @@ export default function Lookup2DConfig({ block, onUpdate, onClose }: Lookup2DCon
 
   const addInput1Point = () => {
     const lastValue = input1Values.length > 0 ? input1Values[input1Values.length - 1] : 0
-    const newInput1Values = [...input1Values, lastValue + 1]
-    setInput1Values(newInput1Values)
-    
-    // Add new row to output table
-    const newRow = Array(input2Values.length).fill(0)
-    setOutputTable([...outputTable, newRow])
+    setInput1Values([...input1Values, lastValue + 1])
+    setOutputTable([...outputTable, Array(input2Values.length).fill(0)])
   }
 
   const addInput2Point = () => {
     const lastValue = input2Values.length > 0 ? input2Values[input2Values.length - 1] : 0
-    const newInput2Values = [...input2Values, lastValue + 1]
-    setInput2Values(newInput2Values)
-    
-    // Add new column to output table
-    const newTable = outputTable.map(row => [...row, 0])
-    setOutputTable(newTable)
+    setInput2Values([...input2Values, lastValue + 1])
+    setOutputTable(outputTable.map(row => [...row, 0]))
   }
 
   const removeInput1Point = (index: number) => {
     if (input1Values.length > 1) {
-      const newInput1Values = input1Values.filter((_, i) => i !== index)
-      setInput1Values(newInput1Values)
-      
-      // Remove row from output table
-      const newTable = outputTable.filter((_, i) => i !== index)
-      setOutputTable(newTable)
+      setInput1Values(input1Values.filter((_, i) => i !== index))
+      setOutputTable(outputTable.filter((_, i) => i !== index))
     }
   }
 
   const removeInput2Point = (index: number) => {
     if (input2Values.length > 1) {
-      const newInput2Values = input2Values.filter((_, i) => i !== index)
-      setInput2Values(newInput2Values)
-      
-      // Remove column from output table
-      const newTable = outputTable.map(row => row.filter((_, j) => j !== index))
-      setOutputTable(newTable)
+      setInput2Values(input2Values.filter((_, i) => i !== index))
+      setOutputTable(outputTable.map(row => row.filter((_, j) => j !== index)))
     }
   }
 
-  const updateInput1Value = (index: number, value: string) => {
-    const numValue = value === '' || value === '-' ? 0 : parseFloat(value)
+  const updateInput1Value = (index: number, value: number | string) => {
+    const numValue = typeof value === 'number' ? value : parseFloat(value) || 0
     const newValues = [...input1Values]
     newValues[index] = isNaN(numValue) ? 0 : numValue
     setInput1Values(newValues)
   }
 
-  const updateInput2Value = (index: number, value: string) => {
-    const numValue = value === '' || value === '-' ? 0 : parseFloat(value)
+  const updateInput2Value = (index: number, value: number | string) => {
+    const numValue = typeof value === 'number' ? value : parseFloat(value) || 0
     const newValues = [...input2Values]
     newValues[index] = isNaN(numValue) ? 0 : numValue
     setInput2Values(newValues)
@@ -137,190 +121,147 @@ export default function Lookup2DConfig({ block, onUpdate, onClose }: Lookup2DCon
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-[500px] max-h-[900px] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900">
-            Configure 2-D Lookup: {block?.name || '2-D Lookup'}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          {/* Input Arrays Configuration */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Input 1 Values ({input1Values.length})
-                </label>
-                <button
-                  onClick={addInput1Point}
-                  className="text-xs px-2 py-1 bg-blue-200 text-blue-700 rounded hover:bg-blue-300 border border-blue-300"
-                >
-                  Add Row
-                </button>
-              </div>
-              <input
-                type="text"
-                value={input1Values.join(', ')}
-                onChange={(e) => handleInput1ValuesChange(e.target.value)}
-                className="w-full px-3 py-2 border-2 border-gray-400 rounded text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
-                placeholder="0, 1, 2"
-              />
-              <div className="mt-2 max-h-24 overflow-y-auto">
+    <Modal
+      opened={true}
+      onClose={onClose}
+      title={`Configure 2-D Lookup: ${block?.name || '2-D Lookup'}`}
+      size="xl"
+      centered
+    >
+      <Stack gap="md">
+        <SimpleGrid cols={2}>
+          <div>
+            <Group justify="space-between" mb="xs">
+              <Text size="sm" fw={500}>Input 1 Values ({input1Values.length})</Text>
+              <Button variant="light" color="blue" size="xs" leftSection={<IconPlus size={14} />} onClick={addInput1Point}>
+                Add Row
+              </Button>
+            </Group>
+            <TextInput
+              value={input1Values.join(', ')}
+              onChange={(e) => handleInput1ValuesChange(e.target.value)}
+              placeholder="0, 1, 2"
+              mb="xs"
+            />
+            <div style={{ maxHeight: 96, overflowY: 'auto' }}>
+              <Stack gap={4}>
                 {input1Values.map((value, i) => (
-                  <div key={i} className="flex items-center gap-2 mb-1">
-                    <input
-                      type="number"
-                      step="any"
+                  <Group key={i} gap="xs">
+                    <NumberInput
                       value={value}
-                      onChange={(e) => updateInput1Value(i, e.target.value)}
-                      className="flex-1 px-2 py-1 border-2 border-gray-400 rounded text-xs bg-white text-gray-900 focus:border-blue-600 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      onChange={(val) => updateInput1Value(i, val)}
+                      decimalScale={4}
+                      size="xs"
+                      style={{ flex: 1 }}
+                      hideControls
                     />
                     {input1Values.length > 1 && (
-                      <button
-                        onClick={() => removeInput1Point(i)}
-                        className="text-red-600 hover:text-red-800 text-sm font-bold w-6 h-6 rounded hover:bg-red-100"
-                      >
-                        ×
-                      </button>
+                      <ActionIcon variant="light" color="red" size="sm" onClick={() => removeInput1Point(i)}>
+                        <IconX size={14} />
+                      </ActionIcon>
                     )}
-                  </div>
+                  </Group>
                 ))}
-              </div>
+              </Stack>
             </div>
+          </div>
 
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Input 2 Values ({input2Values.length})
-                </label>
-                <button
-                  onClick={addInput2Point}
-                  className="text-xs px-2 py-1 bg-green-200 text-green-700 rounded hover:bg-green-300 border border-green-300"
-                >
-                  Add Col
-                </button>
-              </div>
-              <input
-                type="text"
-                value={input2Values.join(', ')}
-                onChange={(e) => handleInput2ValuesChange(e.target.value)}
-                className="w-full px-3 py-2 border-2 border-gray-400 rounded text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
-                placeholder="0, 1, 2"
-              />
-              <div className="mt-2 max-h-24 overflow-y-auto">
+          <div>
+            <Group justify="space-between" mb="xs">
+              <Text size="sm" fw={500}>Input 2 Values ({input2Values.length})</Text>
+              <Button variant="light" color="green" size="xs" leftSection={<IconPlus size={14} />} onClick={addInput2Point}>
+                Add Col
+              </Button>
+            </Group>
+            <TextInput
+              value={input2Values.join(', ')}
+              onChange={(e) => handleInput2ValuesChange(e.target.value)}
+              placeholder="0, 1, 2"
+              mb="xs"
+            />
+            <div style={{ maxHeight: 96, overflowY: 'auto' }}>
+              <Stack gap={4}>
                 {input2Values.map((value, i) => (
-                  <div key={i} className="flex items-center gap-2 mb-1">
-                    <input
-                      type="number"
-                      step="any"
+                  <Group key={i} gap="xs">
+                    <NumberInput
                       value={value}
-                      onChange={(e) => updateInput2Value(i, e.target.value)}
-                      className="flex-1 px-2 py-1 border-2 border-gray-400 rounded text-xs bg-white text-gray-900 focus:border-blue-600 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      onChange={(val) => updateInput2Value(i, val)}
+                      decimalScale={4}
+                      size="xs"
+                      style={{ flex: 1 }}
+                      hideControls
                     />
                     {input2Values.length > 1 && (
-                      <button
-                        onClick={() => removeInput2Point(i)}
-                        className="text-red-600 hover:text-red-800 text-sm font-bold w-6 h-6 rounded hover:bg-red-100"
-                      >
-                        ×
-                      </button>
+                      <ActionIcon variant="light" color="red" size="sm" onClick={() => removeInput2Point(i)}>
+                        <IconX size={14} />
+                      </ActionIcon>
                     )}
-                  </div>
+                  </Group>
                 ))}
-              </div>
+              </Stack>
             </div>
           </div>
+        </SimpleGrid>
 
-          {/* Output Table */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Output Table ({input1Values.length} × {input2Values.length})
-            </label>
-            <div className="border-2 border-gray-300 rounded overflow-auto max-h-48">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-2 py-1 text-center font-medium text-gray-700">Input1\Input2</th>
-                    {input2Values.map((val, j) => (
-                      <th key={j} className="px-2 py-1 text-center font-medium text-gray-700 min-w-[60px]">
-                        {val.toFixed(2)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {input1Values.map((val1, i) => (
-                    <tr key={i} className="border-t border-gray-200">
-                      <td className="px-2 py-1 bg-gray-50 font-medium text-gray-700 text-center">
-                        {val1.toFixed(2)}
-                      </td>
-                      {input2Values.map((_, j) => (
-                        <td key={j} className="px-1 py-1">
-                          <input
-                            type="number"
-                            step="any"
-                            value={outputTable[i]?.[j] ?? 0}
-                            onChange={(e) => updateTableValue(i, j, e.target.value)}
-                            className="w-full px-1 py-1 border border-gray-300 rounded text-xs bg-white text-gray-900 focus:border-blue-600 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          />
-                        </td>
-                      ))}
-                    </tr>
+        <div>
+          <Text size="sm" fw={500} mb="xs">Output Table ({input1Values.length} x {input2Values.length})</Text>
+          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+            <Table withTableBorder withColumnBorders>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th style={{ textAlign: 'center' }}>Input1\Input2</Table.Th>
+                  {input2Values.map((val, j) => (
+                    <Table.Th key={j} style={{ textAlign: 'center', minWidth: 60 }}>{val.toFixed(2)}</Table.Th>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Extrapolation Method */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Extrapolation Method
-            </label>
-            <select
-              value={extrapolation}
-              onChange={(e) => setExtrapolation(e.target.value)}
-              className="w-full px-3 py-2 border-2 border-gray-400 rounded text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
-            >
-              <option value="clamp">Clamp to nearest values</option>
-              <option value="extrapolate">Bilinear extrapolation</option>
-            </select>
-            <p className="text-xs text-gray-600 mt-1">
-              How to handle inputs outside the table range
-            </p>
-          </div>
-
-          <div className="bg-lime-50 p-3 rounded-md border border-lime-200">
-            <p className="text-sm text-lime-800">
-              <strong>2-D Lookup:</strong> Performs bilinear interpolation using two inputs. 
-              Input values should be in ascending order for best results.
-            </p>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {input1Values.map((val1, i) => (
+                  <Table.Tr key={i}>
+                    <Table.Td style={{ textAlign: 'center', fontWeight: 500 }}>{val1.toFixed(2)}</Table.Td>
+                    {input2Values.map((_, j) => (
+                      <Table.Td key={j}>
+                        <NumberInput
+                          value={outputTable[i]?.[j] ?? 0}
+                          onChange={(val) => updateTableValue(i, j, val)}
+                          decimalScale={4}
+                          size="xs"
+                          hideControls
+                        />
+                      </Table.Td>
+                    ))}
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
           </div>
         </div>
 
-        <div className="flex justify-end space-x-3 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border-2 border-gray-400 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+        <Select
+          label="Extrapolation Method"
+          value={extrapolation}
+          onChange={(val) => setExtrapolation(val || 'clamp')}
+          data={[
+            { value: 'clamp', label: 'Clamp to nearest values' },
+            { value: 'extrapolate', label: 'Bilinear extrapolation' }
+          ]}
+          description="How to handle inputs outside the table range"
+        />
+
+        <Alert variant="light" color="lime" icon={<IconInfoCircle />} title="2-D Lookup">
+          Performs bilinear interpolation using two inputs.
+          Input values should be in ascending order for best results.
+        </Alert>
+
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-700 text-white rounded-md text-sm font-medium hover:bg-blue-800 border border-blue-600"
-          >
+          </Button>
+          <Button onClick={handleSave}>
             Save
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   )
 }
