@@ -159,3 +159,12 @@ select {
 .react-flow-dark .comment-node .text-gray-600 {
   color: #9ca3af !important;
 }
+
+/* ReactFlow attribution link in dark mode */
+.react-flow-dark .react-flow__attribution {
+  background-color: #1A1B1E;
+}
+
+.react-flow-dark .react-flow__attribution a {
+  color: #C1C2C5;
+}

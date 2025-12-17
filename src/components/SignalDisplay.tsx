@@ -2,14 +2,38 @@
 
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { Modal, NumberInput, Button, Stack, Group, Alert } from '@mantine/core'
+import { useMantineColorScheme } from '@mantine/core'
+import { IconInfoCircle } from '@tabler/icons-react'
 import { BlockData } from './BlockNode'
 
 interface SignalDisplayProps {
   block: BlockData
   signalData?: { time: number; value: number | number[] | boolean | boolean[] }[]
   isRunning?: boolean
+}
+
+// Theme configurations for recharts
+const lightTheme = {
+  background: '#ffffff',
+  text: '#374151',
+  textMuted: '#6b7280',
+  grid: '#e5e7eb',
+  axis: '#6b7280',
+  tooltipBg: 'rgba(255, 255, 255, 0.95)',
+  tooltipBorder: '#e5e7eb',
+}
+
+const darkTheme = {
+  background: '#25262B',
+  text: '#C1C2C5',
+  textMuted: '#909296',
+  grid: '#373A40',
+  axis: '#909296',
+  tooltipBg: 'rgba(37, 38, 43, 0.95)',
+  tooltipBorder: '#373A40',
 }
 
 // Color palette for multi-line plots
@@ -25,10 +49,14 @@ const LINE_COLORS = [
 ]
 
 export default function SignalDisplay({ block, signalData = [], isRunning = false }: SignalDisplayProps) {
+  const { colorScheme } = useMantineColorScheme()
   const [chartData, setChartData] = useState<any[]>([])
   const [vectorSize, setVectorSize] = useState(1)
   const [isVector, setIsVector] = useState(false)
-  
+
+  const isDark = colorScheme === 'dark'
+  const theme = isDark ? darkTheme : lightTheme
+
   const maxSamples = block.parameters?.maxSamples || 1000
   const displayName = block.name
 
@@ -141,61 +169,66 @@ console.log('First few data points:', chartData.slice(0, 5))
 console.log('Last few data points:', chartData.slice(-5))
   
   return (
-    <div className="bg-white rounded-lg shadow-md  p-4">
+    <div
+      className="rounded-lg shadow-md p-4"
+      style={{ backgroundColor: theme.background }}
+    >
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-medium text-gray-300 dark:text-gray-800">{displayName}</h3>
+        <h3 className="text-sm font-medium" style={{ color: theme.text }}>{displayName}</h3>
         <div className="flex items-center gap-2">
           {isRunning && (
-            <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-              <span className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full animate-pulse" />
+            <span className="flex items-center gap-1 text-xs text-green-500">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               Recording
             </span>
           )}
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="text-xs" style={{ color: theme.textMuted }}>
             {chartData.length} / {maxSamples} samples
           </span>
         </div>
       </div>
-      
+
       <div className="h-64">
         <ResponsiveContainer width="100%" height={256}>
           <LineChart
-              key={`chart-${chartData.length}-${vectorSize}`}  
+              key={`chart-${chartData.length}-${vectorSize}`}
               data={chartData}
               margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
             >
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} />
             <XAxis
               dataKey="time"
-              label={{ value: 'Time (s)', position: 'insideBottom', offset: -5 }}
-              tick={{ fontSize: 12 }}
-              stroke="#6b7280"
+              label={{ value: 'Time (s)', position: 'insideBottom', offset: -5, fill: theme.textMuted }}
+              tick={{ fontSize: 12, fill: theme.axis }}
+              stroke={theme.axis}
               tickFormatter={(value) => value.toFixed(1)}
               allowDecimals={false}
             />
             <YAxis
               domain={yDomain}
-              label={{ value: 'Value', angle: -90, position: 'insideLeft' }}
-              tick={{ fontSize: 12 }}
-              stroke="#6b7280"
+              label={{ value: 'Value', angle: -90, position: 'insideLeft', fill: theme.textMuted }}
+              tick={{ fontSize: 12, fill: theme.axis }}
+              stroke={theme.axis}
               tickFormatter={(value) => value.toFixed(1)}
             />
-            <Tooltip 
-              contentStyle={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                border: '1px solid #e5e7eb',
+            <Tooltip
+              contentStyle={{
+                backgroundColor: theme.tooltipBg,
+                border: `1px solid ${theme.tooltipBorder}`,
                 borderRadius: '6px',
-                fontSize: '12px'
+                fontSize: '12px',
+                color: theme.text
               }}
+              labelStyle={{ color: theme.text }}
               formatter={(value: any) => typeof value === 'number' ? value.toFixed(4) : value}
             />
-            
+
            {isVector ? (
             // Remove the fragment and render Lines directly
             [
-              <Legend 
+              <Legend
                 key="legend"
-                wrapperStyle={{ fontSize: '12px' }}
+                wrapperStyle={{ fontSize: '12px', color: theme.text }}
                 iconType="line"
               />,
               ...Array.from({ length: vectorSize }).map((_, i) => (
@@ -223,9 +256,9 @@ console.log('Last few data points:', chartData.slice(-5))
           </LineChart>
         </ResponsiveContainer>
       </div>
-      
+
       {isVector && (
-        <div className="mt-2 text-xs text-gray-600">
+        <div className="mt-2 text-xs" style={{ color: theme.textMuted }}>
           Displaying {vectorSize} vector elements
         </div>
       )}
@@ -242,68 +275,43 @@ interface SignalDisplayConfigProps {
 
 export function SignalDisplayConfig({ block, onUpdate, onClose }: SignalDisplayConfigProps) {
   const [maxSamples, setMaxSamples] = useState(block.parameters?.maxSamples || 1000)
-  
+
   const handleSave = () => {
     onUpdate({ maxSamples })
     onClose()
   }
-  
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-6 w-96">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium text-gray-900">
-            Configure Signal Display: {block.name}
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-900 mb-1">
-              Maximum Samples
-            </label>
-            <input
-              type="number"
-              min="10"
-              max="10000"
-              value={maxSamples}
-              onChange={(e) => setMaxSamples(parseInt(e.target.value) || 1000)}
-              className="w-full px-3 py-2 border-2 border-gray-400 rounded-md text-sm bg-white text-gray-900 focus:border-blue-600 focus:outline-none"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Number of data points to display (10-10000)
-            </p>
-          </div>
-          
-          <div className="bg-blue-50 p-3 rounded-md">
-            <p className="text-sm text-blue-800">
-              <strong>Signal Display:</strong> Shows real-time signal values during simulation. 
-              Vector signals will be displayed as multiple lines with different colors.
-            </p>
-          </div>
-        </div>
-        
-        <div className="flex justify-end space-x-3 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+    <Modal
+      opened={true}
+      onClose={onClose}
+      title={`Configure Signal Display: ${block.name}`}
+      centered
+    >
+      <Stack gap="md">
+        <NumberInput
+          label="Maximum Samples"
+          value={maxSamples}
+          onChange={(val) => setMaxSamples(typeof val === 'number' ? val : 1000)}
+          min={10}
+          max={10000}
+          description="Number of data points to display (10-10000)"
+        />
+
+        <Alert variant="light" color="blue" icon={<IconInfoCircle />} title="Signal Display">
+          Shows real-time signal values during simulation.
+          Vector signals will be displayed as multiple lines with different colors.
+        </Alert>
+
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
-          >
+          </Button>
+          <Button onClick={handleSave}>
             Save
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   )
 }

@@ -6,7 +6,7 @@ import { memo, CSSProperties, useEffect, useState } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
-import { IconMathIntegral, IconMathMaxMin } from '@tabler/icons-react'
+import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, IconCube } from '@tabler/icons-react'
 import { useComputedColorScheme } from '@mantine/core'
 import CommentNode from './CommentNode'
 
@@ -207,6 +207,21 @@ const getBlockSymbol = (data: BlockNodeData) => {
     return renderTransferFunction(data.parameters)
   }
 
+  // Handle signal_logger with Tabler icon
+  if (data.type === 'signal_logger') {
+    return <IconFileTypeCsv size={24} stroke={1.5} />
+  }
+
+  // Handle signal_display with Tabler icon
+  if (data.type === 'signal_display') {
+    return <IconChartCovariate size={24} stroke={1.5} />
+  }
+
+  // Handle subsystem with Tabler icon
+  if (data.type === 'subsystem') {
+    return <IconCube size={24} stroke={1.5} />
+  }
+
   // Handle 1D lookup block
   if (data.type === 'lookup_1d') {
     return render1DLookupCurve(data.parameters)
@@ -379,14 +394,11 @@ const getBlockSymbol = (data: BlockNodeData) => {
     'scale': data.parameters?.gain || 'K',
     'abs': '|x|',
     'uminus': '-x',
-    'signal_display': '📊',
-    'signal_logger': '📝',
     'input_port': '▶',
     'output_port': '▶',
     'source': '~',
     'lookup_1d': '1D',
     'lookup_2d': '2D',
-    'subsystem': '□',
     'sheet_label_sink': '↓',
     'sheet_label_source': '↑',
     'matrix_multiply': '⊗',
