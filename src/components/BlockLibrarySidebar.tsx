@@ -11,7 +11,8 @@ import {
   Stack,
   ScrollArea,
   Paper,
-  Flex
+  Flex,
+  useMantineColorScheme
 } from '@mantine/core'
 import { IconSearch } from '@tabler/icons-react'
 
@@ -304,6 +305,9 @@ interface DraggableBlockProps {
 }
 
 function DraggableBlock({ blockType }: DraggableBlockProps) {
+  const { colorScheme } = useMantineColorScheme()
+  const isDark = colorScheme === 'dark'
+
   const handleDragStart = (e: React.DragEvent) => {
     // Set the block type data for ReactFlow
     e.dataTransfer.setData('text/plain', blockType.id)
@@ -384,14 +388,14 @@ function DraggableBlock({ blockType }: DraggableBlockProps) {
           w={32}
           h={32}
           style={(theme) => ({
-            backgroundColor: theme.colors.blue[1],
+            backgroundColor: isDark ? theme.colors.blue[9] : theme.colors.blue[1],
             borderRadius: theme.radius.sm,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontFamily: 'monospace',
             fontSize: theme.fontSizes.sm,
-            color: theme.colors.blue[7],
+            color: isDark ? theme.colors.blue[2] : theme.colors.blue[7],
           })}
         >
           {blockType.icon}

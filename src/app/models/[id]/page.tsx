@@ -1626,7 +1626,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             <Button
               onClick={handleExportModel}
               leftSection={<IconFileExport size={16} />}
-              color="indigo"
+              color="violet"
             >
               Export
             </Button>
