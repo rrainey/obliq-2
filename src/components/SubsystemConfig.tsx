@@ -7,6 +7,8 @@ import { IconInfoCircle, IconPlus, IconPencil, IconTrash, IconExternalLink, Icon
 import { BlockData } from './BlockNode'
 import { Sheet } from '@/lib/modelStore'
 import { ModelParameter } from '@/lib/modelSchema'
+import { isValidType, getTypeValidationError } from '@/lib/typeValidator'
+import { isValidC99Initializer, getC99InitializerError, toC99Initializer, parseC99Initializer } from '@/lib/c99InitializerValidator'
 
 interface SubsystemConfigProps {
   block: BlockData
@@ -25,17 +27,10 @@ const CODE_GEN_STRATEGY_OPTIONS = [
   { value: 'segregated_atomic', label: 'Segregated, atomic', description: 'Keeps subsystem blocks separate and treats them as atomic units' },
 ]
 
-const SIGNAL_TYPES = [
-  { value: 'double', label: 'double' },
-  { value: 'float', label: 'float' },
-  { value: 'long', label: 'long' },
-  { value: 'bool', label: 'bool' },
-]
-
 interface ParameterFormData {
   name: string
-  signalType: string
-  value: string
+  dataType: string
+  defaultValue: string
 }
 
 export default function SubsystemConfig({ block, availableSheets = [], onUpdate, onRename, onClose, onSheetNavigate }: SubsystemConfigProps) {
@@ -51,7 +46,7 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
   const [parameters, setParameters] = useState<ModelParameter[]>(block.parameters?.parameters || [])
   const [editingParamIndex, setEditingParamIndex] = useState<number | null>(null)
   const [addingParam, setAddingParam] = useState(false)
-  const [paramFormData, setParamFormData] = useState<ParameterFormData>({ name: '', signalType: 'double', value: '0' })
+  const [paramFormData, setParamFormData] = useState<ParameterFormData>({ name: '', dataType: 'double', defaultValue: '0' })
   const [paramFormError, setParamFormError] = useState<string | null>(null)
   const [showParameters, setShowParameters] = useState(false)
 
@@ -152,16 +147,41 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
   }
 
   const resetParamForm = () => {
-    setParamFormData({ name: '', signalType: 'double', value: '0' })
+    setParamFormData({ name: '', dataType: 'double', defaultValue: '0' })
     setParamFormError(null)
     setAddingParam(false)
     setEditingParamIndex(null)
   }
 
+  // Convert legacy JavaScript-style signalType to C-style dataType
+  const convertLegacySignalType = (signalType: string | undefined, value: any): string => {
+    if (!signalType) return 'double'
+    // Handle legacy array types by inferring dimensions from value
+    if (signalType.includes('[][]') && Array.isArray(value) && Array.isArray(value[0])) {
+      const rows = value.length
+      const cols = value[0].length
+      const baseType = signalType.replace('[][]', '')
+      return `${baseType}[${rows}][${cols}]`
+    } else if (signalType.includes('[]') && Array.isArray(value)) {
+      const size = value.length
+      const baseType = signalType.replace('[]', '')
+      return `${baseType}[${size}]`
+    }
+    return signalType
+  }
+
+  // Convert legacy JavaScript value to C99 initializer string
+  const convertLegacyValue = (value: any, dataType: string): string => {
+    if (typeof value === 'string') return value
+    return toC99Initializer(value, dataType)
+  }
+
   const startEditingParam = (index: number) => {
     const param = parameters[index]
     setEditingParamIndex(index)
-    setParamFormData({ name: param.name, signalType: param.signalType, value: String(param.value) })
+    const dataType = param.dataType || convertLegacySignalType(param.signalType, param.value)
+    const defaultValue = param.defaultValue || convertLegacyValue(param.value, dataType)
+    setParamFormData({ name: param.name, dataType, defaultValue })
     setParamFormError(null)
   }
 
@@ -170,14 +190,41 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(data.name)) return 'Invalid identifier format'
     const existingIndex = parameters.findIndex(p => p.name === data.name)
     if (existingIndex !== -1 && existingIndex !== excludeIndex) return `Parameter "${data.name}" already exists`
-    if (isNaN(parseFloat(data.value))) return 'Value must be a valid number'
+
+    // Validate dataType using C-language type syntax
+    if (!isValidType(data.dataType)) {
+      const typeError = getTypeValidationError(data.dataType)
+      return typeError || `Invalid type: ${data.dataType}. Use: double, float, long, bool, or arrays like double[3]`
+    }
+
+    // Validate defaultValue is a valid C99 initializer for the dataType
+    if (!isValidC99Initializer(data.defaultValue, data.dataType)) {
+      const valueError = getC99InitializerError(data.defaultValue, data.dataType)
+      return valueError || `Invalid value for type ${data.dataType}`
+    }
+
     return null
   }
 
   const handleAddParam = () => {
     const error = validateParamForm(paramFormData)
     if (error) { setParamFormError(error); return }
-    setParameters([...parameters, { name: paramFormData.name, signalType: paramFormData.signalType, value: parseFloat(paramFormData.value) }])
+
+    // Parse the C99 initializer to get the JavaScript value for storage
+    const parseResult = parseC99Initializer(paramFormData.defaultValue, paramFormData.dataType)
+    if (!parseResult.valid) {
+      setParamFormError(parseResult.error || 'Invalid value')
+      return
+    }
+
+    const newParam: ModelParameter = {
+      name: paramFormData.name,
+      signalType: paramFormData.dataType, // Keep signalType for backward compatibility
+      dataType: paramFormData.dataType,
+      value: parseResult.value!,
+      defaultValue: paramFormData.defaultValue
+    }
+    setParameters([...parameters, newParam])
     resetParamForm()
   }
 
@@ -185,8 +232,22 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
     if (editingParamIndex === null) return
     const error = validateParamForm(paramFormData, editingParamIndex)
     if (error) { setParamFormError(error); return }
+
+    // Parse the C99 initializer to get the JavaScript value for storage
+    const parseResult = parseC99Initializer(paramFormData.defaultValue, paramFormData.dataType)
+    if (!parseResult.valid) {
+      setParamFormError(parseResult.error || 'Invalid value')
+      return
+    }
+
     const updatedParams = [...parameters]
-    updatedParams[editingParamIndex] = { name: paramFormData.name, signalType: paramFormData.signalType, value: parseFloat(paramFormData.value) }
+    updatedParams[editingParamIndex] = {
+      name: paramFormData.name,
+      signalType: paramFormData.dataType, // Keep signalType for backward compatibility
+      dataType: paramFormData.dataType,
+      value: parseResult.value!,
+      defaultValue: paramFormData.defaultValue
+    }
     setParameters(updatedParams)
     resetParamForm()
   }
@@ -342,7 +403,10 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
                 <Text size="sm" fw={500}>Subsystem Parameters</Text>
                 <IconChevronDown size={16} style={{ transform: showParameters ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
               </Group>
-              <Text size="xs" c="dimmed" mb="xs">Parameters scoped to this subsystem, generated as #define statements.</Text>
+              <Text size="xs" c="dimmed" mb="xs">
+                Parameters scoped to this subsystem. Types: double, float, long, bool, or arrays like double[3].
+                Values use C99 syntax: 42, 3.14f, true, {'{1, 2, 3}'}.
+              </Text>
 
               <Collapse in={showParameters}>
                 <Stack gap="xs">
@@ -360,9 +424,9 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
                         {parameters.map((param, index) => (
                           editingParamIndex === index ? (
                             <Table.Tr key={index}>
-                              <Table.Td><TextInput size="xs" value={paramFormData.name} onChange={(e) => setParamFormData({ ...paramFormData, name: e.target.value })} /></Table.Td>
-                              <Table.Td><Select size="xs" value={paramFormData.signalType} onChange={(val) => setParamFormData({ ...paramFormData, signalType: val || 'double' })} data={SIGNAL_TYPES} /></Table.Td>
-                              <Table.Td><TextInput size="xs" value={paramFormData.value} onChange={(e) => setParamFormData({ ...paramFormData, value: e.target.value })} /></Table.Td>
+                              <Table.Td><TextInput size="xs" value={paramFormData.name} onChange={(e) => setParamFormData({ ...paramFormData, name: e.target.value })} error={paramFormError?.includes('name') || paramFormError?.includes('identifier') || paramFormError?.includes('exists')} /></Table.Td>
+                              <Table.Td><TextInput size="xs" value={paramFormData.dataType} onChange={(e) => setParamFormData({ ...paramFormData, dataType: e.target.value })} placeholder="double" error={paramFormError?.includes('type') || paramFormError?.includes('Invalid type')} /></Table.Td>
+                              <Table.Td><TextInput size="xs" value={paramFormData.defaultValue} onChange={(e) => setParamFormData({ ...paramFormData, defaultValue: e.target.value })} placeholder="0" error={paramFormError?.includes('value') || paramFormError?.includes('initializer') || paramFormError?.includes('Expected')} /></Table.Td>
                               <Table.Td>
                                 <Group gap={4}>
                                   <ActionIcon variant="subtle" color="green" size="sm" onClick={handleUpdateParam}><IconCheck size={14} /></ActionIcon>
@@ -373,8 +437,8 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
                           ) : (
                             <Table.Tr key={index}>
                               <Table.Td><Text size="xs" ff="monospace">{param.name}</Text></Table.Td>
-                              <Table.Td><Text size="xs">{param.signalType}</Text></Table.Td>
-                              <Table.Td><Text size="xs" ff="monospace">{param.value}</Text></Table.Td>
+                              <Table.Td><Text size="xs">{param.dataType || param.signalType}</Text></Table.Td>
+                              <Table.Td><Text size="xs" ff="monospace">{param.defaultValue || toC99Initializer(param.value, param.dataType || param.signalType || 'double')}</Text></Table.Td>
                               <Table.Td>
                                 <Group gap={4}>
                                   <ActionIcon variant="subtle" size="sm" onClick={() => startEditingParam(index)}><IconPencil size={14} /></ActionIcon>
@@ -386,9 +450,9 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
                         ))}
                         {addingParam && (
                           <Table.Tr>
-                            <Table.Td><TextInput size="xs" value={paramFormData.name} onChange={(e) => setParamFormData({ ...paramFormData, name: e.target.value })} placeholder="MY_PARAM" autoFocus /></Table.Td>
-                            <Table.Td><Select size="xs" value={paramFormData.signalType} onChange={(val) => setParamFormData({ ...paramFormData, signalType: val || 'double' })} data={SIGNAL_TYPES} /></Table.Td>
-                            <Table.Td><TextInput size="xs" value={paramFormData.value} onChange={(e) => setParamFormData({ ...paramFormData, value: e.target.value })} placeholder="0" /></Table.Td>
+                            <Table.Td><TextInput size="xs" value={paramFormData.name} onChange={(e) => setParamFormData({ ...paramFormData, name: e.target.value })} placeholder="MY_PARAM" autoFocus error={paramFormError?.includes('name') || paramFormError?.includes('identifier') || paramFormError?.includes('exists')} /></Table.Td>
+                            <Table.Td><TextInput size="xs" value={paramFormData.dataType} onChange={(e) => setParamFormData({ ...paramFormData, dataType: e.target.value })} placeholder="double" error={paramFormError?.includes('type') || paramFormError?.includes('Invalid type')} /></Table.Td>
+                            <Table.Td><TextInput size="xs" value={paramFormData.defaultValue} onChange={(e) => setParamFormData({ ...paramFormData, defaultValue: e.target.value })} placeholder="0" error={paramFormError?.includes('value') || paramFormError?.includes('initializer') || paramFormError?.includes('Expected')} /></Table.Td>
                             <Table.Td>
                               <Group gap={4}>
                                 <ActionIcon variant="subtle" color="green" size="sm" onClick={handleAddParam}><IconCheck size={14} /></ActionIcon>

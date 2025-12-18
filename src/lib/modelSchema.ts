@@ -24,16 +24,24 @@ const SheetSchema: z.ZodType<any> = z.lazy(() => SheetSchemaDefinition)
 const CodeGenStrategySchema = z.enum(['flatten', 'segregated', 'segregated_atomic']).default('flatten')
 
 // Model parameter schema (used by both model and subsystem parameters)
+// Supports both legacy format (signalType, value) and new C99 format (dataType, defaultValue)
 const ModelParameterSchema = z.object({
   name: z.string()
     .min(1, 'Parameter name cannot be empty')
     .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, 'Parameter name must be a valid identifier (alphanumeric + underscore, no spaces)'),
-  signalType: SignalTypeSchema,
+  // Legacy fields (kept for backward compatibility)
+  signalType: SignalTypeSchema.optional(),
   value: z.union([
     z.number(),                          // Scalar
-    z.array(z.number()),                 // Vector
-    z.array(z.array(z.number()))         // Matrix
-  ])
+    z.boolean(),                         // Boolean scalar
+    z.array(z.number()),                 // Number vector
+    z.array(z.boolean()),                // Boolean vector
+    z.array(z.array(z.number())),        // Number matrix
+    z.array(z.array(z.boolean()))        // Boolean matrix
+  ]).optional(),
+  // New C99-style fields
+  dataType: SignalTypeSchema.optional(),           // C-style type (double, float[3], double[2][3], etc.)
+  defaultValue: z.string().optional()              // C99 initializer string (e.g., "42", "{1, 2, 3}", "{{1, 0}, {0, 1}}")
 })
 
 // Subsystem-specific parameters schema

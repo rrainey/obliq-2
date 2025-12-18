@@ -13,7 +13,6 @@ import {
   Tooltip,
   TextInput,
   Select,
-  NumberInput,
   Paper,
   Alert,
   Code
@@ -28,6 +27,8 @@ import {
 } from '@tabler/icons-react'
 import { useModelStore } from '@/lib/modelStore'
 import { ModelParameter } from '@/lib/modelSchema'
+import { isValidType, getTypeValidationError } from '@/lib/typeValidator'
+import { isValidC99Initializer, getC99InitializerError, toC99Initializer, parseC99Initializer } from '@/lib/c99InitializerValidator'
 
 interface ModelParametersDialogProps {
   opened: boolean
@@ -37,21 +38,16 @@ interface ModelParametersDialogProps {
 
 interface ParameterFormData {
   name: string
-  signalType: string
-  value: string
+  dataType: string
+  defaultValue: string
 }
 
-const SIGNAL_TYPES = [
+// Common base types for quick selection
+const BASE_TYPE_OPTIONS = [
   { value: 'double', label: 'double' },
   { value: 'float', label: 'float' },
   { value: 'long', label: 'long' },
   { value: 'bool', label: 'bool' },
-  { value: 'double[]', label: 'double[] (vector)' },
-  { value: 'float[]', label: 'float[] (vector)' },
-  { value: 'long[]', label: 'long[] (vector)' },
-  { value: 'bool[]', label: 'bool[] (vector)' },
-  { value: 'double[][]', label: 'double[][] (matrix)' },
-  { value: 'float[][]', label: 'float[][] (matrix)' }
 ]
 
 export default function ModelParametersDialog({
@@ -69,14 +65,14 @@ export default function ModelParametersDialog({
   const [addingParam, setAddingParam] = useState(false)
   const [formData, setFormData] = useState<ParameterFormData>({
     name: '',
-    signalType: 'double',
-    value: '0'
+    dataType: 'double',
+    defaultValue: '0'
   })
   const [formError, setFormError] = useState<string | null>(null)
 
   // Reset form
   const resetForm = () => {
-    setFormData({ name: '', signalType: 'double', value: '0' })
+    setFormData({ name: '', dataType: 'double', defaultValue: '0' })
     setFormError(null)
     setAddingParam(false)
     setEditingParam(null)
@@ -85,59 +81,46 @@ export default function ModelParametersDialog({
   // Start editing a parameter
   const startEdit = (param: ModelParameter) => {
     setEditingParam(param.name)
+    // Convert legacy signalType to dataType if needed
+    const dataType = param.dataType || convertLegacySignalType(param.signalType, param.value)
+    const defaultValue = param.defaultValue || convertLegacyValue(param.value, dataType)
     setFormData({
       name: param.name,
-      signalType: param.signalType,
-      value: formatValue(param.value, param.signalType)
+      dataType,
+      defaultValue
     })
     setFormError(null)
   }
 
-  // Format value for display in text input
-  const formatValue = (value: number | number[] | number[][], signalType: string): string => {
-    if (signalType.includes('[][]')) {
-      // Matrix
-      return JSON.stringify(value)
-    } else if (signalType.includes('[]')) {
-      // Vector
-      return JSON.stringify(value)
-    } else {
-      // Scalar
-      return String(value)
+  // Convert legacy JavaScript-style signalType to C-style dataType
+  const convertLegacySignalType = (signalType: string | undefined, value: any): string => {
+    if (!signalType) return 'double'
+
+    // Handle legacy array types by inferring dimensions from value
+    if (signalType.includes('[][]') && Array.isArray(value) && Array.isArray(value[0])) {
+      const rows = value.length
+      const cols = value[0].length
+      const baseType = signalType.replace('[][]', '')
+      return `${baseType}[${rows}][${cols}]`
+    } else if (signalType.includes('[]') && Array.isArray(value)) {
+      const size = value.length
+      const baseType = signalType.replace('[]', '')
+      return `${baseType}[${size}]`
     }
+    return signalType
   }
 
-  // Parse value from text input
-  const parseValue = (valueStr: string, signalType: string): number | number[] | number[][] | null => {
-    try {
-      if (signalType.includes('[][]')) {
-        // Matrix
-        const parsed = JSON.parse(valueStr)
-        if (!Array.isArray(parsed) || !parsed.every(row => Array.isArray(row))) {
-          return null
-        }
-        return parsed
-      } else if (signalType.includes('[]')) {
-        // Vector
-        const parsed = JSON.parse(valueStr)
-        if (!Array.isArray(parsed)) {
-          return null
-        }
-        return parsed
-      } else {
-        // Scalar
-        const num = parseFloat(valueStr)
-        if (isNaN(num)) {
-          return null
-        }
-        return num
-      }
-    } catch {
-      return null
+  // Convert legacy JavaScript value to C99 initializer string
+  const convertLegacyValue = (value: any, dataType: string): string => {
+    if (typeof value === 'string') {
+      // Already a C99 initializer string
+      return value
     }
+    // Convert JavaScript value to C99 initializer
+    return toC99Initializer(value, dataType)
   }
 
-  // Validate form data
+  // Validate form data using C99 validators
   const validateForm = (data: ParameterFormData, originalName?: string): string | null => {
     // Validate name
     const nameValidation = validateParameterName(data.name, originalName)
@@ -145,16 +128,16 @@ export default function ModelParametersDialog({
       return nameValidation.error || 'Invalid parameter name'
     }
 
-    // Validate value
-    const parsedValue = parseValue(data.value, data.signalType)
-    if (parsedValue === null) {
-      if (data.signalType.includes('[][]')) {
-        return 'Value must be a valid 2D array (e.g., [[1, 2], [3, 4]])'
-      } else if (data.signalType.includes('[]')) {
-        return 'Value must be a valid array (e.g., [1, 2, 3])'
-      } else {
-        return 'Value must be a valid number'
-      }
+    // Validate dataType using C-language type syntax
+    if (!isValidType(data.dataType)) {
+      const typeError = getTypeValidationError(data.dataType)
+      return typeError || `Invalid type: ${data.dataType}. Use: double, float, long, bool, or arrays like double[3], double[2][3]`
+    }
+
+    // Validate defaultValue is a valid C99 initializer for the dataType
+    if (!isValidC99Initializer(data.defaultValue, data.dataType)) {
+      const valueError = getC99InitializerError(data.defaultValue, data.dataType)
+      return valueError || `Invalid value for type ${data.dataType}`
     }
 
     return null
@@ -168,16 +151,19 @@ export default function ModelParametersDialog({
       return
     }
 
-    const parsedValue = parseValue(formData.value, formData.signalType)
-    if (parsedValue === null) {
-      setFormError('Invalid value')
+    // Parse the C99 initializer to get the JavaScript value for storage
+    const parseResult = parseC99Initializer(formData.defaultValue, formData.dataType)
+    if (!parseResult.valid) {
+      setFormError(parseResult.error || 'Invalid value')
       return
     }
 
     const newParam: ModelParameter = {
       name: formData.name,
-      signalType: formData.signalType,
-      value: parsedValue
+      signalType: formData.dataType, // Keep signalType for backward compatibility
+      dataType: formData.dataType,
+      value: parseResult.value!,
+      defaultValue: formData.defaultValue
     }
 
     addParameter(newParam)
@@ -192,16 +178,19 @@ export default function ModelParametersDialog({
       return
     }
 
-    const parsedValue = parseValue(formData.value, formData.signalType)
-    if (parsedValue === null) {
-      setFormError('Invalid value')
+    // Parse the C99 initializer to get the JavaScript value for storage
+    const parseResult = parseC99Initializer(formData.defaultValue, formData.dataType)
+    if (!parseResult.valid) {
+      setFormError(parseResult.error || 'Invalid value')
       return
     }
 
     updateParameter(originalName, {
       name: formData.name,
-      signalType: formData.signalType,
-      value: parsedValue
+      signalType: formData.dataType, // Keep signalType for backward compatibility
+      dataType: formData.dataType,
+      value: parseResult.value!,
+      defaultValue: formData.defaultValue
     })
     resetForm()
   }
@@ -224,7 +213,11 @@ export default function ModelParametersDialog({
       <Stack gap="md">
         {/* Info alert */}
         <Alert icon={<IconAlertCircle size={16} />} color="blue" variant="light">
-          Model parameters are global name/type/value tuples that can be referenced throughout your model.
+          <Text size="sm">Model parameters are global name/type/value tuples that can be referenced throughout your model.</Text>
+          <Text size="xs" c="dimmed" mt={4}>
+            Types: double, float, long, bool, or arrays like double[3], double[2][3].
+            Values use C99 syntax: 42, 3.14f, true, {'{1, 2, 3}'}, {'{{1, 0}, {0, 1}}'}.
+          </Text>
         </Alert>
 
         {/* Parameters table */}
@@ -255,22 +248,23 @@ export default function ModelParametersDialog({
                         />
                       </Table.Td>
                       <Table.Td>
-                        <Select
-                          value={formData.signalType}
-                          onChange={(value) => setFormData({ ...formData, signalType: value || 'double' })}
-                          data={SIGNAL_TYPES}
+                        <TextInput
+                          value={formData.dataType}
+                          onChange={(e) => setFormData({ ...formData, dataType: e.currentTarget.value })}
+                          placeholder="double, float[3], etc."
                           size="xs"
                           disabled={disabled}
+                          error={formError?.includes('type') || formError?.includes('Invalid type')}
                         />
                       </Table.Td>
                       <Table.Td>
                         <TextInput
-                          value={formData.value}
-                          onChange={(e) => setFormData({ ...formData, value: e.currentTarget.value })}
-                          placeholder="Value"
+                          value={formData.defaultValue}
+                          onChange={(e) => setFormData({ ...formData, defaultValue: e.currentTarget.value })}
+                          placeholder="0, {1, 2, 3}, etc."
                           size="xs"
                           disabled={disabled}
-                          error={formError?.includes('Value') || formError?.includes('array') || formError?.includes('number')}
+                          error={formError?.includes('value') || formError?.includes('initializer') || formError?.includes('Expected')}
                         />
                       </Table.Td>
                       <Table.Td>
@@ -305,11 +299,11 @@ export default function ModelParametersDialog({
                         <Code>{param.name}</Code>
                       </Table.Td>
                       <Table.Td>
-                        <Text size="sm" c="dimmed">{param.signalType}</Text>
+                        <Text size="sm" c="dimmed">{param.dataType || param.signalType}</Text>
                       </Table.Td>
                       <Table.Td>
                         <Text size="sm" style={{ fontFamily: 'monospace' }}>
-                          {formatValue(param.value, param.signalType)}
+                          {param.defaultValue || toC99Initializer(param.value, param.dataType || param.signalType || 'double')}
                         </Text>
                       </Table.Td>
                       <Table.Td>
@@ -354,22 +348,23 @@ export default function ModelParametersDialog({
                       />
                     </Table.Td>
                     <Table.Td>
-                      <Select
-                        value={formData.signalType}
-                        onChange={(value) => setFormData({ ...formData, signalType: value || 'double' })}
-                        data={SIGNAL_TYPES}
+                      <TextInput
+                        value={formData.dataType}
+                        onChange={(e) => setFormData({ ...formData, dataType: e.currentTarget.value })}
+                        placeholder="double, float[3], etc."
                         size="xs"
                         disabled={disabled}
+                        error={formError?.includes('type') || formError?.includes('Invalid type')}
                       />
                     </Table.Td>
                     <Table.Td>
                       <TextInput
-                        value={formData.value}
-                        onChange={(e) => setFormData({ ...formData, value: e.currentTarget.value })}
-                        placeholder="0 or [1,2,3] or [[1,2],[3,4]]"
+                        value={formData.defaultValue}
+                        onChange={(e) => setFormData({ ...formData, defaultValue: e.currentTarget.value })}
+                        placeholder="0, {1, 2, 3}, etc."
                         size="xs"
                         disabled={disabled}
-                        error={formError?.includes('Value') || formError?.includes('array') || formError?.includes('number')}
+                        error={formError?.includes('value') || formError?.includes('initializer') || formError?.includes('Expected')}
                       />
                     </Table.Td>
                     <Table.Td>
