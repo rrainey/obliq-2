@@ -13,7 +13,10 @@ interface ParameterSchema {
   enum?: string[];
   minimum?: number;
   maximum?: number;
-  items?: { type: string };
+  items?: {
+    type: string;
+    properties?: Record<string, { type: string; description?: string; enum?: string[] }>;
+  };
 }
 
 /**
@@ -455,18 +458,24 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     type: 'mux',
     displayName: 'Mux',
     category: 'Matrix',
-    description: 'Multiplexer: combines scalar inputs into a matrix',
+    description: 'Multiplexer: combines scalar inputs into a vector or matrix. Use outputShape to select between vector (1D array) or matrix (2D array) output.',
     parameters: {
+      outputShape: {
+        type: 'string',
+        description: 'Output shape: "vector" for 1D array, "matrix" for 2D array. For vector, only cols is used as the size.',
+        default: 'matrix',
+        enum: ['vector', 'matrix']
+      },
       rows: {
         type: 'number',
-        description: 'Number of rows in output matrix',
+        description: 'Number of rows in output matrix (ignored when outputShape is "vector")',
         default: 2,
         minimum: 1,
         maximum: 100
       },
       cols: {
         type: 'number',
-        description: 'Number of columns in output matrix',
+        description: 'Number of columns in output matrix, or vector size when outputShape is "vector"',
         default: 2,
         minimum: 1,
         maximum: 100
@@ -480,7 +489,7 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     },
     inputs: ['input1', 'input2', 'input3', 'input4'],
     outputs: ['output'],
-    dynamicPorts: 'Number of inputs = rows × cols. Inputs fill matrix row-by-row.'
+    dynamicPorts: 'For matrix: inputs = rows × cols. For vector: inputs = cols (vector size). Inputs fill in order.'
   },
   {
     type: 'demux',
@@ -633,7 +642,7 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     parameters: {
       codeGenStrategy: {
         type: 'string',
-        description: 'How the subsystem is handled during C code generation',
+        description: 'How the subsystem is handled during C code generation. "flatten" inlines blocks into parent. "segregated" generates separate init/step functions. "segregated_atomic" guarantees atomic execution.',
         default: 'flatten',
         enum: ['flatten', 'segregated', 'segregated_atomic']
       },
@@ -653,6 +662,23 @@ const blockTypeSchemas: BlockTypeInfo[] = [
         type: 'boolean',
         description: 'Show enable input port (when false/0, subsystem outputs hold previous values)',
         default: false
+      },
+      showPortNames: {
+        type: 'boolean',
+        description: 'Display port names next to each port on the subsystem block',
+        default: false
+      },
+      parameters: {
+        type: 'array',
+        description: 'Subsystem-scoped parameters (only valid for segregated or segregated_atomic codeGenStrategy). Each parameter becomes a #define in generated code. Array of objects with name, signalType, and value.',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Parameter name (C-style identifier)' },
+            signalType: { type: 'string', enum: ['double', 'float', 'long', 'bool'] },
+            value: { type: 'number', description: 'Parameter value' }
+          }
+        }
       }
     },
     inputs: [],

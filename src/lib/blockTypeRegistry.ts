@@ -314,6 +314,7 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     displayName: 'Mux',
     category: 'Matrix',
     defaultParameters: {
+      outputShape: 'matrix',  // 'vector' | 'matrix'
       rows: 2,
       cols: 2,
       outputType: 'double[2][2]',
@@ -324,9 +325,9 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
       { name: 'input2' },
       { name: 'input3' },
       { name: 'input4' }
-    ], // Dynamic based on rows*cols
+    ], // Dynamic based on rows*cols (for matrix) or cols (for vector where rows=1)
     outputs: [{ name: 'output' }],
-    description: 'Multiplexer: combines scalar inputs into a matrix'
+    description: 'Multiplexer: combines scalar inputs into a vector or matrix. For vector output, specify outputShape="vector" with rows=1 and cols=size.'
   },
 
   [BlockTypes.DEMUX]: {
@@ -353,7 +354,10 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
       sheetName: 'Subsystem',
       inputPorts: ['Input1'],
       outputPorts: ['Output1'],
-      codeGenStrategy: 'flatten'  // 'flatten' | 'segregated' | 'segregated_atomic'
+      showEnableInput: false,
+      showPortNames: false,
+      codeGenStrategy: 'flatten',  // 'flatten' | 'segregated' | 'segregated_atomic'
+      parameters: []               // Subsystem-scoped parameters (only for segregated strategies)
     },
     inputs: [], // Dynamic based on subsystem content
     outputs: [], // Dynamic based on subsystem content

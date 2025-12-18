@@ -21,6 +21,7 @@ import {
 import {
   addSheetTool,
   addBlockTool,
+  listBlocksTool,
   updateBlockTool,
   deleteBlockTool,
   addConnectionTool,
@@ -63,6 +64,7 @@ const tools: ToolWithHandler[] = [
   // Model construction
   addSheetTool,
   addBlockTool,
+  listBlocksTool,
   updateBlockTool,
   deleteBlockTool,
   addConnectionTool,

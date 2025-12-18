@@ -53,21 +53,28 @@ export class MuxBlockModule implements IBlockModule {
   }
 
   getOutputType(block: BlockData, inputTypes: string[]): string {
+    // If outputType is already computed and stored, use it directly
+    // This ensures consistency with the UI configuration
+    if (block.parameters?.outputType) {
+      return block.parameters.outputType
+    }
+
+    // Fallback: derive from parameters
     const rows = block.parameters?.rows || 2
     const cols = block.parameters?.cols || 2
-    const baseType = block.parameters?.outputType || 'double'
-    
+    const baseType = block.parameters?.baseType || 'double'
+
     // Special case: 1×1 mux outputs a scalar
     if (rows === 1 && cols === 1) {
       return baseType
     }
-    
+
     // Vector output (either 1×n or n×1)
     if (rows === 1 || cols === 1) {
       const size = Math.max(rows, cols)
       return `${baseType}[${size}]`
     }
-    
+
     // Matrix output
     return `${baseType}[${rows}][${cols}]`
   }

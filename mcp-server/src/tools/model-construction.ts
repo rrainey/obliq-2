@@ -163,7 +163,30 @@ Block-specific parameters for subsystem blocks:
 
 export const updateBlockTool: ToolWithHandler = {
   name: 'update_block',
-  description: 'Update a block\'s properties',
+  description: `Update a block's properties including name, position, and parameters.
+
+For subsystem blocks, you can update:
+- codeGenStrategy: 'flatten' | 'segregated' | 'segregated_atomic'
+- inputPorts: array of port name strings
+- outputPorts: array of port name strings
+- showEnableInput: boolean
+- showPortNames: boolean
+- parameters: array of subsystem-scoped parameters (ONLY for segregated/segregated_atomic strategies)
+
+IMPORTANT: Subsystem parameters can only be set when codeGenStrategy is 'segregated' or 'segregated_atomic'.
+If you attempt to set parameters on a 'flatten' strategy subsystem, you will receive an error explaining
+that parameters are only available for segregated code generation strategies.
+
+Example subsystem parameter update:
+{
+  "parameters": {
+    "codeGenStrategy": "segregated",
+    "parameters": [
+      { "name": "Kp", "signalType": "double", "value": 1.5 },
+      { "name": "Ki", "signalType": "double", "value": 0.1 }
+    ]
+  }
+}`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -196,7 +219,7 @@ export const updateBlockTool: ToolWithHandler = {
           },
           parameters: {
             type: 'object',
-            description: 'Updated block parameters'
+            description: 'Updated block parameters. For subsystems, can include codeGenStrategy, inputPorts, outputPorts, showEnableInput, showPortNames, and parameters (subsystem-scoped constants).'
           }
         },
         description: 'Properties to update'
@@ -242,6 +265,65 @@ export const updateBlockTool: ToolWithHandler = {
   }
 };
 
+export const listBlocksTool: ToolWithHandler = {
+  name: 'list_blocks',
+  description: `List all blocks on a sheet with their complete details including parameters.
+
+Use this to inspect block configurations, including:
+- Block type, name, and position
+- All block parameters (including subsystem parameters for segregated subsystems)
+- Input and output port names
+
+For subsystem blocks, the parameters will include codeGenStrategy and any subsystem-scoped parameters.`,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      modelId: {
+        type: 'string',
+        description: 'ID of the model'
+      },
+      sheetId: {
+        type: 'string',
+        description: 'ID of the sheet'
+      }
+    },
+    required: ['modelId', 'sheetId']
+  },
+  handler: async (args: any) => {
+    try {
+      const { modelId, sheetId } = args;
+
+      if (config.debug) {
+        console.error('[list_blocks] Listing blocks:', { modelId, sheetId });
+      }
+
+      const response = await modelBuilderClient.listBlocks(modelId, sheetId);
+
+      if (!response.success) {
+        return {
+          success: false,
+          error: response.error || 'Failed to list blocks',
+          errors: response.errors
+        };
+      }
+
+      return {
+        success: true,
+        modelId,
+        sheetId,
+        blockCount: (response.data as any)?.blockCount || 0,
+        blocks: (response.data as any)?.blocks || []
+      };
+    } catch (error) {
+      console.error('[list_blocks] Error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+};
+
 export const deleteBlockTool: ToolWithHandler = {
   name: 'delete_block',
   description: 'Delete a block from a sheet',
@@ -266,13 +348,13 @@ export const deleteBlockTool: ToolWithHandler = {
   handler: async (args: any) => {
     try {
       const { modelId, sheetId, blockId } = args;
-      
+
       if (config.debug) {
         console.error('[delete_block] Deleting block:', { modelId, sheetId, blockId });
       }
 
       const response = await modelBuilderClient.deleteBlock(modelId, sheetId, blockId);
-      
+
       if (!response.success) {
         return {
           success: false,

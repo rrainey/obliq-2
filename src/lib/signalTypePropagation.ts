@@ -85,18 +85,18 @@ function getBlockOutputType(block: BlockData): string | null {
       // Evaluate block always outputs double
       return 'double'
     
-    case 'mux':  // New: mux output type depends on configuration
-      // Mux output type is determined by its configuration
-      if (block.parameters?.outputType === 'matrix' && 
-          block.parameters?.rows && 
-          block.parameters?.cols) {
+    case 'mux':  // Mux output type depends on configuration
+      // Mux outputType parameter contains the full type string (e.g., 'double[2][2]')
+      // If outputType is set, use it directly
+      if (block.parameters?.outputType) {
+        return block.parameters.outputType
+      }
+      // Fallback: derive type from rows/cols configuration
+      if (block.parameters?.rows && block.parameters?.cols) {
         const baseType = block.parameters?.baseType || 'double'
         return `${baseType}[${block.parameters.rows}][${block.parameters.cols}]`
-      } else if (block.parameters?.outputType === 'vector' && 
-                 block.parameters?.size) {
-        const baseType = block.parameters?.baseType || 'double'
-        return `${baseType}[${block.parameters.size}]`
       }
+      // Type will be determined from inputs during propagation
       return null
     
     case 'demux':  // New: demux always outputs scalars
@@ -282,8 +282,20 @@ function determineProcessingBlockOutputType(
 
     case 'demux':
       // Demux always outputs the base type as scalar
-      const inputType = parsedTypes[0]
-      return inputType.baseType
+      const demuxInputType = parsedTypes[0]
+      return demuxInputType.baseType
+
+    case 'mux':
+      // Mux combines scalars into a vector or matrix
+      // All inputs must be scalars of the same base type
+      if (parsedTypes.length === 0) return null
+      const muxBaseType = parsedTypes[0].baseType
+      const allMuxScalars = parsedTypes.every(t =>
+        !t.isArray && !t.isMatrix && t.baseType === muxBaseType
+      )
+      if (!allMuxScalars) return null
+      // Output type depends on input count - create a vector by default
+      return `${muxBaseType}[${parsedTypes.length}]`
 
     default:
       return null
@@ -1341,6 +1353,7 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'abs':
     case 'uminus':
     case 'transpose':
+    case 'mux':  // Mux always has single output (vector/matrix)
       return 1
     case 'trig': {
       // sincos has 2 outputs, all others have 1
@@ -1357,6 +1370,9 @@ function getBlockOutputPortCount(block: BlockData): number {
       return 0
     case 'sheet_label_source':
       return 1
+    case 'demux':
+      // Demux has dynamic outputs based on outputCount configuration
+      return block.parameters?.outputCount || 1
     case 'orientation_conversion': {
       const conversionType = block.parameters?.conversionType || 'euler_to_dcm'
       // dcm_to_euler, quat_to_euler: 3 outputs (Phi, Theta, Psi)
@@ -1410,7 +1426,11 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'abs':      // Absolute value takes 1 input
     case 'uminus':   // Unary minus takes 1 input
     case 'transpose': // Transpose takes 1 matrix
+    case 'demux':    // Demux takes 1 vector/matrix input
       return 1
+    case 'mux':
+      // Mux has dynamic inputs based on rows * cols configuration
+      return (block.parameters?.rows || 2) * (block.parameters?.cols || 2)
     case 'trig': {
       // atan2 requires 2 inputs (y, x), all others require 1
       const func = block.parameters?.function || 'sin'

@@ -348,6 +348,17 @@ export function validateBlockParameters(
       break;
 
     case BlockTypes.MUX:
+      // Validate outputShape
+      if (parameters.outputShape !== undefined) {
+        if (!['vector', 'matrix'].includes(parameters.outputShape)) {
+          errors.push('outputShape must be "vector" or "matrix"');
+        } else {
+          sanitized.outputShape = parameters.outputShape;
+        }
+      } else {
+        sanitized.outputShape = defaults.outputShape || 'matrix';
+      }
+
       // Validate rows
       if (parameters.rows !== undefined) {
         const rows = Number(parameters.rows);
@@ -359,7 +370,7 @@ export function validateBlockParameters(
       } else {
         sanitized.rows = defaults.rows;
       }
-      
+
       // Validate cols
       if (parameters.cols !== undefined) {
         const cols = Number(parameters.cols);
@@ -371,7 +382,7 @@ export function validateBlockParameters(
       } else {
         sanitized.cols = defaults.cols;
       }
-      
+
       // Validate baseType
       if (parameters.baseType !== undefined) {
         if (!['double', 'float', 'int', 'long'].includes(parameters.baseType)) {
@@ -382,10 +393,19 @@ export function validateBlockParameters(
       } else {
         sanitized.baseType = defaults.baseType;
       }
-      
-      // Generate outputType based on rows, cols, and baseType
-      if (sanitized.rows && sanitized.cols && sanitized.baseType) {
-        sanitized.outputType = `${sanitized.baseType}[${sanitized.rows}][${sanitized.cols}]`;
+
+      // Generate outputType based on outputShape, rows, cols, and baseType
+      if (sanitized.baseType) {
+        if (sanitized.outputShape === 'vector') {
+          // For vector, use cols as the size (rows should be 1)
+          const size = sanitized.cols || 1;
+          sanitized.outputType = `${sanitized.baseType}[${size}]`;
+          // Ensure rows is 1 for vector output
+          sanitized.rows = 1;
+        } else if (sanitized.rows && sanitized.cols) {
+          // For matrix output
+          sanitized.outputType = `${sanitized.baseType}[${sanitized.rows}][${sanitized.cols}]`;
+        }
       }
       break;
 
@@ -405,7 +425,7 @@ export function validateBlockParameters(
       break;
       
     case BlockTypes.SUBSYSTEM:
-      // Validate sheets array - subsystems must have embedded sheets
+      // Validate sheets array - optional for updates, required content checked separately
       if (parameters.sheets !== undefined) {
         if (!Array.isArray(parameters.sheets)) {
           errors.push('sheets must be an array');
@@ -414,9 +434,8 @@ export function validateBlockParameters(
         } else {
           sanitized.sheets = parameters.sheets;
         }
-      } else {
-        errors.push('subsystem must have a sheets array');
       }
+      // Note: sheets is not required for parameter updates - only for block creation
 
       // Validate inputPorts array
       if (parameters.inputPorts !== undefined) {
@@ -453,6 +472,15 @@ export function validateBlockParameters(
         }
       }
 
+      // Validate showPortNames (optional)
+      if (parameters.showPortNames !== undefined) {
+        if (typeof parameters.showPortNames !== 'boolean') {
+          errors.push('showPortNames must be a boolean');
+        } else {
+          sanitized.showPortNames = parameters.showPortNames;
+        }
+      }
+
       // Validate codeGenStrategy
       const validStrategies = ['flatten', 'segregated', 'segregated_atomic'];
       if (parameters.codeGenStrategy !== undefined) {
@@ -473,6 +501,68 @@ export function validateBlockParameters(
         // Warn about deprecated parameter (not an error, just normalize it)
       } else {
         sanitized.codeGenStrategy = defaults.codeGenStrategy || 'flatten';
+      }
+
+      // Validate subsystem parameters array
+      // Parameters are only valid for segregated or segregated_atomic strategies
+      if (parameters.parameters !== undefined) {
+        const effectiveStrategy = sanitized.codeGenStrategy || defaults.codeGenStrategy || 'flatten';
+
+        if (effectiveStrategy === 'flatten') {
+          errors.push('Subsystem parameters can only be defined when codeGenStrategy is "segregated" or "segregated_atomic". ' +
+            'With "flatten" strategy, the subsystem is inlined into the parent model during code generation. ' +
+            'To use subsystem-scoped parameters, first set codeGenStrategy to "segregated" or "segregated_atomic".');
+        } else if (!Array.isArray(parameters.parameters)) {
+          errors.push('parameters must be an array');
+        } else {
+          // Validate each parameter
+          const validatedParams: Array<{ name: string; signalType: string; value: number }> = [];
+          const seenNames = new Set<string>();
+
+          for (let i = 0; i < parameters.parameters.length; i++) {
+            const param = parameters.parameters[i];
+
+            if (typeof param !== 'object' || param === null) {
+              errors.push(`parameters[${i}] must be an object with name, signalType, and value`);
+              continue;
+            }
+
+            // Validate name (C-style identifier)
+            if (typeof param.name !== 'string' || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(param.name)) {
+              errors.push(`parameters[${i}].name must be a valid C-style identifier`);
+              continue;
+            }
+
+            if (seenNames.has(param.name)) {
+              errors.push(`Duplicate parameter name: "${param.name}"`);
+              continue;
+            }
+            seenNames.add(param.name);
+
+            // Validate signalType
+            const validSignalTypes = ['double', 'float', 'long', 'bool'];
+            if (typeof param.signalType !== 'string' || !validSignalTypes.includes(param.signalType)) {
+              errors.push(`parameters[${i}].signalType must be one of: ${validSignalTypes.join(', ')}`);
+              continue;
+            }
+
+            // Validate value
+            if (typeof param.value !== 'number' || isNaN(param.value)) {
+              errors.push(`parameters[${i}].value must be a number`);
+              continue;
+            }
+
+            validatedParams.push({
+              name: param.name,
+              signalType: param.signalType,
+              value: param.value
+            });
+          }
+
+          if (errors.length === 0 || validatedParams.length > 0) {
+            sanitized.parameters = validatedParams;
+          }
+        }
       }
       break;
 
