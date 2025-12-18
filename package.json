@@ -9,6 +9,10 @@
     "lint": "next lint",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:unit": "jest --testPathIgnorePatterns='/__tests__/integration/'",
+    "test:integration": "jest __tests__/integration --runInBand",
+    "test:integration:api": "jest __tests__/integration/api --runInBand",
+    "test:integration:mcp": "jest __tests__/integration/mcp --runInBand",
     "mcp-server:dev": "cd mcp-server && npm run dev",
     "mcp-server:build": "cd mcp-server && npm run build",
     "mcp-server:start": "cd mcp-server && npm start",
@@ -56,12 +60,14 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-fetch": "^4.1.0",
     "eslint": "^9",
     "eslint-config-next": "^15.5.9",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "supabase": "^2.58.5",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "undici": "^7.16.0"
   }
 }

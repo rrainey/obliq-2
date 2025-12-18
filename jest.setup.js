@@ -6,3 +6,6 @@ require('dotenv').config({ path: '.env.local' });
 
 // Basic Jest setup for our model schema tests
 // No additional testing library imports needed for schema validation tests
+
+// Note: Integration tests import fetch directly from 'undici' in api-client.ts
+// so no global polyfill is needed here

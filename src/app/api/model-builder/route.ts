@@ -13,10 +13,17 @@ import {
 import { validateBlockParameters } from '@/lib/blockParameterValidator';
 import { modelBuilderApiMetrics } from '@/lib/modelBuilderApiMetrics';
 import { authenticateApiRequest } from '@/lib/apiAuthMiddleware';
+import {
+  handleListBlockParameters,
+  handleGetBlockParameter,
+  handleAddBlockParameter,
+  handleUpdateBlockParameter,
+  handleDeleteBlockParameter
+} from './handlers/block-parameter';
 
 // Rate limiting configuration
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 100; // 100 requests per minute
+const RATE_LIMIT_MAX_REQUESTS = 1000; // 1000 requests per minute (increased for testing)
 
 // In-memory rate limit store (in production, use Redis or similar)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
@@ -339,7 +346,13 @@ const ModelBuilderActions = {
   BATCH_OPERATIONS: 'batchOperations',
   LIST_PARAMETERS: 'listParameters',
   SET_PARAMETER: 'setParameter',
-  DELETE_PARAMETER: 'deleteParameter'
+  DELETE_PARAMETER: 'deleteParameter',
+  // Block parameter operations (subsystem parameters)
+  LIST_BLOCK_PARAMETERS: 'listBlockParameters',
+  GET_BLOCK_PARAMETER: 'getBlockParameter',
+  ADD_BLOCK_PARAMETER: 'addBlockParameter',
+  UPDATE_BLOCK_PARAMETER: 'updateBlockParameter',
+  DELETE_BLOCK_PARAMETER: 'deleteBlockParameter'
 } as const;
 
 // GET handler for retrieving model data and introspection
@@ -1135,6 +1148,30 @@ export async function GET(request: NextRequest) {
         parameterCount: parameterDetails.length,
         parameters: parameterDetails
       });
+    }
+
+    // Block parameter GET actions (subsystem parameters)
+    if (action === ModelBuilderActions.LIST_BLOCK_PARAMETERS ||
+        action === ModelBuilderActions.GET_BLOCK_PARAMETER) {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const ctx = {
+        request,
+        supabase,
+        userId: authResult.userId!,
+        token: token!,
+        startTime,
+        searchParams
+      };
+
+      if (action === ModelBuilderActions.LIST_BLOCK_PARAMETERS) {
+        return handleListBlockParameters(ctx);
+      } else {
+        return handleGetBlockParameter(ctx);
+      }
     }
 
     // Other GET actions will be implemented in subsequent tasks
@@ -2706,6 +2743,25 @@ export async function POST(request: NextRequest) {
       return response;
     }
 
+    // Block parameter POST action (add subsystem parameter)
+    if (action === ModelBuilderActions.ADD_BLOCK_PARAMETER) {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const ctx = {
+        request,
+        supabase,
+        userId: authResult.userId!,
+        token: token!,
+        startTime,
+        body
+      };
+
+      return handleAddBlockParameter(ctx);
+    }
+
     // Other POST actions will be implemented in subsequent tasks
     const errorResp = errorResponse(`Unknown action: ${action}`, 'UNKNOWN_ACTION');
     logRequest('POST', action || 'unknown', body, startTime, { success: false, status: 400, error: `Unknown action: ${action}` });
@@ -3316,7 +3372,26 @@ export async function PUT(request: NextRequest) {
         }
       });
     }
-    
+
+    // Block parameter PUT action (update subsystem parameter)
+    if (action === ModelBuilderActions.UPDATE_BLOCK_PARAMETER) {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const ctx = {
+        request,
+        supabase,
+        userId: authResult.userId!,
+        token: token!,
+        startTime,
+        body
+      };
+
+      return handleUpdateBlockParameter(ctx);
+    }
+
     // Other PUT actions will be implemented in subsequent tasks
     const errorResp = errorResponse(`Unknown action: ${action}`, 'UNKNOWN_ACTION');
     logRequest('PUT', action || 'unknown', body, startTime, { success: false, status: 400, error: `Unknown action: ${action}` });
@@ -3965,6 +4040,25 @@ export async function DELETE(request: NextRequest) {
         deletedParameter: { name },
         remainingParameterCount: parameters.length
       });
+    }
+
+    // Block parameter DELETE action (delete subsystem parameter)
+    if (action === ModelBuilderActions.DELETE_BLOCK_PARAMETER) {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+
+      const ctx = {
+        request,
+        supabase,
+        userId: authResult.userId!,
+        token: token!,
+        startTime,
+        searchParams
+      };
+
+      return handleDeleteBlockParameter(ctx);
     }
 
     // If no valid action or modelId

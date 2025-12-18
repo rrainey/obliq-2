@@ -10,12 +10,19 @@ const createJestConfig = nextJest({
 const config = {
   coverageProvider: 'v8',
   testEnvironment: 'jsdom',
+  // Increased timeout for integration tests that make network calls
+  testTimeout: 30000,
   // Add more setup options before each test is run
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
     // Handle module aliases (same as in tsconfig.json)
     '^@/(.*)$': '<rootDir>/$1',
   },
+  // Transform TypeScript files in __tests__ directory
+  transformIgnorePatterns: [
+    '/node_modules/',
+    '^.+\\.module\\.(css|sass|scss)$',
+  ],
   testMatch: [
     '**/__tests__/**/*.test.(js|jsx|ts|tsx)',
     '**/__tests__/**/*.tests.(js|jsx|ts|tsx)',

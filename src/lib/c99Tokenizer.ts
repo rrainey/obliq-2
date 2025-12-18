@@ -250,7 +250,27 @@ export function c99Tokenizer(input: string): C99Token[] {
         column: startColumn
       }
     }
-    
+
+    // Handle binary literals (C99 extension, standardized in C23)
+    if (peek() === '0' && (peek(1) === 'b' || peek(1) === 'B')) {
+      value += peek() + peek(1)
+      advance(2)
+      while (position < input.length && /[01]/.test(peek())) {
+        value += peek()
+        advance()
+      }
+      // Check for integer suffixes
+      while (position < input.length && /[uUlL]/.test(peek())) {
+        value += peek()
+        advance()
+      }
+      return {
+        type: C99TokenType.INTEGER_LITERAL,
+        value,
+        column: startColumn
+      }
+    }
+
     // Handle octal or decimal
     while (position < input.length && /[0-9]/.test(peek())) {
       value += peek()
