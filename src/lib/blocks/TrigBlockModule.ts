@@ -1,7 +1,7 @@
 // lib/blocks/TrigBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class TrigBlockModule implements IBlockModule {
@@ -84,43 +84,6 @@ export class TrigBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const func = blockState.blockData?.parameters?.function || 'sin'
-    
-    if (func === 'atan2') {
-      // atan2(y, x) - requires 2 inputs
-      const y = typeof inputs[0] === 'number' ? inputs[0] : 0
-      const x = typeof inputs[1] === 'number' ? inputs[1] : 0
-      blockState.outputs[0] = Math.atan2(y, x)
-    } else if (func === 'sincos') {
-      // sincos(x) - 1 input, 2 outputs
-      const input = typeof inputs[0] === 'number' ? inputs[0] : 0
-      blockState.outputs[0] = Math.sin(input)
-      blockState.outputs[1] = Math.cos(input)
-    } else {
-      // Single input, single output functions
-      const input = typeof inputs[0] === 'number' ? inputs[0] : 0
-      
-      switch (func) {
-        case 'sin':
-          blockState.outputs[0] = Math.sin(input)
-          break
-        case 'cos':
-          blockState.outputs[0] = Math.cos(input)
-          break
-        case 'atan':
-          blockState.outputs[0] = Math.atan(input)
-          break
-        default:
-          blockState.outputs[0] = 0
-      }
-    }
   }
 
   getInputPortCount(block: BlockData): number {

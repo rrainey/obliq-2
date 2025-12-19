@@ -1,7 +1,7 @@
 // lib/blocks/DemuxBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class DemuxBlockModule implements IBlockModule {
@@ -92,78 +92,6 @@ export class DemuxBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const input = inputs[0]
-    
-    // Handle missing input
-    if (input === undefined) {
-      // Set single output to 0
-      blockState.outputs = [0]
-      return
-    }
-    
-    // Case 1: Scalar input - pass through as single output
-    if (typeof input === 'number' || typeof input === 'boolean') {
-      blockState.outputs = [input]
-      return
-    }
-    
-    // Case 2: 1D array (vector) input
-    if (Array.isArray(input) && !Array.isArray(input[0])) {
-      // Split vector into scalar outputs
-      const vector = input as (number | boolean)[]
-      blockState.outputs = []
-      
-      for (let i = 0; i < vector.length; i++) {
-        blockState.outputs[i] = vector[i]
-      }
-      
-      // Store the output count for dynamic port updates
-      blockState.internalState = {
-        ...blockState.internalState,
-        outputCount: vector.length,
-        inputDimensions: [vector.length]
-      }
-      return
-    }
-    
-    // Case 3: 2D array (matrix) input
-    if (Array.isArray(input) && Array.isArray(input[0])) {
-      // Split matrix into scalar outputs in row-major order
-      const matrix = input as unknown as (number[][] | boolean[][])
-      blockState.outputs = []
-      let outputIndex = 0
-      
-      for (let i = 0; i < matrix.length; i++) {
-        const row = matrix[i]
-        if (Array.isArray(row)) {
-          for (let j = 0; j < row.length; j++) {
-            blockState.outputs[outputIndex] = row[j]
-            outputIndex++
-          }
-        }
-      }
-      
-      // Store the output count and dimensions for dynamic port updates
-      const rows = matrix.length
-      const cols = matrix[0]?.length || 0
-      blockState.internalState = {
-        ...blockState.internalState,
-        outputCount: rows * cols,
-        inputDimensions: [rows, cols]
-      }
-      return
-    }
-    
-    // Fallback for unexpected input types
-    console.warn(`Demux block ${blockState.blockId}: Unexpected input type`)
-    blockState.outputs = [0]
   }
 
   getInputPortCount(block: BlockData): number {

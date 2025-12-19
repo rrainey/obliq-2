@@ -5,7 +5,8 @@
 import { useEffect, useState } from 'react'
 import SignalDisplay from './SignalDisplay'
 import { BlockData } from './BlockNode'
-import { SimulationResults } from '@/lib/simulationEngine'
+import { SimulationResults } from '@/lib/simulationTypes'
+import { WasmSimulationEngine } from '@/lib/simulation/WasmSimulationEngine'
 
 interface SimulationDisplayPanelProps {
   blocks: BlockData[]
@@ -81,7 +82,7 @@ export default function SimulationDisplayPanel({
 // Hook to get real-time signal data during simulation
 export function useSimulationDisplay(
   blocks: BlockData[],
-  simulationEngine: any // SimulationEngine instance
+  simulationEngine: any // WasmSimulationEngine instance
 ) {
   const [displayData, setDisplayData] = useState<Map<string, any[]>>(new Map())
   const signalDisplayBlocks = blocks.filter(block => block.type === 'signal_display')

@@ -6,7 +6,7 @@
  */
 
 import crypto from 'crypto'
-import type { Sheet } from '@/lib/simulationEngine'
+import type { Sheet } from '@/lib/simulationTypes'
 import type { ModelParameter } from '@/lib/modelSchema'
 
 /**

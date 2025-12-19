@@ -2,7 +2,7 @@
 
 import { SourceBlockModule } from '@/lib/blocks/SourceBlockModule'
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 
 describe('Source Block Parameter References (Feature 3)', () => {
   describe('Code Generation', () => {

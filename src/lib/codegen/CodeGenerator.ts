@@ -1,6 +1,6 @@
 // lib/codegen/CodeGenerator.ts
 
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet } from '@/lib/simulationTypes'
 import { ModelFlattener } from './ModelFlattener'
 import { HeaderGenerator } from './HeaderGenerator'
 import { InitFunctionGenerator } from './InitFunctionGenerator'

@@ -5,7 +5,7 @@
  * expected by the existing visualization components.
  */
 
-import { SimulationResults } from '@/lib/simulationEngine'
+import { SimulationResults } from '@/lib/simulationTypes'
 import type { SignalValue } from '@/lib/modelSchema'
 import { Sheet } from '@/components/SheetTabs'
 

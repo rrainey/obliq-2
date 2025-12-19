@@ -4,7 +4,7 @@ import { execSync, ExecSyncOptions } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { generateCCode } from '@/lib/codeGeneration'
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet } from '@/lib/simulationTypes'
 
 describe('Code Generation Compilation Tests', () => {
   const testDir = path.join(__dirname, 'platformio-test')

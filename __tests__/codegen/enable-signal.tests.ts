@@ -2,7 +2,7 @@
 
 import { ModelFlattener } from '@/lib/codegen/ModelFlattener'
 import { CodeGenerator } from '@/lib/codegen/CodeGenerator'
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet } from '@/lib/simulationTypes'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 

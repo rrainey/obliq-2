@@ -1,7 +1,7 @@
 // lib/blocks/MuxBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class MuxBlockModule implements IBlockModule {
@@ -97,109 +97,6 @@ export class MuxBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const rows = blockState.internalState?.rows || 2
-    const cols = blockState.internalState?.cols || 2
-    const outputType = blockState.internalState?.outputType || 'double'
-    
-    // Check if we have the expected number of inputs
-    const expectedInputs = rows * cols
-    if (inputs.length !== expectedInputs) {
-      console.warn(`Mux block ${blockState.blockId} expected ${expectedInputs} inputs but received ${inputs.length}`)
-    }
-    
-    // Special case: 1×1 mux acts as a pass-through
-    if (rows === 1 && cols === 1) {
-      blockState.outputs[0] = inputs[0] !== undefined ? inputs[0] : 0
-      return
-    }
-    
-    // Determine if output should be boolean based on outputType
-    const isBooleanOutput = outputType === 'bool'
-    
-    // Case 1: Vector output (either 1×n or n×1)
-    if (rows === 1 || cols === 1) {
-      const size = Math.max(rows, cols)
-      
-      if (isBooleanOutput) {
-        // Create boolean array
-        const result: boolean[] = []
-        for (let i = 0; i < size; i++) {
-          const input = inputs[i]
-          if (typeof input === 'boolean') {
-            result.push(input)
-          } else if (typeof input === 'number') {
-            result.push(input !== 0) // Convert number to boolean
-          } else {
-            result.push(false) // Default
-          }
-        }
-        blockState.outputs[0] = result
-      } else {
-        // Create number array
-        const result: number[] = []
-        for (let i = 0; i < size; i++) {
-          const input = inputs[i]
-          if (typeof input === 'number') {
-            result.push(input)
-          } else if (typeof input === 'boolean') {
-            result.push(input ? 1 : 0) // Convert boolean to number
-          } else {
-            result.push(0) // Default
-          }
-        }
-        blockState.outputs[0] = result
-      }
-      return
-    }
-    
-    // Case 2: Matrix output (m×n where both > 1)
-    if (isBooleanOutput) {
-      // Create boolean matrix
-      const result: boolean[][] = []
-      for (let i = 0; i < rows; i++) {
-        result[i] = []
-        for (let j = 0; j < cols; j++) {
-          const inputIndex = i * cols + j // Row-major order
-          const input = inputs[inputIndex]
-          
-          if (typeof input === 'boolean') {
-            result[i][j] = input
-          } else if (typeof input === 'number') {
-            result[i][j] = input !== 0 // Convert number to boolean
-          } else {
-            result[i][j] = false // Default
-          }
-        }
-      }
-      // Cast to unknown first to satisfy TypeScript
-      blockState.outputs[0] = result as unknown as number[][]
-    } else {
-      // Create number matrix
-      const result: number[][] = []
-      for (let i = 0; i < rows; i++) {
-        result[i] = []
-        for (let j = 0; j < cols; j++) {
-          const inputIndex = i * cols + j // Row-major order
-          const input = inputs[inputIndex]
-          
-          if (typeof input === 'number') {
-            result[i][j] = input
-          } else if (typeof input === 'boolean') {
-            result[i][j] = input ? 1 : 0 // Convert boolean to number
-          } else {
-            result[i][j] = 0 // Default
-          }
-        }
-      }
-      blockState.outputs[0] = result
-    }
   }
 
   getInputPortCount(block: BlockData): number {

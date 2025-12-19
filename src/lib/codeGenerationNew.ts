@@ -1,6 +1,6 @@
 // lib/codeGenerationNew.ts
 
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet } from '@/lib/simulationTypes'
 import { CodeGenerator, CodeGenerationOptions } from './codegen/CodeGenerator'
 import { ModelParameter } from './modelSchema'
 

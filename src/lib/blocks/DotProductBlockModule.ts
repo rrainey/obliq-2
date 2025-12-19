@@ -1,7 +1,7 @@
 // lib/blocks/DotProductBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class DotProductBlockModule implements IBlockModule {
@@ -45,36 +45,6 @@ export class DotProductBlockModule implements IBlockModule {
 
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
     return []
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const input1 = inputs[0]
-    const input2 = inputs[1]
-    
-    if (!Array.isArray(input1) || !Array.isArray(input2)) {
-      console.warn('Dot product requires vector inputs')
-      blockState.outputs[0] = 0
-      return
-    }
-    
-    // Vectors must have the same dimension
-    if (input1.length !== input2.length) {
-      console.warn(`Dot product requires vectors of same dimension. Got ${input1.length} and ${input2.length}`)
-      blockState.outputs[0] = 0
-      return
-    }
-    
-    // Calculate dot product
-    let dotProduct = 0
-    for (let i = 0; i < input1.length; i++) {
-      dotProduct += (input1[i] as number) * (input2[i] as number)
-    }
-    
-    blockState.outputs[0] = dotProduct
   }
 
   getInputPortCount(block: BlockData): number {

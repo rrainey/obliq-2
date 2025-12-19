@@ -1,7 +1,7 @@
 // lib/blocks/SignalDisplayBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class SignalDisplayBlockModule implements IBlockModule {
@@ -35,35 +35,7 @@ export class SignalDisplayBlockModule implements IBlockModule {
     // No initialization needed
     return ''
   }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const input = inputs[0]
-    const { samples, maxSamples } = blockState.internalState
-    
-    // Check if input is a matrix and reject it
-    if (Array.isArray(input) && Array.isArray(input[0])) {
-      console.error(`Signal display block ${blockState.blockId} cannot display matrix signals. Use separate displays for each matrix element.`)
-      return
-    }
-    
-    // Store the current input value
-    // For vectors, we'll store the entire vector
-    samples.push(input)
-    
-    // Maintain maximum sample count
-    if (samples.length > maxSamples) {
-      samples.shift()
-    }
-    
-    // Signal display blocks don't produce outputs to other blocks
-    // but we store the current value for external access
-    blockState.internalState.currentValue = input
-  }
-
+  
   getInputPortCount(block: BlockData): number {
     // Signal display blocks have exactly 1 input
     return 1

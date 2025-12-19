@@ -1,7 +1,7 @@
 // lib/blocks/OutputPortBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class OutputPortBlockModule implements IBlockModule {
@@ -63,33 +63,6 @@ export class OutputPortBlockModule implements IBlockModule {
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
     // No state needed
     return []
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const input = inputs[0]
-    const portName = blockState.internalState?.portName || 
-                     blockState.blockData?.parameters?.portName || 
-                     `Output_${blockState.blockId}`
-
-    //console.log(`OutputPort ${blockState.blockId} received input:`, input)
-
-    // Ensure internalState exists
-    if (!blockState.internalState) {
-      blockState.internalState = {}
-    }
-
-    // Store the current input value for external access
-    blockState.internalState.portName = portName
-    blockState.internalState.currentValue = input !== undefined ? input : 0
-    blockState.internalState.isConnectedToParent = false // Would be true in subsystem context
-    
-    // Output ports don't produce outputs to other blocks within the same level
-    // They are sink blocks, but we might need to track the value for debugging
-    // or for parent subsystem access
   }
 
   getInputPortCount(block: BlockData): number {

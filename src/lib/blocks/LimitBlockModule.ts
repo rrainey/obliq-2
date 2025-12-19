@@ -1,7 +1,7 @@
 // lib/blocks/LimitBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class LimitBlockModule implements IBlockModule {
@@ -68,45 +68,6 @@ export class LimitBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const lowerLimit = blockState.internalState?.lowerLimit ?? -Infinity
-    const upperLimit = blockState.internalState?.upperLimit ?? Infinity
-    const input = inputs[0]
-
-    if (input === undefined) {
-      blockState.outputs[0] = 0
-      return
-    }
-
-    // Helper function to clamp a value
-    const clamp = (val: number, lower: number, upper: number): number =>
-      Math.max(lower, Math.min(upper, val))
-
-    // Handle different input types
-    if (Array.isArray(input)) {
-      if (Array.isArray(input[0])) {
-        // Matrix input
-        const matrix = input as unknown as number[][]
-        blockState.outputs[0] = matrix.map(row =>
-          row.map(val => clamp(val, lowerLimit, upperLimit))
-        )
-      } else {
-        // Vector input
-        blockState.outputs[0] = (input as number[]).map(val => clamp(val, lowerLimit, upperLimit))
-      }
-    } else if (typeof input === 'number') {
-      // Scalar input
-      blockState.outputs[0] = clamp(input, lowerLimit, upperLimit)
-    } else {
-      // Unsupported type (bool)
-      blockState.outputs[0] = 0
-    }
   }
 
   getInputPortCount(block: BlockData): number {

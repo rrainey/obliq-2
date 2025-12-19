@@ -1,7 +1,7 @@
 // lib/blocks/TransposeBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class TransposeBlockModule implements IBlockModule {
@@ -71,47 +71,6 @@ export class TransposeBlockModule implements IBlockModule {
 
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
     return []
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const input = inputs[0]
-    
-    if (Array.isArray(input) && Array.isArray(input[0])) {
-      // Matrix transpose
-      const matrix = input as number[][]
-      const rows = matrix.length
-      const cols = matrix[0]?.length || 0
-      
-      // Create transposed matrix [cols][rows]
-      const transposed: number[][] = []
-      for (let j = 0; j < cols; j++) {
-        transposed[j] = []
-        for (let i = 0; i < rows; i++) {
-          transposed[j][i] = matrix[i][j]
-        }
-      }
-      
-      blockState.outputs[0] = transposed
-    } else if (Array.isArray(input)) {
-      // Vector transpose: [n] -> [n][1]
-      const vector = input as number[]
-      const transposed: number[][] = []
-      
-      for (let i = 0; i < vector.length; i++) {
-        transposed[i] = [vector[i]]
-      }
-      
-      blockState.outputs[0] = transposed
-    } else if (typeof input === 'number') {
-      // Scalar - no transpose needed
-      blockState.outputs[0] = input
-    } else {
-      blockState.outputs[0] = 0
-    }
   }
 
   getInputPortCount(block: BlockData): number {

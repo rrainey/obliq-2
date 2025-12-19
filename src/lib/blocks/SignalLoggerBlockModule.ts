@@ -1,7 +1,7 @@
 // lib/blocks/SignalLoggerBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class SignalLoggerBlockModule implements IBlockModule {
@@ -34,30 +34,6 @@ export class SignalLoggerBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const input = inputs[0]
-    const { loggedData, timeStamps } = blockState.internalState
-    
-    // Check if input is a matrix and reject it
-    if (Array.isArray(input) && Array.isArray(input[0])) {
-      console.error(`Signal logger block ${blockState.blockId} cannot log matrix signals. Use separate loggers for each matrix element.`)
-      return
-    }
-    
-    // Store both the value and timestamp
-    // For vectors, we'll store the entire vector
-    loggedData.push(input)
-    timeStamps.push(simulationState.time)
-    
-    // Signal logger blocks don't produce outputs to other blocks
-    // but we store the current value for external access
-    blockState.internalState.currentValue = input
   }
 
   getInputPortCount(block: BlockData): number {

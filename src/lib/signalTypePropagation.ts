@@ -5,7 +5,7 @@ import { WireData } from '@/components/Wire'
 import { areTypesCompatible, getTypeCompatibilityError, parseType, ParsedType, typeToString, isMatrixType, getMatrixDimensions } from './typeValidator'
 
 // Debug flag for verbose logging - set to true to enable detailed trace output
-const DEBUG_PROPAGATION = false
+const DEBUG_PROPAGATION = true
 
 function debugLog(...args: unknown[]) {
   if (DEBUG_PROPAGATION) {
@@ -908,34 +908,64 @@ function getSubsystemOutputType(
   outputPortName: string,
   blockOutputTypes: BlockOutputTypes
 ): string | null {
-  if (!subsystemBlock.parameters?.sheets) return null
-  
+  debugLog(`  getSubsystemOutputType: subsystem="${subsystemBlock.name}", port="${outputPortName}"`)
+
+  if (!subsystemBlock.parameters?.sheets) {
+    debugLog(`    FAIL: No sheets in subsystem parameters`)
+    return null
+  }
+
+  debugLog(`    Searching ${subsystemBlock.parameters.sheets.length} sheets`)
+
   // Search through subsystem sheets for the output port block
   for (const sheet of subsystemBlock.parameters.sheets) {
-    for (const block of sheet.blocks) {
-      if (block.type === 'output_port' && 
-          block.parameters?.portName === outputPortName) {
-        
+    debugLog(`    Sheet "${sheet.name || sheet.id}": ${sheet.blocks?.length || 0} blocks, ${sheet.connections?.length || 0} connections`)
+
+    // Log all blocks in this sheet for debugging
+    for (const block of sheet.blocks || []) {
+      if (block.type === 'input_port') {
+        debugLog(`      input_port: "${block.name}", portName="${block.parameters?.portName}", dataType="${block.parameters?.dataType}"`)
+      } else if (block.type === 'output_port') {
+        debugLog(`      output_port: "${block.name}", portName="${block.parameters?.portName}"`)
+      }
+    }
+
+    for (const block of sheet.blocks || []) {
+      // Match portName from parameters, falling back to block name (same logic as syncSubsystemPortsFromSheets)
+      const blockPortName = block.parameters?.portName || block.name
+      if (block.type === 'output_port' && blockPortName === outputPortName) {
+        debugLog(`    Found output_port block: id="${block.id}", name="${block.name}"`)
+
         // Find what connects to this output port
-        const inputWire = sheet.connections.find((w : any) => 
+        const inputWire = sheet.connections?.find((w : any) =>
           w.targetBlockId === block.id && w.targetPortIndex === 0
         )
-        
+
         if (inputWire) {
           const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
+          debugLog(`    Wire found: sourceKey="${sourceKey}"`)
+
           const sourceType = blockOutputTypes.get(sourceKey)
-          
+          debugLog(`    External blockOutputTypes lookup: ${sourceType || 'NOT FOUND'}`)
+
           if (sourceType) {
             return sourceType
           } else {
             // Need to propagate types within the subsystem first
-            // This is where it gets complex - you need recursive propagation
+            debugLog(`    Running recursive propagation on subsystem sheet...`)
             const subsystemResult = propagateSignalTypes(
               sheet.blocks,
               sheet.connections
             )
-            
+
+            debugLog(`    Recursive result: ${subsystemResult.blockOutputTypes.size} types, ${subsystemResult.errors.length} errors`)
+            for (const [key, type] of subsystemResult.blockOutputTypes) {
+              debugLog(`      ${key} = ${type}`)
+            }
+
             const internalSourceType = subsystemResult.blockOutputTypes.get(sourceKey)
+            debugLog(`    Internal lookup for "${sourceKey}": ${internalSourceType || 'NOT FOUND'}`)
+
             if (internalSourceType) {
               // Copy internal types to main type map with prefixed keys
               for (const [key, type] of subsystemResult.blockOutputTypes) {
@@ -944,11 +974,14 @@ function getSubsystemOutputType(
               return internalSourceType
             }
           }
+        } else {
+          debugLog(`    FAIL: No wire connecting to output_port input`)
         }
       }
     }
   }
-  
+
+  debugLog(`    FAIL: No matching output_port found for "${outputPortName}"`)
   return null
 }
 

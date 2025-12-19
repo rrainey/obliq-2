@@ -9,7 +9,7 @@ import {
   parseCacheKey,
   shortCacheKey
 } from '@/lib/wasm/cache/cacheKey'
-import type { Sheet } from '@/lib/simulationEngine'
+import type { Sheet } from '@/lib/simulationTypes'
 
 describe('Cache Key Generation', () => {
   const createSimpleModel = (): Sheet[] => [

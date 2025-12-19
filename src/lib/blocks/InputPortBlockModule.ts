@@ -1,7 +1,7 @@
 // lib/blocks/InputPortBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class InputPortBlockModule implements IBlockModule {
@@ -58,63 +58,6 @@ export class InputPortBlockModule implements IBlockModule {
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
     // No state needed
     return []
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    /*
-    console.log(`InputPort ${blockState.blockId} before execution:`, {
-      outputs: blockState.outputs,
-      portName: blockState.blockData?.parameters?.portName
-    });
-    */
-    
-    // Check if the output has already been set (e.g., by setTestInputs)
-    // If so, we should use that value instead of the default
-    if (blockState.outputs.length > 0 && blockState.outputs[0] !== undefined) {
-      // Value already set, likely by test inputs - keep it
-      //console.log(`InputPort ${blockState.blockId} keeping existing value:`, blockState.outputs[0]);
-      return
-    }
-    
-    // Otherwise, use the default value
-    const portName = blockState.blockData?.parameters?.portName || 'Input'
-    const dataType = blockState.blockData?.parameters?.dataType || 'double'
-    const defaultValue = blockState.blockData?.parameters?.defaultValue || 0
-    
-    // For the modular block system, we output the default value
-    // The simulation engine or adapter will override this with test inputs if needed
-    if (dataType.includes('[')) {
-      // For array types, create array filled with default
-      const parsed = BlockModuleUtils.parseType(dataType)
-      if (parsed.isMatrix && parsed.rows && parsed.cols) {
-        // Create matrix
-        const matrix: number[][] = []
-        for (let i = 0; i < parsed.rows; i++) {
-          matrix[i] = new Array(parsed.cols).fill(defaultValue)
-        }
-        blockState.outputs[0] = matrix
-      } else if (parsed.isArray && parsed.arraySize) {
-        // Create vector
-        blockState.outputs[0] = new Array(parsed.arraySize).fill(defaultValue)
-      } else {
-        blockState.outputs[0] = defaultValue
-      }
-    } else {
-      blockState.outputs[0] = defaultValue
-    }
-    
-    // Update internal state for tracking
-    if (!blockState.internalState) {
-      blockState.internalState = {}
-    }
-    blockState.internalState.portName = portName
-    blockState.internalState.dataType = dataType
-    blockState.internalState.defaultValue = defaultValue
-    blockState.internalState.isConnectedToParent = false
   }
 
   getInputPortCount(block: BlockData): number {

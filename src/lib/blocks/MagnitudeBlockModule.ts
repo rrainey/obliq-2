@@ -1,7 +1,7 @@
 // lib/blocks/MagnitudeBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class MagnitudeBlockModule implements IBlockModule {
@@ -47,28 +47,6 @@ export class MagnitudeBlockModule implements IBlockModule {
 
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
     return []
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const input = inputs[0]
-    
-    if (!Array.isArray(input)) {
-      console.warn('Magnitude requires vector input')
-      blockState.outputs[0] = 0
-      return
-    }
-    
-    // Calculate magnitude of vector: sqrt(sum of squares)
-    let sumOfSquares = 0
-    for (let i = 0; i < input.length; i++) {
-      sumOfSquares += (input[i] as number) * (input[i] as number)
-    }
-    
-    blockState.outputs[0] = Math.sqrt(sumOfSquares)
   }
 
   getInputPortCount(block: BlockData): number {

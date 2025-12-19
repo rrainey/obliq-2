@@ -1,7 +1,7 @@
 // lib/blocks/UnaryMinusBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class UnaryMinusBlockModule implements IBlockModule {
@@ -57,31 +57,6 @@ export class UnaryMinusBlockModule implements IBlockModule {
 
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
     return []
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const input = inputs[0]
-    
-    if (typeof input === 'number') {
-      // Scalar negation
-      blockState.outputs[0] = -input
-    } else if (Array.isArray(input)) {
-      if (Array.isArray(input[0])) {
-        // Matrix negation
-        blockState.outputs[0] = (input as number[][]).map(row => 
-          row.map(val => -val)
-        )
-      } else {
-        // Vector negation
-        blockState.outputs[0] = (input as number[]).map(val => -val)
-      }
-    } else {
-      blockState.outputs[0] = 0
-    }
   }
 
   getInputPortCount(block: BlockData): number {

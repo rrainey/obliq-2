@@ -30,10 +30,10 @@ This module provides a unified interface for creating simulation engines with au
 ```typescript
 export async function createSimulationEngine(
   options: CreateEngineOptions
-): Promise<SimulationEngine | WasmSimulationEngine>
+): Promise<WasmSimulationEngine>
 ```
 
-- Returns either a `SimulationEngine` (JavaScript) or `WasmSimulationEngine` (WASM)
+- Returns a `WasmSimulationEngine` 
 - Async to accommodate WASM initialization
 - Automatically selects engine based on `useWasm` flag or stored preference
 

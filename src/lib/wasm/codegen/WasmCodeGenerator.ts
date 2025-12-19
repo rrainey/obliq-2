@@ -9,7 +9,7 @@
  */
 
 import { CodeGenerator, CodeGenerationOptions, CodeGenerationResult } from '@/lib/codegen/CodeGenerator'
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet } from '@/lib/simulationTypes'
 import { CCodeBuilder } from '@/lib/codegen/CCodeBuilder'
 
 export interface WasmCodeGenerationOptions extends CodeGenerationOptions {

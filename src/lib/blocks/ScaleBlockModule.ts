@@ -1,7 +1,7 @@
 // lib/blocks/ScaleBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class ScaleBlockModule implements IBlockModule {
@@ -67,40 +67,6 @@ export class ScaleBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const gain = blockState.internalState?.gain || 1
-    const input = inputs[0]
-    
-    if (input === undefined) {
-      blockState.outputs[0] = 0
-      return
-    }
-    
-    // Handle different input types
-    if (Array.isArray(input)) {
-      if (Array.isArray(input[0])) {
-        // Matrix input
-        const matrix = input as unknown as number[][]
-        blockState.outputs[0] = matrix.map(row => 
-          row.map(val => val * gain)
-        )
-      } else {
-        // Vector input
-        blockState.outputs[0] = (input as number[]).map(val => val * gain)
-      }
-    } else if (typeof input === 'number') {
-      // Scalar input
-      blockState.outputs[0] = input * gain
-    } else {
-      // Unsupported type
-      blockState.outputs[0] = 0
-    }
   }
 
   getInputPortCount(block: BlockData): number {

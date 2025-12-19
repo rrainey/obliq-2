@@ -1,7 +1,7 @@
 // lib/blocks/Lookup1DBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class Lookup1DBlockModule implements IBlockModule {
@@ -106,96 +106,6 @@ export class Lookup1DBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const input = inputs[0]
-    
-    // Lookup blocks only accept scalar inputs
-    if (Array.isArray(input)) {
-      console.error(`Lookup1D block ${blockState.blockId} received vector input but expects scalar`)
-      blockState.outputs[0] = 0
-      return
-    }
-    
-    const scalarInput = typeof input === 'number' ? input : 0
-    const { inputValues, outputValues, extrapolation } = blockState.internalState
-    
-    // Validate that we have data
-    if (!inputValues || !outputValues || inputValues.length === 0 || outputValues.length === 0) {
-      blockState.outputs[0] = 0
-      return
-    }
-    
-    // Ensure arrays are the same length
-    const minLength = Math.min(inputValues.length, outputValues.length)
-    if (minLength === 0) {
-      blockState.outputs[0] = 0
-      return
-    }
-    
-    // Single point case
-    if (minLength === 1) {
-      blockState.outputs[0] = outputValues[0]
-      return
-    }
-    
-    // Handle extrapolation cases
-    if (scalarInput <= inputValues[0]) {
-      if (extrapolation === 'clamp') {
-        blockState.outputs[0] = outputValues[0]
-      } else { // extrapolate
-        if (minLength >= 2) {
-          const slope = (outputValues[1] - outputValues[0]) / (inputValues[1] - inputValues[0])
-          blockState.outputs[0] = outputValues[0] + slope * (scalarInput - inputValues[0])
-        } else {
-          blockState.outputs[0] = outputValues[0]
-        }
-      }
-      return
-    }
-    
-    if (scalarInput >= inputValues[minLength - 1]) {
-      if (extrapolation === 'clamp') {
-        blockState.outputs[0] = outputValues[minLength - 1]
-      } else { // extrapolate
-        if (minLength >= 2) {
-          const slope = (outputValues[minLength - 1] - outputValues[minLength - 2]) / 
-                       (inputValues[minLength - 1] - inputValues[minLength - 2])
-          blockState.outputs[0] = outputValues[minLength - 1] + slope * (scalarInput - inputValues[minLength - 1])
-        } else {
-          blockState.outputs[0] = outputValues[minLength - 1]
-        }
-      }
-      return
-    }
-    
-    // Find the interpolation interval
-    for (let i = 0; i < minLength - 1; i++) {
-      if (scalarInput >= inputValues[i] && scalarInput <= inputValues[i + 1]) {
-        // Linear interpolation
-        const x0 = inputValues[i]
-        const x1 = inputValues[i + 1]
-        const y0 = outputValues[i]
-        const y1 = outputValues[i + 1]
-        
-        // Avoid division by zero
-        if (x1 === x0) {
-          blockState.outputs[0] = y0
-        } else {
-          const t = (scalarInput - x0) / (x1 - x0)
-          blockState.outputs[0] = y0 + t * (y1 - y0)
-        }
-        return
-      }
-    }
-    
-    // Fallback (shouldn't reach here)
-    blockState.outputs[0] = outputValues[0]
   }
 
   getInputPortCount(block: BlockData): number {

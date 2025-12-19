@@ -1,7 +1,7 @@
 // __tests__/feature3-type-propagation.test.ts
 
 import { CodeGenerator } from '@/lib/codegen/CodeGenerator'
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet } from '@/lib/simulationTypes'
 import { ModelParameter } from '@/lib/modelSchema'
 
 describe('Feature 3: Type Propagation with Parameters', () => {

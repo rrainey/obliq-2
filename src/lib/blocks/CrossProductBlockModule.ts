@@ -1,7 +1,7 @@
 // lib/blocks/CrossProductBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class CrossProductBlockModule implements IBlockModule {
@@ -44,38 +44,6 @@ export class CrossProductBlockModule implements IBlockModule {
 
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
     return []
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const input1 = inputs[0]
-    const input2 = inputs[1]
-    
-    if (!Array.isArray(input1) || !Array.isArray(input2)) {
-      console.warn('Cross product requires vector inputs')
-      blockState.outputs[0] = [0, 0, 0]
-      return
-    }
-    
-    // Cross product is only defined for 3D vectors
-    if (input1.length !== 3 || input2.length !== 3) {
-      console.warn('Cross product requires 3D vectors')
-      blockState.outputs[0] = [0, 0, 0]
-      return
-    }
-    
-    const a = input1 as number[]
-    const b = input2 as number[]
-    
-    // Calculate cross product: a × b
-    blockState.outputs[0] = [
-      a[1] * b[2] - a[2] * b[1],
-      a[2] * b[0] - a[0] * b[2],
-      a[0] * b[1] - a[1] * b[0]
-    ]
   }
 
   getInputPortCount(block: BlockData): number {

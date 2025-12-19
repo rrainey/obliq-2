@@ -1,7 +1,7 @@
 // lib/blocks/AbsoluteValueBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class AbsoluteValueBlockModule implements IBlockModule {
@@ -39,22 +39,6 @@ export class AbsoluteValueBlockModule implements IBlockModule {
 
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
     return []
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const input = inputs[0]
-    
-    if (typeof input === 'number') {
-      blockState.outputs[0] = Math.abs(input)
-    } else {
-      // For non-scalar inputs (which shouldn't happen based on validation)
-      console.warn('Absolute value block requires scalar input')
-      blockState.outputs[0] = 0
-    }
   }
 
   getInputPortCount(block: BlockData): number {

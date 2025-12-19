@@ -1,7 +1,7 @@
 // lib/blocks/SheetLabelSinkBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class SheetLabelSinkBlockModule implements IBlockModule {
@@ -36,26 +36,6 @@ export class SheetLabelSinkBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const signalName = blockState.internalState?.signalName
-    if (!signalName) return
-    
-    // Store the input value indexed by signal name
-    const input = inputs[0] !== undefined ? inputs[0] : 0
-    
-    // Store in sheet label values map
-    if ((simulationState as any).sheetLabelValues) {
-      (simulationState as any).sheetLabelValues.set(signalName, input)
-    }
-    
-    // Also store in internal state for debugging
-    blockState.internalState.currentValue = input
   }
 
   getInputPortCount(block: BlockData): number {

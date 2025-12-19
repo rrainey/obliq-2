@@ -1,6 +1,6 @@
 // __tests__/utils/TestModelBuilder.ts
 
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet } from '@/lib/simulationTypes'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { createBlock } from '@/lib/blockFactory'

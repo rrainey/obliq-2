@@ -1,7 +1,7 @@
 // lib/blocks/SheetLabelSourceBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class SheetLabelSourceBlockModule implements IBlockModule {
@@ -38,31 +38,6 @@ export class SheetLabelSourceBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const signalName = blockState.internalState?.signalName
-    if (!signalName) {
-      blockState.outputs[0] = 0
-      return
-    }
-    
-    // Retrieve the value from sheet label storage
-    let value: any = undefined
-    if ((simulationState as any).sheetLabelValues) {
-      value = (simulationState as any).sheetLabelValues.get(signalName)
-    }
-    
-    if (value !== undefined) {
-      blockState.outputs[0] = value
-    } else {
-      // No sink found or not yet executed
-      blockState.outputs[0] = 0
-    }
   }
 
   getInputPortCount(block: BlockData): number {

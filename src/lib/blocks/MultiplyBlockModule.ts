@@ -1,7 +1,7 @@
 // lib/blocks/MultiplyBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class MultiplyBlockModule implements IBlockModule {
@@ -52,90 +52,6 @@ export class MultiplyBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    if (inputs.length === 0) {
-      blockState.outputs[0] = 0
-      return
-    }
-    
-    // Check if we're dealing with matrices
-    const firstInput = inputs[0]
-    if (Array.isArray(firstInput) && Array.isArray(firstInput[0])) {
-      // Matrix multiplication (element-wise)
-      const firstMatrix = firstInput as unknown as number[][]
-      const rows = firstMatrix.length
-      const cols = firstMatrix[0]?.length || 0
-      
-      // Initialize result matrix with first input
-      const result: number[][] = firstMatrix.map(row => [...row])
-      
-      // Multiply remaining matrices element-wise
-      for (let i = 1; i < inputs.length; i++) {
-        const input = inputs[i]
-        if (Array.isArray(input) && Array.isArray(input[0])) {
-          const matrix = input as unknown as number[][]
-          // Check dimensions match
-          if (matrix.length === rows && matrix[0]?.length === cols) {
-            for (let r = 0; r < rows; r++) {
-              for (let c = 0; c < cols; c++) {
-                result[r][c] *= matrix[r][c]
-              }
-            }
-          } else {
-            console.warn(`Dimension mismatch in multiply block ${blockState.blockId}: expected ${rows}×${cols} matrix`)
-          }
-        } else if (typeof input === 'number') {
-          // Multiply all elements by scalar
-          for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-              result[r][c] *= input
-            }
-          }
-        }
-      }
-      
-      blockState.outputs[0] = result
-    } else if (Array.isArray(firstInput)) {
-      // Vector multiplication (element-wise)
-      const result = [...firstInput] as number[]
-      
-      for (let i = 1; i < inputs.length; i++) {
-        const input = inputs[i]
-        if (Array.isArray(input) && input.length === result.length) {
-          // Element-wise multiplication
-          for (let j = 0; j < result.length; j++) {
-            result[j] *= (input[j] as number) || 0
-          }
-        } else if (typeof input === 'number') {
-          // Multiply all elements by scalar
-          for (let j = 0; j < result.length; j++) {
-            result[j] *= input
-          }
-        } else {
-          // Type mismatch
-          console.warn(`Type mismatch in multiply block ${blockState.blockId}`)
-        }
-      }
-      
-      blockState.outputs[0] = result
-    } else {
-      // Scalar multiplication
-      let product = 1
-      for (const val of inputs) {
-        if (typeof val === 'number') {
-          product *= val
-        }
-      }
-      blockState.outputs[0] = product
-    }
-
-    //console.log(`MultiplyBlock ${blockState.blockId} output:`, blockState.outputs[0])
   }
 
   getInputPortCount(block: BlockData): number {

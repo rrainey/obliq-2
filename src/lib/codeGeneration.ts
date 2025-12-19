@@ -2,7 +2,7 @@
 // This file is maintained for backward compatibility only
 // Please use lib/codeGenerationNew.ts instead
 
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet } from '@/lib/simulationTypes'
 import { ModelCodeGenerator } from './codeGenerationNew'
 
 /**

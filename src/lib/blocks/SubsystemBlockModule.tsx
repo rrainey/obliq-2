@@ -1,7 +1,7 @@
 // lib/blocks/SubsystemBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class SubsystemBlockModule implements IBlockModule {
@@ -36,22 +36,6 @@ export class SubsystemBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    // In the hybrid simulation approach, subsystem blocks are just containers
-    // They don't execute - the MultiSheetSimulationEngine handles their contents
-    
-    const { outputPorts } = blockState.internalState
-    
-    // Initialize outputs to zero (actual values come from internal output ports)
-    for (let i = 0; i < outputPorts.length; i++) {
-      blockState.outputs[i] = 0
-    }
   }
 
   getInputPortCount(block: BlockData): number {

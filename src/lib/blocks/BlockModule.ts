@@ -1,7 +1,7 @@
 // lib/blocks/BlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { parseType, normalizeType, isValidType } from '@/lib/typeValidator'
 
 /**
@@ -66,19 +66,6 @@ export interface IBlockModule {
    * @returns C code for initialization or undefined if not needed
    */
   generateInitialization?(block: BlockData, outputType?: string): string
-
-  /**
-   * Execute the simulation logic for this block.
-   * Updates the blockState outputs based on inputs and internal logic.
-   * @param blockState - The current state of the block including outputs and internal state
-   * @param inputs - Array of input values (numbers, arrays, or matrices)
-   * @param simulationState - The global simulation state for accessing time, signals, etc.
-   */
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void
 
   /**
    * Get the number of input ports for this block.

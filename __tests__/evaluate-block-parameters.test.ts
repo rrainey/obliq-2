@@ -2,7 +2,7 @@
 
 import { EvaluateBlockModule } from '@/lib/blocks/EvaluateBlockModule'
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { C99ExpressionParser } from '@/lib/c99ExpressionParser'
 import { C99ExpressionValidator } from '@/lib/c99ExpressionValidator'
 import { C99ExpressionEvaluator } from '@/lib/c99ExpressionEvaluator'

@@ -1,7 +1,7 @@
 // lib/blocks/SumBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 import { parseType, ParsedType } from '@/lib/typeValidator'
 
@@ -104,98 +104,6 @@ export class SumBlockModule implements IBlockModule {
   generateInitialization(block: BlockData): string {
     // No initialization needed
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    if (inputs.length === 0) {
-      blockState.outputs[0] = 0
-      return
-    }
-
-    // Get signs from block data
-    const signs = blockState.blockData?.parameters?.signs || '+'.repeat(inputs.length)
-
-    // Determine the type from the first input
-    const firstInput = inputs[0]
-    
-    if (Array.isArray(firstInput) && Array.isArray(firstInput[0])) {
-      // All inputs should be matrices with same dimensions
-      const firstMatrix = firstInput as unknown as number[][]
-      const rows = firstMatrix.length
-      const cols = firstMatrix[0]?.length || 0
-      
-      // Initialize result matrix with zeros
-      const result: number[][] = Array(rows).fill(null).map(() => Array(cols).fill(0))
-      
-      // Process each input signal
-      for (let inputIdx = 0; inputIdx < inputs.length; inputIdx++) {
-        const sign = signs[inputIdx] || '+'
-        const inputSignal = inputs[inputIdx]
-        
-        if (Array.isArray(inputSignal) && Array.isArray(inputSignal[0])) {
-          const matrix = inputSignal as unknown as number[][]
-          // Add/subtract this matrix to the result
-          for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-              if (sign === '+') {
-                result[r][c] += matrix[r][c]
-              } else {
-                result[r][c] -= matrix[r][c]
-              }
-            }
-          }
-        }
-      }
-      
-      blockState.outputs[0] = result
-      
-    } else if (Array.isArray(firstInput)) {
-      // All inputs should be vectors with same length
-      const length = firstInput.length
-      const result = new Array(length).fill(0)
-      
-      // Process each input signal
-      for (let inputIdx = 0; inputIdx < inputs.length; inputIdx++) {
-        const sign = signs[inputIdx] || '+'
-        const inputSignal = inputs[inputIdx]
-        
-        if (Array.isArray(inputSignal) && inputSignal.length === length) {
-          // Add/subtract this vector to the result
-          for (let i = 0; i < length; i++) {
-            if (sign === '+') {
-              result[i] += (inputSignal[i] as number) || 0
-            } else {
-              result[i] -= (inputSignal[i] as number) || 0
-            }
-          }
-        }
-      }
-      
-      blockState.outputs[0] = result
-      
-    } else {
-      // All inputs should be scalars
-      let sum = 0
-      
-      for (let inputIdx = 0; inputIdx < inputs.length; inputIdx++) {
-        const sign = signs[inputIdx] || '+'
-        const val = inputs[inputIdx]
-        
-        if (typeof val === 'number') {
-          if (sign === '+') {
-            sum += val
-          } else {
-            sum -= val
-          }
-        }
-      }
-      
-      blockState.outputs[0] = sum
-    }
   }
 
   getInputPortCount(block: BlockData): number {

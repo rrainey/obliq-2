@@ -1,6 +1,6 @@
 // lib/codegen/SubsystemInfo.ts
 
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet } from '@/lib/simulationTypes'
 import { ModelParameter } from '@/lib/modelSchema'
 import { FlattenedModel } from './ModelFlattener'
 

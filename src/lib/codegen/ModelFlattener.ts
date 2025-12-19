@@ -2,7 +2,7 @@
 
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet } from '@/lib/simulationTypes'
 import { CCodeBuilder } from '@/lib/codegen/CCodeBuilder'
 import { ModelParameter } from '@/lib/modelSchema'
 import { SubsystemInfo, SubsystemPort } from './SubsystemInfo'

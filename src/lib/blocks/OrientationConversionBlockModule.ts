@@ -1,7 +1,7 @@
 // lib/blocks/OrientationConversionBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 /**
@@ -317,38 +317,6 @@ export class OrientationConversionBlockModule implements IBlockModule {
 
   generateInitialization(block: BlockData): string {
     return ''
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    const conversionType: OrientationConversionType =
-      blockState.blockData?.parameters?.conversionType || 'euler_to_dcm'
-
-    switch (conversionType) {
-      case 'euler_to_dcm':
-        this.simEulerToDCM(blockState, inputs)
-        break
-      case 'dcm_to_euler':
-        this.simDCMToEuler(blockState, inputs)
-        break
-      case 'euler_to_quat':
-        this.simEulerToQuat(blockState, inputs)
-        break
-      case 'dcm_to_quat':
-        this.simDCMToQuat(blockState, inputs)
-        break
-      case 'quat_to_euler':
-        this.simQuatToEuler(blockState, inputs)
-        break
-      case 'quat_to_dcm':
-        this.simQuatToDCM(blockState, inputs)
-        break
-      default:
-        blockState.outputs[0] = 0
-    }
   }
 
   private simEulerToDCM(

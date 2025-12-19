@@ -1,7 +1,7 @@
 // __tests__/codegen/model-flattening.test.ts
 
 import { ModelFlattener } from '@/lib/codegen/ModelFlattener'
-import { Sheet } from '@/lib/simulationEngine'
+import { Sheet } from '@/lib/simulationTypes'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 

@@ -19,7 +19,7 @@
  * ```
  */
 
-import { SimulationConfig } from '@/lib/simulationEngine'
+import { SimulationConfig } from '@/lib/simulationTypes'
 import { WasmSimulationEngine } from '@/lib/simulation/WasmSimulationEngine'
 import {
   SimulationWorkerManager,

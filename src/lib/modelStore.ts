@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
-import { SimulationResults, SimulationEngine } from '@/lib/simulationEngine'
+import { SimulationResults } from '@/lib/simulationTypes'
+import { WasmSimulationEngine } from './simulation/WasmSimulationEngine'
 import { Model, ModelVersion } from '@/lib/types'
 import { supabase } from '@/lib/supabaseClient'
 import { SignalValue, ModelParameter } from '@/lib/modelSchema'
@@ -55,7 +56,7 @@ export interface ModelState {
   currentSheetSimulationResults: SimulationResults | null 
   simulationResults: SimulationResults | null
   isSimulating: boolean
-  simulationEngine: SimulationEngine | null
+  simulationEngine: WasmSimulationEngine | null
   outputPortValues: Map<string, SignalValue> | null
   
   // Loading states
@@ -142,7 +143,6 @@ export interface ModelActions {
   // Simulation actions
   setSimulationResults: (results: SimulationResults | null) => void
   setIsSimulating: (simulating: boolean) => void
-  setSimulationEngine: (engine: SimulationEngine | null) => void
   setOutputPortValues: (values: Map<string, SignalValue > | null | undefined) => void
   setGlobalSimulationResults: (results: Map<string, SimulationResults>) => void
   clearGlobalSimulationResults: () => void
@@ -1338,7 +1338,7 @@ export const useModelStore = create<ModelStore>()(
     // Simulation actions
     setSimulationResults: (simulationResults) => set({ simulationResults }),
     setIsSimulating: (isSimulating) => set({ isSimulating }),
-    setSimulationEngine: (simulationEngine) => set({ simulationEngine }),
+    setSimulationEngine: (simulationEngine: any) => set({ simulationEngine }),
     setOutputPortValues: (outputPortValues) => set({ outputPortValues }),
 
     // Composite actions

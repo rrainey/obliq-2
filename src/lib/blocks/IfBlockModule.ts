@@ -1,7 +1,7 @@
 // lib/blocks/IfBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationEngine'
+import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 import { SignalValue } from '@/lib/modelSchema'
 
@@ -82,66 +82,6 @@ export class IfBlockModule implements IBlockModule {
 
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
     return []
-  }
-
-  executeSimulation(
-    blockState: BlockState,
-    inputs: (number | number[] | boolean | boolean[] | number[][])[],
-    simulationState: SimulationState
-  ): void {
-    if (inputs.length < 3) {
-      console.warn('If block requires 3 inputs')
-      blockState.outputs[0] = 0
-      return
-    }
-    
-    const input1 = inputs[0]
-    const control = inputs[1]
-    const input2 = inputs[2]
-    
-    // Determine if control is truthy
-    let isTrue = false
-    if (typeof control === 'boolean') {
-      isTrue = control
-    } else if (typeof control === 'number') {
-      isTrue = control !== 0
-    } else if (Array.isArray(control)) {
-      // For arrays, check if first element is truthy
-      isTrue = control.length > 0 && control[0] !== 0 && control[0] !== false
-    }
-    
-    // Select output based on control
-    if (isTrue) {
-      // Output = input2
-      if (Array.isArray(input2)) {
-        // Deep copy for arrays/matrices
-        if (Array.isArray(input2[0])) {
-          // Matrix
-          blockState.outputs[0] = (input2 as number[][]).map(row => [...row])
-        } else {
-          // Vector
-          blockState.outputs[0] = ([...input2] as SignalValue)
-        }
-      } else {
-        // Scalar
-        blockState.outputs[0] = input2
-      }
-    } else {
-      // Output = input1
-      if (Array.isArray(input1)) {
-        // Deep copy for arrays/matrices
-        if (Array.isArray(input1[0])) {
-          // Matrix
-          blockState.outputs[0] = (input1 as number[][]).map(row => [...row])
-        } else {
-          // Vector
-          blockState.outputs[0] = ([...input1] as SignalValue)
-        }
-      } else {
-        // Scalar
-        blockState.outputs[0] = input1
-      }
-    }
   }
 
   getInputPortCount(block: BlockData): number {
