@@ -247,8 +247,11 @@ export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextRe
  * UPDATE_BLOCK_PARAMETERS - Update a block's parameters
  */
 export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<NextResponse> {
+  console.log('[UPDATE_BLOCK_PARAMETERS] Handler invoked (v2 with pre-merge)');
+
   const { supabase, body } = ctx;
-  const { modelId, sheetId, blockId, parameters } = body || {};
+  const { modelId, sheetId, blockId } = body || {};
+  let { parameters } = body || {};
 
   // Validate required parameters
   if (!modelId) {
@@ -263,6 +266,11 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
   if (!parameters || typeof parameters !== 'object') {
     return errorResponse('Invalid parameters: must be an object', 'INVALID_PARAMETERS', 400);
   }
+
+  // Handle case where caller sends an array of subsystem parameter definitions directly
+  // instead of wrapping it as { parameters: [...] }. This is a common MCP client pattern.
+  // We need to know the block type first, so we defer this normalization until after finding the block.
+  const rawParametersIsArray = Array.isArray(parameters);
 
   // Get the latest version of the model
   const { data: versionData, error: versionError } = await supabase
@@ -299,22 +307,83 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
   const block = blocks[blockIndex];
   const blockType = block.type;
 
+  // Normalize parameters for subsystem blocks when caller sends an array directly
+  // This handles the case where MCP clients send updates.parameters as an array of
+  // subsystem parameter definitions instead of { parameters: [...] }
+  if (blockType === BlockTypes.SUBSYSTEM && rawParametersIsArray) {
+    console.log('[UPDATE_BLOCK_PARAMETERS] Normalizing array parameters for subsystem');
+    parameters = { parameters: parameters };
+  }
+
+  // For subsystem blocks, pre-merge incoming parameters with existing block parameters
+  // before validation. This ensures the validator sees the complete context (e.g., existing
+  // codeGenStrategy) when validating partial updates. Without this, updating just the
+  // 'parameters' array would fail validation because the validator wouldn't know the
+  // existing codeGenStrategy is 'segregated'.
+  if (blockType === BlockTypes.SUBSYSTEM) {
+    parameters = {
+      ...block.parameters,  // Existing values (codeGenStrategy, inputPorts, etc.)
+      ...parameters         // Incoming updates override existing
+    };
+    // Remove sheets from the merged parameters to avoid re-validating them
+    // (sheets are handled separately via the merge after validation)
+    delete parameters.sheets;
+  }
+
+  // DEBUG: Log incoming request for subsystems
+  if (blockType === BlockTypes.SUBSYSTEM) {
+    console.log('[UPDATE_BLOCK_PARAMETERS] ========== SUBSYSTEM UPDATE ==========');
+    console.log('[UPDATE_BLOCK_PARAMETERS] Block ID:', blockId);
+    console.log('[UPDATE_BLOCK_PARAMETERS] Block Name:', block.name);
+    console.log('[UPDATE_BLOCK_PARAMETERS] Incoming request parameters:', JSON.stringify(parameters, null, 2));
+    console.log('[UPDATE_BLOCK_PARAMETERS] Request has "sheets" key?', 'sheets' in parameters, 'value:', parameters.sheets);
+    console.log('[UPDATE_BLOCK_PARAMETERS] Existing block.parameters.sheets?', !!block.parameters?.sheets, 'count:', block.parameters?.sheets?.length);
+  }
+
   // Validate parameters based on block type
   const validation = validateBlockParameters(blockType, parameters);
 
   if (!validation.valid) {
+    // Include validation errors directly in the error message for better visibility
+    const errorSummary = validation.errors?.slice(0, 3).join('; ') || 'Unknown validation error';
+    const moreErrors = (validation.errors?.length || 0) > 3 ? ` (and ${validation.errors!.length - 3} more)` : '';
+
     return NextResponse.json({
       success: false,
       timestamp: new Date().toISOString(),
-      error: 'Parameter validation failed',
+      error: `Parameter validation failed: ${errorSummary}${moreErrors}`,
       code: 'VALIDATION_FAILED',
+      errors: validation.errors,  // Also at top level for easier access
       details: { errors: validation.errors }
     }, { status: 400 });
   }
 
   // Update block parameters
   const oldParameters = { ...block.parameters };
-  block.parameters = validation.sanitizedParameters;
+
+  // For subsystem blocks, MERGE parameters to preserve sheets and internal data
+  // that shouldn't be modified via UPDATE_BLOCK_PARAMETERS
+  if (blockType === BlockTypes.SUBSYSTEM) {
+    // DEBUG: Log detailed merge information
+    console.log('[UPDATE_BLOCK_PARAMETERS] Validation passed. Sanitized parameters:');
+    console.log('[UPDATE_BLOCK_PARAMETERS]   - sanitizedParameters keys:', Object.keys(validation.sanitizedParameters || {}));
+    console.log('[UPDATE_BLOCK_PARAMETERS]   - sanitizedParameters has "sheets" key?', 'sheets' in (validation.sanitizedParameters || {}));
+    console.log('[UPDATE_BLOCK_PARAMETERS]   - sanitizedParameters.sheets value:', validation.sanitizedParameters?.sheets);
+
+    console.log('[UPDATE_BLOCK_PARAMETERS] BEFORE merge - block.parameters keys:', Object.keys(block.parameters || {}));
+    console.log('[UPDATE_BLOCK_PARAMETERS] BEFORE merge - block.parameters.sheets?', !!block.parameters?.sheets, 'count:', block.parameters?.sheets?.length);
+
+    block.parameters = {
+      ...block.parameters,              // Keep existing (sheets, internal state)
+      ...validation.sanitizedParameters // Apply sanitized updates
+    };
+
+    console.log('[UPDATE_BLOCK_PARAMETERS] AFTER merge - block.parameters keys:', Object.keys(block.parameters || {}));
+    console.log('[UPDATE_BLOCK_PARAMETERS] AFTER merge - block.parameters.sheets?', !!block.parameters?.sheets, 'count:', block.parameters?.sheets?.length);
+    console.log('[UPDATE_BLOCK_PARAMETERS] ========================================');
+  } else {
+    block.parameters = validation.sanitizedParameters;
+  }
 
   // For Sum and Multiply blocks, update ports based on numInputs
   if (blockType === BlockTypes.SUM || blockType === BlockTypes.MULTIPLY) {

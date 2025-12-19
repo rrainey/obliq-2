@@ -143,8 +143,12 @@ export class ModelBuilderAPIClient {
 
       if (!data.success) {
         console.error(`[Request #${requestId}] API returned error: ${data.error || 'Unknown error'}`);
-        if (data.errors) {
-          console.error(`[Request #${requestId}] Error details:`, data.errors);
+        // Check for errors in both locations (top-level and in details)
+        const errors = data.errors || (data as any).details?.errors;
+        if (errors) {
+          console.error(`[Request #${requestId}] Error details:`, errors);
+          // Ensure errors are available at the top level for consumers
+          data.errors = errors;
         }
       }
 

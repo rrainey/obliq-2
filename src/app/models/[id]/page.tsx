@@ -693,16 +693,17 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     if (!settingsValidation.isValid) {
       return
     }
-    
+
     const globalSettings = {
       simulationTimeStep: settingsValidation.timeStep,
       simulationDuration: settingsValidation.duration
     }
 
-    const success = await saveAsNewModel(newName, globalSettings)
-    if (success) {
+    const newModelId = await saveAsNewModel(newName, globalSettings)
+    if (newModelId) {
       setShowSaveAsDialog(false)
-      // Navigation is handled in the store
+      // Navigate to the new model (standard IDE "Save As" behavior)
+      router.push(`/models/${newModelId}`)
     }
   }
 

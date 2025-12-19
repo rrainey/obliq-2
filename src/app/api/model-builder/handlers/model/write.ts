@@ -108,8 +108,8 @@ export async function handleCreateModel(ctx: HandlerContext): Promise<NextRespon
  * UPDATE_MODEL_NAME - Update a model's name
  */
 export async function handleUpdateModelName(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, modelId, userId, body } = ctx;
-  const { name } = body || {};
+  const { supabase, userId, body } = ctx;
+  const { modelId, name } = body || {};
 
   if (!modelId) {
     return ErrorResponses.missingParameter('modelId');
@@ -122,7 +122,7 @@ export async function handleUpdateModelName(ctx: HandlerContext): Promise<NextRe
   // Verify model exists and user owns it
   const { data: model, error: fetchError } = await supabase
     .from('models')
-    .select('id, user_id')
+    .select('id, name, user_id')
     .eq('id', modelId)
     .single();
 
@@ -138,6 +138,9 @@ export async function handleUpdateModelName(ctx: HandlerContext): Promise<NextRe
       code: 'FORBIDDEN'
     }, { status: 403 });
   }
+
+  // Store previous name before updating
+  const previousName = model.name;
 
   // Update the model name
   const { data: updatedModel, error: updateError } = await supabase
@@ -155,6 +158,7 @@ export async function handleUpdateModelName(ctx: HandlerContext): Promise<NextRe
   return successResponse({
     id: updatedModel.id,
     name: updatedModel.name,
+    previousName,
     updated_at: updatedModel.updated_at
   });
 }
