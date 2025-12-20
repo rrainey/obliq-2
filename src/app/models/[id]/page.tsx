@@ -39,6 +39,7 @@ import EvaluateConfig from '@/components/EvaluateConfig'
 import LimitConfig from '@/components/LimitConfig'
 import IntegratorConfig from '@/components/IntegratorConfig'
 import OrientationConversionConfig from '@/components/OrientationConversionConfig'
+import UnitsConversionConfig from '@/components/UnitsConversionConfig'
 import CommentConfig from '@/components/CommentConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
@@ -1328,6 +1329,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'condition' ||
       block.type === 'evaluate' ||
       block.type === 'orientation_conversion' ||
+      block.type === 'units_conversion' ||
       block.type === 'comment'
     )) {
       console.log('Setting config block:', block)
@@ -2015,6 +2017,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'orientation_conversion' && (
             <OrientationConversionConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'units_conversion' && (
+            <UnitsConversionConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

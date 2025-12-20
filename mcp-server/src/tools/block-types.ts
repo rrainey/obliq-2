@@ -712,6 +712,94 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     outputs: ['DCM'],
     dynamicPorts: 'Inputs and outputs change based on conversionType'
   },
+  {
+    type: 'units_conversion',
+    displayName: 'Units Conversion',
+    category: 'Aerospace',
+    description: 'Converts between SI and American/Imperial engineering units. Select a category first, then choose the specific conversion.',
+    parameters: {
+      category: {
+        type: 'string',
+        description: 'Unit category',
+        default: 'angle',
+        enum: [
+          'angle',
+          'temperature',
+          'length',
+          'velocity',
+          'angular_velocity',
+          'acceleration',
+          'mass',
+          'force',
+          'pressure',
+          'area',
+          'volume',
+          'energy',
+          'power',
+          'torque',
+          'density',
+          'flow_rate'
+        ]
+      },
+      conversionType: {
+        type: 'string',
+        description: 'Specific conversion to perform. Available conversions depend on category:\n' +
+          '  angle: deg_to_rad, rad_to_deg, rev_to_rad, rev_to_deg\n' +
+          '  temperature: c_to_f, f_to_c, c_to_k, k_to_c, f_to_r, r_to_f\n' +
+          '  length: m_to_ft, ft_to_m, m_to_in, in_to_m, km_to_mi, mi_to_km, km_to_nmi, nmi_to_km\n' +
+          '  velocity: mps_to_fps, fps_to_mps, mps_to_kts, kts_to_mps, mps_to_mph, mph_to_mps, kmh_to_mph, mph_to_kmh\n' +
+          '  angular_velocity: radps_to_degps, degps_to_radps, radps_to_rpm, rpm_to_radps\n' +
+          '  acceleration: mps2_to_fps2, fps2_to_mps2, mps2_to_g, g_to_mps2\n' +
+          '  mass: kg_to_lbm, lbm_to_kg, kg_to_slug, slug_to_kg\n' +
+          '  force: n_to_lbf, lbf_to_n\n' +
+          '  pressure: pa_to_psi, psi_to_pa, pa_to_atm, atm_to_pa, pa_to_inhg, inhg_to_pa, pa_to_mbar, mbar_to_pa\n' +
+          '  area: m2_to_ft2, ft2_to_m2, m2_to_in2, in2_to_m2, km2_to_mi2, mi2_to_km2, ha_to_acre, acre_to_ha\n' +
+          '  volume: m3_to_ft3, ft3_to_m3, l_to_gal, gal_to_l, m3_to_in3, in3_to_m3\n' +
+          '  energy: j_to_btu, btu_to_j, j_to_ftlbf, ftlbf_to_j\n' +
+          '  power: w_to_hp, hp_to_w, w_to_btuh, btuh_to_w\n' +
+          '  torque: nm_to_lbft, lbft_to_nm, nm_to_lbin, lbin_to_nm\n' +
+          '  density: kgm3_to_lbft3, lbft3_to_kgm3, kgm3_to_slugft3, slugft3_to_kgm3\n' +
+          '  flow_rate: m3s_to_cfm, cfm_to_m3s, lpm_to_gpm, gpm_to_lpm',
+        default: 'deg_to_rad',
+        enum: [
+          // Angle
+          'deg_to_rad', 'rad_to_deg', 'rev_to_rad', 'rev_to_deg',
+          // Temperature
+          'c_to_f', 'f_to_c', 'c_to_k', 'k_to_c', 'f_to_r', 'r_to_f',
+          // Length
+          'm_to_ft', 'ft_to_m', 'm_to_in', 'in_to_m', 'km_to_mi', 'mi_to_km', 'km_to_nmi', 'nmi_to_km',
+          // Velocity
+          'mps_to_fps', 'fps_to_mps', 'mps_to_kts', 'kts_to_mps', 'mps_to_mph', 'mph_to_mps', 'kmh_to_mph', 'mph_to_kmh',
+          // Angular velocity
+          'radps_to_degps', 'degps_to_radps', 'radps_to_rpm', 'rpm_to_radps',
+          // Acceleration
+          'mps2_to_fps2', 'fps2_to_mps2', 'mps2_to_g', 'g_to_mps2',
+          // Mass
+          'kg_to_lbm', 'lbm_to_kg', 'kg_to_slug', 'slug_to_kg',
+          // Force
+          'n_to_lbf', 'lbf_to_n',
+          // Pressure
+          'pa_to_psi', 'psi_to_pa', 'pa_to_atm', 'atm_to_pa', 'pa_to_inhg', 'inhg_to_pa', 'pa_to_mbar', 'mbar_to_pa',
+          // Area
+          'm2_to_ft2', 'ft2_to_m2', 'm2_to_in2', 'in2_to_m2', 'km2_to_mi2', 'mi2_to_km2', 'ha_to_acre', 'acre_to_ha',
+          // Volume
+          'm3_to_ft3', 'ft3_to_m3', 'l_to_gal', 'gal_to_l', 'm3_to_in3', 'in3_to_m3',
+          // Energy
+          'j_to_btu', 'btu_to_j', 'j_to_ftlbf', 'ftlbf_to_j',
+          // Power
+          'w_to_hp', 'hp_to_w', 'w_to_btuh', 'btuh_to_w',
+          // Torque
+          'nm_to_lbft', 'lbft_to_nm', 'nm_to_lbin', 'lbin_to_nm',
+          // Density
+          'kgm3_to_lbft3', 'lbft3_to_kgm3', 'kgm3_to_slugft3', 'slugft3_to_kgm3',
+          // Flow rate
+          'm3s_to_cfm', 'cfm_to_m3s', 'lpm_to_gpm', 'gpm_to_lpm'
+        ]
+      }
+    },
+    inputs: ['input'],
+    outputs: ['output']
+  },
 
   // === Annotation ===
   {

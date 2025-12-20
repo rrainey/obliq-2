@@ -387,6 +387,117 @@ const getBlockSymbol = (data: BlockNodeData) => {
     )
   }
 
+  // Handle units conversion block - display the conversion label
+  if (data.type === 'units_conversion') {
+    const convType: string = data.parameters?.conversionType || 'deg_to_rad'
+    // Display labels for common conversions
+    const convDisplay: Record<string, string> = {
+      // Angle
+      'deg_to_rad': 'deg→rad',
+      'rad_to_deg': 'rad→deg',
+      'rev_to_rad': 'rev→rad',
+      'rev_to_deg': 'rev→deg',
+      // Temperature
+      'c_to_f': 'C→F',
+      'f_to_c': 'F→C',
+      'c_to_k': 'C→K',
+      'k_to_c': 'K→C',
+      'f_to_r': 'F→R',
+      'r_to_f': 'R→F',
+      // Length
+      'm_to_ft': 'm→ft',
+      'ft_to_m': 'ft→m',
+      'm_to_in': 'm→in',
+      'in_to_m': 'in→m',
+      'km_to_mi': 'km→mi',
+      'mi_to_km': 'mi→km',
+      'km_to_nmi': 'km→nmi',
+      'nmi_to_km': 'nmi→km',
+      // Velocity
+      'mps_to_fps': 'm/s→ft/s',
+      'fps_to_mps': 'ft/s→m/s',
+      'mps_to_kts': 'm/s→kts',
+      'kts_to_mps': 'kts→m/s',
+      'mps_to_mph': 'm/s→mph',
+      'mph_to_mps': 'mph→m/s',
+      'kmh_to_mph': 'km/h→mph',
+      'mph_to_kmh': 'mph→km/h',
+      // Angular velocity
+      'radps_to_degps': 'rad/s→deg/s',
+      'degps_to_radps': 'deg/s→rad/s',
+      'radps_to_rpm': 'rad/s→rpm',
+      'rpm_to_radps': 'rpm→rad/s',
+      // Acceleration
+      'mps2_to_fps2': 'm/s2→ft/s2',
+      'fps2_to_mps2': 'ft/s2→m/s2',
+      'mps2_to_g': 'm/s2→g',
+      'g_to_mps2': 'g→m/s2',
+      // Mass
+      'kg_to_lbm': 'kg→lbm',
+      'lbm_to_kg': 'lbm→kg',
+      'kg_to_slug': 'kg→slug',
+      'slug_to_kg': 'slug→kg',
+      // Force
+      'n_to_lbf': 'N→lbf',
+      'lbf_to_n': 'lbf→N',
+      // Pressure
+      'pa_to_psi': 'Pa→psi',
+      'psi_to_pa': 'psi→Pa',
+      'pa_to_atm': 'Pa→atm',
+      'atm_to_pa': 'atm→Pa',
+      'pa_to_inhg': 'Pa→inHg',
+      'inhg_to_pa': 'inHg→Pa',
+      'pa_to_mbar': 'Pa→mbar',
+      'mbar_to_pa': 'mbar→Pa',
+      // Area
+      'm2_to_ft2': 'm2→ft2',
+      'ft2_to_m2': 'ft2→m2',
+      'm2_to_in2': 'm2→in2',
+      'in2_to_m2': 'in2→m2',
+      'km2_to_mi2': 'km2→mi2',
+      'mi2_to_km2': 'mi2→km2',
+      'ha_to_acre': 'ha→acre',
+      'acre_to_ha': 'acre→ha',
+      // Volume
+      'm3_to_ft3': 'm3→ft3',
+      'ft3_to_m3': 'ft3→m3',
+      'l_to_gal': 'L→gal',
+      'gal_to_l': 'gal→L',
+      'm3_to_in3': 'm3→in3',
+      'in3_to_m3': 'in3→m3',
+      // Energy
+      'j_to_btu': 'J→BTU',
+      'btu_to_j': 'BTU→J',
+      'j_to_ftlbf': 'J→ft-lbf',
+      'ftlbf_to_j': 'ft-lbf→J',
+      // Power
+      'w_to_hp': 'W→hp',
+      'hp_to_w': 'hp→W',
+      'w_to_btuh': 'W→BTU/h',
+      'btuh_to_w': 'BTU/h→W',
+      // Torque
+      'nm_to_lbft': 'N-m→lb-ft',
+      'lbft_to_nm': 'lb-ft→N-m',
+      'nm_to_lbin': 'N-m→lb-in',
+      'lbin_to_nm': 'lb-in→N-m',
+      // Density
+      'kgm3_to_lbft3': 'kg/m3→lb/ft3',
+      'lbft3_to_kgm3': 'lb/ft3→kg/m3',
+      'kgm3_to_slugft3': 'kg/m3→slug/ft3',
+      'slugft3_to_kgm3': 'slug/ft3→kg/m3',
+      // Flow rate
+      'm3s_to_cfm': 'm3/s→CFM',
+      'cfm_to_m3s': 'CFM→m3/s',
+      'lpm_to_gpm': 'L/min→GPM',
+      'gpm_to_lpm': 'GPM→L/min',
+    }
+    return (
+      <div className="text-xs font-mono">
+        { convDisplay[convType] || convType }
+      </div>
+    )
+  }
+
   // Regular symbols for other blocks
   const symbols: Record<string, string> = {
     'sum': '∑',
@@ -413,6 +524,7 @@ const getBlockSymbol = (data: BlockNodeData) => {
     'evaluate': 'f(x)', // Fallback if no expression
     'condition': 'x1?', // Fallback if no condition
     'orientation_conversion': 'E↔DCM', // Fallback for orientation conversion
+    'units_conversion': 'Units', // Fallback for units conversion
   }
 
   return symbols[data.type] || '?'

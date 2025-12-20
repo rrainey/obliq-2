@@ -69,6 +69,7 @@ export const BlockTypes = {
 
   // Aerospace blocks
   ORIENTATION_CONVERSION: 'orientation_conversion',
+  UNITS_CONVERSION: 'units_conversion',
 
   // Annotation blocks
   COMMENT: 'comment',
@@ -510,6 +511,19 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     ],
     outputs: [{ name: 'DCM' }],
     description: 'Converts between Euler angles, DCM, and Quaternion representations (AIAA/ANSI aerospace convention)'
+  },
+
+  [BlockTypes.UNITS_CONVERSION]: {
+    type: BlockTypes.UNITS_CONVERSION,
+    displayName: 'Units Conversion',
+    category: 'Aerospace',
+    defaultParameters: {
+      conversionType: 'deg_to_rad',
+      category: 'angle'
+    },
+    inputs: [{ name: 'input' }],
+    outputs: [{ name: 'output' }],
+    description: 'Converts between SI and American/Imperial engineering units'
   },
 
   [BlockTypes.COMMENT]: {

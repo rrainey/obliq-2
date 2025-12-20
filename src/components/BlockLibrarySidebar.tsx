@@ -268,6 +268,14 @@ const blockTypes: BlockType[] = [
     icon: 'E↔q',
     vectorSupport: 'full'
   },
+  {
+    id: 'units_conversion',
+    name: 'Units Conversion',
+    category: 'Aerospace',
+    description: 'Convert between SI and American/Imperial engineering units',
+    icon: 'U',
+    vectorSupport: 'full'
+  },
 
   // Control Flow
   {

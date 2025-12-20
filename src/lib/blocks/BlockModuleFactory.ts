@@ -26,6 +26,7 @@ import { UnaryMinusBlockModule } from './UnaryMinusBlockModule'
 import { LimitBlockModule } from './LimitBlockModule'
 import { IntegratorBlockModule } from './IntegratorBlockModule'
 import { OrientationConversionBlockModule } from './OrientationConversionBlockModule'
+import { UnitsConversionBlockModule } from './UnitsConversionBlockModule'
 
 import { SheetLabelSinkBlockModule } from './SheetLabelSinkBlockModule'
 import { SheetLabelSourceBlockModule } from './SheetLabelSourceBlockModule'
@@ -157,6 +158,9 @@ export class BlockModuleFactory {
       case 'orientation_conversion':
         return new OrientationConversionBlockModule()
 
+      case 'units_conversion':
+        return new UnitsConversionBlockModule()
+
       default:
         return null
     }
@@ -199,7 +203,8 @@ export class BlockModuleFactory {
       'uminus',
       'limit',
       'integrator',
-      'orientation_conversion'
+      'orientation_conversion',
+      'units_conversion'
     ]
   }
   
