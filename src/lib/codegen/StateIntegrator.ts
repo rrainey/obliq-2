@@ -292,8 +292,9 @@ export class StateIntegrator {
    */
   generateRK4Integration(): string {
     const statefulBlocks = this.getStatefulBlocks()
-    
-    if (statefulBlocks.length === 0) {
+    const hasSubsystemStates = this.hasStatefulSubsystems()
+
+    if (statefulBlocks.length === 0 && !hasSubsystemStates) {
       return '    /* No state integration needed - no stateful blocks */\n'
     }
     
