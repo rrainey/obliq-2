@@ -189,6 +189,7 @@ export class BlockModuleFactory {
       'lookup_1d',
       'lookup_2d',
       'matrix_multiply',
+      'transpose',
       'mux',
       'demux',
       'trig',
