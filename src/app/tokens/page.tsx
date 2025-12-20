@@ -422,7 +422,7 @@ export default function TokensPage() {
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
               <h2 className="text-xl font-semibold mb-4">Delete API Key</h2>
               <p className="text-gray-600 mb-6">
-                Are you sure you want to delete the API key "{tokenToDelete.name}"? This action cannot be undone and any applications using this key will lose access.
+                Are you sure you want to delete the API key &quot;{tokenToDelete.name}&quot;? This action cannot be undone and any applications using this key will lose access.
               </p>
               <div className="flex justify-end space-x-3">
                 <button
@@ -473,7 +473,7 @@ export default function TokensPage() {
                   autoFocus
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Choose a descriptive name to identify this key's purpose
+                  Choose a descriptive name to identify this key&apos;s purpose
                 </p>
               </div>
               

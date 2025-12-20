@@ -11,6 +11,8 @@
 import { CodeGenerator, CodeGenerationOptions, CodeGenerationResult } from '@/lib/codegen/CodeGenerator'
 import { Sheet } from '@/lib/simulationTypes'
 import { CCodeBuilder } from '@/lib/codegen/CCodeBuilder'
+import { ModelFlattener } from '@/lib/codegen/ModelFlattener'
+import { TypePropagator } from '@/lib/codegen/TypePropagator'
 
 export interface WasmCodeGenerationOptions extends CodeGenerationOptions {
   /** Whether to include Emscripten-specific exports (default: true) */
@@ -57,9 +59,6 @@ export class WasmCodeGenerator extends CodeGenerator {
     const baseResult = this.generate(sheets, parameters)
 
     // Flatten the model to run type propagation (same as base code generation does)
-    const { ModelFlattener } = require('../../codegen/ModelFlattener')
-    const { TypePropagator } = require('../../codegen/TypePropagator')
-
     const flattener = new ModelFlattener({
       preserveOriginalNames: true,
       generateEnableTracking: true,

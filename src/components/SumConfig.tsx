@@ -132,10 +132,10 @@ export default function SumConfig({ block, onUpdate, onClose }: SumConfigProps) 
         </Alert>
 
         <Alert variant="light" color="yellow" icon={<IconInfoCircle />} title="Example Patterns">
-          • "++" - Add two inputs (default)<br />
-          • "+-" - Subtract second input from first<br />
-          • "+++" - Add three inputs<br />
-          • "+-+" - First + third - second
+          • &quot;++&quot; - Add two inputs (default)<br />
+          • &quot;+-&quot; - Subtract second input from first<br />
+          • &quot;+++&quot; - Add three inputs<br />
+          • &quot;+-+&quot; - First + third - second
         </Alert>
 
         <Checkbox

@@ -3,6 +3,7 @@
 import { FlattenedModel } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
+import { parseType, isValidType } from '@/lib/typeValidator'
 
 /**
  * Generates the C header file for a flattened model
@@ -171,20 +172,24 @@ export class HeaderGenerator {
     for (const port of inputPorts) {
       const portName = port.block.parameters?.portName || port.flattenedName
       const dataType = port.block.parameters?.dataType || 'double'
-      
+
       // Parse array dimensions if present
-      const typeMatch = dataType.match(/^(\w+)(\[[\d\[\]]+\])?$/)
-      if (typeMatch) {
-        const baseType = typeMatch[1]
-        const dimensions = typeMatch[2]
-        
-        if (dimensions) {
-          // Extract dimension values
-          const dims = dimensions.match(/\d+/g)?.map((d:any) => parseInt(d)) || []
+      if (isValidType(dataType)) {
+        const parsedType = parseType(dataType)
+        const baseType = parsedType.baseType
+
+        if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
           members.push(CCodeBuilder.generateStructMember(
             baseType,
             portName,
-            dims,
+            [parsedType.rows, parsedType.cols],
+            `Input port: ${port.block.name}`
+          ))
+        } else if (parsedType.isArray && parsedType.arraySize) {
+          members.push(CCodeBuilder.generateStructMember(
+            baseType,
+            portName,
+            [parsedType.arraySize],
             `Input port: ${port.block.name}`
           ))
         } else {
@@ -237,19 +242,24 @@ export class HeaderGenerator {
         const sourceBlock = this.model.blocks.find(b => b.originalId === inputWire.sourceBlockId)
         if (sourceBlock) {
           const outputType = this.getBlockOutputType(sourceBlock)
-          
+
           // Parse type for array dimensions
-          const typeMatch = outputType.match(/^(\w+)(\[[\d\[\]]+\])?$/)
-          if (typeMatch) {
-            const baseType = typeMatch[1]
-            const dimensions = typeMatch[2]
-            
-            if (dimensions) {
-              const dims = dimensions.match(/\d+/g)?.map(d => parseInt(d)) || []
+          if (isValidType(outputType)) {
+            const parsedType = parseType(outputType)
+            const baseType = parsedType.baseType
+
+            if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
               members.push(CCodeBuilder.generateStructMember(
                 baseType,
                 portName,
-                dims,
+                [parsedType.rows, parsedType.cols],
+                `Output port: ${port.block.name}`
+              ))
+            } else if (parsedType.isArray && parsedType.arraySize) {
+              members.push(CCodeBuilder.generateStructMember(
+                baseType,
+                portName,
+                [parsedType.arraySize],
                 `Output port: ${port.block.name}`
               ))
             } else {
@@ -297,17 +307,22 @@ export class HeaderGenerator {
         const dataType = block.block.parameters?.dataType || 'double'
 
         // Generate member for input port signal - use flattened name for uniqueness
-        const typeMatch = dataType.match(/^(\w+)(\[[\d\[\]]+\])?$/)
-        if (typeMatch) {
-          const baseType = typeMatch[1]
-          const dimensions = typeMatch[2]
+        if (isValidType(dataType)) {
+          const parsedType = parseType(dataType)
+          const baseType = parsedType.baseType
 
-          if (dimensions) {
-            const dims = dimensions.match(/\d+/g)?.map((d: string) => parseInt(d)) || []
+          if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
             members.push(CCodeBuilder.generateStructMember(
               baseType,
               block.flattenedName, // Use flattened name for uniqueness in subsystems
-              dims,
+              [parsedType.rows, parsedType.cols],
+              `Signal from input port: ${portName}`
+            ))
+          } else if (parsedType.isArray && parsedType.arraySize) {
+            members.push(CCodeBuilder.generateStructMember(
+              baseType,
+              block.flattenedName, // Use flattened name for uniqueness in subsystems
+              [parsedType.arraySize],
               `Signal from input port: ${portName}`
             ))
           } else {
@@ -588,20 +603,18 @@ export class HeaderGenerator {
       const { name, signalType, value } = param
 
       // Parse signal type to determine if scalar, vector, or matrix
-      const typeMatch = signalType.match(/^(\w+)(?:\[(\d+)\])?(?:\[(\d+)\])?$/)
-      if (!typeMatch) {
+      if (!signalType || !isValidType(signalType)) {
         code += `// Warning: Invalid signal type for parameter ${name}: ${signalType}\n`
         continue
       }
 
-      const baseType = typeMatch[1] // float, double, long, bool
-      const dim1 = typeMatch[2] ? parseInt(typeMatch[2]) : null
-      const dim2 = typeMatch[3] ? parseInt(typeMatch[3]) : null
+      const parsedType = parseType(signalType)
+      const baseType = parsedType.baseType
 
-      if (dim2 !== null) {
+      if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
         // Matrix: Use const array with #define for dimensions
-        code += `#define ${name}_ROWS ${dim1}\n`
-        code += `#define ${name}_COLS ${dim2}\n`
+        code += `#define ${name}_ROWS ${parsedType.rows}\n`
+        code += `#define ${name}_COLS ${parsedType.cols}\n`
         code += `const ${baseType} ${name}[${name}_ROWS][${name}_COLS] = `
 
         // Format matrix value
@@ -612,9 +625,9 @@ export class HeaderGenerator {
         }
         code += ';\n\n'
 
-      } else if (dim1 !== null) {
+      } else if (parsedType.isArray && parsedType.arraySize) {
         // Vector: Use const array with #define for size
-        code += `#define ${name}_SIZE ${dim1}\n`
+        code += `#define ${name}_SIZE ${parsedType.arraySize}\n`
         code += `const ${baseType} ${name}[${name}_SIZE] = `
 
         // Format vector value

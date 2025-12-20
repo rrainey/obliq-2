@@ -103,7 +103,7 @@ export default function ConditionConfig({ block, onUpdate, onClose }: ConditionC
         <Alert variant="light" color="blue" icon={<IconInfoCircle />} title="Condition Block">
           Outputs true when the input signal (x1) satisfies the specified condition.
           The output is a boolean signal that can be used with control blocks like the If block.
-          Example: If condition is {'">'} 10.0", the block outputs true when the input is greater than 10.0.
+          Example: If condition is &quot;&gt; 10.0&quot;, the block outputs true when the input is greater than 10.0.
         </Alert>
 
         <Group justify="flex-end" gap="sm">

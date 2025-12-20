@@ -544,7 +544,7 @@ export default function ModelsPage() {
       >
         <Stack>
           <Text>
-            Are you sure you want to delete "{selectedModel?.name}"? This action cannot be undone.
+            Are you sure you want to delete &quot;{selectedModel?.name}&quot;? This action cannot be undone.
           </Text>
           <Group justify="flex-end">
             <Button

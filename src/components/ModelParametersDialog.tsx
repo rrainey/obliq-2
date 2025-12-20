@@ -398,7 +398,7 @@ export default function ModelParametersDialog({
           </Paper>
         ) : (
           <Text size="sm" c="dimmed" ta="center" py="xl">
-            No parameters defined. Click "Add Parameter" to create one.
+            No parameters defined. Click &quot;Add Parameter&quot; to create one.
           </Text>
         )}
 

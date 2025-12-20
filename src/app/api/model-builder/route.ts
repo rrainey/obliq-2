@@ -443,8 +443,8 @@ export async function GET(request: NextRequest) {
 // POST handler for creating models, sheets, blocks, and connections
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  let action = 'unknown';
-  let body: any = {};
+  const action = 'unknown';
+  const body: any = {};
 
   // Extract token from Authorization header
   const token = extractBearerToken(request);
@@ -1030,8 +1030,8 @@ export async function POST(request: NextRequest) {
 // PUT handler for updating models, sheets, blocks, and connections
 export async function PUT(request: NextRequest) {
   const startTime = Date.now();
-  let action = 'unknown';
-  let body: any = {};
+  const action = 'unknown';
+  const body: any = {};
 
   // Extract token from Authorization header
   const token = extractBearerToken(request);

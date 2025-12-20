@@ -65,7 +65,7 @@ export default function AutoSaveRecoveryDialog({
     >
       <Stack>
         <Text size="sm">
-          An auto-saved version of <Text span fw={600}>"{modelName}"</Text> was found. 
+          An auto-saved version of <Text span fw={600}>&quot;{modelName}&quot;</Text> was found. 
           This may contain unsaved changes from a previous session.
         </Text>
 

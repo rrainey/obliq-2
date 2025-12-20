@@ -15,8 +15,8 @@ export class PortCountAdapter {
    */
   static getInputPortCount(block: BlockData): number {
     try {
-      const module = BlockModuleFactory.getBlockModule(block.type)
-      return module.getInputPortCount(block)
+      const module1 = BlockModuleFactory.getBlockModule(block.type)
+      return module1.getInputPortCount(block)
     } catch (error) {
       // Default to 1 input if module not found
       console.warn(`No module found for block type ${block.type}, defaulting to 1 input port`)
@@ -31,8 +31,8 @@ export class PortCountAdapter {
    */
   static getOutputPortCount(block: BlockData): number {
     try {
-      const module = BlockModuleFactory.getBlockModule(block.type)
-      return module.getOutputPortCount(block)
+      const module1 = BlockModuleFactory.getBlockModule(block.type)
+      return module1.getOutputPortCount(block)
     } catch (error) {
       // Default to 1 output if module not found
       console.warn(`No module found for block type ${block.type}, defaulting to 1 output port`)
@@ -47,8 +47,8 @@ export class PortCountAdapter {
    */
   static getInputPortLabels(block: BlockData): string[] | undefined {
     try {
-      const module = BlockModuleFactory.getBlockModule(block.type)
-      return module.getInputPortLabels?.(block)
+      const module1 = BlockModuleFactory.getBlockModule(block.type)
+      return module1.getInputPortLabels?.(block)
     } catch (error) {
       return undefined
     }
@@ -61,8 +61,8 @@ export class PortCountAdapter {
    */
   static getOutputPortLabels(block: BlockData): string[] | undefined {
     try {
-      const module = BlockModuleFactory.getBlockModule(block.type)
-      return module.getOutputPortLabels?.(block)
+      const module1 = BlockModuleFactory.getBlockModule(block.type)
+      return module1.getOutputPortLabels?.(block)
     } catch (error) {
       return undefined
     }

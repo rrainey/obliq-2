@@ -76,12 +76,12 @@ export default function SheetLabelSourceConfig({
 
         <Alert variant="light" color="grape" icon={<IconInfoCircle />} title="Sheet Label Source">
           Outputs the signal value from a Sheet Label Sink with the matching signal name.
-          The signal type is inherited from the sink's input.
+          The signal type is inherited from the sink&apos;s input.
         </Alert>
 
         {selectedSignalName && (
           <Alert variant="light" color="green" icon={<IconCheck />} title="Connected">
-            This source will output the signal from "{availableSinks.find(s => s.signalName === selectedSignalName)?.blockName}"
+            This source will output the signal from &quot;{availableSinks.find(s => s.signalName === selectedSignalName)?.blockName}&quot;
           </Alert>
         )}
 

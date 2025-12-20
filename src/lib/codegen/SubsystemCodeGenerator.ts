@@ -7,6 +7,7 @@ import { TypePropagator } from './TypePropagator'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 import { CodeGenContext } from '../blocks/BlockModule'
 import { ModelParameter } from '@/lib/modelSchema'
+import { parseType, isValidType } from '@/lib/typeValidator'
 
 /**
  * Result of subsystem code generation
@@ -171,20 +172,18 @@ export class SubsystemCodeGenerator {
       const { name, signalType, value } = param
 
       // Parse signal type to determine if scalar, vector, or matrix
-      const typeMatch = signalType.match(/^(\w+)(?:\[(\d+)\])?(?:\[(\d+)\])?$/)
-      if (!typeMatch) {
+      if (!signalType || !isValidType(signalType)) {
         code += `// Warning: Invalid signal type for parameter ${name}: ${signalType}\n`
         continue
       }
 
-      const baseType = typeMatch[1] // float, double, long, bool
-      const dim1 = typeMatch[2] ? parseInt(typeMatch[2]) : null
-      const dim2 = typeMatch[3] ? parseInt(typeMatch[3]) : null
+      const parsedType = parseType(signalType)
+      const baseType = parsedType.baseType
 
-      if (dim2 !== null) {
+      if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
         // Matrix: Use const array with #define for dimensions
-        code += `#define ${name}_ROWS ${dim1}\n`
-        code += `#define ${name}_COLS ${dim2}\n`
+        code += `#define ${name}_ROWS ${parsedType.rows}\n`
+        code += `#define ${name}_COLS ${parsedType.cols}\n`
         code += `static const ${baseType} ${name}[${name}_ROWS][${name}_COLS] = `
 
         // Format matrix value
@@ -195,9 +194,9 @@ export class SubsystemCodeGenerator {
         }
         code += ';\n\n'
 
-      } else if (dim1 !== null) {
+      } else if (parsedType.isArray && parsedType.arraySize) {
         // Vector: Use const array with #define for size
-        code += `#define ${name}_SIZE ${dim1}\n`
+        code += `#define ${name}_SIZE ${parsedType.arraySize}\n`
         code += `static const ${baseType} ${name}[${name}_SIZE] = `
 
         // Format vector value
@@ -597,14 +596,16 @@ export class SubsystemCodeGenerator {
   // ============================================================
 
   private generatePortMember(port: SubsystemPort, comment: string): string {
-    const typeMatch = port.dataType.match(/^(\w+)(\[[\d\[\]]+\])?$/)
-    if (typeMatch) {
-      const baseType = typeMatch[1]
-      const dimensions = typeMatch[2]
+    if (isValidType(port.dataType)) {
+      const parsedType = parseType(port.dataType)
+      const baseType = parsedType.baseType
 
-      if (dimensions) {
-        const dims = dimensions.match(/\d+/g)?.map(d => parseInt(d)) || []
-        return CCodeBuilder.generateStructMember(baseType, port.sanitizedName, dims, `${comment}: ${port.name}`)
+      if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
+        return CCodeBuilder.generateStructMember(baseType, port.sanitizedName, [parsedType.rows, parsedType.cols], `${comment}: ${port.name}`)
+      } else if (parsedType.isArray && parsedType.arraySize) {
+        return CCodeBuilder.generateStructMember(baseType, port.sanitizedName, [parsedType.arraySize], `${comment}: ${port.name}`)
+      } else {
+        return CCodeBuilder.generateStructMember(baseType, port.sanitizedName, undefined, `${comment}: ${port.name}`)
       }
     }
     return CCodeBuilder.generateStructMember('double', port.sanitizedName, undefined, `${comment}: ${port.name}`)
@@ -780,9 +781,9 @@ export class SubsystemCodeGenerator {
   private hasDirectFeedthrough(block: FlattenedBlock): boolean {
     if (BlockModuleFactory.isSupported(block.block.type)) {
       try {
-        const module = BlockModuleFactory.getBlockModule(block.block.type)
-        if (module.isDirectFeedthrough) {
-          return module.isDirectFeedthrough(block.block) ?? true
+        const module1 = BlockModuleFactory.getBlockModule(block.block.type)
+        if (module1.isDirectFeedthrough) {
+          return module1.isDirectFeedthrough(block.block) ?? true
         }
       } catch {
         // Default to true

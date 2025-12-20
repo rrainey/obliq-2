@@ -695,8 +695,8 @@ export class ModelFlattener {
       
       let sourceBlockId = wire.sourceBlockId
       let sourcePortIndex = wire.sourcePortIndex
-      let targetBlockId = wire.targetBlockId
-      let targetPortIndex = wire.targetPortIndex
+      const targetBlockId = wire.targetBlockId
+      const targetPortIndex = wire.targetPortIndex
       let connectionType: FlattenedConnection['connectionType'] = 'direct'
       
       // Skip connections from/to port blocks entirely - they'll be replaced

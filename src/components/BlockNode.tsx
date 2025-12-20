@@ -602,7 +602,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
   const isDark = colorScheme === 'dark'
 
   const getPortCounts = () => {
-    let x = PortCountAdapter.getPortCounts(data)
+    const x = PortCountAdapter.getPortCounts(data)
     if (data.type === 'output_port' ) {
       // spacial case: Output Block Node reports that it has an output; override that here.
       x.outputCount = 0
@@ -837,7 +837,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           {(data.type === 'sheet_label_sink' || data.type === 'sheet_label_source') &&
           data.parameters?.signalName && (
             <div className={`mt-0.5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} style={{ fontSize: '0.5rem' }}>
-              "{data.parameters.signalName}"
+              &quot;{data.parameters.signalName}&quot;
             </div>
           )}
         </div>

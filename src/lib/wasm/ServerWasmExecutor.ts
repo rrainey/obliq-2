@@ -200,12 +200,12 @@ export async function executeServerSimulation(
     }
 
     // Load WASM module
-    const module = await loadWasmModule(
+    const module1 = await loadWasmModule(
       compileResult.wasmData!,
       compileResult.jsData!
     )
 
-    if (!module) {
+    if (!module1) {
       return {
         success: false,
         error: 'Failed to load WASM module',
@@ -216,7 +216,7 @@ export async function executeServerSimulation(
     }
 
     // Initialize simulation
-    module._wasm_init(timeStep)
+    module1._wasm_init(timeStep)
 
     // Set input values
     const inputMap = new Map<string, number>(compileResult.inputMap || [])
@@ -226,7 +226,7 @@ export async function executeServerSimulation(
       for (const [name, value] of Object.entries(config.inputs)) {
         const index = inputMap.get(name)
         if (index !== undefined) {
-          module._wasm_set_input(index, value)
+          module1._wasm_set_input(index, value)
         }
       }
     }
@@ -245,45 +245,45 @@ export async function executeServerSimulation(
 
     // Execute simulation steps
     for (let step = 0; step < numSteps; step++) {
-      module._wasm_step(timeStep)
+      module1._wasm_step(timeStep)
 
       // Collect time series data
       if (includeTimeSeries && step % sampleRate === 0) {
         outputMap.forEach((index, name) => {
-          timeSeries[name].push(module._wasm_get_output(index))
+          timeSeries[name].push(module1._wasm_get_output(index))
         })
       }
     }
 
     const execTime = Date.now() - execStart
-    const finalTime = module._wasm_get_time()
+    const finalTime = module1._wasm_get_time()
 
     // Collect final output values
     const outputs: Record<string, number> = {}
     outputMap.forEach((index, name) => {
-      outputs[name] = module._wasm_get_output(index)
+      outputs[name] = module1._wasm_get_output(index)
     })
 
     // Collect signal statistics from loggers/displays
     const signals: Record<string, any> = {}
 
-    if (module._wasm_get_collector_count) {
-      const collectorCount = module._wasm_get_collector_count()
+    if (module1._wasm_get_collector_count) {
+      const collectorCount = module1._wasm_get_collector_count()
 
       for (let i = 0; i < collectorCount; i++) {
-        const namePtr = module._wasm_get_collector_name!(i)
-        const name = module.UTF8ToString(namePtr)
+        const namePtr = module1._wasm_get_collector_name!(i)
+        const name = module1.UTF8ToString(namePtr)
         const shortName = name.replace(/^(logger_|display_)/, '')
 
-        const numSamples = module._wasm_get_sample_count!(i)
-        const samplesPtr = module._wasm_get_samples!(i)
-        const elementSize = module._wasm_get_element_size?.(i) ?? 1
+        const numSamples = module1._wasm_get_sample_count!(i)
+        const samplesPtr = module1._wasm_get_samples!(i)
+        const elementSize = module1._wasm_get_element_size?.(i) ?? 1
 
         if (elementSize === 1 && numSamples > 0) {
           // Collect scalar samples
           const samples: number[] = []
           for (let j = 0; j < numSamples; j++) {
-            samples.push(module.HEAPF64[samplesPtr / 8 + j])
+            samples.push(module1.HEAPF64[samplesPtr / 8 + j])
           }
 
           const min = Math.min(...samples)
@@ -303,8 +303,8 @@ export async function executeServerSimulation(
     }
 
     // Cleanup WASM resources
-    if (module._wasm_cleanup) {
-      module._wasm_cleanup()
+    if (module1._wasm_cleanup) {
+      module1._wasm_cleanup()
     }
 
     return {
@@ -413,7 +413,7 @@ async function loadWasmModule(
     }
 
     // Instantiate WASM module
-    const module = await createModule({
+    const module1 = await createModule({
       wasmBinary: wasmBinary.buffer.slice(
         wasmBinary.byteOffset,
         wasmBinary.byteOffset + wasmBinary.byteLength
@@ -422,7 +422,7 @@ async function loadWasmModule(
       printErr: () => {}
     }) as WasmModule
 
-    return module
+    return module1
 
   } catch (error) {
     console.error('[ServerWasmExecutor] Failed to load WASM module:', error)

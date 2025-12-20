@@ -81,8 +81,8 @@ export class TypePropagator {
       }
 
       try {
-        const module = BlockModuleFactory.getBlockModule(block.block.type)
-        const outputType = module.getOutputType(block.block, inputTypes)
+        const module1 = BlockModuleFactory.getBlockModule(block.block.type)
+        const outputType = module1.getOutputType(block.block, inputTypes)
 
         // Sink blocks (signal_logger, signal_display) have void output type - this is valid
         if (outputType === 'void') {
@@ -204,9 +204,9 @@ export class TypePropagator {
     if (block.block.type === 'transfer_function') {
       // Transfer functions without direct feedthrough can break algebraic loops
       try {
-        const module = BlockModuleFactory.getBlockModule(block.block.type)
-        if (module.isDirectFeedthrough) {
-          return module.isDirectFeedthrough(block.block) ?? true
+        const module1 = BlockModuleFactory.getBlockModule(block.block.type)
+        if (module1.isDirectFeedthrough) {
+          return module1.isDirectFeedthrough(block.block) ?? true
         }
       } catch {
         // If module not found, assume direct feedthrough
@@ -216,9 +216,9 @@ export class TypePropagator {
     // Check if block module implements isDirectFeedthrough
     if (BlockModuleFactory.isSupported(block.block.type)) {
       try {
-        const module = BlockModuleFactory.getBlockModule(block.block.type)
-        if (module.isDirectFeedthrough) {
-          return module.isDirectFeedthrough(block.block) ?? true
+        const module1 = BlockModuleFactory.getBlockModule(block.block.type)
+        if (module1.isDirectFeedthrough) {
+          return module1.isDirectFeedthrough(block.block) ?? true
         }
       } catch {
         // If error, assume direct feedthrough for safety

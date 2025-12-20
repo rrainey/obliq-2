@@ -121,7 +121,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     setSelectedBlockId, setSelectedBlocks, setSelectedWireId, setConfigBlock, clearSelection,
     // Feature 5: Clipboard actions
     copySelection, cutSelection, pasteFromClipboard, checkClipboardDependencies,
-    setSimulationResults, setIsSimulating, setSimulationEngine, setOutputPortValues,
+    setSimulationResults, setIsSimulating, setOutputPortValues,
     setGlobalSimulationResults, clearGlobalSimulationResults,
     updateCurrentSheet, saveCurrentSheetData, initializeFromModel, saveAsNewModel,
 
@@ -805,7 +805,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             {errorMessages}
             {errors.length > 5 && <div>...and {errors.length - 5} more errors</div>}
             <div style={{ marginTop: 12, fontWeight: 500 }}>Correct the Model Validation errors and run the simulation again.</div>
-            <div style={{ marginTop: 4, fontSize: '0.9em', color: '#666' }}>Use the "Validate Model" button to see all issues.</div>
+            <div style={{ marginTop: 4, fontSize: '0.9em', color: '#666' }}>Use the &quot;Validate Model&quot; button to see all issues.</div>
           </div>
         ),
         color: 'red',
@@ -894,6 +894,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           autoClose: 3000
         })
 
+        let compiledWasmToUse = null;
+
         try {
           // Use version 0 (auto-save) if we just saved, otherwise latest version
           const versionToCompile = isDirty ? 0 : undefined
@@ -968,7 +970,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           })
 
           // Use the fresh compilation result for simulation
-          var compiledWasmToUse = wasmResult
+          compiledWasmToUse = wasmResult
 
         } catch (error) {
           console.error('[Run Simulation] Compilation failed:', error)

@@ -670,6 +670,133 @@ export class WasmSimulationEngine {
   }
 
   /**
+   * Export all logged data as CSV
+   *
+   * Generates a CSV file containing all signal logger and display data.
+   * Each logger/display gets its own column(s) with time as the first column.
+   *
+   * @returns CSV string, or null if no data available
+   */
+  exportAllLoggedDataAsCSV(): string | null {
+    const sampleData = this.getSampleData()
+
+    if (sampleData.size === 0) {
+      return null
+    }
+
+    // Determine the maximum number of samples across all collectors
+    let maxSamples = 0
+    for (const samples of sampleData.values()) {
+      if (samples.length > maxSamples) {
+        maxSamples = samples.length
+      }
+    }
+
+    if (maxSamples === 0) {
+      return null
+    }
+
+    // Build CSV lines
+    const lines: string[] = []
+
+    // Build header row
+    const headers: string[] = ['time']
+    const collectorNames = Array.from(sampleData.keys())
+
+    for (const name of collectorNames) {
+      const samples = sampleData.get(name)!
+      const firstSample = samples[0]
+
+      if (typeof firstSample === 'number' || typeof firstSample === 'boolean') {
+        // Scalar signal
+        headers.push(name)
+      } else if (Array.isArray(firstSample)) {
+        if (Array.isArray(firstSample[0])) {
+          // Matrix signal - add column for each element
+          const rows = firstSample.length
+          const cols = (firstSample[0] as number[]).length
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              headers.push(`${name}[${r}][${c}]`)
+            }
+          }
+        } else {
+          // Vector signal - add column for each element
+          for (let i = 0; i < firstSample.length; i++) {
+            headers.push(`${name}[${i}]`)
+          }
+        }
+      }
+    }
+
+    lines.push(headers.join(','))
+
+    // Calculate time step based on simulation state
+    const timeStep = this.state.timeStep
+    const finalTime = this.getTime()
+
+    // Generate data rows
+    for (let i = 0; i < maxSamples; i++) {
+      const row: string[] = []
+
+      // Calculate time for this sample
+      // Samples are stored in chronological order, starting from (finalTime - maxSamples * timeStep)
+      const time = finalTime - (maxSamples - i) * timeStep
+      row.push(time.toFixed(6))
+
+      // Add data from each collector
+      for (const name of collectorNames) {
+        const samples = sampleData.get(name)!
+        const sample = i < samples.length ? samples[i] : null
+
+        if (sample === null || sample === undefined) {
+          // Pad with empty values if this collector has fewer samples
+          const firstSample = samples[0]
+          if (typeof firstSample === 'number' || typeof firstSample === 'boolean') {
+            row.push('')
+          } else if (Array.isArray(firstSample)) {
+            if (Array.isArray(firstSample[0])) {
+              const rows = firstSample.length
+              const cols = (firstSample[0] as number[]).length
+              for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                  row.push('')
+                }
+              }
+            } else {
+              for (let j = 0; j < firstSample.length; j++) {
+                row.push('')
+              }
+            }
+          }
+        } else if (typeof sample === 'number') {
+          row.push(sample.toString())
+        } else if (typeof sample === 'boolean') {
+          row.push(sample ? '1' : '0')
+        } else if (Array.isArray(sample)) {
+          if (Array.isArray(sample[0])) {
+            // Matrix
+            for (const matrixRow of sample as number[][]) {
+              for (const val of matrixRow) {
+                row.push(val.toString())
+              }
+            }
+          } else {
+            // Vector
+            for (const val of sample as number[]) {
+              row.push(val.toString())
+            }
+          }
+        }
+      }
+
+      lines.push(row.join(','))
+    }
+
+    return lines.join('\n')
+  }
+
+  /**
    * Get current simulation time
    *
    * @returns Current time (seconds)

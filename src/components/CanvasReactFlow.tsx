@@ -170,7 +170,7 @@ function CanvasReactFlowInner({
   const initialEdges = wires.map(wire => {
     const signalType = initialPropagationResult.signalTypes.get(wire.id)
 
-    let edgeData: CustomEdgeData = {}
+    const edgeData: CustomEdgeData = {}
 
     // Add type error information if available
     if (signalType) {
@@ -296,7 +296,7 @@ function CanvasReactFlowInner({
     const newEdges = wires.map(wire => {
       const signalType = propagationResult.signalTypes.get(wire.id)
 
-      let edgeData: CustomEdgeData = {}
+      const edgeData: CustomEdgeData = {}
 
       if (signalType) {
         // Check for type errors
