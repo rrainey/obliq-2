@@ -36,11 +36,9 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
   const [stepTime, setStepTime] = useState<number>(block?.parameters?.stepTime || 1.0)
   const [stepValue, setStepValue] = useState<number>(block?.parameters?.stepValue || 1.0)
   const [slope, setSlope] = useState<number>(block?.parameters?.slope || 1.0)
-  const [startTime, setStartTime] = useState<number>(block?.parameters?.startTime || 0)
+  const [startValue, setStartValue] = useState<number>(block?.parameters?.startValue || 0)
   const [frequency, setFrequency] = useState<number>(block?.parameters?.frequency || 1.0)
   const [amplitude, setAmplitude] = useState<number>(block?.parameters?.amplitude || 1.0)
-  const [phase, setPhase] = useState<number>(block?.parameters?.phase || 0)
-  const [offset, setOffset] = useState<number>(block?.parameters?.offset || 0)
   const [f0, setF0] = useState<number>(block?.parameters?.f0 || 0.1)
   const [f1, setF1] = useState<number>(block?.parameters?.f1 || 10)
   const [duration, setDuration] = useState<number>(block?.parameters?.duration || 10)
@@ -217,11 +215,9 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
       stepTime,
       stepValue,
       slope,
-      startTime,
+      startValue,
       frequency,
       amplitude,
-      phase,
-      offset,
       f0,
       f1,
       duration,
@@ -285,22 +281,18 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
         return (
           <Stack gap="xs">
             <NumberInput
-              label="Slope"
+              label="Starting Value"
+              value={startValue}
+              onChange={(val) => setStartValue(typeof val === 'number' ? val : 0)}
+              decimalScale={6}
+              description="Initial value before ramp begins"
+            />
+            <NumberInput
+              label="Ramp Slope"
               value={slope}
               onChange={(val) => setSlope(typeof val === 'number' ? val : 0)}
               decimalScale={6}
-              description={
-                isMatrix ? "Rate of change for all matrix elements (units/second)" :
-                isVector ? "Rate of change for all elements (units/second)" :
-                "Rate of change (units/second)"
-              }
-            />
-            <NumberInput
-              label="Start Time (s)"
-              value={startTime}
-              onChange={(val) => setStartTime(typeof val === 'number' ? val : 0)}
-              decimalScale={6}
-              description="Time when ramp begins"
+              description="Rate of change (units/second)"
             />
           </Stack>
         )
@@ -313,27 +305,14 @@ export default function SourceConfig({ block, onUpdate, onClose }: SourceConfigP
               value={frequency}
               onChange={(val) => setFrequency(typeof val === 'number' ? val : 0)}
               decimalScale={6}
+              description="Sine wave frequency in Hertz"
             />
             <NumberInput
-              label="Amplitude"
+              label="Scale (peak value)"
               value={amplitude}
               onChange={(val) => setAmplitude(typeof val === 'number' ? val : 0)}
               decimalScale={6}
-              description={(isVector || isMatrix) ? "Applied to all elements" : undefined}
-            />
-            <NumberInput
-              label="Phase (rad)"
-              value={phase}
-              onChange={(val) => setPhase(typeof val === 'number' ? val : 0)}
-              decimalScale={6}
-              description="Phase shift in radians"
-            />
-            <NumberInput
-              label="Offset"
-              value={offset}
-              onChange={(val) => setOffset(typeof val === 'number' ? val : 0)}
-              decimalScale={6}
-              description="DC offset"
+              description="Peak amplitude of the sine wave"
             />
           </Stack>
         )
