@@ -35,6 +35,7 @@ export class SourceBlockModule implements IBlockModule {
 
       if (useParameter && parameterName) {
         // Use parameter reference instead of literal value
+        // Parameters may change, so we need to copy them each step
         code += `    // Using parameter: ${parameterName}\n`
 
         if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
@@ -54,30 +55,9 @@ export class SourceBlockModule implements IBlockModule {
           code += `    ${outputName} = ${parameterName};\n`
         }
       } else {
-        // For constants, use the value directly with proper C99 formatting
-        const value = block.parameters?.value
-
-        if (typeInfo.isMatrix && Array.isArray(value) && Array.isArray(value[0])) {
-          // Matrix constant - assign element by element
-          for (let i = 0; i < value.length; i++) {
-            for (let j = 0; j < value[i].length; j++) {
-              // Use toC99Initializer for proper literal formatting
-              const c99Value = toC99Initializer(value[i][j], typeInfo.baseType)
-              code += `    ${outputName}[${i}][${j}] = ${c99Value};\n`
-            }
-          }
-        } else if (typeInfo.isArray && Array.isArray(value)) {
-          // Vector constant - assign element by element
-          for (let i = 0; i < value.length; i++) {
-            const c99Value = toC99Initializer(value[i], typeInfo.baseType)
-            code += `    ${outputName}[${i}] = ${c99Value};\n`
-          }
-        } else {
-          // Scalar constant - use toC99Initializer for proper literal formatting
-          const scalarValue = value !== undefined ? value : 0
-          const c99Value = toC99Initializer(scalarValue, dataType)
-          code += `    ${outputName} = ${c99Value};\n`
-        }
+        // Pure literal constant - already initialized in _init(), no need to reassign every step
+        // This is an optimization: constant values don't change during simulation
+        code += `    // (constant value initialized in _init)\n`
       }
     } else if (signalType === 'step') {
       // Step signal: 0 before stepTime, stepValue after stepTime

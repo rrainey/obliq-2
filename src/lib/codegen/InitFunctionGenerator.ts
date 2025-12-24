@@ -42,16 +42,16 @@ export class InitFunctionGenerator {
       'Initialize model with given time step',
       'Sets all states and signals to their initial values'
     ])
-    
+
     code += CCodeBuilder.generateFunctionHeader(
       'void',
       `${this.modelName}_init`,
       [`${this.modelName}_t* model`, 'double dt']
     )
-    
+
     // Initialize time tracking
     code += this.generateTimeInit()
-    
+
     // Initialize all structures to zero
     code += this.generateStructureInit()
 
@@ -62,15 +62,17 @@ export class InitFunctionGenerator {
     if (this.model.subsystemEnableInfo.some(info => info.hasEnableInput)) {
       code += this.generateEnableStateInit()
     }
-    
-    // Initialize block-specific states
+
+    // Initialize constants and source blocks FIRST
+    // This is important for integrator init ports that read from source signals
+    code += this.generateConstantInit()
+
+    // Initialize block-specific states (e.g., integrators)
+    // Must come after constant init so init port signals are available
     code += this.generateBlockSpecificInit()
 
     // Initialize data collection buffers
     code += this.generateDataCollectionInit()
-
-    // Initialize constants and source blocks
-    code += this.generateConstantInit()
 
     code += '}\n'
     return code
@@ -152,28 +154,35 @@ export class InitFunctionGenerator {
   private generateBlockSpecificInit(): string {
     let code = ''
     let hasBlockInit = false
-    
+
     for (const block of this.model.blocks) {
       try {
         const generator = BlockModuleFactory.getBlockModule(block.block.type)
-        
+
         // Check if this block type has initialization
         if (generator.generateInitialization) {
           const outputType = this.getBlockOutputType(block)
-          const initCode = generator.generateInitialization(block.block, outputType)
+
+          // Check for init port connection (port index -3) for integrator blocks
+          let initSignalExpr: string | undefined
+          if (block.block.type === 'integrator' && block.block.parameters?.showInitPort) {
+            initSignalExpr = this.getInitPortSignalExpr(block)
+          }
+
+          const initCode = generator.generateInitialization(block.block, outputType, initSignalExpr)
           if (initCode && initCode.trim()) {
             if (!hasBlockInit) {
               code += '    /* Initialize block-specific states */\n'
               hasBlockInit = true
             }
-            
+
             // Add comment about which block
             if (block.subsystemPath.length > 0) {
               code += `    /* ${block.flattenedName} (from ${block.subsystemPath.join(' > ')}) */\n`
             } else {
               code += `    /* ${block.flattenedName} */\n`
             }
-            
+
             code += initCode
             code += '\n'
           }
@@ -183,12 +192,36 @@ export class InitFunctionGenerator {
         continue
       }
     }
-    
+
     if (hasBlockInit) {
       code += '\n'
     }
-    
+
     return code
+  }
+
+  /**
+   * Get the C expression for a signal connected to an integrator's init port (port -3)
+   */
+  private getInitPortSignalExpr(block: typeof this.model.blocks[0]): string | undefined {
+    // Find connection to port -3 (init port) for this block
+    const initConnection = this.model.connections.find(c =>
+      c.targetBlockId === block.originalId && c.targetPortIndex === -3
+    )
+
+    if (!initConnection) {
+      return undefined
+    }
+
+    // Find the source block
+    const sourceBlock = this.model.blocks.find(b => b.originalId === initConnection.sourceBlockId)
+    if (!sourceBlock) {
+      return undefined
+    }
+
+    // Return the signal expression for the source block
+    const signalName = CCodeBuilder.sanitizeIdentifier(sourceBlock.flattenedName)
+    return `model->signals.${signalName}`
   }
 
   /**
@@ -290,28 +323,28 @@ export class InitFunctionGenerator {
   private generateConstantInit(): string {
     let code = ''
     let hasConstants = false
-    
+
     // Find all source blocks with constant values
     const sourceBlocks = this.model.blocks.filter(b => b.block.type === 'source')
-    
+
     for (const block of sourceBlocks) {
       const sourceType = block.block.parameters?.sourceType || 'constant'
-      
+
       if (sourceType === 'constant') {
-        const value = block.block.parameters?.value || '0.0'
+        const value = block.block.parameters?.value ?? 0.0
         const dataType = block.block.parameters?.dataType || 'double'
         // Use flattened name for signal access to handle subsystem blocks correctly
         const signalName = `model->signals.${CCodeBuilder.sanitizeIdentifier(block.flattenedName)}`
-        
+
         if (!hasConstants) {
           code += '    /* Initialize constant sources */\n'
           hasConstants = true
         }
-        
+
         // Check if it's an array/matrix type
         const arrayMatch = dataType.match(/\[([\d\s,\[\]]+)\]/)
         if (arrayMatch) {
-          // Array or matrix constant
+          // Array or matrix constant - pass value as-is (may be array or string)
           code += this.generateArrayConstantInit(signalName, value, dataType, block.flattenedName)
         } else {
           // Scalar constant
@@ -319,11 +352,11 @@ export class InitFunctionGenerator {
         }
       }
     }
-    
+
     if (hasConstants) {
       code += '\n'
     }
-    
+
     return code
   }
   
@@ -332,44 +365,51 @@ export class InitFunctionGenerator {
    */
   private generateArrayConstantInit(
     signalName: string,
-    value: string,
+    value: string | number[] | number[][],
     dataType: string,
     blockName: string
   ): string {
     let code = `    /* Initialize ${blockName} (${dataType}) */\n`
-    
-    // Parse the array value
+
+    // Parse the array value - may already be an array or may be a string
     try {
-      // Handle different formats: [1,2,3] or [[1,2],[3,4]] etc.
-      const parsedValue = this.parseArrayValue(value)
-      
+      let parsedValue: any
+
+      // Check if value is already an array (common case from block parameters)
+      if (Array.isArray(value)) {
+        parsedValue = value
+      } else if (typeof value === 'string') {
+        // Handle different formats: [1,2,3] or [[1,2],[3,4]] etc.
+        parsedValue = this.parseArrayValue(value)
+      } else {
+        throw new Error('Unexpected value type')
+      }
+
       if (Array.isArray(parsedValue)) {
         // Determine dimensions
         const dims = this.getArrayDimensions(parsedValue)
-        
+
         if (dims.length === 1) {
-          // 1D array
-          code += `    {\n`
-          code += `        const double init_values[] = ${CCodeBuilder.generateArrayInitializer(parsedValue.flat())};\n`
-          code += `        memcpy(${signalName}, init_values, sizeof(init_values));\n`
-          code += `    }\n`
+          // 1D array - assign element by element for clarity
+          for (let i = 0; i < dims[0]; i++) {
+            const val = parsedValue[i] ?? 0
+            code += `    ${signalName}[${i}] = ${val};\n`
+          }
         } else if (dims.length === 2) {
           // 2D array (matrix)
-          code += `    {\n`
           for (let i = 0; i < dims[0]; i++) {
             for (let j = 0; j < dims[1]; j++) {
-              const val = (parsedValue[i] && parsedValue[i][j]) || 0
-              code += `        ${signalName}[${i}][${j}] = ${val};\n`
+              const val = (parsedValue[i] && parsedValue[i][j]) ?? 0
+              code += `    ${signalName}[${i}][${j}] = ${val};\n`
             }
           }
-          code += `    }\n`
         }
       }
     } catch (error) {
       // If parsing fails, initialize to zero (already done by memset)
       code += `    /* Error parsing array value - initialized to zero */\n`
     }
-    
+
     return code
   }
   

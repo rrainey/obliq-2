@@ -195,9 +195,9 @@ export class RK4Generator {
   ): string {
     // For blocks with generateStateDerivative method (transfer_function, integrator)
     if (generator.generateStateDerivative) {
-      // Get block inputs from signals
+      // Get block inputs from signals (exclude special ports like init port -3, enable -1, reset -2)
       const inputConnections = this.model.connections
-        .filter(c => c.targetBlockId === block.originalId)
+        .filter(c => c.targetBlockId === block.originalId && c.targetPortIndex >= 0)
         .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
 
       let inputExpr = '0.0' // Default if no input

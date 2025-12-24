@@ -319,12 +319,14 @@ export class AlgebraicEvaluator {
     statesVar: string = 'model'     // Changed default
   ): string[] {
     const inputs: string[] = []
-    
+
     // Find all connections to this block, sorted by target port index
+    // Filter out special ports (negative indices: -1 enable, -2 reset, -3 init)
+    // These are handled separately and should not be in the regular inputs array
     const connections = this.model.connections
-      .filter(c => c.targetBlockId === block.originalId)
+      .filter(c => c.targetBlockId === block.originalId && c.targetPortIndex >= 0)
       .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
-    
+
     for (const connection of connections) {
       const sourceBlock = this.model.blocks.find(b => 
         b.originalId === connection.sourceBlockId
@@ -440,8 +442,9 @@ export class AlgebraicEvaluator {
     const types: string[] = []
 
     // Find all connections to this block, sorted by target port index
+    // Filter out special ports (negative indices: -1 enable, -2 reset, -3 init)
     const connections = this.model.connections
-      .filter(c => c.targetBlockId === block.originalId)
+      .filter(c => c.targetBlockId === block.originalId && c.targetPortIndex >= 0)
       .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
 
     for (const connection of connections) {
