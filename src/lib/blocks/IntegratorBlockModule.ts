@@ -226,11 +226,12 @@ export class IntegratorBlockModule implements IBlockModule {
     return members
   }
 
-  generateInitialization(block: BlockData, outputType?: string): string {
+  generateInitialization(block: BlockData, outputType?: string, initSignalExpr?: string): string {
     const intName = BlockModuleUtils.sanitizeIdentifier(block.name)
     const {
       initialValue = 0,
       showResetInput = false,
+      showInitPort = false,
       useLimits = false,
       upperLimit = Infinity,
       lowerLimit = -Infinity
@@ -242,49 +243,88 @@ export class IntegratorBlockModule implements IBlockModule {
     // State structure is: scalar -> [1], vector[n] -> [n][1], matrix[m][n] -> [m][n][1]
     const typeInfo = BlockModuleUtils.parseType(outputType || 'double')
 
-    // Calculate the initial value (clamped if using limits)
-    const getClampedValue = (val: number): number => {
+    // Helper to generate clamped value expression
+    const getClampedValue = (val: number): string => {
       if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-        return Math.max(lowerLimit, Math.min(upperLimit, val))
+        return `fmax(${lowerLimit}, fmin(${upperLimit}, ${val}))`
       }
-      return val
+      return String(val)
     }
 
-    // Determine the scalar initial value to use
-    const scalarInitial = typeof initialValue === 'number' ? initialValue : 0
+    // Helper to generate clamped expression for signal values
+    const getClampedExpr = (expr: string): string => {
+      if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
+        return `fmax(${lowerLimit}, fmin(${upperLimit}, ${expr}))`
+      }
+      return expr
+    }
 
-    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-      // Matrix: _states[i][j][0]
-      code += `    // Initialize ${intName}_states (matrix ${typeInfo.rows}x${typeInfo.cols})\n`
-      for (let i = 0; i < typeInfo.rows; i++) {
-        for (let j = 0; j < typeInfo.cols; j++) {
+    // If using init port and we have the signal expression, initialize from it
+    if (showInitPort && initSignalExpr) {
+      code += `    // Initialize ${intName}_states from x(0) port signal\n`
+      if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+        code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
+        code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
+        code += `            model->states.${intName}_states[i][j][0] = ${getClampedExpr(`${initSignalExpr}[i][j]`)};\n`
+        code += `        }\n`
+        code += `    }\n`
+      } else if (typeInfo.isArray && typeInfo.arraySize) {
+        code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
+        code += `        model->states.${intName}_states[i][0] = ${getClampedExpr(`${initSignalExpr}[i]`)};\n`
+        code += `    }\n`
+      } else {
+        code += `    model->states.${intName}_states[0] = ${getClampedExpr(initSignalExpr)};\n`
+      }
+    } else if (showInitPort) {
+      // Init port enabled but no signal expression provided (not connected) - use 0
+      code += `    // Initialize ${intName}_states to 0 (x(0) port not connected)\n`
+      if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+        for (let i = 0; i < typeInfo.rows; i++) {
+          for (let j = 0; j < typeInfo.cols; j++) {
+            code += `    model->states.${intName}_states[${i}][${j}][0] = 0.0;\n`
+          }
+        }
+      } else if (typeInfo.isArray && typeInfo.arraySize) {
+        for (let i = 0; i < typeInfo.arraySize; i++) {
+          code += `    model->states.${intName}_states[${i}][0] = 0.0;\n`
+        }
+      } else {
+        code += `    model->states.${intName}_states[0] = 0.0;\n`
+      }
+    } else {
+      // Use static initial value from parameters
+      const scalarInitial = typeof initialValue === 'number' ? initialValue : 0
+
+      if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+        // Matrix: _states[i][j][0]
+        code += `    // Initialize ${intName}_states (matrix ${typeInfo.rows}x${typeInfo.cols})\n`
+        for (let i = 0; i < typeInfo.rows; i++) {
+          for (let j = 0; j < typeInfo.cols; j++) {
+            let val: number
+            if (Array.isArray(initialValue) && Array.isArray(initialValue[i])) {
+              val = (initialValue[i] as number[])[j] ?? scalarInitial
+            } else {
+              val = scalarInitial
+            }
+            code += `    model->states.${intName}_states[${i}][${j}][0] = ${getClampedValue(val)};\n`
+          }
+        }
+      } else if (typeInfo.isArray && typeInfo.arraySize) {
+        // Vector: _states[i][0]
+        code += `    // Initialize ${intName}_states (vector size ${typeInfo.arraySize})\n`
+        for (let i = 0; i < typeInfo.arraySize; i++) {
           let val: number
-          if (Array.isArray(initialValue) && Array.isArray(initialValue[i])) {
-            val = (initialValue[i] as number[])[j] ?? scalarInitial
+          if (Array.isArray(initialValue) && !Array.isArray(initialValue[0])) {
+            val = (initialValue[i] as number) ?? scalarInitial
           } else {
             val = scalarInitial
           }
-          val = getClampedValue(val)
-          code += `    model->states.${intName}_states[${i}][${j}][0] = ${val};\n`
+          code += `    model->states.${intName}_states[${i}][0] = ${getClampedValue(val)};\n`
         }
+      } else {
+        // Scalar: _states[0]
+        code += `    model->states.${intName}_states[0] = ${getClampedValue(scalarInitial)};\n`
       }
-    } else if (typeInfo.isArray && typeInfo.arraySize) {
-      // Vector: _states[i][0]
-      code += `    // Initialize ${intName}_states (vector size ${typeInfo.arraySize})\n`
-      for (let i = 0; i < typeInfo.arraySize; i++) {
-        let val: number
-        if (Array.isArray(initialValue) && !Array.isArray(initialValue[0])) {
-          val = (initialValue[i] as number) ?? scalarInitial
-        } else {
-          val = scalarInitial
-        }
-        val = getClampedValue(val)
-        code += `    model->states.${intName}_states[${i}][0] = ${val};\n`
-      }
-    } else {
-      // Scalar: _states[0]
-      const val = getClampedValue(scalarInitial)
-      code += `    model->states.${intName}_states[0] = ${val};\n`
     }
 
     // Initialize reset edge detection

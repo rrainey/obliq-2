@@ -98,7 +98,42 @@ async function fullIntegrationTest() {
     if (!client.isSuccess(response)) throw new Error(response.error);
   });
 
-  // Test 7: Add Various Block Types
+  // Test 7: Add Integrator with Special Ports
+  await runTest('Add Integrator with Init Port', async () => {
+    // Add integrator with showInitPort enabled
+    const integrator = await client.addBlock(modelId, sheetIds.main, 'integrator', 'TestIntegrator',
+      { x: 100, y: 450 },
+      {
+        initialValue: 0,
+        showInitPort: true,      // Enable x(0) initialization port
+        showEnableInput: false,
+        showResetInput: false,
+        useLimits: true,
+        lowerLimit: -10,
+        upperLimit: 10
+      }
+    );
+    if (!client.isSuccess(integrator)) throw new Error(integrator.error);
+    blockIds.integrator = integrator.data.id;
+
+    // Add a source for the initial value
+    const initSource = await client.addBlock(modelId, sheetIds.main, 'source', 'InitValue',
+      { x: 100, y: 550 },
+      { value: '2.5', dataType: 'double' }
+    );
+    if (!client.isSuccess(initSource)) throw new Error(initSource.error);
+    blockIds.initSource = initSource.data.id;
+
+    // Connect source to integrator's x(0) port (port index -3)
+    const initConn = await client.addConnection(
+      modelId, sheetIds.main,
+      blockIds.initSource, 0,    // Source output
+      blockIds.integrator, -3    // Integrator x(0) port
+    );
+    if (!client.isSuccess(initConn)) throw new Error(initConn.error);
+  });
+
+  // Test 8: Add Various Block Types (continued)
   await runTest('Add All Block Types', async () => {
     // Source blocks
     const source = await client.addBlock(modelId, sheetIds.input, 'source', 'Input1', { x: 100, y: 100 }, { value: '5.0', dataType: 'double' });
@@ -156,39 +191,39 @@ async function fullIntegrationTest() {
     blockIds.outputPort = outputPort.data.id;
   });
 
-  // Test 8: List Blocks
+  // Test 9: List Blocks
   await runTest('List Blocks', async () => {
     const response = await client.listBlocks(modelId, sheetIds.main);
     if (!client.isSuccess(response)) throw new Error(response.error);
     if (response.data.blocks.length < 5) throw new Error('Expected at least 5 blocks on main sheet');
   });
 
-  // Test 9: Get Block Details
+  // Test 10: Get Block Details
   await runTest('Get Block Details', async () => {
     const response = await client.getBlock(modelId, sheetIds.main, blockIds.tf);
     if (!client.isSuccess(response)) throw new Error(response.error);
     if (response.data.type !== 'transfer_function') throw new Error('Wrong block type');
   });
 
-  // Test 10: Update Block Position
+  // Test 11: Update Block Position
   await runTest('Update Block Position', async () => {
     const response = await client.updateBlockPosition(modelId, sheetIds.main, blockIds.sum, { x: 350, y: 175 });
     if (!client.isSuccess(response)) throw new Error(response.error);
   });
 
-  // Test 11: Update Block Name
+  // Test 12: Update Block Name
   await runTest('Update Block Name', async () => {
     const response = await client.updateBlockName(modelId, sheetIds.main, blockIds.scale, 'MainGain');
     if (!client.isSuccess(response)) throw new Error(response.error);
   });
 
-  // Test 12: Update Block Parameters
+  // Test 13: Update Block Parameters
   await runTest('Update Block Parameters', async () => {
     const response = await client.updateBlockParameters(modelId, sheetIds.main, blockIds.scale, { factor: 3.5 });
     if (!client.isSuccess(response)) throw new Error(response.error);
   });
 
-  // Test 13: Create Connections
+  // Test 14: Create Connections
   await runTest('Create Complex Connections', async () => {
     // Connect within main sheet
     const conn1 = await client.addConnection(modelId, sheetIds.main, blockIds.sum, 'output', blockIds.mult, 'input0');
@@ -217,34 +252,34 @@ async function fullIntegrationTest() {
     connectionIds.push(conn6.data.id);
   });
 
-  // Test 14: List Connections
+  // Test 15: List Connections
   await runTest('List Connections', async () => {
     const response = await client.listConnections(modelId, sheetIds.main);
     if (!client.isSuccess(response)) throw new Error(response.error);
     if (response.data.connections.length < 4) throw new Error('Expected at least 4 connections on main sheet');
   });
 
-  // Test 15: Get Connection Details
+  // Test 16: Get Connection Details
   await runTest('Get Connection Details', async () => {
     const response = await client.getConnection(modelId, sheetIds.main, connectionIds[0]);
     if (!client.isSuccess(response)) throw new Error(response.error);
   });
 
-  // Test 16: Get Block Ports
+  // Test 17: Get Block Ports
   await runTest('Get Block Ports', async () => {
     const response = await client.getBlockPorts(modelId, sheetIds.main, blockIds.sum);
     if (!client.isSuccess(response)) throw new Error(response.error);
     if (response.data.inputs.length < 2) throw new Error('Sum block should have at least 2 inputs');
   });
 
-  // Test 17: Validate Model
+  // Test 18: Validate Model
   await runTest('Validate Complete Model', async () => {
     const response = await client.validateModel(modelId);
     if (!client.isSuccess(response)) throw new Error(response.error);
     // Note: There might be warnings about unconnected ports, which is OK for this test
   });
 
-  // Test 18: Batch Operations
+  // Test 19: Batch Operations
   await runTest('Batch Operations', async () => {
     const operations = [
       {
@@ -277,13 +312,13 @@ async function fullIntegrationTest() {
     if (response.data.summary.failed > 0) throw new Error('Some batch operations failed');
   });
 
-  // Test 19: Clone Sheet
+  // Test 20: Clone Sheet
   await runTest('Clone Sheet', async () => {
     const response = await client.cloneSheet(modelId, sheetIds.main, 'Main Clone');
     if (!client.isSuccess(response)) throw new Error(response.error);
   });
 
-  // Test 20: Export/Import Sheet
+  // Test 21: Export/Import Sheet
   await runTest('Export and Import Sheet', async () => {
     // Export
     const exportResp = await client.exportSheet(modelId, sheetIds.main);
@@ -295,50 +330,50 @@ async function fullIntegrationTest() {
     if (!client.isSuccess(importResp)) throw new Error(importResp.error);
   });
 
-  // Test 21: Delete Connection
+  // Test 22: Delete Connection
   await runTest('Delete Connection', async () => {
     const response = await client.deleteConnection(modelId, sheetIds.main, connectionIds[0]);
     if (!client.isSuccess(response)) throw new Error(response.error);
   });
 
-  // Test 22: Delete Block
+  // Test 23: Delete Block
   await runTest('Delete Block', async () => {
     const response = await client.deleteBlock(modelId, sheetIds.main, blockIds.lookup1d);
     if (!client.isSuccess(response)) throw new Error(response.error);
   });
 
-  // Test 23: Clear Sheet
+  // Test 24: Clear Sheet
   await runTest('Clear Sheet', async () => {
     const response = await client.clearSheet(modelId, sheetIds.input);
     if (!client.isSuccess(response)) throw new Error(response.error);
   });
 
-  // Test 24: Delete Sheet
+  // Test 25: Delete Sheet
   await runTest('Delete Sheet', async () => {
     const response = await client.deleteSheet(modelId, sheetIds.input);
     if (!client.isSuccess(response)) throw new Error(response.error);
   });
 
-  // Test 25: Get Model Metadata
+  // Test 26: Get Model Metadata
   await runTest('Get Model Metadata', async () => {
     const response = await client.getModelMetadata(modelId);
     if (!client.isSuccess(response)) throw new Error(response.error);
   });
 
-  // Test 26: Error Handling - Invalid Block Type
+  // Test 27: Error Handling - Invalid Block Type
   await runTest('Error Handling - Invalid Block Type', async () => {
     const response = await client.addBlock(modelId, sheetIds.main, 'invalid_type', 'BadBlock', { x: 0, y: 0 });
     if (client.isSuccess(response)) throw new Error('Should have failed with invalid block type');
   });
 
-  // Test 27: Error Handling - Invalid Connection
+  // Test 28: Error Handling - Invalid Connection
   await runTest('Error Handling - Invalid Connection', async () => {
     // Try to connect output to output (should fail)
     const response = await client.addConnection(modelId, sheetIds.main, blockIds.sum, 'output', blockIds.mult, 'output');
     if (client.isSuccess(response)) throw new Error('Should have failed with invalid connection');
   });
 
-  // Test 28: Transactional Batch (should rollback)
+  // Test 29: Transactional Batch (should rollback)
   await runTest('Transactional Batch Rollback', async () => {
     const operations = [
       {
@@ -363,7 +398,7 @@ async function fullIntegrationTest() {
     if (client.isSuccess(response)) throw new Error('Transactional batch should have failed');
   });
 
-  // Test 29: Metrics (if implemented)
+  // Test 30: Metrics (if implemented)
   await runTest('Get API Metrics', async () => {
     const response = await client.getMetricsSummary();
     // This might fail if metrics aren't implemented, which is OK
@@ -372,7 +407,7 @@ async function fullIntegrationTest() {
     }
   });
 
-  // Test 30: Delete Model (cleanup)
+  // Test 31: Delete Model (cleanup)
   await runTest('Delete Model', async () => {
     const response = await client.deleteModel(modelId);
     if (!client.isSuccess(response)) throw new Error(response.error);

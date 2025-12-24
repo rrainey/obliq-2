@@ -6,7 +6,7 @@ import { memo, CSSProperties, useEffect, useState } from 'react'
 import { Handle, Position, NodeProps } from 'reactflow'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
-import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, IconCube } from '@tabler/icons-react'
+import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, IconCube, IconClockCog, IconX } from '@tabler/icons-react'
 import { useComputedColorScheme } from '@mantine/core'
 import CommentNode from './CommentNode'
 
@@ -253,6 +253,16 @@ const getBlockSymbol = (data: BlockNodeData) => {
   // Handle limit block with Tabler icon
   if (data.type === 'limit') {
     return <IconMathMaxMin size={24} stroke={1.5} />
+  }
+
+  // Handle clock block with Tabler icon
+  if (data.type === 'clock') {
+    return <IconClockCog size={24} stroke={1.5} />
+  }
+
+  // Handle no_connection block with Tabler icon
+  if (data.type === 'no_connection') {
+    return <IconX size={20} stroke={2} />
   }
 
   // Handle source blocks with constant values
@@ -713,7 +723,12 @@ const getBlockWidth = (data: BlockNodeData): number => {
     const estimatedWidth = fullText.length * 7 + 40
     return Math.max(80, Math.min(200, estimatedWidth))
   }
-  
+
+  // No Connection block is half the default size
+  if (data.type === 'no_connection') {
+    return 40
+  }
+
   return 80 // Default width
 }
 
@@ -810,9 +825,11 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
     : getBlockWidth(data)
   const minHeight = isTerminator
     ? TERMINATOR_HEIGHT
-    : isSubsystem && data.parameters?.height
-      ? data.parameters.height
-      : Math.max(MIN_HEIGHT, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
+    : data.type === 'no_connection'
+      ? 32 // Half size for no_connection block
+      : isSubsystem && data.parameters?.height
+        ? data.parameters.height
+        : Math.max(MIN_HEIGHT, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
   const [updateTrigger, setUpdateTrigger] = useState(0);
 
   // Get sum block signs
@@ -868,6 +885,21 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
   const resetHandleHoverStyle: CSSProperties = {
     backgroundColor: '#ef4444',
     boxShadow: '0 0 0 2px #fca5a5',
+  }
+
+  // Special style for init handle (x(0) port)
+  const initHandleStyle: CSSProperties = {
+    width: 12,
+    height: 12,
+    borderRadius: '50%',
+    backgroundColor: '#059669', // Green color for init
+    border: '2px solid #ffffff',
+    cursor: 'crosshair',
+  }
+
+  const initHandleHoverStyle: CSSProperties = {
+    backgroundColor: '#10b981',
+    boxShadow: '0 0 0 2px #6ee7b7',
   }
 
   // CSS additions for port labels
@@ -1004,25 +1036,27 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           {portSignStyles}
         </style>
 
-        {/* Block Name - positioned above the block */}
-        <div
-          className={`absolute left-0 right-0 text-center font-medium pointer-events-none ${isDark ? 'text-gray-200' : 'text-gray-800'}`}
-          style={{
-            width: blockWidth,
-            fontSize: '0.5rem',
-            lineHeight: '0.75rem',
-            top: isTerminator ? '-0.7rem' : '-0.75rem'
-          }}
-        >
-          {data.name}
-          {/* Signal name indicator for sheet labels */}
-          {(data.type === 'sheet_label_sink' || data.type === 'sheet_label_source') &&
-          data.parameters?.signalName && (
-            <div className={`mt-0.5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} style={{ fontSize: '0.5rem' }}>
-              &quot;{data.parameters.signalName}&quot;
-            </div>
-          )}
-        </div>
+        {/* Block Name - positioned above the block (hidden for no_connection blocks) */}
+        {data.type !== 'no_connection' && (
+          <div
+            className={`absolute left-0 right-0 text-center font-medium pointer-events-none ${isDark ? 'text-gray-200' : 'text-gray-800'}`}
+            style={{
+              width: blockWidth,
+              fontSize: '0.5rem',
+              lineHeight: '0.75rem',
+              top: isTerminator ? '-0.7rem' : '-0.75rem'
+            }}
+          >
+            {data.name}
+            {/* Signal name indicator for sheet labels */}
+            {(data.type === 'sheet_label_sink' || data.type === 'sheet_label_source') &&
+            data.parameters?.signalName && (
+              <div className={`mt-0.5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} style={{ fontSize: '0.5rem' }}>
+                &quot;{data.parameters.signalName}&quot;
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Enable port indicator for blocks with showEnableInput (subsystem, integrator) */}
         {(data.type === 'subsystem' || data.type === 'integrator') && data.parameters?.showEnableInput && (
@@ -1045,12 +1079,33 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             className="absolute text-red-600 font-bold pointer-events-none"
             style={{
               bottom: -8,
-              left: blockWidth / 2 - 6,
+              // Position left if init port is also shown, otherwise center
+              left: data.parameters?.showInitPort
+                ? blockWidth / 2 - 20
+                : blockWidth / 2 - 6,
               fontSize: '0.75rem',
               transform: 'translateX(-50%)',
             }}
           >
             ▲
+          </div>
+        )}
+
+        {/* Init port indicator for integrator blocks with showInitPort */}
+        {data.type === 'integrator' && data.parameters?.showInitPort && (
+          <div
+            className="absolute text-green-600 font-bold pointer-events-none"
+            style={{
+              bottom: -10,
+              // Position right if reset port is also shown, otherwise center
+              left: data.parameters?.showResetInput
+                ? blockWidth / 2 + 8
+                : blockWidth / 2 - 6,
+              fontSize: '0.55rem',
+              transform: 'translateX(-50%)',
+            }}
+          >
+            x(0)
           </div>
         )}
 
@@ -1209,7 +1264,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           />
         )}
 
-        {/* Reset Handle - Special port at bottom center for integrator blocks with showResetInput */}
+        {/* Reset Handle - Special port at bottom for integrator blocks with showResetInput */}
         {data.type === 'integrator' && data.parameters?.showResetInput && (
           <Handle
             type="target"
@@ -1218,7 +1273,10 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             style={{
               ...resetHandleStyle,
               bottom: -6,
-              left: blockWidth / 2,
+              // Position left if init port is also shown, otherwise center
+              left: data.parameters?.showInitPort
+                ? blockWidth / 2 - 14
+                : blockWidth / 2,
               transform: 'translateX(-50%)',
             }}
             onMouseEnter={(e) => {
@@ -1228,6 +1286,32 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             onMouseLeave={(e) => {
               const target = e.target as HTMLElement
               Object.assign(target.style, resetHandleStyle)
+            }}
+          />
+        )}
+
+        {/* Init Handle - Special port at bottom for integrator blocks with showInitPort */}
+        {data.type === 'integrator' && data.parameters?.showInitPort && (
+          <Handle
+            type="target"
+            position={Position.Bottom}
+            id="_init_"
+            style={{
+              ...initHandleStyle,
+              bottom: -6,
+              // Position right if reset port is also shown, otherwise center
+              left: data.parameters?.showResetInput
+                ? blockWidth / 2 + 14
+                : blockWidth / 2,
+              transform: 'translateX(-50%)',
+            }}
+            onMouseEnter={(e) => {
+              const target = e.target as HTMLElement
+              Object.assign(target.style, initHandleHoverStyle)
+            }}
+            onMouseLeave={(e) => {
+              const target = e.target as HTMLElement
+              Object.assign(target.style, initHandleStyle)
             }}
           />
         )}
@@ -1340,11 +1424,14 @@ export const wireDataToEdge = (wire: any) => {
   // Map special port indices to handle IDs
   // -1 = enable port (top edge)
   // -2 = reset port (bottom edge)
+  // -3 = init port (bottom edge, x(0) for integrator)
   let targetHandle: string
   if (wire.targetPortIndex === -1) {
     targetHandle = '_enable_'
   } else if (wire.targetPortIndex === -2) {
     targetHandle = '_reset_'
+  } else if (wire.targetPortIndex === -3) {
+    targetHandle = '_init_'
   } else {
     targetHandle = `input-${wire.targetPortIndex}`
   }

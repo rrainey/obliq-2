@@ -137,6 +137,14 @@ const blockTypes: BlockType[] = [
     icon: '◦',
     vectorSupport: 'full'
   },
+  {
+    id: 'clock',
+    name: 'Clock',
+    category: 'Sources',
+    description: 'Simulation time output',
+    icon: '⏱',
+    vectorSupport: 'scalar-only'
+  },
 
   // Display & Logging
   {
@@ -153,6 +161,14 @@ const blockTypes: BlockType[] = [
     category: 'Display',
     description: 'Log signal data',
     icon: '📝',
+    vectorSupport: 'full'
+  },
+  {
+    id: 'no_connection',
+    name: 'No Connection',
+    category: 'Sinks',
+    description: 'Mark signal as unused',
+    icon: '✕',
     vectorSupport: 'full'
   },
 

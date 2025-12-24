@@ -126,6 +126,15 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     inputs: [],
     outputs: ['output']
   },
+  {
+    type: 'clock',
+    displayName: 'Clock',
+    category: 'Sources',
+    description: 'Outputs the current simulation time in seconds as a double scalar value. No configuration required.',
+    parameters: {},
+    inputs: [],
+    outputs: ['output']
+  },
 
   // === Ports ===
   {
@@ -337,8 +346,13 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     parameters: {
       initialValue: {
         type: 'number',
-        description: 'Initial state value at simulation start',
+        description: 'Initial state value at simulation start (ignored when showInitPort=true)',
         default: 0
+      },
+      showInitPort: {
+        type: 'boolean',
+        description: 'Show x(0) initialization port. When enabled, initial value comes from connected signal instead of initialValue parameter. The connected signal type must match the integrator input type.',
+        default: false
       },
       showEnableInput: {
         type: 'boolean',
@@ -347,7 +361,7 @@ const blockTypeSchemas: BlockTypeInfo[] = [
       },
       showResetInput: {
         type: 'boolean',
-        description: 'Show reset input port (when true/nonzero, state resets to initial value)',
+        description: 'Show reset input port (on rising edge, state resets to initial value)',
         default: false
       },
       useLimits: {
@@ -368,7 +382,7 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     },
     inputs: ['input'],
     outputs: ['output'],
-    dynamicPorts: 'Additional ports appear based on showEnableInput and showResetInput'
+    dynamicPorts: 'Additional ports: enable (top, port -1) when showEnableInput=true; reset (bottom, port -2) when showResetInput=true; x(0) init (bottom, port -3) when showInitPort=true'
   },
   {
     type: 'discrete_transform',
@@ -625,6 +639,15 @@ const blockTypeSchemas: BlockTypeInfo[] = [
         maximum: 10000
       }
     },
+    inputs: ['input'],
+    outputs: []
+  },
+  {
+    type: 'no_connection',
+    displayName: 'No Connection',
+    category: 'Sinks',
+    description: 'Marks a signal as intentionally unused. When an output is connected to a No Connection block, no other connections can be made from that output. Use this to document signals that are not needed in the model.',
+    parameters: {},
     inputs: ['input'],
     outputs: []
   },

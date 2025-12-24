@@ -231,6 +231,19 @@ Each primitive block type is defined with specific behavior:
 * **Unary Minus** - one scalar input
 * **Absolute Value** - in input of any type. Output type matches the input.
 * **Laplace Transfer Function Block** – represents a dynamic system; it has a mathematical transfer function (one input, one output with internal state representing the differential equation). The transfer function is specified by numerator and denominator polynomial coefficients ordered from highest to lowest power of s (e.g., for H(s) = (s + 2)/(s² + 3s + 1), numerator = [1, 2] and denominator = [1, 3, 1]). Internal integration of this block shall be performed by a Runge-Kutta Fourth Order Integration algorithm. The generated C code shall include a separate `_derivatives` function to support proper RK4 implementation.
+* **Integrator Block** – integrates the input signal over time (equivalent to a 1/s transfer function). The block supports several configuration options:
+  - `initialValue`: Initial state value at simulation start (default: 0)
+  - `showInitPort`: When enabled, adds an x(0) initialization port that accepts an external signal to set the initial state value. The signal type must match the integrator's input type. Uses port index -3.
+  - `showEnableInput`: Adds an enable port (top edge, port index -1). When the enable input is false/0, integration is paused and the output holds its current value.
+  - `showResetInput`: Adds a reset port (bottom edge, port index -2). On rising edge, the integrator state resets to the initial value.
+  - `useLimits`: Enables output saturation with configurable `lowerLimit` and `upperLimit` bounds.
+  The integrator uses Euler integration for state updates and supports scalar, vector, and matrix input types.
+* **Discrete Transform Block** – implements a discrete-time transfer function (z-transform) using difference equations. Updates at specified sample intervals. Configuration includes:
+  - `numerator`: Z-domain numerator polynomial coefficients [highest power first] (e.g., [1, 0.5] for z + 0.5)
+  - `denominator`: Z-domain denominator polynomial coefficients [highest power first] (e.g., [1, -0.8] for z - 0.8)
+  - `sampleTime`: Sample period in seconds (default: 0.01)
+  The block maintains internal state for previous inputs and outputs to implement the difference equation. Useful for digital filters, discrete controllers, and sampled-data systems.
+* **Clock Block** – outputs the current simulation time in seconds as a double scalar value. No input ports, one output port. Requires no configuration. Useful for time-dependent calculations, ramp generation, or triggering time-based events in models.
 * **Signal Display Block** – an output-only block that graphically displays a signal (for simulation visualization purposes; no outputs). The Signal display block should be capable of storing a fixed number of input Signal samples from each time step of the simulation.  The number of samples should be configurable for each block. The default number of stored samples should be 1000.  Signal Display blocks are only important to the interactive simulation.  These will be ignored when generating C-code. Recorded signals will be plotted as line charts using a popular charting package such as **Recharts**.
 * **Signal Logger Block** – an output-only block that logs a signal's values during simulation (could be used to export data later; no outputs).
 * **Input Port Block** – a source block representing an external input (no inputs, one output). This would be where external signals enter a subsystem or top-level model.
@@ -299,6 +312,9 @@ Each block type has a distinct visual appearance designed to convey its function
 
 **Dynamic System Blocks:**
 - **Transfer Function Block** – Rectangular block displaying the transfer function as a fraction with numerator and denominator polynomials. Width adjusts dynamically based on polynomial length. Polynomials are formatted with proper superscripts for powers of s (e.g., s², s³).
+- **Integrator Block** – Rectangular block displaying "∫" (integral) symbol. Supports special ports on top (enable) and bottom (reset, init x(0)) edges when configured. Port colors: enable (blue), reset (red), init (green). The init port displays "x(0)" label below the block.
+- **Discrete Transform Block** – Rectangular block displaying the z-domain transfer function as a fraction with numerator and denominator polynomials. Similar to Transfer Function but with powers of z instead of s. Includes sample time indicator.
+- **Clock Block** – Rectangular block displaying a clock icon "⏱" (stopwatch/timer symbol). Single output port on the right edge. No input ports.
 
 **Data Lookup Blocks:**
 - **1-D Lookup Block** – Rectangular block containing a 60x40px SVG diagram showing the actual lookup curve. The diagram displays:
@@ -780,7 +796,18 @@ Subsystems have a special "enable" Boolean input signal.  By default, its value 
 
 **Output behavior when disabled** You mentioned "Subsystem outputs would be generated as usual including using any frozen state values." Disabled Subsystems should hold their last values from when the subsystem was enabled. This implies that an initial value of all outputs must be computed based on the state of the system (taking into account initial values of all state variables), so that these outputs may be used for the Subsystem until it is enabled.
 
-**"enable" has a Special Port Number** Enable ports will be assigned a special index of -1 - for example, -1 will appear as the targetPortIndex for a connection where the "enable" port is the target of a connection.  Using -1 avoids affecting the order of other, regular input ports.
+**Special Port Indices** Certain blocks have special ports that use negative indices to distinguish them from regular input ports. This avoids affecting the order of regular input ports (0, 1, 2, ...) and simplifies connection handling:
+
+| Port Index | Port Type | Description | Handle ID |
+|------------|-----------|-------------|-----------|
+| 0, 1, 2... | Regular   | Standard input ports on the left edge | `input-0`, `input-1`, etc. |
+| -1         | Enable    | Subsystem/Integrator enable port (top edge) | `_enable_` |
+| -2         | Reset     | Integrator reset port (bottom edge) | `_reset_` |
+| -3         | Init x(0) | Integrator initialization port (bottom edge) | `_init_` |
+
+The enable port (-1) is used by Subsystem blocks (when `showEnableInput=true`) and Integrator blocks (when `showEnableInput=true`). The reset port (-2) and init port (-3) are specific to Integrator blocks.
+
+When both reset and init ports are enabled on an Integrator, they appear side by side on the bottom edge (reset on the left, init on the right). The UI uses distinct colors for each special port type: enable is blue, reset is red, and init is green.
 
 **Default enable behavior** Where a subsystem has showEnableInput=false, it is enabled only if immediate parent is enabled. Similar to other rules, the top level model is special: it does not have its own showEnableInput tracking. Instead, it is always considered "enabled".
 
@@ -953,6 +980,21 @@ The MCP `add_connection` tool accepts both port indices (preferred) and port nam
 - When port names are provided, they are resolved to indices using block metadata
 - Connections are stored using indices as the canonical format
 - The `get_connection` response includes computed port names for readability
+
+**Special Port Connections via MCP:**
+The MCP API supports connecting to special ports using negative indices:
+- Use target port index `-1` to connect to an enable port
+- Use target port index `-2` to connect to a reset port (Integrator)
+- Use target port index `-3` to connect to an init/x(0) port (Integrator)
+
+Example for connecting to an Integrator's x(0) initialization port:
+```typescript
+await client.addConnection(
+  modelId, sheetId,
+  sourceBlockId, 0,    // Source output port 0
+  integratorId, -3     // Integrator x(0) port (init)
+);
+```
 
 ## State Management and Data Flow
 

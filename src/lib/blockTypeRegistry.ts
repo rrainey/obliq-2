@@ -18,6 +18,7 @@ export interface BlockTypeDefinition {
 export const BlockTypes = {
   // Source blocks
   SOURCE: 'source',
+  CLOCK: 'clock',
   INPUT_PORT: 'input_port',
   
   // Math blocks
@@ -40,7 +41,8 @@ export const BlockTypes = {
   OUTPUT_PORT: 'output_port',
   SIGNAL_DISPLAY: 'signal_display',
   SIGNAL_LOGGER: 'signal_logger',
-  
+  NO_CONNECTION: 'no_connection',
+
   // Sheet labels
   SHEET_LABEL_SINK: 'sheet_label_sink',
   SHEET_LABEL_SOURCE: 'sheet_label_source',
@@ -104,6 +106,16 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [],
     outputs: [{ name: 'output' }],
     description: 'Provides a constant or signal generator output'
+  },
+
+  [BlockTypes.CLOCK]: {
+    type: BlockTypes.CLOCK,
+    displayName: 'Clock',
+    category: 'Sources',
+    defaultParameters: {},
+    inputs: [],
+    outputs: [{ name: 'output' }],
+    description: 'Outputs the current simulation time in seconds as a double scalar'
   },
 
   [BlockTypes.INPUT_PORT]: {
@@ -277,7 +289,17 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     outputs: [],
     description: 'Logs signal values for export'
   },
-  
+
+  [BlockTypes.NO_CONNECTION]: {
+    type: BlockTypes.NO_CONNECTION,
+    displayName: 'No Connection',
+    category: 'Sinks',
+    defaultParameters: {},
+    inputs: [{ name: 'input' }],
+    outputs: [],
+    description: 'Marks a signal as intentionally unused. When connected, prevents other connections from the same output.'
+  },
+
   [BlockTypes.SHEET_LABEL_SINK]: {
     type: BlockTypes.SHEET_LABEL_SINK,
     displayName: 'Sheet Label Sink',

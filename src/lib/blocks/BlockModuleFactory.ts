@@ -6,6 +6,7 @@ import { MultiplyBlockModule } from './MultiplyBlockModule'
 import { InputPortBlockModule } from './InputPortBlockModule'
 import { OutputPortBlockModule } from './OutputPortBlockModule'
 import { SourceBlockModule } from './SourceBlockModule'
+import { ClockBlockModule } from './ClockBlockModule'
 import { ScaleBlockModule } from './ScaleBlockModule'
 import { EvaluateBlockModule } from './EvaluateBlockModule'
 import { TransferFunctionBlockModule } from './TransferFunctionBlockModule'
@@ -34,6 +35,7 @@ import { SheetLabelSourceBlockModule } from './SheetLabelSourceBlockModule'
 import { SubsystemBlockModule } from './SubsystemBlockModule'
 import { SignalDisplayBlockModule } from './SignalDisplayBlockModule'
 import { SignalLoggerBlockModule } from './SignalLoggerBlockModule'
+import { NoConnectionBlockModule } from './NoConnectionBlockModule'
 
 /**
  * Factory for creating block-specific code generators
@@ -83,7 +85,10 @@ export class BlockModuleFactory {
         
       case 'source':
         return new SourceBlockModule()
-        
+
+      case 'clock':
+        return new ClockBlockModule()
+
       case 'scale':
         return new ScaleBlockModule()
 
@@ -115,7 +120,10 @@ export class BlockModuleFactory {
         return new SignalDisplayBlockModule() 
 
       case 'signal_logger':
-        return new SignalLoggerBlockModule() 
+        return new SignalLoggerBlockModule()
+
+      case 'no_connection':
+        return new NoConnectionBlockModule()
 
       case 'sheet_label_sink':
         return new SheetLabelSinkBlockModule()
@@ -187,6 +195,7 @@ export class BlockModuleFactory {
       'input_port',
       'output_port',
       'source',
+      'clock',
       'scale',
       'evaluate',
       'transfer_function',
@@ -202,6 +211,7 @@ export class BlockModuleFactory {
       'dot',
       'signal_display',
       'signal_logger',
+      'no_connection',
       'if',
       'condition',
       'abs',

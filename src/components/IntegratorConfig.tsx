@@ -13,6 +13,7 @@ interface IntegratorConfigProps {
 
 export default function IntegratorConfig({ block, onUpdate, onClose }: IntegratorConfigProps) {
   const [initialValue, setInitialValue] = useState<number>(block.parameters?.initialValue ?? 0)
+  const [showInitPort, setShowInitPort] = useState<boolean>(block.parameters?.showInitPort ?? false)
   const [showEnableInput, setShowEnableInput] = useState<boolean>(block.parameters?.showEnableInput ?? false)
   const [showResetInput, setShowResetInput] = useState<boolean>(block.parameters?.showResetInput ?? false)
   const [useLimits, setUseLimits] = useState<boolean>(block.parameters?.useLimits ?? false)
@@ -27,7 +28,8 @@ export default function IntegratorConfig({ block, onUpdate, onClose }: Integrato
     }
 
     const parameters = {
-      initialValue,
+      initialValue: showInitPort ? 0 : initialValue,
+      showInitPort,
       showEnableInput,
       showResetInput,
       useLimits,
@@ -67,6 +69,13 @@ export default function IntegratorConfig({ block, onUpdate, onClose }: Integrato
       centered
     >
       <Stack gap="md">
+        <Checkbox
+          label="Show Initialization Port"
+          description="Use external signal to set initial value via x(0) port"
+          checked={showInitPort}
+          onChange={(e) => setShowInitPort(e.currentTarget.checked)}
+        />
+
         <NumberInput
           label="Initial Value"
           value={initialValue}
@@ -74,6 +83,7 @@ export default function IntegratorConfig({ block, onUpdate, onClose }: Integrato
           decimalScale={10}
           description="The starting value of the integrator at t=0"
           placeholder="Enter initial value"
+          disabled={showInitPort}
         />
 
         <Divider label="Optional Inputs" labelPosition="left" />

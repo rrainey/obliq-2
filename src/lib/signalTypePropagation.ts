@@ -67,6 +67,10 @@ function getBlockOutputType(block: BlockData): string | null {
     case 'input_port':
       // These blocks have explicit dataType parameter
       return block.parameters?.dataType || 'double'
+
+    case 'clock':
+      // Clock always outputs simulation time as double
+      return 'double'
     
     case 'sum':
     case 'multiply':
@@ -108,6 +112,7 @@ function getBlockOutputType(block: BlockData): string | null {
     
     case 'signal_display':
     case 'signal_logger':
+    case 'no_connection':
     case 'output_port':
       // These blocks don't have outputs
       return null
@@ -670,7 +675,7 @@ export function propagateSignalTypes(
               debugLog(`        -> Target "${targetBlock.name}" (${targetBlock.type}): ${targetInputs.length}/${expectedInputs} inputs`)
               // Subsystems can be processed independently - their internal input_ports have explicit types
               if (targetInputs.length === expectedInputs ||
-                  ['signal_display', 'signal_logger', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
+                  ['signal_display', 'signal_logger', 'no_connection', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
                 processingQueue.push(wire.targetBlockId)
                 processedBlocks.add(wire.targetBlockId)
                 debugLog(`           Added to queue`)
@@ -1348,7 +1353,7 @@ function propagateSignalTypesWithPreset(
               debugLog(`        Target "${targetBlock.name}": has ${targetInputs.length}/${expectedInputs} inputs`)
               // Subsystems can be processed independently - their internal input_ports have explicit types
               if (targetInputs.length === expectedInputs ||
-                  ['signal_display', 'signal_logger', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
+                  ['signal_display', 'signal_logger', 'no_connection', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
                 processingQueue.push(wire.targetBlockId)
                 processedBlocks.add(wire.targetBlockId)
                 debugLog(`        -> Added to queue`)
@@ -1482,7 +1487,7 @@ function propagateSignalTypesWithPreset(
               debugLog(`        -> Target "${targetBlock.name}" (${targetBlock.type}): ${targetInputs.length}/${expectedInputs} inputs`)
               // Subsystems can be processed independently - their internal input_ports have explicit types
               if (targetInputs.length === expectedInputs ||
-                  ['signal_display', 'signal_logger', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
+                  ['signal_display', 'signal_logger', 'no_connection', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
                 processingQueue.push(wire.targetBlockId)
                 processedBlocks.add(wire.targetBlockId)
                 debugLog(`           Added to queue`)
@@ -1527,6 +1532,7 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'lookup_2d':
     case 'input_port':
     case 'source':
+    case 'clock':
     case 'matrix_multiply':
     case 'evaluate':
     case 'if':
@@ -1547,6 +1553,7 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'output_port':
     case 'signal_display':
     case 'signal_logger':
+    case 'no_connection':
       return 0
     case 'subsystem':
       return block.parameters?.outputPorts?.length || 1
@@ -1586,6 +1593,7 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'discrete_transform':
     case 'signal_display':
     case 'signal_logger':
+    case 'no_connection':
     case 'output_port':
     case 'lookup_1d':
       return 1
@@ -1624,6 +1632,7 @@ function getBlockInputPortCount(block: BlockData): number {
     }
     case 'input_port':
     case 'source':
+    case 'clock':
       return 0
     case 'subsystem':
       // Don't count enable port in regular input count

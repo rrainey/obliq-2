@@ -582,7 +582,41 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       console.error('Cannot create wire: source or target block not found')
       return
     }
-    
+
+    // Validation for No Connection blocks
+    // Rule 1: If target is no_connection, source output must have no other connections
+    if (targetBlock.type === 'no_connection') {
+      const existingConnections = wires.filter(w =>
+        w.sourceBlockId === sourcePort.blockId &&
+        w.sourcePortIndex === sourcePort.portIndex
+      )
+      if (existingConnections.length > 0) {
+        notifications.show({
+          title: 'Invalid connection',
+          message: `Cannot connect to No Connection block: ${sourceBlock.name} output already has other connections. Remove existing connections first.`,
+          color: 'red',
+          icon: <IconAlertCircle size={20} />
+        })
+        return
+      }
+    }
+
+    // Rule 2: If source output is already connected to a no_connection block, prevent new connections
+    const existingNoConnectionWire = wires.find(w =>
+      w.sourceBlockId === sourcePort.blockId &&
+      w.sourcePortIndex === sourcePort.portIndex &&
+      blocks.find(b => b.id === w.targetBlockId)?.type === 'no_connection'
+    )
+    if (existingNoConnectionWire) {
+      notifications.show({
+        title: 'Invalid connection',
+        message: `${sourceBlock.name} output is marked as "No Connection" and cannot have additional connections.`,
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
+      return
+    }
+
     // Special validation for lookup blocks
     if (targetBlock.type === 'lookup_1d' || targetBlock.type === 'lookup_2d') {
       // Get the source block's output type

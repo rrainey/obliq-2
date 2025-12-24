@@ -63,9 +63,10 @@ export interface IBlockModule {
    * Generate initialization code for this block (optional).
    * @param block - The block data
    * @param outputType - The C type string for the output (e.g., "double", "double[3]")
+   * @param initSignalExpr - Optional C expression for external initial value signal (e.g., for integrator x(0) port)
    * @returns C code for initialization or undefined if not needed
    */
-  generateInitialization?(block: BlockData, outputType?: string): string
+  generateInitialization?(block: BlockData, outputType?: string, initSignalExpr?: string): string
 
   /**
    * Get the number of input ports for this block.

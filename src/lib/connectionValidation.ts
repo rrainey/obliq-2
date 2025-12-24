@@ -91,14 +91,16 @@ export function validateConnection(
   
   // Special handling for enable port (port index -1)
   if (targetPort.portIndex === -1) {
-    // Verify this is a subsystem with enable input
-    if (targetBlock.type !== 'subsystem' || !targetBlock.parameters?.showEnableInput) {
+    // Verify this is a subsystem or integrator with enable input
+    const hasEnablePort = (targetBlock.type === 'subsystem' || targetBlock.type === 'integrator') &&
+                          targetBlock.parameters?.showEnableInput
+    if (!hasEnablePort) {
       return {
         isValid: false,
         errorMessage: "Block does not have an enable port"
       }
     }
-    
+
     // Rule 5a: Enable port must receive boolean signal
     const sourceType = getBlockOutputType(sourceBlock, sourcePort.portIndex)
     if (sourceType && !isBooleanType(sourceType)) {
@@ -107,6 +109,34 @@ export function validateConnection(
         errorMessage: `Enable port requires boolean signal, but source provides ${sourceType}`
       }
     }
+  } else if (targetPort.portIndex === -2) {
+    // Special handling for reset port (port index -2)
+    // Verify this is an integrator with reset input
+    if (targetBlock.type !== 'integrator' || !targetBlock.parameters?.showResetInput) {
+      return {
+        isValid: false,
+        errorMessage: "Block does not have a reset port"
+      }
+    }
+    // Reset port accepts boolean signal (rising edge triggers reset)
+    const sourceType = getBlockOutputType(sourceBlock, sourcePort.portIndex)
+    if (sourceType && !isBooleanType(sourceType)) {
+      return {
+        isValid: false,
+        errorMessage: `Reset port requires boolean signal, but source provides ${sourceType}`
+      }
+    }
+  } else if (targetPort.portIndex === -3) {
+    // Special handling for init port (port index -3, x(0) for integrator)
+    // Verify this is an integrator with init port enabled
+    if (targetBlock.type !== 'integrator' || !targetBlock.parameters?.showInitPort) {
+      return {
+        isValid: false,
+        errorMessage: "Block does not have an initialization port"
+      }
+    }
+    // Init port signal type should match the integrator's expected signal type
+    // (We don't strictly validate this here - the code generator will handle type matching)
   } else {
     // Regular port validation
     if (sourcePort.portIndex >= sourcePortCount) {

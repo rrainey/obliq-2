@@ -113,12 +113,46 @@ await client.addBlock(modelId, sheetId, 'sum', 'Sum1', position);
 
 ### Creating Connections
 ```typescript
+// Regular port connections use port indices (0, 1, 2, ...)
 await client.addConnection(
-  modelId, 
+  modelId,
   sheetId,
-  sourceBlockId, 
-  'output',
-  targetBlockId, 
-  'input0'
+  sourceBlockId,
+  0,             // Source port index (output ports: 0, 1, 2, ...)
+  targetBlockId,
+  0              // Target port index (input ports: 0, 1, 2, ...)
+);
+```
+
+### Special Port Indices
+
+Some blocks (like Integrator) have special ports with negative indices:
+
+| Port Index | Port Type | Description |
+|------------|-----------|-------------|
+| 0, 1, 2... | Regular   | Normal input/output ports |
+| -1         | Enable    | Integrator enable port (top edge, when `showEnableInput=true`) |
+| -2         | Reset     | Integrator reset port (bottom edge, when `showResetInput=true`) |
+| -3         | Init x(0) | Integrator initialization port (bottom edge, when `showInitPort=true`) |
+
+```typescript
+// Example: Connect to integrator's x(0) initialization port
+const integrator = await client.addBlock(
+  modelId, sheetId, 'integrator', 'MyIntegrator',
+  { x: 300, y: 200 },
+  { showInitPort: true }  // Enable x(0) port
+);
+
+const initValue = await client.addBlock(
+  modelId, sheetId, 'source', 'InitValue',
+  { x: 100, y: 300 },
+  { value: '5.0' }
+);
+
+// Connect source to integrator's x(0) port (index -3)
+await client.addConnection(
+  modelId, sheetId,
+  initValue.data.id, 0,    // Source output port 0
+  integrator.data.id, -3   // Target init port -3
 );
 ```

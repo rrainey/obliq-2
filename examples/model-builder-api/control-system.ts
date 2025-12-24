@@ -75,14 +75,24 @@ async function createControlSystem() {
     if (!client.isSuccess(iGainResp)) throw new Error(iGainResp.error);
     const iGainId = iGainResp.data.id;
 
+    // Using actual Integrator block (not transfer function)
+    // Shows optional ports: showInitPort for x(0) initialization,
+    // showEnableInput for pausing, showResetInput for resetting
     const integratorResp = await client.addBlock(
-      modelId, sheetId, 'transfer_function', 'Integrator',
+      modelId, sheetId, 'integrator', 'Integrator',
       { x: 550, y: 200 },
-      { numerator: [1], denominator: [1, 0] }
+      {
+        initialValue: 0,        // Initial state at t=0 (ignored if showInitPort=true)
+        showInitPort: false,    // Set to true to enable x(0) port for external initialization
+        showEnableInput: false, // Set to true to add enable port (top, port -1)
+        showResetInput: false,  // Set to true to add reset port (bottom, port -2)
+        useLimits: false        // Set to true to enable output saturation
+        // When showInitPort=true, connect to port index -3 for x(0) initialization
+      }
     );
     if (!client.isSuccess(integratorResp)) throw new Error(integratorResp.error);
     const integratorId = integratorResp.data.id;
-    console.log('   ✓ Added Integral path');
+    console.log('   ✓ Added Integral path (using Integrator block)');
 
     // D gain with derivative
     const dGainResp = await client.addBlock(
