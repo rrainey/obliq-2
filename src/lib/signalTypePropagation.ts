@@ -75,6 +75,7 @@ function getBlockOutputType(block: BlockData): string | null {
     case 'integrator':
     case 'units_conversion':
     case 'transfer_function':
+    case 'discrete_transform':
     case 'lookup_1d':
     case 'lookup_2d':
     case 'matrix_multiply':  // New: matrix multiply output depends on inputs
@@ -197,6 +198,7 @@ function determineProcessingBlockOutputType(
       return typeToString(parsedTypes[0])
 
     case 'transfer_function':
+    case 'discrete_transform':
       // Transfer function: output type matches input type
       // Arrays and matrices are processed element-wise
       return typeToString(parsedTypes[0])
@@ -1520,6 +1522,7 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'integrator':
     case 'units_conversion':
     case 'transfer_function':
+    case 'discrete_transform':
     case 'lookup_1d':
     case 'lookup_2d':
     case 'input_port':
@@ -1580,6 +1583,7 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'limit':
     case 'units_conversion':
     case 'transfer_function':
+    case 'discrete_transform':
     case 'signal_display':
     case 'signal_logger':
     case 'output_port':
@@ -1838,6 +1842,7 @@ export function getMatrixBlockOutputType(
     case 'integrator':
     case 'units_conversion':
     case 'transfer_function':
+    case 'discrete_transform':
       // Limit, integrator, units conversion, and transfer functions process each element independently
       return parsedInputs.length > 0 ? typeToString(parsedInputs[0]) : null
     

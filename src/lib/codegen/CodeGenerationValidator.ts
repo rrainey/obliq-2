@@ -377,17 +377,70 @@ export class CodeGenerationValidator {
    * Validate source block parameters
    */
   private validateSource(block: FlattenedBlock): void {
-    const sourceType = block.block.parameters?.sourceType || 'constant'
-    
-    if (sourceType === 'constant') {
-      const value = block.block.parameters?.value
-      if (value === undefined || value === null) {
-        this.addError({
-          code: 'MISSING_PARAMETER',
-          message: `Source block '${block.flattenedName}' missing value parameter`,
-          blockId: block.originalId
-        })
-      }
+    const signalType = block.block.parameters?.signalType || 'constant'
+    const params = block.block.parameters || {}
+
+    switch (signalType) {
+      case 'constant':
+        // Constant requires a value (scalar, vector, or matrix)
+        if (params.value === undefined && !params.useParameter) {
+          this.addError({
+            code: 'MISSING_PARAMETER',
+            message: `Source block '${block.flattenedName}' (constant) missing value parameter`,
+            blockId: block.originalId
+          })
+        }
+        break
+
+      case 'step':
+        // Step requires stepTime and stepValue (scalars only)
+        if (params.stepTime === undefined) {
+          this.addError({
+            code: 'MISSING_PARAMETER',
+            message: `Source block '${block.flattenedName}' (step) missing stepTime parameter`,
+            blockId: block.originalId
+          })
+        }
+        if (params.stepValue === undefined) {
+          this.addError({
+            code: 'MISSING_PARAMETER',
+            message: `Source block '${block.flattenedName}' (step) missing stepValue parameter`,
+            blockId: block.originalId
+          })
+        }
+        break
+
+      case 'ramp':
+        // Ramp requires startValue and slope (scalars only)
+        if (params.slope === undefined) {
+          this.addError({
+            code: 'MISSING_PARAMETER',
+            message: `Source block '${block.flattenedName}' (ramp) missing slope parameter`,
+            blockId: block.originalId
+          })
+        }
+        // startValue defaults to 0, so only warn if explicitly needed
+        break
+
+      case 'sine':
+        // Sine requires frequency and amplitude (scalars only)
+        if (params.frequency === undefined) {
+          this.addError({
+            code: 'MISSING_PARAMETER',
+            message: `Source block '${block.flattenedName}' (sine) missing frequency parameter`,
+            blockId: block.originalId
+          })
+        }
+        if (params.amplitude === undefined) {
+          this.addError({
+            code: 'MISSING_PARAMETER',
+            message: `Source block '${block.flattenedName}' (sine) missing amplitude parameter`,
+            blockId: block.originalId
+          })
+        }
+        break
+
+      // Other signal types (square, triangle, noise, chirp) can be added as needed
     }
   }
   

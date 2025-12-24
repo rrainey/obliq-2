@@ -96,6 +96,14 @@ const blockTypes: BlockType[] = [
     vectorSupport: 'element-wise'
   },
   {
+    id: 'discrete_transform',
+    name: 'Discrete Transform',
+    category: 'Dynamic',
+    description: 'Z-transform with sample interval',
+    icon: 'H(z)',
+    vectorSupport: 'element-wise'
+  },
+  {
     id: 'integrator',
     name: 'Integrator',
     category: 'Dynamic',

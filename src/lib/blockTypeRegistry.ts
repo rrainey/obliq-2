@@ -30,6 +30,7 @@ export const BlockTypes = {
   
   // Dynamic blocks
   TRANSFER_FUNCTION: 'transfer_function',
+  DISCRETE_TRANSFORM: 'discrete_transform',
   
   // Lookup blocks
   LOOKUP_1D: 'lookup_1d',
@@ -189,6 +190,20 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [{ name: 'input' }],
     outputs: [{ name: 'output' }],
     description: 'Laplace transfer function with RK4 integration'
+  },
+
+  [BlockTypes.DISCRETE_TRANSFORM]: {
+    type: BlockTypes.DISCRETE_TRANSFORM,
+    displayName: 'Discrete Transform',
+    category: 'Dynamic',
+    defaultParameters: {
+      numerator: [1],
+      denominator: [1, -0.5],
+      sampleInterval: 0.01
+    },
+    inputs: [{ name: 'input' }],
+    outputs: [{ name: 'output' }],
+    description: 'Discrete-time transfer function (z-transform) with sample interval'
   },
   
   [BlockTypes.LOOKUP_1D]: {

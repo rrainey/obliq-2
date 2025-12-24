@@ -26,6 +26,7 @@ import SourceConfig from '@/components/SourceConfig'
 import ScaleConfig from '@/components/ScaleConfig'
 import SubsystemConfig from '@/components/SubsystemConfig'
 import TransferFunctionConfig from '@/components/TransferFunctionConfig'
+import DiscreteTransformConfig from '@/components/DiscreteTransformConfig'
 import TrigConfig from '@/components/TrigConfig'
 import Lookup1DConfig from '@/components/Lookup1DConfig'
 import Lookup2DConfig from '@/components/Lookup2DConfig'
@@ -1317,6 +1318,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'limit' ||
       block.type === 'integrator' ||
       block.type === 'transfer_function' ||
+      block.type === 'discrete_transform' ||
       block.type === 'subsystem' ||
       block.type === 'lookup_1d' ||
       block.type === 'lookup_2d' ||
@@ -2031,6 +2033,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'transfer_function' && (
             <TransferFunctionConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'discrete_transform' && (
+            <DiscreteTransformConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

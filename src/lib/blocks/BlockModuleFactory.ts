@@ -27,6 +27,7 @@ import { LimitBlockModule } from './LimitBlockModule'
 import { IntegratorBlockModule } from './IntegratorBlockModule'
 import { OrientationConversionBlockModule } from './OrientationConversionBlockModule'
 import { UnitsConversionBlockModule } from './UnitsConversionBlockModule'
+import { DiscreteTransformBlockModule } from './DiscreteTransformBlockModule'
 
 import { SheetLabelSinkBlockModule } from './SheetLabelSinkBlockModule'
 import { SheetLabelSourceBlockModule } from './SheetLabelSourceBlockModule'
@@ -161,6 +162,9 @@ export class BlockModuleFactory {
       case 'units_conversion':
         return new UnitsConversionBlockModule()
 
+      case 'discrete_transform':
+        return new DiscreteTransformBlockModule()
+
       default:
         return null
     }
@@ -205,7 +209,8 @@ export class BlockModuleFactory {
       'limit',
       'integrator',
       'orientation_conversion',
-      'units_conversion'
+      'units_conversion',
+      'discrete_transform'
     ]
   }
   

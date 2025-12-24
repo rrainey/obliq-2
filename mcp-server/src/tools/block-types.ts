@@ -370,6 +370,34 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     outputs: ['output'],
     dynamicPorts: 'Additional ports appear based on showEnableInput and showResetInput'
   },
+  {
+    type: 'discrete_transform',
+    displayName: 'Discrete Transform',
+    category: 'Dynamic',
+    description: 'Discrete-time transfer function (z-transform) implemented using difference equations. Updates at specified sample intervals.',
+    parameters: {
+      numerator: {
+        type: 'array',
+        description: 'Numerator polynomial coefficients [highest power first]. Example: [1, 0.5] for z + 0.5',
+        default: [1],
+        items: { type: 'number' }
+      },
+      denominator: {
+        type: 'array',
+        description: 'Denominator polynomial coefficients [highest power first]. Example: [1, -0.8] for z - 0.8',
+        default: [1, -0.5],
+        items: { type: 'number' }
+      },
+      sampleInterval: {
+        type: 'number',
+        description: 'Sample period in seconds (Ts). The block updates its output only at multiples of this interval.',
+        default: 0.01,
+        minimum: 0.0001
+      }
+    },
+    inputs: ['input'],
+    outputs: ['output']
+  },
 
   // === Lookup ===
   {

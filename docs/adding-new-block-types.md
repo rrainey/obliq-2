@@ -16,7 +16,7 @@ Adding a new block type requires modifications to multiple files across three ma
 
 ### 1.1 Create the Block Module 
 
-This module in `src/lib/blocks` implements aspects of signal data type proagation and is the principal module defining code generation.
+This module in `src/lib/blocks` implements aspects of signal data type propagation and is the principal module defining code generation.
 
 **File:** `src/lib/blocks/{BlockName}BlockModule.ts`
 
@@ -189,9 +189,13 @@ const symbols: Record<string, string> = {
 
 ### 1.6 Add Configuration Dialog (If Needed)
 
-**File:** `src/components/{BlockName}Config.tsx`
+If the block has configurable parameters, you need to:
+1. Create the configuration component
+2. Register it in `page.tsx` in **three locations**
 
-Create a configuration component if the block has configurable parameters:
+#### Step 1: Create the Config Component
+
+**File:** `src/components/{BlockName}Config.tsx`
 
 ```typescript
 // components/UnitsConversionConfig.tsx
@@ -241,24 +245,48 @@ export default function UnitsConversionConfig({
 }
 ```
 
-#### Register in page.tsx (around line 42, 1332, 2025):
+#### Step 2: Register in page.tsx
+
+**File:** `src/app/models/[id]/page.tsx`
+
+You must update **three locations** in this file:
+
+**Location 1: Import the component (around line 42):**
+```typescript
+import UnitsConversionConfig from '@/components/UnitsConversionConfig'
+```
+
+**Location 2: Add to configurable block types condition (around line 1320):**
+
+Find the `handleDoubleClick` function which contains a long if-statement listing all configurable block types. Add your new block type to this list:
 
 ```typescript
-// Import
-import UnitsConversionConfig from '@/components/UnitsConversionConfig'
+// Open properties dialog for all block types that have configuration
+if (block && (
+  block.type === 'input_port' ||
+  block.type === 'output_port' ||
+  block.type === 'source' ||
+  // ... other existing types ...
+  block.type === 'units_conversion' ||  // ADD YOUR BLOCK TYPE HERE
+  block.type === 'comment'
+)) {
+  console.log('Setting config block:', block)
+  setConfigBlock(block)
+}
+```
 
-// Add to configurable block list
-const configurableBlocks = [
-  // ... existing ...
-  'units_conversion'
-]
+> **Important:** If you forget this step, double-clicking the block will not open the config dialog!
 
-// Add rendering
-{configuringBlock?.type === 'units_conversion' && (
+**Location 3: Add rendering logic (around line 2025):**
+
+Find the section where config dialogs are conditionally rendered and add your component:
+
+```typescript
+{configBlock.type === 'units_conversion' && (
   <UnitsConversionConfig
-    block={configuringBlock}
-    onUpdate={handleBlockParameterUpdate}
-    onClose={() => setConfiguringBlock(null)}
+    block={configBlock}
+    onUpdate={handleBlockConfigUpdate}
+    onClose={() => setConfigBlock(null)}
   />
 )}
 ```
@@ -393,7 +421,9 @@ Add comprehensive documentation in the `BLOCK_TYPES` array (around line 715):
 | 7 | `src/components/BlockLibrarySidebar.tsx` | Add to BLOCK_LIBRARY |
 | 8 | `src/components/BlockNode.tsx` | Add visual rendering (optional) |
 | 9 | `src/components/{Name}Config.tsx` | Create config dialog (optional) |
-| 10 | `src/app/models/[id]/page.tsx` | Register config dialog (optional) |
+| 10a | `src/app/models/[id]/page.tsx` | Import config component (optional) |
+| 10b | `src/app/models/[id]/page.tsx` | Add to handleDoubleClick condition (optional) |
+| 10c | `src/app/models/[id]/page.tsx` | Add config dialog rendering (optional) |
 | 11 | `src/lib/signalTypePropagation.ts` | Location 1: getBlockInitialOutputType() |
 | 12 | `src/lib/signalTypePropagation.ts` | Location 2: determineProcessingBlockOutputType() |
 | 13 | `src/lib/signalTypePropagation.ts` | Location 3: getBlockOutputPortCount() |
@@ -403,7 +433,7 @@ Add comprehensive documentation in the `BLOCK_TYPES` array (around line 715):
 
 ### Quick Reference: Block Type Categories
 
-When adding blocks, use one of these categories:
+When adding blocks, use one of these existing categories, where possible:
 - `Sources` - Signal generators (source, input_port)
 - `Sinks` - Signal consumers (output_port, signal_display, signal_logger)
 - `Arithmetic` - Math operations (sum, multiply, scale, abs, uminus)
@@ -413,7 +443,7 @@ When adding blocks, use one of these categories:
 - `Trig` - Trigonometric functions (trig)
 - `Lookup` - Table lookups (lookup_1d, lookup_2d)
 - `Transfer Functions` - Dynamic systems (transfer_function, integrator)
-- `Aerospace` - Domain-specific (orientation_conversion, units_conversion)
+- `Aerospace` - Domain-specific (orientation_conversion, units_conversion, aircraft simulation modules)
 - `Annotation` - Documentation (comment)
 - `Connectivity` - Signal routing (sheet_label_sink, sheet_label_source, subsystem)
 

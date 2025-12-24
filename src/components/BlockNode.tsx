@@ -207,6 +207,11 @@ const getBlockSymbol = (data: BlockNodeData) => {
     return renderTransferFunction(data.parameters)
   }
 
+  // Handle discrete transfer function (z-transform) special case
+  if (data.type === 'discrete_transform') {
+    return renderDiscreteTransform(data.parameters)
+  }
+
   // Handle signal_logger with Tabler icon
   if (data.type === 'signal_logger') {
     return <IconFileTypeCsv size={24} stroke={1.5} />
@@ -588,6 +593,65 @@ const renderTransferFunction = (parameters?: Record<string, any>) => {
   )
 }
 
+// Helper to render discrete transfer function (z-transform) polynomial
+// Uses highest power first ordering (same as Transfer Function block)
+const renderDiscreteTransform = (parameters?: Record<string, any>) => {
+  const numerator = parameters?.numerator || [1]
+  const denominator = parameters?.denominator || [1, -0.5]
+
+  const formatPolynomial = (coeffs: number[]) => {
+    const terms: React.ReactNode[] = []
+    const degree = coeffs.length - 1
+
+    coeffs.forEach((coeff, index) => {
+      if (coeff === 0) return
+
+      const power = degree - index  // Highest power first: z^n, z^(n-1), ..., z^0
+      const isFirst = terms.length === 0
+      const sign = coeff >= 0 && !isFirst ? '+' : ''
+      const absCoeff = Math.abs(coeff)
+      const coeffStr = (absCoeff === 1 && power > 0) ? '' : absCoeff.toString()
+
+      if (power === 0) {
+        terms.push(
+          <span key={index}>
+            {sign}{coeff < 0 && isFirst ? '-' : ''}{absCoeff}
+          </span>
+        )
+      } else if (power === 1) {
+        terms.push(
+          <span key={index}>
+            {sign}{coeff < 0 && isFirst ? '-' : ''}{coeffStr}z
+          </span>
+        )
+      } else {
+        terms.push(
+          <span key={index}>
+            {sign}{coeff < 0 && isFirst ? '-' : ''}{coeffStr}z<sup>{power}</sup>
+          </span>
+        )
+      }
+    })
+
+    if (terms.length === 0) {
+      return <span>0</span>
+    }
+
+    return <>{terms}</>
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center text-xs">
+      <div className="border-b border-gray-800 px-1 pb-0.5">
+        {formatPolynomial(numerator)}
+      </div>
+      <div className="px-1 pt-0.5">
+        {formatPolynomial(denominator)}
+      </div>
+    </div>
+  )
+}
+
 // Calculate block width based on type and content
 const getBlockWidth = (data: BlockNodeData): number => {
   if (data.type === 'transfer_function') {
@@ -595,6 +659,12 @@ const getBlockWidth = (data: BlockNodeData): number => {
     const denominator = data.parameters?.denominator || [1, 1]
     const maxLength = Math.max(numerator.length, denominator.length)
     return Math.max(80, 60 + maxLength * 15)
+  }
+  if (data.type === 'discrete_transform') {
+    const numerator = data.parameters?.numerator || [1]
+    const denominator = data.parameters?.denominator || [1, -0.5]
+    const maxLength = Math.max(numerator.length, denominator.length)
+    return Math.max(80, 60 + maxLength * 20)  // Slightly wider due to z^-n notation
   }
 
   if (data.type === 'source' && data.parameters?.value !== undefined) {

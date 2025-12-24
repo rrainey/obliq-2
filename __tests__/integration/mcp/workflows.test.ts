@@ -450,7 +450,7 @@ describeIntegration('MCP Workflow Integration Tests', () => {
         sheetId: 'main',
         blockType: 'sum',
         name: 'Error',
-        parameters: { numInputs: 2, signs: ['+', '-'] }
+        parameters: { numInputs: 2, signs: '+-' }
       });
       const sumId = sumResult.data.block.id;
 

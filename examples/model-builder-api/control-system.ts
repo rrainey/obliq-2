@@ -50,7 +50,7 @@ async function createControlSystem() {
     const errorSumResp = await client.addBlock(
       modelId, sheetId, 'sum', 'ErrorSum',
       { x: 250, y: 200 },
-      { numInputs: 2, signs: ['+', '-'] }
+      { numInputs: 2, signs: '+-'}
     );
     if (!client.isSuccess(errorSumResp)) throw new Error(errorSumResp.error);
     const errorSumId = errorSumResp.data.id;
