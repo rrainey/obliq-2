@@ -300,6 +300,14 @@ const blockTypes: BlockType[] = [
     icon: 'U',
     vectorSupport: 'full'
   },
+  {
+    id: 'body2quaternion_rates',
+    name: 'Body→Quat Rates',
+    category: 'Aerospace',
+    description: 'Convert body angular rates (P,Q,R) to quaternion rates given orientation quaternion',
+    icon: 'ω→q̇',
+    vectorSupport: 'full'
+  },
 
   // Control Flow
   {

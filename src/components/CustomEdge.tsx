@@ -470,6 +470,9 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
     baseOffset: 0,
   })
 
+  // Track current offset in a ref for use in handleMouseUp without state callback
+  const currentOffsetRef = useRef<number>(0)
+
   // Ref to track hover clear timeout - prevents losing hover when moving to drag handle
   const hoverClearTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -530,14 +533,17 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
     clearHoverTimeout()
 
     // Store drag state in ref
+    const initialOffset = data?.routing?.midpointOffset ?? 0
     dragStateRef.current = {
       segmentIndex: 1, // Always the middle segment for now
       startPos: { x: e.clientX, y: e.clientY },
       startZoom: zoom,
-      baseOffset: data?.routing?.midpointOffset ?? 0,
+      baseOffset: initialOffset,
     }
 
-    setCurrentOffset(data?.routing?.midpointOffset ?? 0)
+    // Initialize both state and ref
+    currentOffsetRef.current = initialOffset
+    setCurrentOffset(initialOffset)
     setIsDragging(true)
   }, [zoom, data?.routing?.midpointOffset, clearHoverTimeout])
 
@@ -553,23 +559,24 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
       // Divide by zoom to convert screen pixels to canvas coordinates
       const delta = (e.clientX - startPos.x) / startZoom
 
-      // Update the offset
-      setCurrentOffset(baseOffset + delta)
+      // Update the offset (both state and ref)
+      const newOffset = baseOffset + delta
+      currentOffsetRef.current = newOffset
+      setCurrentOffset(newOffset)
     }
 
     const handleMouseUp = () => {
-      // Get the final offset value and commit the routing change
-      setCurrentOffset(prevOffset => {
-        // Commit the routing change
-        if (data?.onRoutingChange) {
-          const newRouting: WireRouting = {
-            ...data?.routing,
-            midpointOffset: prevOffset,
-          }
-          data.onRoutingChange(id, newRouting)
+      // Read the final offset from the ref (avoids setState callback during render)
+      const finalOffset = currentOffsetRef.current
+
+      // Commit the routing change
+      if (data?.onRoutingChange) {
+        const newRouting: WireRouting = {
+          ...data?.routing,
+          midpointOffset: finalOffset,
         }
-        return prevOffset
-      })
+        data.onRoutingChange(id, newRouting)
+      }
 
       // Reset drag state
       dragStateRef.current = {

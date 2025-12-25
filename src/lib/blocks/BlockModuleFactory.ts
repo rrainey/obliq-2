@@ -29,6 +29,7 @@ import { IntegratorBlockModule } from './IntegratorBlockModule'
 import { OrientationConversionBlockModule } from './OrientationConversionBlockModule'
 import { UnitsConversionBlockModule } from './UnitsConversionBlockModule'
 import { DiscreteTransformBlockModule } from './DiscreteTransformBlockModule'
+import { Body2QuaternionRatesBlockModule } from './Body2QuaternionRatesBlockModule'
 
 import { SheetLabelSinkBlockModule } from './SheetLabelSinkBlockModule'
 import { SheetLabelSourceBlockModule } from './SheetLabelSourceBlockModule'
@@ -173,6 +174,9 @@ export class BlockModuleFactory {
       case 'discrete_transform':
         return new DiscreteTransformBlockModule()
 
+      case 'body2quaternion_rates':
+        return new Body2QuaternionRatesBlockModule()
+
       default:
         return null
     }
@@ -220,7 +224,8 @@ export class BlockModuleFactory {
       'integrator',
       'orientation_conversion',
       'units_conversion',
-      'discrete_transform'
+      'discrete_transform',
+      'body2quaternion_rates'
     ]
   }
   

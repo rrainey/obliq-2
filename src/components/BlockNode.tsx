@@ -513,6 +513,15 @@ const getBlockSymbol = (data: BlockNodeData) => {
     )
   }
 
+  // Handle body to quaternion rates block
+  if (data.type === 'body2quaternion_rates') {
+    return (
+      <div className="text-xs font-mono">
+        ω→q̇
+      </div>
+    )
+  }
+
   // Regular symbols for other blocks
   const symbols: Record<string, string> = {
     'sum': '∑',
@@ -540,6 +549,7 @@ const getBlockSymbol = (data: BlockNodeData) => {
     'condition': 'x1?', // Fallback if no condition
     'orientation_conversion': 'E↔DCM', // Fallback for orientation conversion
     'units_conversion': 'Units', // Fallback for units conversion
+    'body2quaternion_rates': 'ω→q̇', // Body rates to quaternion rates
   }
 
   return symbols[data.type] || '?'
@@ -766,13 +776,13 @@ const portSignStyles = `
   .port-name-label.input {
     right: 100%;
     text-align: right;
-    margin-right: 6px;
+    margin-right: 12px;  /* 6px base + 6px (0.75 char) additional spacing */
   }
 
   .port-name-label.output {
     left: 100%;
     text-align: left;
-    margin-left: 6px;
+    margin-left: 12px;  /* 6px base + 6px (0.75 char) additional spacing */
   }
 `
 
@@ -1096,11 +1106,12 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           <div
             className="absolute text-green-600 font-bold pointer-events-none"
             style={{
-              bottom: -10,
+              bottom: -18,  /* -10 base - 8 (1.0 char) shift down */
               // Position right if reset port is also shown, otherwise center
+              // Shifted left by 8px (1.0 char) from original positions
               left: data.parameters?.showResetInput
-                ? blockWidth / 2 + 8
-                : blockWidth / 2 - 6,
+                ? blockWidth / 2
+                : blockWidth / 2 - 14,
               fontSize: '0.55rem',
               transform: 'translateX(-50%)',
             }}
@@ -1175,9 +1186,9 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           </div>
         ))}
 
-        {/* Port Name Labels - shown when showPortNames is enabled */}
+        {/* Port Name Labels - shown when showPortNames is enabled or for blocks that always show port names */}
         {/* Skip multiply blocks entirely, skip enable/reset ports */}
-        {data.type !== 'multiply' && data.parameters?.showPortNames && (
+        {data.type !== 'multiply' && (data.parameters?.showPortNames || data.type === 'body2quaternion_rates') && (
           <>
             {/* Input port name labels */}
             {Array.from({ length: inputCount }).map((_, index) => {
@@ -1186,6 +1197,10 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
               if (isSubsystem) {
                 const inputPorts = data.parameters?.inputPorts || []
                 portName = inputPorts[index] || null
+              } else if (data.type === 'body2quaternion_rates') {
+                // Body2QuaternionRates always shows predefined port names
+                const portNames = ['q', 'P', 'Q', 'R']
+                portName = portNames[index] || null
               } else {
                 portName = getConnectedPortName(
                   data.id,
@@ -1201,7 +1216,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
                   key={`input-label-${index}`}
                   className="port-name-label input"
                   style={{
-                    top: calculatePortPosition(index, inputCount, minHeight) - 10,
+                    top: calculatePortPosition(index, inputCount, minHeight) - 16,  /* -10 base - 6 (0.75 char) shift up */
                   }}
                 >
                   {portName}
@@ -1216,6 +1231,9 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
               if (isSubsystem) {
                 const outputPorts = data.parameters?.outputPorts || []
                 portName = outputPorts[index] || null
+              } else if (data.type === 'body2quaternion_rates') {
+                // Body2QuaternionRates always shows predefined port names
+                portName = 'q̇'
               } else {
                 portName = getConnectedPortName(
                   data.id,
@@ -1231,7 +1249,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
                   key={`output-label-${index}`}
                   className="port-name-label output"
                   style={{
-                    top: calculatePortPosition(index, outputCount, minHeight) - 12,
+                    top: calculatePortPosition(index, outputCount, minHeight) - 18,  /* -12 base - 6 (0.75 char) shift up */
                   }}
                 >
                   {portName}

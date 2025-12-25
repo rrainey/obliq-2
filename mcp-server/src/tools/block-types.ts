@@ -851,6 +851,15 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     inputs: ['input'],
     outputs: ['output']
   },
+  {
+    type: 'body2quaternion_rates',
+    displayName: 'Body→Quat Rates',
+    category: 'Aerospace',
+    description: 'Converts body angular rates (P, Q, R in rad/sec) to quaternion rates given the current orientation quaternion. Implements the quaternion kinematic equation: q̇ = ½ * Ω(ω) * q. Input q must be a 4x1 quaternion column vector (scalar-first: [q0, q1, q2, q3] where q0 is scalar). P, Q, R are roll, pitch, yaw rates in rad/sec. Output q_dot is a 4x1 quaternion rate vector.',
+    parameters: {},
+    inputs: ['q', 'P', 'Q', 'R'],
+    outputs: ['q_dot']
+  },
 
   // === Annotation ===
   {

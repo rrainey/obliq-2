@@ -73,6 +73,7 @@ export const BlockTypes = {
   // Aerospace blocks
   ORIENTATION_CONVERSION: 'orientation_conversion',
   UNITS_CONVERSION: 'units_conversion',
+  BODY2QUATERNION_RATES: 'body2quaternion_rates',
 
   // Annotation blocks
   COMMENT: 'comment',
@@ -561,6 +562,21 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [{ name: 'input' }],
     outputs: [{ name: 'output' }],
     description: 'Converts between SI and American/Imperial engineering units'
+  },
+
+  [BlockTypes.BODY2QUATERNION_RATES]: {
+    type: BlockTypes.BODY2QUATERNION_RATES,
+    displayName: 'Body2Quat Rates',
+    category: 'Aerospace',
+    defaultParameters: {},
+    inputs: [
+      { name: 'q' },
+      { name: 'P' },
+      { name: 'Q' },
+      { name: 'R' }
+    ],
+    outputs: [{ name: 'q_dot' }],
+    description: 'Converts body angular rates (P, Q, R in rad/sec) to quaternion rates given current orientation quaternion'
   },
 
   [BlockTypes.COMMENT]: {

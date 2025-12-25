@@ -143,6 +143,10 @@ function getBlockOutputType(block: BlockData): string | null {
     case 'cross':
       return 'double[3]'
 
+    // Body to quaternion rates always outputs double[4][1]
+    case 'body2quaternion_rates':
+      return 'double[4][1]'
+
     // These blocks pass through their input type - determined during propagation
     case 'if':
     case 'abs':
@@ -1544,6 +1548,7 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'uminus':
     case 'transpose':
     case 'mux':  // Mux always has single output (vector/matrix)
+    case 'body2quaternion_rates':  // Always outputs 4x1 quaternion rate vector
       return 1
     case 'trig': {
       // sincos has 2 outputs, all others have 1
@@ -1612,6 +1617,9 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'if':
       // If block takes 3 inputs: input1, control, input2
       return 3
+    case 'body2quaternion_rates':
+      // Body2QuaternionRates takes 4 inputs: q (quaternion), P, Q, R (body rates)
+      return 4
     case 'evaluate':
       // Evaluate blocks have configurable number of inputs
       return block.parameters?.numInputs || 1
