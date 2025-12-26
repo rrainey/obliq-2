@@ -558,3 +558,77 @@ export function getMatrixDimensions(typeString: string): { rows: number, cols: n
     return null
   }
 }
+
+/**
+ * Checks if a type is a column matrix (N×1)
+ * Column matrices are mathematically equivalent to vectors
+ * @param typeString - The type string to check
+ * @returns true if the type is [N][1], false otherwise
+ */
+export function isColumnMatrix(typeString: string): boolean {
+  try {
+    const parsed = parseType(typeString)
+    return parsed.isMatrix === true && parsed.cols === 1
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Checks if a type is a row matrix (1×N)
+ * @param typeString - The type string to check
+ * @returns true if the type is [1][N], false otherwise
+ */
+export function isRowMatrix(typeString: string): boolean {
+  try {
+    const parsed = parseType(typeString)
+    return parsed.isMatrix === true && parsed.rows === 1
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Normalizes a column matrix [N][1] to a vector [N]
+ * This reflects the mathematical equivalence of column vectors
+ * @param typeString - The type string to normalize
+ * @returns Normalized type string (vector if input was column matrix, unchanged otherwise)
+ */
+export function normalizeColumnMatrixToVector(typeString: string): string {
+  try {
+    const parsed = parseType(typeString)
+    if (parsed.isMatrix && parsed.cols === 1 && parsed.rows) {
+      // [N][1] -> [N]
+      return `${parsed.baseType}[${parsed.rows}]`
+    }
+    return typeString
+  } catch {
+    return typeString
+  }
+}
+
+/**
+ * Gets the effective dimensions for vector/matrix operations
+ * Treats vectors [N] as column vectors [N×1] for mathematical operations
+ * @param typeString - The type string
+ * @returns Object with rows and cols, treating vectors as Nx1
+ */
+export function getEffectiveDimensions(typeString: string): { rows: number, cols: number } | null {
+  try {
+    const parsed = parseType(typeString)
+    if (parsed.isMatrix && parsed.rows && parsed.cols) {
+      return { rows: parsed.rows, cols: parsed.cols }
+    }
+    if (parsed.isArray && parsed.arraySize) {
+      // Vector is effectively Nx1 (column vector)
+      return { rows: parsed.arraySize, cols: 1 }
+    }
+    if (!parsed.isArray && !parsed.isMatrix) {
+      // Scalar is effectively 1x1
+      return { rows: 1, cols: 1 }
+    }
+    return null
+  } catch {
+    return null
+  }
+}

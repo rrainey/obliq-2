@@ -54,15 +54,15 @@ export class IntegratorBlockModule implements IBlockModule {
       code += `    if (${intName}_rising_edge) {\n`
 
       // Reset to initial value (clamped if limits are used)
-      // Uses _states[...][0] pattern (order 1 transfer function)
+      // State access matches signal dimensions: scalar[0], vector[i], matrix[i][j]
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
         code += `        for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
         code += `            for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
         const initVal = typeof initialValue === 'number' ? initialValue : `${initialValue}[i][j]`
         if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-          code += `                model->states.${intName}_states[i][j][0] = fmax(${lowerLimit}, fmin(${upperLimit}, ${initVal}));\n`
+          code += `                model->states.${intName}_states[i][j] = fmax(${lowerLimit}, fmin(${upperLimit}, ${initVal}));\n`
         } else {
-          code += `                model->states.${intName}_states[i][j][0] = ${initVal};\n`
+          code += `                model->states.${intName}_states[i][j] = ${initVal};\n`
         }
         code += `            }\n`
         code += `        }\n`
@@ -70,9 +70,9 @@ export class IntegratorBlockModule implements IBlockModule {
         code += `        for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
         const initVal = typeof initialValue === 'number' ? initialValue : `${initialValue}[i]`
         if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-          code += `            model->states.${intName}_states[i][0] = fmax(${lowerLimit}, fmin(${upperLimit}, ${initVal}));\n`
+          code += `            model->states.${intName}_states[i] = fmax(${lowerLimit}, fmin(${upperLimit}, ${initVal}));\n`
         } else {
-          code += `            model->states.${intName}_states[i][0] = ${initVal};\n`
+          code += `            model->states.${intName}_states[i] = ${initVal};\n`
         }
         code += `        }\n`
       } else {
@@ -88,16 +88,16 @@ export class IntegratorBlockModule implements IBlockModule {
     }
 
     // Output current state value (integration done separately by StateIntegrator)
-    // Uses _states[...][0] pattern (order 1 transfer function)
+    // State access matches signal dimensions: scalar[0], vector[i], matrix[i][j]
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
-      code += `            ${outputName}[i][j] = model->states.${intName}_states[i][j][0];\n`
+      code += `            ${outputName}[i][j] = model->states.${intName}_states[i][j];\n`
       code += `        }\n`
       code += `    }\n`
     } else if (typeInfo.isArray && typeInfo.arraySize) {
       code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-      code += `        ${outputName}[i] = model->states.${intName}_states[i][0];\n`
+      code += `        ${outputName}[i] = model->states.${intName}_states[i];\n`
       code += `    }\n`
     } else {
       // Scalar: _states[0]
@@ -110,7 +110,7 @@ export class IntegratorBlockModule implements IBlockModule {
   /**
    * Generate state derivative computation for RK4/Euler integration.
    * For an integrator (1/s), the derivative is simply the input signal.
-   * Uses _states[0] pattern matching transfer function convention.
+   * State access matches signal dimensions: scalar[0], vector[i], matrix[i][j]
    */
   generateStateDerivative(
     block: BlockData,
@@ -129,39 +129,39 @@ export class IntegratorBlockModule implements IBlockModule {
     let code = `    /* State derivatives for ${block.name} (integrator: 1/s) */\n`
 
     // For integrator, derivative = input (with optional saturation check)
-    // Uses _states[...][0] pattern (order 1 transfer function)
+    // State access matches signal dimensions: scalar[0], vector[i], matrix[i][j]
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
       if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-        code += `            double ${intName}_current = ${stateAccessor}->${intName}_states[i][j][0];\n`
+        code += `            double ${intName}_current = ${stateAccessor}->${intName}_states[i][j];\n`
         code += `            double ${intName}_deriv = ${inputExpr}[i][j];\n`
         code += `            // Saturation: zero derivative if at limit and would exceed\n`
         code += `            if ((${intName}_current >= ${upperLimit} && ${intName}_deriv > 0.0) ||\n`
         code += `                (${intName}_current <= ${lowerLimit} && ${intName}_deriv < 0.0)) {\n`
-        code += `                state_derivatives->${intName}_states[i][j][0] = 0.0;\n`
+        code += `                state_derivatives->${intName}_states[i][j] = 0.0;\n`
         code += `            } else {\n`
-        code += `                state_derivatives->${intName}_states[i][j][0] = ${intName}_deriv;\n`
+        code += `                state_derivatives->${intName}_states[i][j] = ${intName}_deriv;\n`
         code += `            }\n`
       } else {
-        code += `            state_derivatives->${intName}_states[i][j][0] = ${inputExpr}[i][j];\n`
+        code += `            state_derivatives->${intName}_states[i][j] = ${inputExpr}[i][j];\n`
       }
       code += `        }\n`
       code += `    }\n`
     } else if (typeInfo.isArray && typeInfo.arraySize) {
       code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
       if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-        code += `        double ${intName}_current = ${stateAccessor}->${intName}_states[i][0];\n`
+        code += `        double ${intName}_current = ${stateAccessor}->${intName}_states[i];\n`
         code += `        double ${intName}_deriv = ${inputExpr}[i];\n`
         code += `        // Saturation: zero derivative if at limit and would exceed\n`
         code += `        if ((${intName}_current >= ${upperLimit} && ${intName}_deriv > 0.0) ||\n`
         code += `            (${intName}_current <= ${lowerLimit} && ${intName}_deriv < 0.0)) {\n`
-        code += `            state_derivatives->${intName}_states[i][0] = 0.0;\n`
+        code += `            state_derivatives->${intName}_states[i] = 0.0;\n`
         code += `        } else {\n`
-        code += `            state_derivatives->${intName}_states[i][0] = ${intName}_deriv;\n`
+        code += `            state_derivatives->${intName}_states[i] = ${intName}_deriv;\n`
         code += `        }\n`
       } else {
-        code += `        state_derivatives->${intName}_states[i][0] = ${inputExpr}[i];\n`
+        code += `        state_derivatives->${intName}_states[i] = ${inputExpr}[i];\n`
       }
       code += `    }\n`
     } else {
@@ -208,12 +208,13 @@ export class IntegratorBlockModule implements IBlockModule {
     const members: string[] = []
     const { showResetInput = false } = block.parameters || {}
 
-    // Integrator uses _states[] pattern like transfer function (order 1)
-    // Scalar: _states[1], Vector: _states[size][1], Matrix: _states[rows][cols][1]
+    // Integrator state matches signal dimensions (no extra [1] for state order)
+    // Scalar: _states[1] (array of 1), Vector: _states[size], Matrix: _states[rows][cols]
+    // Note: Scalar keeps [1] to maintain array semantics for consistency
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-      members.push(`    double ${intName}_states[${typeInfo.rows}][${typeInfo.cols}][1];`)
+      members.push(`    double ${intName}_states[${typeInfo.rows}][${typeInfo.cols}];`)
     } else if (typeInfo.isArray && typeInfo.arraySize) {
-      members.push(`    double ${intName}_states[${typeInfo.arraySize}][1];`)
+      members.push(`    double ${intName}_states[${typeInfo.arraySize}];`)
     } else {
       members.push(`    double ${intName}_states[1];`)
     }
@@ -240,7 +241,7 @@ export class IntegratorBlockModule implements IBlockModule {
     let code = ''
 
     // Parse the output type to determine dimensions
-    // State structure is: scalar -> [1], vector[n] -> [n][1], matrix[m][n] -> [m][n][1]
+    // State structure matches signal: scalar -> [1], vector[n] -> [n], matrix[m][n] -> [m][n]
     const typeInfo = BlockModuleUtils.parseType(outputType || 'double')
 
     // Helper to generate clamped value expression
@@ -265,12 +266,12 @@ export class IntegratorBlockModule implements IBlockModule {
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
         code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
         code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
-        code += `            model->states.${intName}_states[i][j][0] = ${getClampedExpr(`${initSignalExpr}[i][j]`)};\n`
+        code += `            model->states.${intName}_states[i][j] = ${getClampedExpr(`${initSignalExpr}[i][j]`)};\n`
         code += `        }\n`
         code += `    }\n`
       } else if (typeInfo.isArray && typeInfo.arraySize) {
         code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-        code += `        model->states.${intName}_states[i][0] = ${getClampedExpr(`${initSignalExpr}[i]`)};\n`
+        code += `        model->states.${intName}_states[i] = ${getClampedExpr(`${initSignalExpr}[i]`)};\n`
         code += `    }\n`
       } else {
         code += `    model->states.${intName}_states[0] = ${getClampedExpr(initSignalExpr)};\n`
@@ -281,12 +282,12 @@ export class IntegratorBlockModule implements IBlockModule {
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
         for (let i = 0; i < typeInfo.rows; i++) {
           for (let j = 0; j < typeInfo.cols; j++) {
-            code += `    model->states.${intName}_states[${i}][${j}][0] = 0.0;\n`
+            code += `    model->states.${intName}_states[${i}][${j}] = 0.0;\n`
           }
         }
       } else if (typeInfo.isArray && typeInfo.arraySize) {
         for (let i = 0; i < typeInfo.arraySize; i++) {
-          code += `    model->states.${intName}_states[${i}][0] = 0.0;\n`
+          code += `    model->states.${intName}_states[${i}] = 0.0;\n`
         }
       } else {
         code += `    model->states.${intName}_states[0] = 0.0;\n`
@@ -296,7 +297,7 @@ export class IntegratorBlockModule implements IBlockModule {
       const scalarInitial = typeof initialValue === 'number' ? initialValue : 0
 
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-        // Matrix: _states[i][j][0]
+        // Matrix: _states[i][j]
         code += `    // Initialize ${intName}_states (matrix ${typeInfo.rows}x${typeInfo.cols})\n`
         for (let i = 0; i < typeInfo.rows; i++) {
           for (let j = 0; j < typeInfo.cols; j++) {
@@ -306,11 +307,11 @@ export class IntegratorBlockModule implements IBlockModule {
             } else {
               val = scalarInitial
             }
-            code += `    model->states.${intName}_states[${i}][${j}][0] = ${getClampedValue(val)};\n`
+            code += `    model->states.${intName}_states[${i}][${j}] = ${getClampedValue(val)};\n`
           }
         }
       } else if (typeInfo.isArray && typeInfo.arraySize) {
-        // Vector: _states[i][0]
+        // Vector: _states[i]
         code += `    // Initialize ${intName}_states (vector size ${typeInfo.arraySize})\n`
         for (let i = 0; i < typeInfo.arraySize; i++) {
           let val: number
@@ -319,7 +320,7 @@ export class IntegratorBlockModule implements IBlockModule {
           } else {
             val = scalarInitial
           }
-          code += `    model->states.${intName}_states[${i}][0] = ${getClampedValue(val)};\n`
+          code += `    model->states.${intName}_states[${i}] = ${getClampedValue(val)};\n`
         }
       } else {
         // Scalar: _states[0]
@@ -337,7 +338,7 @@ export class IntegratorBlockModule implements IBlockModule {
 
   /**
    * Post-integration limiting - clamp state after integration step if limits are enabled
-   * Uses _states[0] pattern (order 1 transfer function)
+   * State access matches signal dimensions: scalar[0], vector[i], matrix[i][j]
    */
   generatePostIntegrationLimiting(block: BlockData, outputType: string): string {
     const intName = BlockModuleUtils.sanitizeIdentifier(block.name)
@@ -357,12 +358,12 @@ export class IntegratorBlockModule implements IBlockModule {
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
-      code += `            model->states.${intName}_states[i][j][0] = fmax(${lowerLimit}, fmin(${upperLimit}, model->states.${intName}_states[i][j][0]));\n`
+      code += `            model->states.${intName}_states[i][j] = fmax(${lowerLimit}, fmin(${upperLimit}, model->states.${intName}_states[i][j]));\n`
       code += `        }\n`
       code += `    }\n`
     } else if (typeInfo.isArray && typeInfo.arraySize) {
       code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-      code += `        model->states.${intName}_states[i][0] = fmax(${lowerLimit}, fmin(${upperLimit}, model->states.${intName}_states[i][0]));\n`
+      code += `        model->states.${intName}_states[i] = fmax(${lowerLimit}, fmin(${upperLimit}, model->states.${intName}_states[i]));\n`
       code += `    }\n`
     } else {
       code += `    model->states.${intName}_states[0] = fmax(${lowerLimit}, fmin(${upperLimit}, model->states.${intName}_states[0]));\n`

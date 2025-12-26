@@ -152,23 +152,34 @@ export class StateIntegrator {
     const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
     const typeInfo = this.getSubsystemBlockTypeInfo(sub, block)
     const stateOrder = this.getBlockStateOrder(block)
+    const simplified = this.usesSimplifiedStateAccess(block)
 
     if (stateOrder > 0) {
       if (typeInfo.isMatrix) {
         const [rows, cols] = typeInfo.dimensions
         code += `${indent}for (int i = 0; i < ${rows}; i++) {\n`
         code += `${indent}    for (int j = 0; j < ${cols}; j++) {\n`
-        code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
-        code += `${indent}            model->states.${subName}.${safeName}_states[i][j][k] += model->dt * derivatives.${subName}.${safeName}_states[i][j][k];\n`
-        code += `${indent}        }\n`
+        if (simplified) {
+          // Integrators: direct 2D access matching signal dimensions
+          code += `${indent}        model->states.${subName}.${safeName}_states[i][j] += model->dt * derivatives.${subName}.${safeName}_states[i][j];\n`
+        } else {
+          code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
+          code += `${indent}            model->states.${subName}.${safeName}_states[i][j][k] += model->dt * derivatives.${subName}.${safeName}_states[i][j][k];\n`
+          code += `${indent}        }\n`
+        }
         code += `${indent}    }\n`
         code += `${indent}}\n`
       } else if (typeInfo.isVector) {
         const size = typeInfo.dimensions[0]
         code += `${indent}for (int i = 0; i < ${size}; i++) {\n`
-        code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
-        code += `${indent}        model->states.${subName}.${safeName}_states[i][j] += model->dt * derivatives.${subName}.${safeName}_states[i][j];\n`
-        code += `${indent}    }\n`
+        if (simplified) {
+          // Integrators: direct 1D access matching signal dimensions
+          code += `${indent}    model->states.${subName}.${safeName}_states[i] += model->dt * derivatives.${subName}.${safeName}_states[i];\n`
+        } else {
+          code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
+          code += `${indent}        model->states.${subName}.${safeName}_states[i][j] += model->dt * derivatives.${subName}.${safeName}_states[i][j];\n`
+          code += `${indent}    }\n`
+        }
         code += `${indent}}\n`
       } else {
         code += `${indent}for (int i = 0; i < ${stateOrder}; i++) {\n`
@@ -236,8 +247,8 @@ export class StateIntegrator {
   
   /**
    * Generate the actual state update code for a block.
-   * Both transfer_function and integrator use the same _states[] pattern.
-   * Integrator is treated as a 1/s transfer function (stateOrder = 1).
+   * Transfer functions use _states[...][stateOrder] pattern.
+   * Integrators use simplified access matching signal dimensions.
    */
   private generateBlockStateUpdate(
     block: FlattenedBlock,
@@ -250,23 +261,34 @@ export class StateIntegrator {
     const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
     const typeInfo = this.getBlockTypeInfo(block)
     const stateOrder = this.getBlockStateOrder(block)
+    const simplified = this.usesSimplifiedStateAccess(block)
 
     if (stateOrder > 0) {
       if (typeInfo.isMatrix) {
         const [rows, cols] = typeInfo.dimensions
         code += `${indent}for (int i = 0; i < ${rows}; i++) {\n`
         code += `${indent}    for (int j = 0; j < ${cols}; j++) {\n`
-        code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
-        code += `${indent}            model->states.${safeName}_states[i][j][k] += model->dt * derivatives.${safeName}_states[i][j][k];\n`
-        code += `${indent}        }\n`
+        if (simplified) {
+          // Integrators: direct 2D access matching signal dimensions
+          code += `${indent}        model->states.${safeName}_states[i][j] += model->dt * derivatives.${safeName}_states[i][j];\n`
+        } else {
+          code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
+          code += `${indent}            model->states.${safeName}_states[i][j][k] += model->dt * derivatives.${safeName}_states[i][j][k];\n`
+          code += `${indent}        }\n`
+        }
         code += `${indent}    }\n`
         code += `${indent}}\n`
       } else if (typeInfo.isVector) {
         const size = typeInfo.dimensions[0]
         code += `${indent}for (int i = 0; i < ${size}; i++) {\n`
-        code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
-        code += `${indent}        model->states.${safeName}_states[i][j] += model->dt * derivatives.${safeName}_states[i][j];\n`
-        code += `${indent}    }\n`
+        if (simplified) {
+          // Integrators: direct 1D access matching signal dimensions
+          code += `${indent}    model->states.${safeName}_states[i] += model->dt * derivatives.${safeName}_states[i];\n`
+        } else {
+          code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
+          code += `${indent}        model->states.${safeName}_states[i][j] += model->dt * derivatives.${safeName}_states[i][j];\n`
+          code += `${indent}    }\n`
+        }
         code += `${indent}}\n`
       } else {
         code += `${indent}for (int i = 0; i < ${stateOrder}; i++) {\n`
@@ -362,7 +384,8 @@ export class StateIntegrator {
   
   /**
    * Generate code to update temporary states.
-   * Both transfer_function and integrator use the same _states[] pattern.
+   * Transfer functions use _states[...][stateOrder] pattern.
+   * Integrators use simplified access matching signal dimensions.
    */
   private generateStateUpdate(
     dest: string,
@@ -378,23 +401,34 @@ export class StateIntegrator {
       const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
       const typeInfo = this.getBlockTypeInfo(block)
       const stateOrder = this.getBlockStateOrder(block)
+      const simplified = this.usesSimplifiedStateAccess(block)
 
       if (stateOrder > 0) {
         if (typeInfo.isMatrix) {
           const [rows, cols] = typeInfo.dimensions
           code += `    for (int i = 0; i < ${rows}; i++) {\n`
           code += `        for (int j = 0; j < ${cols}; j++) {\n`
-          code += `            for (int k = 0; k < ${stateOrder}; k++) {\n`
-          code += `                ${dest}.${safeName}_states[i][j][k] = ${source}.${safeName}_states[i][j][k] + ${factor} * ${derivative}.${safeName}_states[i][j][k];\n`
-          code += `            }\n`
+          if (simplified) {
+            // Integrators: direct 2D access matching signal dimensions
+            code += `            ${dest}.${safeName}_states[i][j] = ${source}.${safeName}_states[i][j] + ${factor} * ${derivative}.${safeName}_states[i][j];\n`
+          } else {
+            code += `            for (int k = 0; k < ${stateOrder}; k++) {\n`
+            code += `                ${dest}.${safeName}_states[i][j][k] = ${source}.${safeName}_states[i][j][k] + ${factor} * ${derivative}.${safeName}_states[i][j][k];\n`
+            code += `            }\n`
+          }
           code += `        }\n`
           code += `    }\n`
         } else if (typeInfo.isVector) {
           const size = typeInfo.dimensions[0]
           code += `    for (int i = 0; i < ${size}; i++) {\n`
-          code += `        for (int j = 0; j < ${stateOrder}; j++) {\n`
-          code += `            ${dest}.${safeName}_states[i][j] = ${source}.${safeName}_states[i][j] + ${factor} * ${derivative}.${safeName}_states[i][j];\n`
-          code += `        }\n`
+          if (simplified) {
+            // Integrators: direct 1D access matching signal dimensions
+            code += `        ${dest}.${safeName}_states[i] = ${source}.${safeName}_states[i] + ${factor} * ${derivative}.${safeName}_states[i];\n`
+          } else {
+            code += `        for (int j = 0; j < ${stateOrder}; j++) {\n`
+            code += `            ${dest}.${safeName}_states[i][j] = ${source}.${safeName}_states[i][j] + ${factor} * ${derivative}.${safeName}_states[i][j];\n`
+            code += `        }\n`
+          }
           code += `    }\n`
         } else {
           code += `    for (int i = 0; i < ${stateOrder}; i++) {\n`
@@ -411,7 +445,9 @@ export class StateIntegrator {
   }
 
   /**
-   * Generate code to update subsystem states for RK4 intermediate stages
+   * Generate code to update subsystem states for RK4 intermediate stages.
+   * Transfer functions use _states[...][stateOrder] pattern.
+   * Integrators use simplified access matching signal dimensions.
    */
   private generateSubsystemStateUpdate(
     dest: string,
@@ -434,23 +470,34 @@ export class StateIntegrator {
         const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
         const typeInfo = this.getSubsystemBlockTypeInfo(sub, block)
         const stateOrder = this.getBlockStateOrder(block)
+        const simplified = this.usesSimplifiedStateAccess(block)
 
         if (stateOrder > 0) {
           if (typeInfo.isMatrix) {
             const [rows, cols] = typeInfo.dimensions
             code += `    for (int i = 0; i < ${rows}; i++) {\n`
             code += `        for (int j = 0; j < ${cols}; j++) {\n`
-            code += `            for (int k = 0; k < ${stateOrder}; k++) {\n`
-            code += `                ${dest}.${subName}.${safeName}_states[i][j][k] = ${source}.${subName}.${safeName}_states[i][j][k] + ${factor} * ${derivative}.${subName}.${safeName}_states[i][j][k];\n`
-            code += `            }\n`
+            if (simplified) {
+              // Integrators: direct 2D access matching signal dimensions
+              code += `            ${dest}.${subName}.${safeName}_states[i][j] = ${source}.${subName}.${safeName}_states[i][j] + ${factor} * ${derivative}.${subName}.${safeName}_states[i][j];\n`
+            } else {
+              code += `            for (int k = 0; k < ${stateOrder}; k++) {\n`
+              code += `                ${dest}.${subName}.${safeName}_states[i][j][k] = ${source}.${subName}.${safeName}_states[i][j][k] + ${factor} * ${derivative}.${subName}.${safeName}_states[i][j][k];\n`
+              code += `            }\n`
+            }
             code += `        }\n`
             code += `    }\n`
           } else if (typeInfo.isVector) {
             const size = typeInfo.dimensions[0]
             code += `    for (int i = 0; i < ${size}; i++) {\n`
-            code += `        for (int j = 0; j < ${stateOrder}; j++) {\n`
-            code += `            ${dest}.${subName}.${safeName}_states[i][j] = ${source}.${subName}.${safeName}_states[i][j] + ${factor} * ${derivative}.${subName}.${safeName}_states[i][j];\n`
-            code += `        }\n`
+            if (simplified) {
+              // Integrators: direct 1D access matching signal dimensions
+              code += `        ${dest}.${subName}.${safeName}_states[i] = ${source}.${subName}.${safeName}_states[i] + ${factor} * ${derivative}.${subName}.${safeName}_states[i];\n`
+            } else {
+              code += `        for (int j = 0; j < ${stateOrder}; j++) {\n`
+              code += `            ${dest}.${subName}.${safeName}_states[i][j] = ${source}.${subName}.${safeName}_states[i][j] + ${factor} * ${derivative}.${subName}.${safeName}_states[i][j];\n`
+              code += `        }\n`
+            }
             code += `    }\n`
           } else {
             code += `    for (int i = 0; i < ${stateOrder}; i++) {\n`
@@ -523,7 +570,9 @@ export class StateIntegrator {
   }
 
   /**
-   * Generate RK4 update for a single block within a subsystem
+   * Generate RK4 update for a single block within a subsystem.
+   * Transfer functions use _states[...][stateOrder] pattern.
+   * Integrators use simplified access matching signal dimensions.
    */
   private generateSubsystemRK4BlockUpdate(
     block: FlattenedBlock,
@@ -536,6 +585,7 @@ export class StateIntegrator {
 
     const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
     const stateOrder = this.getBlockStateOrder(block)
+    const simplified = this.usesSimplifiedStateAccess(block)
 
     if (stateOrder > 0) {
       const typeInfo = this.getSubsystemBlockTypeInfo(sub, block)
@@ -544,27 +594,47 @@ export class StateIntegrator {
         const [rows, cols] = typeInfo.dimensions
         code += `${indent}for (int i = 0; i < ${rows}; i++) {\n`
         code += `${indent}    for (int j = 0; j < ${cols}; j++) {\n`
-        code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
-        code += `${indent}            model->states.${subName}.${safeName}_states[i][j][k] += (h / 6.0) * (\n`
-        code += `${indent}                k1.${subName}.${safeName}_states[i][j][k] +\n`
-        code += `${indent}                2.0 * k2.${subName}.${safeName}_states[i][j][k] +\n`
-        code += `${indent}                2.0 * k3.${subName}.${safeName}_states[i][j][k] +\n`
-        code += `${indent}                k4.${subName}.${safeName}_states[i][j][k]\n`
-        code += `${indent}            );\n`
-        code += `${indent}        }\n`
+        if (simplified) {
+          // Integrators: direct 2D access matching signal dimensions
+          code += `${indent}        model->states.${subName}.${safeName}_states[i][j] += (h / 6.0) * (\n`
+          code += `${indent}            k1.${subName}.${safeName}_states[i][j] +\n`
+          code += `${indent}            2.0 * k2.${subName}.${safeName}_states[i][j] +\n`
+          code += `${indent}            2.0 * k3.${subName}.${safeName}_states[i][j] +\n`
+          code += `${indent}            k4.${subName}.${safeName}_states[i][j]\n`
+          code += `${indent}        );\n`
+        } else {
+          code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
+          code += `${indent}            model->states.${subName}.${safeName}_states[i][j][k] += (h / 6.0) * (\n`
+          code += `${indent}                k1.${subName}.${safeName}_states[i][j][k] +\n`
+          code += `${indent}                2.0 * k2.${subName}.${safeName}_states[i][j][k] +\n`
+          code += `${indent}                2.0 * k3.${subName}.${safeName}_states[i][j][k] +\n`
+          code += `${indent}                k4.${subName}.${safeName}_states[i][j][k]\n`
+          code += `${indent}            );\n`
+          code += `${indent}        }\n`
+        }
         code += `${indent}    }\n`
         code += `${indent}}\n`
       } else if (typeInfo.isVector) {
         const size = typeInfo.dimensions[0]
         code += `${indent}for (int i = 0; i < ${size}; i++) {\n`
-        code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
-        code += `${indent}        model->states.${subName}.${safeName}_states[i][j] += (h / 6.0) * (\n`
-        code += `${indent}            k1.${subName}.${safeName}_states[i][j] +\n`
-        code += `${indent}            2.0 * k2.${subName}.${safeName}_states[i][j] +\n`
-        code += `${indent}            2.0 * k3.${subName}.${safeName}_states[i][j] +\n`
-        code += `${indent}            k4.${subName}.${safeName}_states[i][j]\n`
-        code += `${indent}        );\n`
-        code += `${indent}    }\n`
+        if (simplified) {
+          // Integrators: direct 1D access matching signal dimensions
+          code += `${indent}    model->states.${subName}.${safeName}_states[i] += (h / 6.0) * (\n`
+          code += `${indent}        k1.${subName}.${safeName}_states[i] +\n`
+          code += `${indent}        2.0 * k2.${subName}.${safeName}_states[i] +\n`
+          code += `${indent}        2.0 * k3.${subName}.${safeName}_states[i] +\n`
+          code += `${indent}        k4.${subName}.${safeName}_states[i]\n`
+          code += `${indent}    );\n`
+        } else {
+          code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
+          code += `${indent}        model->states.${subName}.${safeName}_states[i][j] += (h / 6.0) * (\n`
+          code += `${indent}            k1.${subName}.${safeName}_states[i][j] +\n`
+          code += `${indent}            2.0 * k2.${subName}.${safeName}_states[i][j] +\n`
+          code += `${indent}            2.0 * k3.${subName}.${safeName}_states[i][j] +\n`
+          code += `${indent}            k4.${subName}.${safeName}_states[i][j]\n`
+          code += `${indent}        );\n`
+          code += `${indent}    }\n`
+        }
         code += `${indent}}\n`
       } else {
         code += `${indent}for (int i = 0; i < ${stateOrder}; i++) {\n`
@@ -603,7 +673,8 @@ export class StateIntegrator {
   
   /**
    * Generate RK4 update for a single block.
-   * Both transfer_function and integrator use the same _states[] pattern.
+   * Transfer functions use _states[...][stateOrder] pattern.
+   * Integrators use simplified access matching signal dimensions.
    */
   private generateRK4BlockUpdate(block: FlattenedBlock, indentLevel: number = 1): string {
     const indent = '    '.repeat(indentLevel)
@@ -612,6 +683,7 @@ export class StateIntegrator {
     // Use flattened name for state access to handle subsystem blocks correctly
     const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
     const stateOrder = this.getBlockStateOrder(block)
+    const simplified = this.usesSimplifiedStateAccess(block)
 
     if (stateOrder > 0) {
       const typeInfo = this.getBlockTypeInfo(block)
@@ -620,27 +692,47 @@ export class StateIntegrator {
         const [rows, cols] = typeInfo.dimensions
         code += `${indent}for (int i = 0; i < ${rows}; i++) {\n`
         code += `${indent}    for (int j = 0; j < ${cols}; j++) {\n`
-        code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
-        code += `${indent}            model->states.${safeName}_states[i][j][k] += (h / 6.0) * (\n`
-        code += `${indent}                k1.${safeName}_states[i][j][k] +\n`
-        code += `${indent}                2.0 * k2.${safeName}_states[i][j][k] +\n`
-        code += `${indent}                2.0 * k3.${safeName}_states[i][j][k] +\n`
-        code += `${indent}                k4.${safeName}_states[i][j][k]\n`
-        code += `${indent}            );\n`
-        code += `${indent}        }\n`
+        if (simplified) {
+          // Integrators: direct 2D access matching signal dimensions
+          code += `${indent}        model->states.${safeName}_states[i][j] += (h / 6.0) * (\n`
+          code += `${indent}            k1.${safeName}_states[i][j] +\n`
+          code += `${indent}            2.0 * k2.${safeName}_states[i][j] +\n`
+          code += `${indent}            2.0 * k3.${safeName}_states[i][j] +\n`
+          code += `${indent}            k4.${safeName}_states[i][j]\n`
+          code += `${indent}        );\n`
+        } else {
+          code += `${indent}        for (int k = 0; k < ${stateOrder}; k++) {\n`
+          code += `${indent}            model->states.${safeName}_states[i][j][k] += (h / 6.0) * (\n`
+          code += `${indent}                k1.${safeName}_states[i][j][k] +\n`
+          code += `${indent}                2.0 * k2.${safeName}_states[i][j][k] +\n`
+          code += `${indent}                2.0 * k3.${safeName}_states[i][j][k] +\n`
+          code += `${indent}                k4.${safeName}_states[i][j][k]\n`
+          code += `${indent}            );\n`
+          code += `${indent}        }\n`
+        }
         code += `${indent}    }\n`
         code += `${indent}}\n`
       } else if (typeInfo.isVector) {
         const size = typeInfo.dimensions[0]
         code += `${indent}for (int i = 0; i < ${size}; i++) {\n`
-        code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
-        code += `${indent}        model->states.${safeName}_states[i][j] += (h / 6.0) * (\n`
-        code += `${indent}            k1.${safeName}_states[i][j] +\n`
-        code += `${indent}            2.0 * k2.${safeName}_states[i][j] +\n`
-        code += `${indent}            2.0 * k3.${safeName}_states[i][j] +\n`
-        code += `${indent}            k4.${safeName}_states[i][j]\n`
-        code += `${indent}        );\n`
-        code += `${indent}    }\n`
+        if (simplified) {
+          // Integrators: direct 1D access matching signal dimensions
+          code += `${indent}    model->states.${safeName}_states[i] += (h / 6.0) * (\n`
+          code += `${indent}        k1.${safeName}_states[i] +\n`
+          code += `${indent}        2.0 * k2.${safeName}_states[i] +\n`
+          code += `${indent}        2.0 * k3.${safeName}_states[i] +\n`
+          code += `${indent}        k4.${safeName}_states[i]\n`
+          code += `${indent}    );\n`
+        } else {
+          code += `${indent}    for (int j = 0; j < ${stateOrder}; j++) {\n`
+          code += `${indent}        model->states.${safeName}_states[i][j] += (h / 6.0) * (\n`
+          code += `${indent}            k1.${safeName}_states[i][j] +\n`
+          code += `${indent}            2.0 * k2.${safeName}_states[i][j] +\n`
+          code += `${indent}            2.0 * k3.${safeName}_states[i][j] +\n`
+          code += `${indent}            k4.${safeName}_states[i][j]\n`
+          code += `${indent}        );\n`
+          code += `${indent}    }\n`
+        }
         code += `${indent}}\n`
       } else {
         code += `${indent}for (int i = 0; i < ${stateOrder}; i++) {\n`
@@ -685,6 +777,15 @@ export class StateIntegrator {
       return Math.max(0, denominator.length - 1)
     }
     return 0
+  }
+
+  /**
+   * Check if a block uses simplified state access pattern.
+   * Integrators use direct dimensional access (vector[i], matrix[i][j]) without
+   * an additional state-order dimension, matching mathematical vector/matrix semantics.
+   */
+  private usesSimplifiedStateAccess(block: FlattenedBlock): boolean {
+    return block.block.type === 'integrator'
   }
 
   /**

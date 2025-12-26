@@ -13,7 +13,11 @@ import {
   getMatrixDimensions,
   createMatrix,
   createIdentityMatrix,
-  validateMatrixStructure
+  validateMatrixStructure,
+  isColumnMatrix,
+  isRowMatrix,
+  normalizeColumnMatrixToVector,
+  getEffectiveDimensions
 } from '../src/lib/typeValidator';
 
 describe('Matrix Type Support', () => {
@@ -164,6 +168,97 @@ describe('Matrix Type Support', () => {
       expect(validateMatrixStructure([[1, 2], [3, 4]]).isValid).toBe(true)
       expect(validateMatrixStructure([[1, 2], [3]]).isValid).toBe(false)
       expect(validateMatrixStructure([]).isValid).toBe(false)
+    })
+  })
+})
+
+describe('Vector/Matrix Equivalence', () => {
+  describe('isColumnMatrix', () => {
+    it('should identify column matrices [N][1]', () => {
+      expect(isColumnMatrix('double[3][1]')).toBe(true)
+      expect(isColumnMatrix('float[4][1]')).toBe(true)
+      expect(isColumnMatrix('long[1][1]')).toBe(true)
+    })
+
+    it('should not match non-column-matrices', () => {
+      expect(isColumnMatrix('double[3]')).toBe(false)       // vector
+      expect(isColumnMatrix('double[3][4]')).toBe(false)    // general matrix
+      expect(isColumnMatrix('double[1][3]')).toBe(false)    // row matrix
+      expect(isColumnMatrix('double')).toBe(false)          // scalar
+    })
+
+    it('should handle invalid types gracefully', () => {
+      expect(isColumnMatrix('invalid')).toBe(false)
+      expect(isColumnMatrix('')).toBe(false)
+    })
+  })
+
+  describe('isRowMatrix', () => {
+    it('should identify row matrices [1][N]', () => {
+      expect(isRowMatrix('double[1][3]')).toBe(true)
+      expect(isRowMatrix('float[1][4]')).toBe(true)
+      expect(isRowMatrix('long[1][1]')).toBe(true)
+    })
+
+    it('should not match non-row-matrices', () => {
+      expect(isRowMatrix('double[3]')).toBe(false)       // vector
+      expect(isRowMatrix('double[3][4]')).toBe(false)    // general matrix
+      expect(isRowMatrix('double[3][1]')).toBe(false)    // column matrix
+      expect(isRowMatrix('double')).toBe(false)          // scalar
+    })
+
+    it('should handle invalid types gracefully', () => {
+      expect(isRowMatrix('invalid')).toBe(false)
+      expect(isRowMatrix('')).toBe(false)
+    })
+  })
+
+  describe('normalizeColumnMatrixToVector', () => {
+    it('should convert column matrix [N][1] to vector [N]', () => {
+      expect(normalizeColumnMatrixToVector('double[3][1]')).toBe('double[3]')
+      expect(normalizeColumnMatrixToVector('float[4][1]')).toBe('float[4]')
+      expect(normalizeColumnMatrixToVector('long[1][1]')).toBe('long[1]')
+    })
+
+    it('should leave non-column-matrices unchanged', () => {
+      expect(normalizeColumnMatrixToVector('double[3]')).toBe('double[3]')
+      expect(normalizeColumnMatrixToVector('double[3][4]')).toBe('double[3][4]')
+      expect(normalizeColumnMatrixToVector('double[1][3]')).toBe('double[1][3]')
+      expect(normalizeColumnMatrixToVector('double')).toBe('double')
+    })
+
+    it('should handle invalid types gracefully', () => {
+      expect(normalizeColumnMatrixToVector('invalid')).toBe('invalid')
+    })
+  })
+
+  describe('getEffectiveDimensions', () => {
+    it('should treat vectors as column vectors [N×1]', () => {
+      expect(getEffectiveDimensions('double[3]')).toEqual({ rows: 3, cols: 1 })
+      expect(getEffectiveDimensions('float[4]')).toEqual({ rows: 4, cols: 1 })
+    })
+
+    it('should return matrix dimensions unchanged', () => {
+      expect(getEffectiveDimensions('double[3][4]')).toEqual({ rows: 3, cols: 4 })
+      expect(getEffectiveDimensions('float[2][2]')).toEqual({ rows: 2, cols: 2 })
+      expect(getEffectiveDimensions('double[3][1]')).toEqual({ rows: 3, cols: 1 })
+      expect(getEffectiveDimensions('double[1][3]')).toEqual({ rows: 1, cols: 3 })
+    })
+
+    it('should treat scalars as 1×1', () => {
+      expect(getEffectiveDimensions('double')).toEqual({ rows: 1, cols: 1 })
+      expect(getEffectiveDimensions('float')).toEqual({ rows: 1, cols: 1 })
+    })
+
+    it('should return null for invalid types', () => {
+      expect(getEffectiveDimensions('invalid')).toBeNull()
+    })
+
+    it('should show vector and column matrix equivalence', () => {
+      // Vector [3] and column matrix [3][1] have same effective dimensions
+      const vectorDims = getEffectiveDimensions('double[3]')
+      const colMatrixDims = getEffectiveDimensions('double[3][1]')
+      expect(vectorDims).toEqual(colMatrixDims)
     })
   })
 })
