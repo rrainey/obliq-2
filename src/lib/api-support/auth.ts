@@ -156,3 +156,134 @@ export function logRequest(
 
 // Start cleanup on module load
 startRateLimitCleanup();
+
+/**
+ * Result of model ownership verification
+ */
+export interface ModelOwnershipResult {
+  authorized: boolean;
+  model?: any;
+  versionData?: any;
+  errorResponse?: NextResponse;
+}
+
+/**
+ * Verify that the requesting user owns the specified model.
+ * This is the central authorization check for all model operations.
+ *
+ * @param supabase - Supabase client instance
+ * @param modelId - The model ID to check
+ * @param userId - The authenticated user's ID
+ * @returns ModelOwnershipResult with authorization status and model data if authorized
+ */
+export async function verifyModelOwnership(
+  supabase: any,
+  modelId: string,
+  userId: string
+): Promise<ModelOwnershipResult> {
+  // Fetch the model and verify ownership in a single query
+  const { data: model, error } = await supabase
+    .from('models')
+    .select('*')
+    .eq('id', modelId)
+    .eq('user_id', userId)
+    .single();
+
+  if (error || !model) {
+    // Check if model exists but belongs to another user
+    const { data: existingModel } = await supabase
+      .from('models')
+      .select('id')
+      .eq('id', modelId)
+      .single();
+
+    if (existingModel) {
+      // Model exists but user doesn't own it - return 403
+      return {
+        authorized: false,
+        errorResponse: NextResponse.json(
+          {
+            success: false,
+            timestamp: new Date().toISOString(),
+            error: 'Access denied: You do not have permission to access this model',
+            code: 'FORBIDDEN'
+          },
+          { status: 403 }
+        )
+      };
+    } else {
+      // Model doesn't exist - return 404
+      return {
+        authorized: false,
+        errorResponse: NextResponse.json(
+          {
+            success: false,
+            timestamp: new Date().toISOString(),
+            error: 'Model not found',
+            code: 'MODEL_NOT_FOUND',
+            details: { modelId }
+          },
+          { status: 404 }
+        )
+      };
+    }
+  }
+
+  return {
+    authorized: true,
+    model
+  };
+}
+
+/**
+ * Verify model ownership and fetch the latest version data.
+ * Combines ownership check with version data retrieval for efficiency.
+ *
+ * @param supabase - Supabase client instance
+ * @param modelId - The model ID to check
+ * @param userId - The authenticated user's ID
+ * @returns ModelOwnershipResult with model and version data if authorized
+ */
+export async function verifyModelOwnershipWithVersion(
+  supabase: any,
+  modelId: string,
+  userId: string
+): Promise<ModelOwnershipResult> {
+  // First verify ownership
+  const ownershipResult = await verifyModelOwnership(supabase, modelId, userId);
+
+  if (!ownershipResult.authorized) {
+    return ownershipResult;
+  }
+
+  // Fetch the latest version data
+  const { data: versionData, error: versionError } = await supabase
+    .from('model_versions')
+    .select('*')
+    .eq('model_id', modelId)
+    .order('version', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (versionError || !versionData) {
+    return {
+      authorized: false,
+      errorResponse: NextResponse.json(
+        {
+          success: false,
+          timestamp: new Date().toISOString(),
+          error: 'Model version data not found',
+          code: 'VERSION_NOT_FOUND',
+          details: { modelId }
+        },
+        { status: 404 }
+      )
+    };
+  }
+
+  return {
+    authorized: true,
+    model: ownershipResult.model,
+    versionData
+  };
+}

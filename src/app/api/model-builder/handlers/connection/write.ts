@@ -5,12 +5,13 @@ import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-support/responses';
 import { findSheetRecursively } from '@/lib/api-support/sheet-search';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 
 /**
  * ADD_CONNECTION - Add a new connection between blocks
  */
 export async function handleAddConnection(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, body } = ctx;
+  const { supabase, userId, body } = ctx;
   const { modelId, sheetId, sourceBlockId, sourcePort, sourcePortIndex, targetBlockId, targetPort, targetPortIndex } = body || {};
 
   // Validate required parameters
@@ -33,18 +34,13 @@ export async function handleAddConnection(ctx: HandlerContext): Promise<NextResp
     return errorResponse('Either targetPort or targetPortIndex must be provided', 'MISSING_PARAMETER', 400);
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   // Extract current model data
   const modelData = versionData.data;

@@ -4,12 +4,13 @@
 import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-support/responses';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 
 /**
  * DELETE_SHEET - Delete a sheet from a model
  */
 export async function handleDeleteSheet(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, searchParams, body } = ctx;
+  const { supabase, userId, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const sheetId = searchParams?.get('sheetId') || body?.sheetId;
 
@@ -21,18 +22,13 @@ export async function handleDeleteSheet(ctx: HandlerContext): Promise<NextRespon
     return ErrorResponses.missingParameter('sheetId');
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -106,7 +102,7 @@ export async function handleDeleteSheet(ctx: HandlerContext): Promise<NextRespon
  * CLEAR_SHEET - Clear all blocks and connections from a sheet
  */
 export async function handleClearSheet(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, searchParams, body } = ctx;
+  const { supabase, userId, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const sheetId = searchParams?.get('sheetId') || body?.sheetId;
 
@@ -118,18 +114,13 @@ export async function handleClearSheet(ctx: HandlerContext): Promise<NextRespons
     return ErrorResponses.missingParameter('sheetId');
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   // Extract current model data
   const modelData = versionData.data;

@@ -4,6 +4,7 @@
 import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, ErrorResponses } from '@/lib/api-support/responses';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 import { BlockTypes, isValidBlockType } from '@/lib/blockTypeRegistry';
 import { validateBlockParameters } from '@/lib/blockParameterValidator';
 
@@ -11,25 +12,20 @@ import { validateBlockParameters } from '@/lib/blockParameterValidator';
  * VALIDATE_MODEL - Validate a model's structure and connections
  */
 export async function handleValidateModel(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, body } = ctx;
+  const { supabase, userId, body } = ctx;
   const modelId = body?.modelId || ctx.modelId;
 
   if (!modelId) {
     return ErrorResponses.missingParameter('modelId');
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   // Extract model data
   const modelData = versionData.data;

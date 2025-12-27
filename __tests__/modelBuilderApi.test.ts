@@ -27,32 +27,36 @@ jest.mock('next/server', () => ({
   }
 }));
 
-// Mock Supabase client
+// Mock Supabase client with chainable eq() support
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          single: jest.fn(() => ({ data: null, error: null })),
-          order: jest.fn(() => ({
-            limit: jest.fn(() => ({
-              single: jest.fn(() => ({ data: null, error: null }))
-            }))
+    from: jest.fn(() => {
+      // Create a chainable eq function
+      const createChainableResult = (): any => ({
+        eq: jest.fn(() => createChainableResult()),
+        single: jest.fn(() => ({ data: null, error: null })),
+        order: jest.fn(() => ({
+          limit: jest.fn(() => ({
+            single: jest.fn(() => ({ data: null, error: null }))
           }))
         }))
-      })),
-      insert: jest.fn(() => ({
-        select: jest.fn(() => ({
-          single: jest.fn(() => ({ data: null, error: { message: 'Mock error' } }))
+      });
+
+      return {
+        select: jest.fn(() => createChainableResult()),
+        insert: jest.fn(() => ({
+          select: jest.fn(() => ({
+            single: jest.fn(() => ({ data: null, error: { message: 'Mock error' } }))
+          }))
+        })),
+        update: jest.fn(() => ({
+          eq: jest.fn(() => ({ error: null }))
+        })),
+        delete: jest.fn(() => ({
+          eq: jest.fn(() => ({ error: null }))
         }))
-      })),
-      update: jest.fn(() => ({
-        eq: jest.fn(() => ({ error: null }))
-      })),
-      delete: jest.fn(() => ({
-        eq: jest.fn(() => ({ error: null }))
-      }))
-    }))
+      };
+    })
   }))
 }));
 

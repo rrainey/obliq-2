@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-support/responses';
 import { findSheetRecursively, getAllSheets } from '@/lib/api-support/sheet-search';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 
 /**
  * Find a block by ID across all sheets (including nested subsystem sheets)
@@ -25,7 +26,7 @@ function findBlockById(sheets: any[], blockId: string): { block: any; sheet: any
  * LIST_BLOCK_PARAMETERS - List all parameters for a subsystem block
  */
 export async function handleListBlockParameters(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, searchParams, body } = ctx;
+  const { supabase, userId, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const blockId = searchParams?.get('blockId') || body?.blockId;
 
@@ -37,20 +38,13 @@ export async function handleListBlockParameters(ctx: HandlerContext): Promise<Ne
     return ErrorResponses.missingParameter('blockId');
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('data')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
 
-  const modelData = versionData.data;
+  const modelData = authResult.versionData.data;
   const sheets = modelData.sheets || [];
 
   // Find the block
@@ -90,7 +84,7 @@ export async function handleListBlockParameters(ctx: HandlerContext): Promise<Ne
  * GET_BLOCK_PARAMETER - Get a specific parameter from a subsystem block
  */
 export async function handleGetBlockParameter(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, searchParams, body } = ctx;
+  const { supabase, userId, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const blockId = searchParams?.get('blockId') || body?.blockId;
   const paramName = searchParams?.get('paramName') || body?.paramName;
@@ -106,20 +100,13 @@ export async function handleGetBlockParameter(ctx: HandlerContext): Promise<Next
     return ErrorResponses.missingParameter('paramName');
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('data')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
 
-  const modelData = versionData.data;
+  const modelData = authResult.versionData.data;
   const sheets = modelData.sheets || [];
 
   // Find the block

@@ -4,6 +4,7 @@
 import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, ErrorResponses } from '@/lib/api-support/responses';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 
 /**
  * Helper to recursively collect all sheets including those in subsystems
@@ -56,28 +57,21 @@ function collectAllSheets(
  * LIST_SHEETS - List all sheets in a model with summary information
  */
 export async function handleListSheets(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, searchParams, body } = ctx;
+  const { supabase, userId, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
 
   if (!modelId) {
     return ErrorResponses.missingParameter('modelId');
   }
 
-  // Get the latest version of the model to access sheets
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('data')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
 
   // Extract sheets from the model data (top-level)
-  const sheets = versionData.data?.sheets || [];
+  const sheets = authResult.versionData.data?.sheets || [];
 
   // Collect all sheets recursively, including subsystem sheets
   const allSheets = collectAllSheets(sheets);
@@ -93,7 +87,7 @@ export async function handleListSheets(ctx: HandlerContext): Promise<NextRespons
  * EXPORT_SHEET - Export a sheet as standalone JSON
  */
 export async function handleExportSheet(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, searchParams, body } = ctx;
+  const { supabase, userId, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const sheetId = searchParams?.get('sheetId') || body?.sheetId;
 
@@ -105,21 +99,14 @@ export async function handleExportSheet(ctx: HandlerContext): Promise<NextRespon
     return ErrorResponses.missingParameter('sheetId');
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('data')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
 
   // Find the specific sheet
-  const sheets = versionData.data?.sheets || [];
+  const sheets = authResult.versionData.data?.sheets || [];
   const sheet = sheets.find((s: any) => s.id === sheetId);
 
   if (!sheet) {

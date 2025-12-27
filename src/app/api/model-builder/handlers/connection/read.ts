@@ -5,12 +5,13 @@ import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, ErrorResponses } from '@/lib/api-support/responses';
 import { findSheetRecursively } from '@/lib/api-support/sheet-search';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 
 /**
  * LIST_CONNECTIONS - List all connections in a sheet
  */
 export async function handleListConnections(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, searchParams, body } = ctx;
+  const { supabase, userId, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const sheetId = searchParams?.get('sheetId') || body?.sheetId;
 
@@ -22,21 +23,14 @@ export async function handleListConnections(ctx: HandlerContext): Promise<NextRe
     return ErrorResponses.missingParameter('sheetId');
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('data')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
 
   // Find the specific sheet (searching both top-level and subsystem sheets)
-  const sheets = versionData.data?.sheets || [];
+  const sheets = authResult.versionData.data?.sheets || [];
   const sheetResult = findSheetRecursively(sheets, sheetId);
 
   if (!sheetResult) {
@@ -78,7 +72,7 @@ export async function handleListConnections(ctx: HandlerContext): Promise<NextRe
  * GET_CONNECTION - Get details of a specific connection
  */
 export async function handleGetConnection(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, searchParams, body } = ctx;
+  const { supabase, userId, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const sheetId = searchParams?.get('sheetId') || body?.sheetId;
   const connectionId = searchParams?.get('connectionId') || body?.connectionId;
@@ -94,21 +88,14 @@ export async function handleGetConnection(ctx: HandlerContext): Promise<NextResp
     return ErrorResponses.missingParameter('connectionId');
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('data')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
 
   // Find the specific sheet
-  const sheets = versionData.data?.sheets || [];
+  const sheets = authResult.versionData.data?.sheets || [];
   const sheet = sheets.find((s: any) => s.id === sheetId);
 
   if (!sheet) {

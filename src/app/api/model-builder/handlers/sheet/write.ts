@@ -4,6 +4,7 @@
 import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-support/responses';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 
 /**
  * Helper function to find a block recursively in all sheets (including nested subsystems)
@@ -31,7 +32,7 @@ function findBlockRecursively(
  * CREATE_SHEET - Create a new sheet in a model
  */
 export async function handleCreateSheet(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, body } = ctx;
+  const { supabase, userId, body } = ctx;
   const { modelId, name, subsystemBlockId } = body || {};
 
   // Validate required parameters
@@ -39,18 +40,13 @@ export async function handleCreateSheet(ctx: HandlerContext): Promise<NextRespon
     return ErrorResponses.missingParameter('modelId');
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -168,7 +164,7 @@ export async function handleCreateSheet(ctx: HandlerContext): Promise<NextRespon
  * IMPORT_SHEET - Import a sheet from external data
  */
 export async function handleImportSheet(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, body } = ctx;
+  const { supabase, userId, body } = ctx;
   // Support both 'overrideName' and 'name' for convenience
   const { modelId, sheetData, overrideId, overrideName, name } = body || {};
   const effectiveOverrideName = overrideName || name;
@@ -186,18 +182,13 @@ export async function handleImportSheet(ctx: HandlerContext): Promise<NextRespon
     return errorResponse('Sheet data must have id and name properties', 'INVALID_SHEET_STRUCTURE', 400);
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -316,7 +307,7 @@ export async function handleImportSheet(ctx: HandlerContext): Promise<NextRespon
  * CLONE_SHEET - Clone an existing sheet
  */
 export async function handleCloneSheet(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, body } = ctx;
+  const { supabase, userId, body } = ctx;
   // Support both 'sheetId' and 'sourceSheetId' for convenience
   const { modelId, sheetId, sourceSheetId, newName } = body || {};
   const effectiveSheetId = sheetId || sourceSheetId;
@@ -329,18 +320,13 @@ export async function handleCloneSheet(ctx: HandlerContext): Promise<NextRespons
     return ErrorResponses.missingParameter('sheetId or sourceSheetId');
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   // Extract current model data
   const modelData = versionData.data;

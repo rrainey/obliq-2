@@ -5,6 +5,8 @@
  *
  * Streams compilation progress using Server-Sent Events (SSE).
  *
+ * Authentication: Bearer token required (Authorization: Bearer <token>)
+ *
  * Request body:
  * {
  *   modelId: string,          // UUID of the model
@@ -24,7 +26,8 @@ import { NextRequest } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { WasmCodeGenerator } from '@/lib/wasm/codegen/WasmCodeGenerator'
 import { SupabaseCacheManager, generateCacheKey, hashModel } from '@/lib/wasm/cache'
-import { AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
+import { validateRequiredFields } from '@/lib/apiErrorHandler'
+import { authenticateApiRequest } from '@/lib/apiAuthMiddleware'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import * as fs from 'fs/promises'
@@ -61,6 +64,19 @@ function sanitizeModelName(name: string): string {
 }
 
 /**
+ * Extract Bearer token from Authorization header
+ */
+function extractBearerToken(request: NextRequest): string | null {
+  const authHeader = request.headers.get('Authorization')
+  if (!authHeader) return null
+
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i)
+  if (bearerMatch) return bearerMatch[1]
+
+  return authHeader
+}
+
+/**
  * Send SSE event to client
  */
 function sendEvent(controller: ReadableStreamDefaultController, event: string, data: any) {
@@ -72,6 +88,29 @@ function sendEvent(controller: ReadableStreamDefaultController, event: string, d
  * Main compilation handler with progress streaming
  */
 export async function POST(request: NextRequest) {
+  // Authenticate the request before creating the stream
+  const token = extractBearerToken(request)
+  if (!token) {
+    return new Response(JSON.stringify({
+      error: 'Missing Authorization header. Use: Authorization: Bearer <token>'
+    }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  const authResult = await authenticateApiRequest(token)
+  if (!authResult.authenticated) {
+    return new Response(JSON.stringify({
+      error: authResult.error || 'Invalid or expired API token'
+    }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  const userId = authResult.userId!
+
   // Create a ReadableStream for Server-Sent Events
   const stream = new ReadableStream({
     async start(controller) {
@@ -129,17 +168,33 @@ export async function POST(request: NextRequest) {
           message: 'Fetching model from database...'
         })
 
+        // Fetch model - scoped to authenticated user
         const { data: model, error: dbError } = await supabaseServer
           .from('models')
           .select('*')
           .eq('id', modelId)
+          .eq('user_id', userId)
           .single()
 
         if (dbError || !model) {
-          sendEvent(controller, 'error', {
-            error: 'Model not found',
-            modelId
-          })
+          // Check if model exists but belongs to another user
+          const { data: existingModel } = await supabaseServer
+            .from('models')
+            .select('id')
+            .eq('id', modelId)
+            .single()
+
+          if (existingModel) {
+            sendEvent(controller, 'error', {
+              error: 'Access denied: You do not have permission to access this model',
+              code: 'FORBIDDEN'
+            })
+          } else {
+            sendEvent(controller, 'error', {
+              error: 'Model not found',
+              modelId
+            })
+          }
           controller.close()
           return
         }

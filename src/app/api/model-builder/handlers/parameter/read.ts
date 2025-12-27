@@ -4,12 +4,13 @@
 import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, ErrorResponses } from '@/lib/api-support/responses';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 
 /**
  * LIST_PARAMETERS - List all model parameters
  */
 export async function handleListParameters(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, searchParams, body } = ctx;
+  const { supabase, userId, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
 
   // Validate modelId parameter
@@ -17,21 +18,14 @@ export async function handleListParameters(ctx: HandlerContext): Promise<NextRes
     return ErrorResponses.missingParameter('modelId');
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('data')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
 
   // Extract parameters from the model data
-  const parameters = versionData.data?.parameters || [];
+  const parameters = authResult.versionData.data?.parameters || [];
 
   // Transform parameters to summary format
   const parameterDetails = parameters.map((param: any) => ({

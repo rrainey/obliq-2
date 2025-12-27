@@ -7,6 +7,7 @@ import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-suppor
 import { getAllSheets } from '@/lib/api-support/sheet-search';
 import { isValidType, getTypeValidationError } from '@/lib/typeValidator';
 import { isValidC99Initializer, getC99InitializerError } from '@/lib/c99InitializerValidator';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 
 /**
  * Find a block by ID across all sheets (including nested subsystem sheets)
@@ -27,7 +28,7 @@ function findBlockById(sheets: any[], blockId: string): { block: any; sheet: any
  * ADD_BLOCK_PARAMETER - Add a parameter to a subsystem block
  */
 export async function handleAddBlockParameter(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, body } = ctx;
+  const { supabase, userId, body } = ctx;
   const { modelId, blockId, name, dataType, defaultValue } = body || {};
 
   // Validate required parameters
@@ -85,18 +86,13 @@ export async function handleAddBlockParameter(ctx: HandlerContext): Promise<Next
     );
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   const modelData = versionData.data;
   const sheets = modelData.sheets || [];

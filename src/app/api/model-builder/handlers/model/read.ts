@@ -4,7 +4,7 @@
 import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, ErrorResponses } from '@/lib/api-support/responses';
-import { logRequest } from '@/lib/api-support/auth';
+import { logRequest, verifyModelOwnership } from '@/lib/api-support/auth';
 import { modelBuilderApiMetrics } from '@/lib/modelBuilderApiMetrics';
 
 /**
@@ -101,22 +101,19 @@ export async function handleGetModel(ctx: HandlerContext): Promise<NextResponse>
  * GET_MODEL_METADATA - Retrieve model metadata without full data
  */
 export async function handleGetModelMetadata(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, modelId, startTime } = ctx;
+  const { supabase, modelId, userId, startTime } = ctx;
 
   if (!modelId) {
     return ErrorResponses.missingParameter('modelId');
   }
 
-  // Fetch just the model metadata (not the full data)
-  const { data: model, error } = await supabase
-    .from('models')
-    .select('id, name, user_id, latest_version, created_at, updated_at')
-    .eq('id', modelId)
-    .single();
-
-  if (error || !model) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model
+  const authResult = await verifyModelOwnership(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const model = authResult.model;
 
   // Get version count
   const { count: versionCount } = await supabase

@@ -8,12 +8,13 @@ import { findSheetRecursively } from '@/lib/api-support/sheet-search';
 import { isValidBlockType } from '@/lib/blockTypeRegistry';
 import { createBlock, syncSubsystemPortsFromSheets } from '@/lib/blockFactory';
 import { validateBlockParameters } from '@/lib/blockParameterValidator';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 
 /**
  * ADD_BLOCK - Add a new block to a sheet
  */
 export async function handleAddBlock(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, body } = ctx;
+  const { supabase, userId, body } = ctx;
   const { modelId, sheetId, blockType, position, name, parameters } = body || {};
 
   // Validate required parameters
@@ -32,18 +33,13 @@ export async function handleAddBlock(ctx: HandlerContext): Promise<NextResponse>
     return errorResponse(`Invalid block type: ${blockType}`, 'INVALID_BLOCK_TYPE', 400);
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   // Extract current model data
   const modelData = versionData.data;

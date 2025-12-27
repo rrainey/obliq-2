@@ -65,11 +65,12 @@ const mockDatabase = {
     this.modelVersions.clear();
   },
   
-  createModel(modelData: any) {
-    const id = `model_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  createModel(modelData: any, userId: string = 'test-user-123') {
+    const id = `model_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     const model = {
       id,
       ...modelData,
+      user_id: userId,
       latest_version: 1,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -136,58 +137,74 @@ const mockDatabase = {
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     from: jest.fn((table) => ({
-      select: jest.fn((fields) => ({
-        eq: jest.fn((field, value) => {
-          if (field === 'id' && table === 'models') {
-            return {
-              single: jest.fn(async () => {
-                const model = mockDatabase.models.get(value);
-                if (!model) {
-                  return { data: null, error: { message: 'Not found' } };
-                }
-                // For the GET endpoint, we need to return the model with its data
-                const latestVersion = mockDatabase.getLatestVersion(value);
-                return { 
-                  data: {
-                    ...model,
-                    data: latestVersion ? latestVersion.data : null
-                  }, 
-                  error: null 
-                };
-              })
-            };
+      select: jest.fn(() => {
+        // Track filter conditions through chained eq() calls
+        const filters: Record<string, any> = {};
+
+        const createSingleFn = () => jest.fn(async () => {
+          if (table === 'models') {
+            const modelId = filters['id'];
+            const userId = filters['user_id'];
+
+            if (modelId) {
+              const model = mockDatabase.models.get(modelId);
+              if (!model) {
+                return { data: null, error: { message: 'Not found' } };
+              }
+              if (userId && model.user_id !== userId) {
+                return { data: null, error: { message: 'Not found' } };
+              }
+              const latestVersion = mockDatabase.getLatestVersion(modelId);
+              return {
+                data: {
+                  ...model,
+                  data: latestVersion ? latestVersion.data : null
+                },
+                error: null
+              };
+            }
           }
-          if (field === 'model_id' && table === 'model_versions') {
-            return {
-              order: jest.fn((orderField, orderOpts) => ({
-                limit: jest.fn((num) => ({
-                  single: jest.fn(async () => {
-                    const version = mockDatabase.getLatestVersion(value);
-                    return { data: version || null, error: version ? null : { message: 'Not found' } };
-                  })
-                }))
-              })),
-              single: jest.fn(async () => {
-                const version = mockDatabase.getLatestVersion(value);
+          return { data: null, error: { message: 'Not found' } };
+        });
+
+        const createOrderFn = () => jest.fn(() => ({
+          limit: jest.fn(() => ({
+            single: jest.fn(async () => {
+              if (table === 'model_versions' && filters['model_id']) {
+                const version = mockDatabase.getLatestVersion(filters['model_id']);
                 return { data: version || null, error: version ? null : { message: 'Not found' } };
-              })
-            };
-          }
+              }
+              return { data: null, error: { message: 'Not found' } };
+            })
+          }))
+        }));
+
+        const eqFn: any = jest.fn((field: string, value: any) => {
+          filters[field] = value;
           return {
-            single: jest.fn(async () => ({ data: null, error: { message: 'Not found' } }))
+            eq: eqFn,
+            single: createSingleFn(),
+            order: createOrderFn()
           };
-        })
-      })),
+        });
+
+        return {
+          eq: eqFn,
+          single: createSingleFn(),
+          order: createOrderFn()
+        };
+      }),
       insert: jest.fn((data) => {
         if (table === 'models') {
           return {
             select: jest.fn(() => ({
               single: jest.fn(async () => {
                 // Don't use createModel here as it would create a version
-                const id = `model_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                const id = `model_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
                 const model = {
                   id,
                   ...data,
+                  user_id: data.user_id || 'test-user-123',
                   latest_version: 1,
                   created_at: new Date().toISOString(),
                   updated_at: new Date().toISOString()

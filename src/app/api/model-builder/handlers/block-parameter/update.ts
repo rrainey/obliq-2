@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-support/responses';
 import { getAllSheets } from '@/lib/api-support/sheet-search';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 
 /**
  * Find a block by ID across all sheets (including nested subsystem sheets)
@@ -25,7 +26,7 @@ function findBlockById(sheets: any[], blockId: string): { block: any; sheet: any
  * UPDATE_BLOCK_PARAMETER - Update a parameter on a subsystem block
  */
 export async function handleUpdateBlockParameter(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, body } = ctx;
+  const { supabase, userId, body } = ctx;
   const { modelId, blockId, paramName, name: newName, defaultValue } = body || {};
 
   // Validate required parameters
@@ -60,18 +61,13 @@ export async function handleUpdateBlockParameter(ctx: HandlerContext): Promise<N
     }
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   const modelData = versionData.data;
   const sheets = modelData.sheets || [];

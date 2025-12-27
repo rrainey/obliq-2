@@ -5,6 +5,8 @@
  *
  * Compiles a model to WebAssembly using Emscripten.
  *
+ * Authentication: Bearer token required (Authorization: Bearer <token>)
+ *
  * Request body:
  * {
  *   modelId: string,          // UUID of the model
@@ -16,6 +18,8 @@
  * Response:
  * - 200: JSON with { wasmData, jsData, metadata, cacheHit }
  * - 400: Validation error
+ * - 401: Unauthorized
+ * - 403: Forbidden (not owner of model)
  * - 404: Model not found
  * - 500: Compilation error
  */
@@ -25,6 +29,7 @@ import { createClient } from '@supabase/supabase-js'
 import { WasmCodeGenerator } from '@/lib/wasm/codegen/WasmCodeGenerator'
 import { SupabaseCacheManager, generateCacheKey, hashModel } from '@/lib/wasm/cache'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
+import { authenticateApiRequest } from '@/lib/apiAuthMiddleware'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import * as fs from 'fs/promises'
@@ -49,9 +54,43 @@ const DOCKER_IMAGE = 'obliq-emscripten:latest'
 // Compilation timeout (30 seconds)
 const COMPILATION_TIMEOUT = 30000
 
+/**
+ * Extract Bearer token from Authorization header
+ */
+function extractBearerToken(request: NextRequest): string | null {
+  const authHeader = request.headers.get('Authorization')
+  if (!authHeader) return null
+
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i)
+  if (bearerMatch) return bearerMatch[1]
+
+  return authHeader
+}
+
 async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
   const startTime = Date.now()
   console.log('[compile-wasm] API called')
+
+  // Authenticate the request
+  const token = extractBearerToken(request)
+  if (!token) {
+    throw new AppError(
+      'Missing Authorization header. Use: Authorization: Bearer <token>',
+      401,
+      ErrorTypes.UNAUTHORIZED
+    )
+  }
+
+  const authResult = await authenticateApiRequest(token)
+  if (!authResult.authenticated) {
+    throw new AppError(
+      authResult.error || 'Invalid or expired API token',
+      401,
+      ErrorTypes.UNAUTHORIZED
+    )
+  }
+
+  const userId = authResult.userId!
 
   // Parse and validate request body
   let requestBody: any
@@ -93,19 +132,36 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
 
   console.log(`[compile-wasm] Fetching model: ${modelId}`)
 
-  // Fetch model metadata
+  // Fetch model metadata - scoped to authenticated user
   const { data: model, error: dbError } = await supabaseServer
     .from('models')
     .select('*')
     .eq('id', modelId)
+    .eq('user_id', userId)
     .single()
 
   if (dbError || !model) {
+    // Check if model exists but belongs to another user
+    const { data: existingModel } = await supabaseServer
+      .from('models')
+      .select('id')
+      .eq('id', modelId)
+      .single()
+
+    if (existingModel) {
+      throw new AppError(
+        'Access denied: You do not have permission to access this model',
+        403,
+        ErrorTypes.FORBIDDEN,
+        { modelId }
+      )
+    }
+
     throw new AppError(
       'Model not found',
       404,
       ErrorTypes.NOT_FOUND,
-      { modelId, dbError }
+      { modelId }
     )
   }
 

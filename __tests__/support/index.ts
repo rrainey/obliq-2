@@ -24,6 +24,21 @@ export function shouldRunIntegrationTests(): boolean {
 }
 
 /**
+ * Check if security tests with a second user should run
+ * Returns true if TEST_API_TOKEN_USER2 is configured
+ */
+export function shouldRunSecurityTests(): boolean {
+  return !!process.env.TEST_API_TOKEN && !!process.env.TEST_API_TOKEN_USER2;
+}
+
+/**
+ * Skip message for when security tests are disabled
+ */
+export const SECURITY_SKIP_MESSAGE =
+  'Security tests skipped: TEST_API_TOKEN_USER2 not configured. ' +
+  'Set TEST_API_TOKEN_USER2 in .env.local to run cross-user security tests.';
+
+/**
  * Skip message for when integration tests are disabled
  */
 export const INTEGRATION_SKIP_MESSAGE =
@@ -40,6 +55,32 @@ export function createTestClient(): TestApiClient {
     throw new Error('TEST_API_TOKEN environment variable is required for integration tests');
   }
   return new TestApiClient(token);
+}
+
+/**
+ * Create a configured test client for the second user
+ * Throws if TEST_API_TOKEN_USER2 is not set
+ */
+export function createSecondUserClient(): TestApiClient {
+  const token = process.env.TEST_API_TOKEN_USER2;
+  if (!token) {
+    throw new Error('TEST_API_TOKEN_USER2 environment variable is required for security tests');
+  }
+  return new TestApiClient(token);
+}
+
+/**
+ * Create a test client with an invalid token
+ */
+export function createInvalidTokenClient(): TestApiClient {
+  return new TestApiClient('invalid-token-12345');
+}
+
+/**
+ * Create a test client with a malformed token
+ */
+export function createMalformedTokenClient(): TestApiClient {
+  return new TestApiClient('not.a.valid.jwt.token');
 }
 
 /**

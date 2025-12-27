@@ -1,9 +1,10 @@
-// app/api/generate-code/route.ts - With versioning support
+// app/api/generate-code/route.ts - With versioning support and authentication
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { ModelCodeGenerator } from '@/lib/codeGenerationNew'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
+import { authenticateApiRequest } from '@/lib/apiAuthMiddleware'
 import JSZip from 'jszip'
 
 // Create a server-side Supabase client
@@ -16,9 +17,43 @@ const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
   }
 })
 
+/**
+ * Extract Bearer token from Authorization header
+ */
+function extractBearerToken(request: NextRequest): string | null {
+  const authHeader = request.headers.get('Authorization')
+  if (!authHeader) return null
+
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i)
+  if (bearerMatch) return bearerMatch[1]
+
+  return authHeader
+}
+
 async function generateCodeHandler(request: NextRequest): Promise<NextResponse> {
   console.log('Generate code API called')
-  
+
+  // Authenticate the request
+  const token = extractBearerToken(request)
+  if (!token) {
+    throw new AppError(
+      'Missing Authorization header. Use: Authorization: Bearer <token>',
+      401,
+      ErrorTypes.UNAUTHORIZED
+    )
+  }
+
+  const authResult = await authenticateApiRequest(token)
+  if (!authResult.authenticated) {
+    throw new AppError(
+      authResult.error || 'Invalid or expired API token',
+      401,
+      ErrorTypes.UNAUTHORIZED
+    )
+  }
+
+  const userId = authResult.userId!
+
   // Parse and validate request body
   let requestBody: any
   try {
@@ -34,7 +69,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   // Validate required fields
   validateRequiredFields(requestBody, ['modelId'])
-  
+
   const { modelId, version } = requestBody
 
   // Validate modelId format (should be UUID)
@@ -50,24 +85,31 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   console.log('Fetching model:', modelId)
 
-  // Fetch the model metadata from the database using service role key
+  // Fetch the model metadata - scoped to authenticated user
   const { data: model, error: dbError } = await supabaseServer
     .from('models')
     .select('*')
     .eq('id', modelId)
+    .eq('user_id', userId)
     .single()
 
-  if (dbError) {
-    console.error('Database error:', dbError)
-    throw new AppError(
-      dbError.message || 'Database error',
-      dbError.code === 'PGRST116' ? 404 : 500,
-      dbError.code === 'PGRST116' ? ErrorTypes.NOT_FOUND : ErrorTypes.DATABASE_ERROR,
-      { modelId, dbError }
-    )
-  }
+  if (dbError || !model) {
+    // Check if model exists but belongs to another user
+    const { data: existingModel } = await supabaseServer
+      .from('models')
+      .select('id')
+      .eq('id', modelId)
+      .single()
 
-  if (!model) {
+    if (existingModel) {
+      throw new AppError(
+        'Access denied: You do not have permission to access this model',
+        403,
+        ErrorTypes.FORBIDDEN,
+        { modelId }
+      )
+    }
+
     throw new AppError(
       'Model not found',
       404,

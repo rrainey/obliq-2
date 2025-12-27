@@ -8,12 +8,13 @@ import { findSheetRecursively, findBlockRecursively } from '@/lib/api-support/sh
 import { BlockTypes, generateDynamicPorts } from '@/lib/blockTypeRegistry';
 import { validateBlockParameters } from '@/lib/blockParameterValidator';
 import { syncSubsystemPortsFromSheets } from '@/lib/blockFactory';
+import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
 
 /**
  * UPDATE_BLOCK_POSITION - Update a block's position on the canvas
  */
 export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, body } = ctx;
+  const { supabase, userId, body } = ctx;
   const { modelId, blockId, position } = body || {};
   let { sheetId } = body || {};
 
@@ -28,18 +29,13 @@ export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<Ne
     return errorResponse('Invalid position: must have numeric x and y properties', 'INVALID_POSITION', 400);
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -137,7 +133,7 @@ export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<Ne
  * UPDATE_BLOCK_NAME - Update a block's name
  */
 export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, body } = ctx;
+  const { supabase, userId, body } = ctx;
   const { modelId, blockId, name } = body || {};
   let { sheetId } = body || {};
 
@@ -162,18 +158,13 @@ export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextRe
     );
   }
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -309,7 +300,7 @@ export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextRe
 export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<NextResponse> {
   console.log('[UPDATE_BLOCK_PARAMETERS] Handler invoked (v2 with pre-merge)');
 
-  const { supabase, body } = ctx;
+  const { supabase, userId, body } = ctx;
   const { modelId, blockId } = body || {};
   let { sheetId, parameters } = body || {};
 
@@ -329,18 +320,13 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
   // We need to know the block type first, so we defer this normalization until after finding the block.
   const rawParametersIsArray = Array.isArray(parameters);
 
-  // Get the latest version of the model
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
-    return ErrorResponses.modelNotFound(modelId);
+  // Verify user owns this model and get version data
+  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
+
+  const versionData = authResult.versionData;
 
   // Extract current model data
   const modelData = versionData.data;
