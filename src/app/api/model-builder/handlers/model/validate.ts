@@ -168,7 +168,7 @@ export async function handleValidateModel(ctx: HandlerContext): Promise<NextResp
 
   return successResponse({
     modelId,
-    valid: isValid,
+    isValid,
     errors,
     warnings,
     summary: {

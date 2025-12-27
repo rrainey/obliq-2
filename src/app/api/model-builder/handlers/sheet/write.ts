@@ -169,7 +169,9 @@ export async function handleCreateSheet(ctx: HandlerContext): Promise<NextRespon
  */
 export async function handleImportSheet(ctx: HandlerContext): Promise<NextResponse> {
   const { supabase, body } = ctx;
-  const { modelId, sheetData, overrideId, overrideName } = body || {};
+  // Support both 'overrideName' and 'name' for convenience
+  const { modelId, sheetData, overrideId, overrideName, name } = body || {};
+  const effectiveOverrideName = overrideName || name;
 
   // Validate required parameters
   if (!modelId) {
@@ -252,7 +254,7 @@ export async function handleImportSheet(ctx: HandlerContext): Promise<NextRespon
   const importedSheet = {
     ...sheetData,
     id: newSheetId,
-    name: overrideName || sheetData.name,
+    name: effectiveOverrideName || sheetData.name,
     blocks: importedBlocks,
     connections: importedConnections,
     extents: sheetData.extents || { width: 2000, height: 2000 }
@@ -315,14 +317,16 @@ export async function handleImportSheet(ctx: HandlerContext): Promise<NextRespon
  */
 export async function handleCloneSheet(ctx: HandlerContext): Promise<NextResponse> {
   const { supabase, body } = ctx;
-  const { modelId, sheetId, newName } = body || {};
+  // Support both 'sheetId' and 'sourceSheetId' for convenience
+  const { modelId, sheetId, sourceSheetId, newName } = body || {};
+  const effectiveSheetId = sheetId || sourceSheetId;
 
   // Validate required parameters
   if (!modelId) {
     return ErrorResponses.missingParameter('modelId');
   }
-  if (!sheetId) {
-    return ErrorResponses.missingParameter('sheetId');
+  if (!effectiveSheetId) {
+    return ErrorResponses.missingParameter('sheetId or sourceSheetId');
   }
 
   // Get the latest version of the model
@@ -343,10 +347,10 @@ export async function handleCloneSheet(ctx: HandlerContext): Promise<NextRespons
   const sheets = modelData.sheets || [];
 
   // Find the sheet to clone
-  const sourceSheet = sheets.find((sheet: any) => sheet.id === sheetId);
+  const sourceSheet = sheets.find((sheet: any) => sheet.id === effectiveSheetId);
 
   if (!sourceSheet) {
-    return ErrorResponses.sheetNotFound(sheetId);
+    return ErrorResponses.sheetNotFound(effectiveSheetId);
   }
 
   // Generate new sheet ID
@@ -428,7 +432,7 @@ export async function handleCloneSheet(ctx: HandlerContext): Promise<NextRespons
   return successResponse({
     modelId,
     newVersion: nextVersion,
-    sourceSheetId: sheetId,
+    sourceSheetId: effectiveSheetId,
     clonedSheet: {
       id: clonedSheet.id,
       name: clonedSheet.name,

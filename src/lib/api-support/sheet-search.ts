@@ -111,6 +111,43 @@ export function findBlockInSheet(sheet: any, blockId: string): { block: any; ind
 }
 
 /**
+ * Find a block by ID across all sheets (including nested subsystem sheets).
+ * Returns the block, its sheet, and other context.
+ */
+export function findBlockRecursively(
+  sheets: any[],
+  blockId: string
+): { block: any; blockIndex: number; sheet: any; sheetId: string; parentBlock?: any } | null {
+  for (const sheet of sheets) {
+    const blocks = sheet.blocks || [];
+    const blockIndex = blocks.findIndex((b: any) => b.id === blockId);
+
+    if (blockIndex !== -1) {
+      return {
+        block: blocks[blockIndex],
+        blockIndex,
+        sheet,
+        sheetId: sheet.id
+      };
+    }
+
+    // Search in subsystem sheets
+    for (const block of blocks) {
+      if (block.type === 'subsystem' && block.parameters?.sheets) {
+        const nestedResult = findBlockRecursively(block.parameters.sheets, blockId);
+        if (nestedResult) {
+          return {
+            ...nestedResult,
+            parentBlock: block
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Find a connection by ID within a sheet
  */
 export function findConnectionInSheet(sheet: any, connectionId: string): { connection: any; index: number } | null {

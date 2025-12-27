@@ -6,6 +6,53 @@ import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, ErrorResponses } from '@/lib/api-support/responses';
 
 /**
+ * Helper to recursively collect all sheets including those in subsystems
+ */
+function collectAllSheets(
+  sheets: any[],
+  parentPath: string = ''
+): Array<{
+  id: string;
+  name: string;
+  blockCount: number;
+  connectionCount: number;
+  extents: { width: number; height: number };
+  parentSubsystemId?: string;
+  path: string;
+}> {
+  const result: any[] = [];
+
+  for (const sheet of sheets) {
+    const sheetPath = parentPath ? `${parentPath}/${sheet.name}` : sheet.name;
+
+    result.push({
+      id: sheet.id,
+      name: sheet.name,
+      blockCount: sheet.blocks?.length || 0,
+      connectionCount: sheet.connections?.length || 0,
+      extents: sheet.extents || { width: 2000, height: 2000 },
+      ...(parentPath && { parentSubsystemId: parentPath }),
+      path: sheetPath
+    });
+
+    // Look for subsystem blocks that have embedded sheets
+    for (const block of sheet.blocks || []) {
+      if (block.type === 'subsystem' && block.parameters?.sheets) {
+        const subsystemPath = `${sheetPath}/${block.name}`;
+        const embeddedSheets = collectAllSheets(block.parameters.sheets, subsystemPath);
+        for (const embeddedSheet of embeddedSheets) {
+          // Add the parent subsystem block ID for reference
+          embeddedSheet.parentSubsystemId = block.id;
+        }
+        result.push(...embeddedSheets);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * LIST_SHEETS - List all sheets in a model with summary information
  */
 export async function handleListSheets(ctx: HandlerContext): Promise<NextResponse> {
@@ -29,22 +76,16 @@ export async function handleListSheets(ctx: HandlerContext): Promise<NextRespons
     return ErrorResponses.modelNotFound(modelId);
   }
 
-  // Extract sheets from the model data
+  // Extract sheets from the model data (top-level)
   const sheets = versionData.data?.sheets || [];
 
-  // Transform sheets to include summary information
-  const sheetSummaries = sheets.map((sheet: any) => ({
-    id: sheet.id,
-    name: sheet.name,
-    blockCount: sheet.blocks?.length || 0,
-    connectionCount: sheet.connections?.length || 0,
-    extents: sheet.extents || { width: 2000, height: 2000 }
-  }));
+  // Collect all sheets recursively, including subsystem sheets
+  const allSheets = collectAllSheets(sheets);
 
   return successResponse({
     modelId,
-    sheetCount: sheetSummaries.length,
-    sheets: sheetSummaries
+    sheetCount: allSheets.length,
+    sheets: allSheets
   });
 }
 

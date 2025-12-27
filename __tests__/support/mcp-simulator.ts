@@ -303,7 +303,7 @@ export class McpToolSimulator {
    * Validate a model and return validation results
    */
   async validateModel(modelId: string): Promise<{
-    valid: boolean;
+    isValid: boolean;
     errors: string[];
     warnings: string[];
   }> {
@@ -314,7 +314,7 @@ export class McpToolSimulator {
     }
 
     return {
-      valid: result.data.valid,
+      isValid: result.data.isValid,
       errors: result.data.errors || [],
       warnings: result.data.warnings || []
     };

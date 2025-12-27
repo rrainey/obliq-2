@@ -4,7 +4,7 @@
 import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-support/responses';
-import { findSheetRecursively } from '@/lib/api-support/sheet-search';
+import { findSheetRecursively, findBlockRecursively } from '@/lib/api-support/sheet-search';
 import { BlockTypes, generateDynamicPorts } from '@/lib/blockTypeRegistry';
 import { validateBlockParameters } from '@/lib/blockParameterValidator';
 import { syncSubsystemPortsFromSheets } from '@/lib/blockFactory';
@@ -14,14 +14,12 @@ import { syncSubsystemPortsFromSheets } from '@/lib/blockFactory';
  */
 export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<NextResponse> {
   const { supabase, body } = ctx;
-  const { modelId, sheetId, blockId, position } = body || {};
+  const { modelId, blockId, position } = body || {};
+  let { sheetId } = body || {};
 
   // Validate required parameters
   if (!modelId) {
     return ErrorResponses.missingParameter('modelId');
-  }
-  if (!sheetId) {
-    return ErrorResponses.missingParameter('sheetId');
   }
   if (!blockId) {
     return ErrorResponses.missingParameter('blockId');
@@ -47,23 +45,40 @@ export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<Ne
   const modelData = versionData.data;
   const sheets = modelData.sheets || [];
 
-  // Find the target sheet (searching both top-level and subsystem sheets)
-  const sheetResult = findSheetRecursively(sheets, sheetId);
+  // If sheetId is not provided, search for the block across all sheets
+  let block: any;
 
-  if (!sheetResult) {
-    return ErrorResponses.sheetNotFound(sheetId);
-  }
+  if (sheetId) {
+    // Find the target sheet (searching both top-level and subsystem sheets)
+    const sheetResult = findSheetRecursively(sheets, sheetId);
 
-  // Find the block to update
-  const blocks = sheetResult.sheet.blocks || [];
-  const blockIndex = blocks.findIndex((block: any) => block.id === blockId);
+    if (!sheetResult) {
+      return ErrorResponses.sheetNotFound(sheetId);
+    }
 
-  if (blockIndex === -1) {
-    return ErrorResponses.blockNotFound(blockId);
+    // Find the block to update
+    const blocks = sheetResult.sheet.blocks || [];
+    const blockIndex = blocks.findIndex((b: any) => b.id === blockId);
+
+    if (blockIndex === -1) {
+      return ErrorResponses.blockNotFound(blockId);
+    }
+
+    block = blocks[blockIndex];
+  } else {
+    // Search for the block across all sheets
+    const blockResult = findBlockRecursively(sheets, blockId);
+
+    if (!blockResult) {
+      return ErrorResponses.blockNotFound(blockId);
+    }
+
+    block = blockResult.block;
+    sheetId = blockResult.sheetId;
   }
 
   // Update the block position
-  blocks[blockIndex].position = {
+  block.position = {
     x: Math.round(position.x),
     y: Math.round(position.y)
   };
@@ -98,13 +113,23 @@ export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<Ne
     return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
   }
 
-  // Return success response
+  // Return success response with block object for consistency
   return successResponse({
     modelId,
     sheetId,
     blockId,
     newVersion: nextVersion,
-    position: blocks[blockIndex].position
+    position: block.position,
+    // Include full block object for test compatibility
+    block: {
+      id: block.id,
+      type: block.type,
+      name: block.name,
+      position: block.position,
+      parameters: block.parameters,
+      inputs: block.inputs,
+      outputs: block.outputs
+    }
   });
 }
 
@@ -113,14 +138,12 @@ export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<Ne
  */
 export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextResponse> {
   const { supabase, body } = ctx;
-  const { modelId, sheetId, blockId, name } = body || {};
+  const { modelId, blockId, name } = body || {};
+  let { sheetId } = body || {};
 
   // Validate required parameters
   if (!modelId) {
     return ErrorResponses.missingParameter('modelId');
-  }
-  if (!sheetId) {
-    return ErrorResponses.missingParameter('sheetId');
   }
   if (!blockId) {
     return ErrorResponses.missingParameter('blockId');
@@ -156,24 +179,52 @@ export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextRe
   const modelData = versionData.data;
   const sheets = modelData.sheets || [];
 
-  // Find the target sheet (searching both top-level and subsystem sheets)
-  const sheetResult = findSheetRecursively(sheets, sheetId);
+  // If sheetId is not provided, search for the block across all sheets
+  let sheetResult: any;
+  let block: any;
+  let blockIndex: number;
 
-  if (!sheetResult) {
-    return ErrorResponses.sheetNotFound(sheetId);
+  if (sheetId) {
+    // Find the target sheet (searching both top-level and subsystem sheets)
+    sheetResult = findSheetRecursively(sheets, sheetId);
+
+    if (!sheetResult) {
+      return ErrorResponses.sheetNotFound(sheetId);
+    }
+
+    // Find the block to update
+    const blocks = sheetResult.sheet.blocks || [];
+    blockIndex = blocks.findIndex((b: any) => b.id === blockId);
+
+    if (blockIndex === -1) {
+      return ErrorResponses.blockNotFound(blockId);
+    }
+
+    block = blocks[blockIndex];
+  } else {
+    // Search for the block across all sheets
+    const blockResult = findBlockRecursively(sheets, blockId);
+
+    if (!blockResult) {
+      return ErrorResponses.blockNotFound(blockId);
+    }
+
+    block = blockResult.block;
+    blockIndex = blockResult.blockIndex;
+    sheetId = blockResult.sheetId;
+
+    // Build a sheetResult compatible object
+    sheetResult = {
+      sheet: blockResult.sheet,
+      parentBlock: blockResult.parentBlock
+    };
   }
 
-  // Find the block to update
   const blocks = sheetResult.sheet.blocks || [];
-  const blockIndex = blocks.findIndex((block: any) => block.id === blockId);
-
-  if (blockIndex === -1) {
-    return ErrorResponses.blockNotFound(blockId);
-  }
 
   // Check if name is already taken by another block on the same sheet
-  const nameTaken = blocks.some((block: any, idx: number) =>
-    idx !== blockIndex && block.name === name
+  const nameTaken = blocks.some((b: any, idx: number) =>
+    idx !== blockIndex && b.name === name
   );
 
   if (nameTaken) {
@@ -185,7 +236,6 @@ export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextRe
   }
 
   // Update the block name
-  const block = blocks[blockIndex];
   const previousName = block.name;
   block.name = name;
 
@@ -232,14 +282,24 @@ export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextRe
     return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
   }
 
-  // Return success response
+  // Return success response with block object for consistency
   return successResponse({
     modelId,
     sheetId,
     blockId,
     newVersion: nextVersion,
     name: name,
-    previousName: previousName
+    previousName: previousName,
+    // Include full block object for test compatibility
+    block: {
+      id: block.id,
+      type: block.type,
+      name: block.name,
+      position: block.position,
+      parameters: block.parameters,
+      inputs: block.inputs,
+      outputs: block.outputs
+    }
   });
 }
 
@@ -250,15 +310,12 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
   console.log('[UPDATE_BLOCK_PARAMETERS] Handler invoked (v2 with pre-merge)');
 
   const { supabase, body } = ctx;
-  const { modelId, sheetId, blockId } = body || {};
-  let { parameters } = body || {};
+  const { modelId, blockId } = body || {};
+  let { sheetId, parameters } = body || {};
 
   // Validate required parameters
   if (!modelId) {
     return ErrorResponses.missingParameter('modelId');
-  }
-  if (!sheetId) {
-    return ErrorResponses.missingParameter('sheetId');
   }
   if (!blockId) {
     return ErrorResponses.missingParameter('blockId');
@@ -289,22 +346,46 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
   const modelData = versionData.data;
   const sheets = modelData.sheets || [];
 
-  // Find the target sheet (searching both top-level and subsystem sheets)
-  const sheetResult = findSheetRecursively(sheets, sheetId);
+  // If sheetId is not provided, search for the block across all sheets
+  let sheetResult: any;
+  let block: any;
+  let blockIndex: number;
 
-  if (!sheetResult) {
-    return ErrorResponses.sheetNotFound(sheetId);
+  if (sheetId) {
+    // Find the target sheet (searching both top-level and subsystem sheets)
+    sheetResult = findSheetRecursively(sheets, sheetId);
+
+    if (!sheetResult) {
+      return ErrorResponses.sheetNotFound(sheetId);
+    }
+
+    // Find the block to update
+    const blocks = sheetResult.sheet.blocks || [];
+    blockIndex = blocks.findIndex((b: any) => b.id === blockId);
+
+    if (blockIndex === -1) {
+      return ErrorResponses.blockNotFound(blockId);
+    }
+
+    block = blocks[blockIndex];
+  } else {
+    // Search for the block across all sheets
+    const blockResult = findBlockRecursively(sheets, blockId);
+
+    if (!blockResult) {
+      return ErrorResponses.blockNotFound(blockId);
+    }
+
+    block = blockResult.block;
+    blockIndex = blockResult.blockIndex;
+    sheetId = blockResult.sheetId;
+
+    // Build a sheetResult compatible object
+    sheetResult = {
+      sheet: blockResult.sheet,
+      parentBlock: blockResult.parentBlock
+    };
   }
-
-  // Find the block to update
-  const blocks = sheetResult.sheet.blocks || [];
-  const blockIndex = blocks.findIndex((block: any) => block.id === blockId);
-
-  if (blockIndex === -1) {
-    return ErrorResponses.blockNotFound(blockId);
-  }
-
-  const block = blocks[blockIndex];
   const blockType = block.type;
 
   // Normalize parameters for subsystem blocks when caller sends an array directly
@@ -438,7 +519,7 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
     return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
   }
 
-  // Return success response
+  // Return success response with block object for consistency
   return successResponse({
     modelId,
     sheetId,
@@ -447,6 +528,16 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
     newVersion: nextVersion,
     oldParameters,
     newParameters: block.parameters,
+    // Include full block object for test compatibility
+    block: {
+      id: block.id,
+      type: block.type,
+      name: block.name,
+      position: block.position,
+      parameters: block.parameters,
+      inputs: block.inputs,
+      outputs: block.outputs
+    },
     ports: {
       inputs: block.inputs,
       outputs: block.outputs
