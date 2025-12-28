@@ -333,6 +333,8 @@ The C code generation tests use Docker to ensure consistent compilation environm
    - [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows/Mac
    - [Docker Engine](https://docs.docker.com/engine/install/) for Linux
 
+Obliq-2 leverages Docker to compile and link a simulation model for execution.  Thee compiled Web Assenblies are cached in Supabase.
+
 2. **Initial Setup**: The test suite will automatically build the required Docker image on first run
 
 #### Running Code Generation Tests
