@@ -84,7 +84,35 @@ export class TestApiClient {
       options.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url.toString(), options);
+    let response: Response;
+    try {
+      response = await fetch(url.toString(), options);
+    } catch (error) {
+      // Network error - server likely not running
+      throw new Error(
+        `Network error connecting to ${url.toString()}. ` +
+        `Ensure the Next.js dev server is running (npm run dev). ` +
+        `Original error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+
+    // Check for HTML error pages (server returns 404/500 as HTML)
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await response.text();
+      if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+        throw new Error(
+          `Server returned HTML instead of JSON (status ${response.status}). ` +
+          `This usually means: 1) The dev server is not running, 2) The route doesn't exist, ` +
+          `or 3) An unhandled server error occurred. URL: ${url.toString()}`
+        );
+      }
+      throw new Error(
+        `Unexpected response type: ${contentType}. Expected application/json. ` +
+        `Status: ${response.status}. URL: ${url.toString()}`
+      );
+    }
+
     return response.json();
   }
 
