@@ -8,7 +8,7 @@ A web-based visual modeling and simulation tool that enables users to construct,
 
 obliq-2 is a browser-based application, designed for creating and simulating visual block diagram models. Users can drag and drop various block types onto a canvas, connect them with wires to define signal flow, run simulations to see how signals propagate through the system, and generate PlatformIO-compatible C code for deployment on embedded systems.
 
-![Screenshot](images/screenshot-01.png)
+![Screenshot](images/transp07.png)
 
 ## Key Features
 
@@ -29,6 +29,47 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 - 1D vector and 2D matrix support (e.g., `double[3]`, `float[3][3]`)
 - Automatic type propagation through connections
 - Type validation with visual error indicators
+
+### Supported Block Types
+
+| Block Type | Display Name | Category | Description |
+|------------|--------------|----------|-------------|
+| `source` | Source | Sources | Provides constant or signal generator output (step, ramp, sine, chirp, noise) |
+| `clock` | Clock | Sources | Outputs current simulation time in seconds as a double scalar |
+| `input_port` | Input Port | Ports | External input to a model or subsystem |
+| `output_port` | Output Port | Ports | External output from a model or subsystem |
+| `sum` | Sum | Math | Sums multiple input signals with configurable signs (+/-) |
+| `multiply` | Multiply | Math | Element-wise multiplication of multiple input signals |
+| `scale` | Scale | Math | Multiplies input by a scalar constant (gain) |
+| `abs` | Absolute Value | Math | Absolute value of scalar input |
+| `uminus` | Unary Minus | Math | Negates input (element-wise for vectors/matrices) |
+| `limit` | Limit | Math | Clamps signal values to specified upper/lower range |
+| `evaluate` | Evaluate | Math | Evaluates custom C-style expression with multiple inputs |
+| `trig` | Trig | Math | Trigonometric functions (sin, cos, tan, asin, acos, atan, atan2) |
+| `transfer_function` | Transfer Function | Dynamic | Laplace transfer function with RK4 integration |
+| `discrete_transform` | Discrete Transform | Dynamic | Discrete-time z-transform transfer function |
+| `integrator` | Integrator | Dynamic | Integrator block (1/s) with optional limits and reset |
+| `lookup_1d` | 1-D Lookup | Lookup | 1-D lookup table with linear interpolation |
+| `lookup_2d` | 2-D Lookup | Lookup | 2-D lookup table with bilinear interpolation |
+| `matrix_multiply` | Matrix Multiply | Matrix | Matrix multiplication (A×B) or scalar multiplication |
+| `transpose` | Transpose | Matrix | Matrix transpose; vectors [n] become [n][1] matrices |
+| `mux` | Mux | Matrix | Multiplexer: combines scalars into vector or matrix |
+| `demux` | Demux | Matrix | Demultiplexer: splits matrix/vector into scalar outputs |
+| `cross` | Cross Product | Vector | 3D vector cross product (A × B) |
+| `dot` | Dot Product | Vector | Vector dot product (A · B) |
+| `mag` | Magnitude | Vector | Vector magnitude (Euclidean norm) |
+| `if` | If | Control | Conditional selection based on control signal |
+| `condition` | Condition | Control | Compares input against constant (>, <, >=, <=, ==, !=) |
+| `subsystem` | Subsystem | Hierarchical | Encapsulates another sheet as a reusable block |
+| `signal_display` | Signal Display | Sinks | Real-time signal visualization during simulation |
+| `signal_logger` | Signal Logger | Sinks | Logs signal values for CSV export |
+| `no_connection` | No Connection | Sinks | Marks a signal as intentionally unused |
+| `sheet_label_sink` | Sheet Label Sink | Sheet Labels | Receives signal for wireless routing within a sheet |
+| `sheet_label_source` | Sheet Label Source | Sheet Labels | Outputs signal from corresponding sheet label sink |
+| `orientation_conversion` | Orientation Conversion | Aerospace | Converts between Euler angles, DCM, and Quaternion (AIAA convention) |
+| `units_conversion` | Units Conversion | Aerospace | Converts between SI and Imperial units |
+| `body2quaternion_rates` | Body2Quat Rates | Aerospace | Converts body angular rates to quaternion rates |
+| `comment` | Comment | Annotation | Text annotation with Markdown and LaTeX math support |
 
 ### Simulation Engine
 - **Client-side simulation** - Models are compiled dynamically and executed as [Web Assemblies](https://webassembly.org/)
@@ -66,7 +107,7 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 - **Visualization**: Recharts for signal charting
 - **Code Generation**: Server-side TypeScript to C transpilation
 
-## Installation
+## Installation and Development Setup
 
 ### Prerequisites
 - Node.js 20+ and npm/yarn
