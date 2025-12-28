@@ -106,12 +106,14 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 - **State Management**: Zustand
 - **Visualization**: Recharts for signal charting
 - **Code Generation**: Server-side TypeScript to C transpilation
+- **Model Compilation**: Custom Docker image with gcc and WASM tooling
 
 ## Installation and Development Setup
 
 ### Prerequisites
 - Node.js 20+ and npm/yarn
 - Supabase account (or local Supabase instance)
+- Docker Desktop
 
 ### Setup
 
