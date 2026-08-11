@@ -623,12 +623,18 @@ export class HeaderGenerator {
 
   /**
    * Generate model parameter definitions (Feature 3)
-   * Scalars use #define, arrays use const with size macros
+   * Scalars use #define, arrays use const with size macros.
+   *
+   * Scalar #defines that collide with a signal/block identifier are emitted as
+   * PARAM_<name> only, so they cannot rewrite `struct { double name; }` or
+   * `model->signals.name` (see K_q collision on 9.2 closed-loop model).
    */
   private generateParameters(): string {
     if (!this.model.parameters || this.model.parameters.length === 0) {
       return CCodeBuilder.generateCommentBlock(['No model parameters defined'])
     }
+
+    const signalIds = this.collectSignalIdentifiers()
 
     let code = CCodeBuilder.generateCommentBlock(['Model Parameters'])
 
@@ -643,12 +649,13 @@ export class HeaderGenerator {
 
       const parsedType = parseType(signalType)
       const baseType = parsedType.baseType
+      const safeName = CCodeBuilder.sanitizeIdentifier(name)
 
       if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
         // Matrix: Use const array with #define for dimensions
-        code += `#define ${name}_ROWS ${parsedType.rows}\n`
-        code += `#define ${name}_COLS ${parsedType.cols}\n`
-        code += `const ${baseType} ${name}[${name}_ROWS][${name}_COLS] = `
+        code += `#define ${safeName}_ROWS ${parsedType.rows}\n`
+        code += `#define ${safeName}_COLS ${parsedType.cols}\n`
+        code += `const ${baseType} ${safeName}[${safeName}_ROWS][${safeName}_COLS] = `
 
         // Format matrix value
         if (Array.isArray(value) && Array.isArray(value[0])) {
@@ -660,8 +667,8 @@ export class HeaderGenerator {
 
       } else if (parsedType.isArray && parsedType.arraySize) {
         // Vector: Use const array with #define for size
-        code += `#define ${name}_SIZE ${parsedType.arraySize}\n`
-        code += `const ${baseType} ${name}[${name}_SIZE] = `
+        code += `#define ${safeName}_SIZE ${parsedType.arraySize}\n`
+        code += `const ${baseType} ${safeName}[${safeName}_SIZE] = `
 
         // Format vector value
         if (Array.isArray(value)) {
@@ -672,14 +679,31 @@ export class HeaderGenerator {
         code += ';\n\n'
 
       } else {
-        // Scalar: Use #define
-        code += `#define ${name} `
-        code += this.formatScalarLiteral(value as number, baseType)
-        code += '\n'
+        // Scalar: prefer bare #define for evaluate expressions; avoid clobbering signals
+        const literal = this.formatScalarLiteral(value as number, baseType)
+        if (signalIds.has(safeName)) {
+          code += `/* Parameter ${safeName} conflicts with a signal name; use PARAM_${safeName} */\n`
+          code += `#define PARAM_${safeName} ${literal}\n`
+        } else {
+          code += `#define ${safeName} ${literal}\n`
+          code += `#define PARAM_${safeName} ${safeName}\n`
+        }
       }
     }
 
     return code
+  }
+
+  /** Sanitized identifiers that appear as signal/state struct members */
+  private collectSignalIdentifiers(): Set<string> {
+    const ids = new Set<string>()
+    for (const block of this.model.blocks) {
+      const n = CCodeBuilder.sanitizeIdentifier(block.flattenedName || block.block.name)
+      ids.add(n)
+      // Common multi-out suffixes still include the base name as a prefix; base is enough
+      // to catch #define K_q vs signals.K_q
+    }
+    return ids
   }
 
   /**

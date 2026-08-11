@@ -1101,7 +1101,8 @@ export function buildSixDofClosedLoopPitchRateDamp(): SliceModel {
     denominator: [0.1556, 1]
   })
   // Gain: error (rad/s) → moment command scale (N·m)
-  const Kq = B('source', 'K_q', 1180, 60, {
+  // Name must not match a model parameter #define (e.g. K_q) — that breaks C codegen.
+  const Kq = B('source', 'Kq_gain', 1180, 60, {
     signalType: 'constant',
     value: 5e6,
     dataType: 'double'
@@ -1244,7 +1245,8 @@ export function buildSixDofClosedLoopPitchRateDamp(): SliceModel {
     parameters: [
       ...(core.parameters || []),
       {
-        name: 'K_q',
+        // Prefixed so it cannot collide with a signal named K_q / Kq_gain
+        name: 'pitch_rate_gain',
         dataType: 'double',
         defaultValue: '5e6',
         signalType: 'double',

@@ -3,7 +3,7 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-11T23:34:31.230Z",
+      "created": "2026-08-11T23:43:25.259Z",
       "description": "Open-loop 6-DoF ascent: EOM + liftoff/thrust/mdot + altitude/atmosphere/q̄ plots (no aero force). Sprint integration model."
     },
     "sheets": [

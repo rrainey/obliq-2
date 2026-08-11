@@ -122,4 +122,19 @@ describe('6-DoF / 9.1 codegen naming fixes', () => {
     // Scalars are OK (mass, r_mag, thrust, altitude, …)
     expect(result.wasmWrapper).toMatch(/wasm_get_output/)
   })
+
+  test('9.2 parameter macros do not clobber gain signal members', () => {
+    const { buildSixDofClosedLoopPitchRateDamp } = require('../examples/saturn-ib/sixDofVarMassEom')
+    const model = buildSixDofClosedLoopPitchRateDamp()
+    const gen = new CodeGenerator({
+      modelName: 'saturn_9_2_closed_loop_pitch_rate_damp',
+      integrationAlgorithm: 'rk4',
+    })
+    const result = gen.generate(model.sheets as any, model.parameters || [])
+    // No #define that expands signals.K_q / signals.Kq_gain
+    expect(result.header).not.toMatch(/#define K_q\b/)
+    expect(result.header).not.toMatch(/#define Kq_gain\b/)
+    expect(result.source).toMatch(/signals\.Kq_gain/)
+    expect(result.source).not.toMatch(/Error generating code for/)
+  })
 })

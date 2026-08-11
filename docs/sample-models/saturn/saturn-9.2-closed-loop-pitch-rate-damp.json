@@ -3,7 +3,7 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-11T23:34:31.231Z",
+      "created": "2026-08-11T23:43:25.259Z",
       "description": "Closed-loop pitch-rate damp: EOM + short boost + Q feedback through TF/limit → My (FCC-style). Sprint 9.2."
     },
     "sheets": [
@@ -213,7 +213,7 @@
           },
           {
             "id": "source_177",
-            "name": "K_q",
+            "name": "Kq_gain",
             "type": "source",
             "position": {
               "x": 1180,
@@ -2267,7 +2267,7 @@
         "value": 590000
       },
       {
-        "name": "K_q",
+        "name": "pitch_rate_gain",
         "dataType": "double",
         "defaultValue": "5e6",
         "signalType": "double",

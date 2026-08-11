@@ -32,6 +32,14 @@ npm test -- --testPathPattern=saturn-ib-slices
 
 Selected AS-205 constants from `saturn-1B/AS205_presettings.m` are attached as model parameters on guidance-related slices.
 
+## Validation baseline (important)
+
+**Primary trajectory reference:** Chrysler **TN-AP-67-158** (*AS-205 Revised Launch Vehicle Reference Trajectory*), not the Simulink stack.
+
+- Policy + quantity mapping: [`AS205_REFERENCE.md`](./AS205_REFERENCE.md)
+- CSV layout + compare helpers: [`as205Compare.ts`](./as205Compare.ts), `docs/sample-models/saturn/as205-reference/`
+- Simulink (`saturn-1B/*.mdl`) may **deviate** from the TN; prefer the TN when debugging residuals
+
 ## 6-DOF variable-mass EOM
 
 See **[SIXDOF_VARMASS_EOM.md](./SIXDOF_VARMASS_EOM.md)** for equations, IO, and limitations.
@@ -44,6 +52,6 @@ npm test -- --testPathPattern=sixdof-varmass-eom
 
 - Aero forces/moments coupled into EOM (9.1 samples atmosphere only)
 - Full inertia tensor (products of inertia) and mass-property LUTs
-- Closed-loop IGM chi steering / FCC → moments
+- Full IGM χ steering (9.2 is pitch-rate damp only)
 - Multi-engine H-1 cluster + APS
-- Trajectory matching against AS-205 reference tables
+- Digitized full TN-AP-67-158 tables + quantitative pass/fail windows

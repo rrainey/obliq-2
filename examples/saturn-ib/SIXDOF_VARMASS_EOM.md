@@ -153,13 +153,19 @@ npm test -- --testPathPattern=sixdof-varmass-eom
 
 Fixture: `docs/sample-models/saturn/saturn-9.2-closed-loop-pitch-rate-damp.json`
 
+## Validation baseline
+
+Trajectory comparison target: **TN-AP-67-158 (AS-205 revised launch reference)**.  
+See [`AS205_REFERENCE.md`](./AS205_REFERENCE.md). Simulink is secondary and may disagree with the TN.
+
 ## Limitations (v1)
 
 - Principal-axis inertia only; no \(I_{xy}\) etc.
 - No thruster relative-velocity / plume force beyond user `F_b`
 - No aero forces into EOM (9.1 samples atmosphere for plots only)
 - 9.2 is pitch-rate damping only — not full IGM χ steering
-- Multi-engine / APS and AS-205 trajectory matching still TBD
+- Multi-engine / APS still TBD
+- Quantitative TN residual pass/fail not yet declared (digitize tables first)
 - DCM convention assumed body→inertial; verify sign for a specific trajectory frame
 
 ## Run codegen test
