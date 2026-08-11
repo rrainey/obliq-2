@@ -1,6 +1,9 @@
 // lib/__tests__/signalTypePropagation.test.ts
 
-import { propagateSignalTypes } from '@/lib/signalTypePropagation'
+import {
+  propagateSignalTypes,
+  calculateMatrixMultiplyOutputType
+} from '@/lib/signalTypePropagation'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 
@@ -137,6 +140,42 @@ describe('arithmetic blocks', () => {
     // Error will be about unable to determine output type due to incompatible inputs
     expect(result.errors[0].message).toContain('Cannot determine output type')
     expect(result.errors[0].blockId).toBe('sum1')
+  })
+})
+
+describe('matrix_multiply scalar × vector', () => {
+  test('calculateMatrixMultiplyOutputType covers scalar×vector and reverse', () => {
+    expect(calculateMatrixMultiplyOutputType('double', 'double[3]')).toBe('double[3]')
+    expect(calculateMatrixMultiplyOutputType('double[3]', 'double')).toBe('double[3]')
+    expect(calculateMatrixMultiplyOutputType('double', 'double')).toBe('double')
+    expect(calculateMatrixMultiplyOutputType('double[3]', 'double[3]')).toBe('double[3]')
+    expect(calculateMatrixMultiplyOutputType('double[3]', 'double[4]')).toBeNull()
+  })
+
+  test('propagates scalar × vector through matrix_multiply (9.3 aero path)', () => {
+    // D_mag (scalar) * v_hat (vector) → D_vec (vector) → uminus → sum with F_thrust
+    const blocks: BlockData[] = [
+      createBlock('dmag', 'source', { dataType: 'double' }),
+      createBlock('vhat', 'source', { dataType: 'double[3]' }),
+      createBlock('fthrust', 'source', { dataType: 'double[3]' }),
+      createBlock('dvec', 'matrix_multiply'),
+      createBlock('faero', 'uminus'),
+      createBlock('fb', 'sum', { signs: '++', numInputs: 2 })
+    ]
+    const wires: WireData[] = [
+      createWire('w1', 'dmag', 'dvec', 0, 0),
+      createWire('w2', 'vhat', 'dvec', 0, 1),
+      createWire('w3', 'dvec', 'faero'),
+      createWire('w4', 'fthrust', 'fb', 0, 0),
+      createWire('w5', 'faero', 'fb', 0, 1)
+    ]
+
+    const result = propagateSignalTypes(blocks, wires)
+
+    expect(result.errors.filter(e => e.severity === 'error')).toHaveLength(0)
+    expect(result.blockOutputTypes.get('dvec:0')).toBe('double[3]')
+    expect(result.blockOutputTypes.get('faero:0')).toBe('double[3]')
+    expect(result.blockOutputTypes.get('fb:0')).toBe('double[3]')
   })
 })
 

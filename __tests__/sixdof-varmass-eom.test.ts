@@ -13,6 +13,7 @@ import {
   buildSixDofOpenLoopAscentWithAero
 } from '../examples/saturn-ib/sixDofVarMassEom'
 import { sliceToModelData } from '../examples/saturn-ib/sliceModels'
+import { propagateSignalTypes } from '@/lib/signalTypePropagation'
 
 describe('6-DOF variable-mass quaternion EOM', () => {
   const model = buildSixDofVariableMassEom()
@@ -164,6 +165,19 @@ describe('6-DOF variable-mass quaternion EOM', () => {
         c => c.sourceBlockId === Fb.id && c.targetBlockId === eom.id
       )
     ).toBe(true)
+
+    // Parent-sheet type propagation must type D_vec / F_aero / F_b_cmd
+    const prop = propagateSignalTypes(
+      m.sheets[0].blocks as any,
+      m.sheets[0].connections as any
+    )
+    const typeErrors = prop.errors.filter(e => e.severity === 'error')
+    expect(typeErrors.map(e => e.message)).toEqual([])
+    const dvec = m.sheets[0].blocks.find(b => b.name === 'D_vec')!
+    const faero = m.sheets[0].blocks.find(b => b.name === 'F_aero')!
+    expect(prop.blockOutputTypes.get(`${dvec.id}:0`)).toBe('double[3]')
+    expect(prop.blockOutputTypes.get(`${faero.id}:0`)).toBe('double[3]')
+    expect(prop.blockOutputTypes.get(`${Fb.id}:0`)).toBe('double[3]')
 
     const gen = new CodeGenerator({
       modelName: 'sixdof_ascent_aero',

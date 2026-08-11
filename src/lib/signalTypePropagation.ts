@@ -423,57 +423,9 @@ function determineProcessingBlockOutputType(
       return null // Lookup blocks don't accept arrays or matrices
     
     case 'matrix_multiply':
-      // Matrix multiply has special rules
-      if (inputTypes.length < 2) return null
-      
-      const input1 = parsedTypes[0]
-      const input2 = parsedTypes[1]
-      
-      // Both inputs must have the same base type
-      if (input1.baseType !== input2.baseType) return null
-      
-      // Handle different multiplication scenarios
-      if (!input1.isMatrix && !input1.isArray && !input2.isMatrix && !input2.isArray) {
-        // Scalar × Scalar = Scalar
-        return typeToString(input1)
-      }
-      
-      if (!input1.isMatrix && !input1.isArray && input2.isMatrix) {
-        // Scalar × Matrix = Matrix (same size)
-        return typeToString(input2)
-      }
-      
-      if (input1.isMatrix && !input2.isMatrix && !input2.isArray) {
-        // Matrix × Scalar = Matrix (same size)
-        return typeToString(input1)
-      }
-      
-      if (input1.isArray && input2.isMatrix) {
-        // Vector × Matrix: [1×n] × [n×m] = [1×m]
-        if (input1.arraySize === input2.rows) {
-          return `${input1.baseType}[${input2.cols}]`
-
-        }
-        return null // Dimension mismatch
-      }
-      
-      if (input1.isMatrix && input2.isArray) {
-        // Matrix × Vector: [m×n] × [n×1] = [m×1]
-        if (input1.cols === input2.arraySize) {
-          return `${input1.baseType}[${input1.rows}]`
-        }
-        return null // Dimension mismatch
-      }
-      
-      if (input1.isMatrix && input2.isMatrix) {
-        // Matrix × Matrix: [m×n] × [n×p] = [m×p]
-        if (input1.cols === input2.rows) {
-          return `${input1.baseType}[${input1.rows}][${input2.cols}]`
-        }
-        return null // Dimension mismatch
-      }
-      
-      return null // Unsupported combination
+      // Shared rules with MatrixMultiplyBlockModule (scalar×vector, mat×vec, etc.)
+      if (knownInputTypes.length < 2) return null
+      return calculateMatrixMultiplyOutputType(knownInputTypes[0], knownInputTypes[1])
 
     case 'if':
       // If block passes through input1's type (first input)
@@ -2062,44 +2014,66 @@ export function calculateMatrixMultiplyOutputType(type1: string, type2: string):
   try {
     const parsed1 = parseType(type1)
     const parsed2 = parseType(type2)
-    
+
     // Must have same base type
     if (parsed1.baseType !== parsed2.baseType) return null
-    
+
+    const s1 = !parsed1.isMatrix && !parsed1.isArray
+    const s2 = !parsed2.isMatrix && !parsed2.isArray
+
     // Scalar × Scalar
-    if (!parsed1.isMatrix && !parsed1.isArray && !parsed2.isMatrix && !parsed2.isArray) {
+    if (s1 && s2) {
       return type1
     }
-    
-    // Scalar × Matrix or Matrix × Scalar
-    if (!parsed1.isMatrix && !parsed1.isArray && parsed2.isMatrix) {
+
+    // Scalar × Vector = Vector (and reverse) — used e.g. F_aero = D · v̂
+    if (s1 && parsed2.isArray) {
       return type2
     }
-    if (parsed1.isMatrix && !parsed2.isMatrix && !parsed2.isArray) {
+    if (parsed1.isArray && s2) {
       return type1
     }
-    
-    // Vector × Matrix: [1×n] × [n×m] = [1×m]
+
+    // Scalar × Matrix or Matrix × Scalar
+    if (s1 && parsed2.isMatrix) {
+      return type2
+    }
+    if (parsed1.isMatrix && s2) {
+      return type1
+    }
+
+    // Vector × Vector element-wise (same size) — matches MatrixMultiplyBlockModule
+    if (parsed1.isArray && parsed2.isArray) {
+      if (parsed1.arraySize === parsed2.arraySize) {
+        return type1
+      }
+      return null
+    }
+
+    // Vector × Matrix: [n] × [n×m] = [m]
     if (parsed1.isArray && parsed2.isMatrix) {
       if (parsed1.arraySize === parsed2.rows) {
         return `${parsed1.baseType}[${parsed2.cols}]`
       }
+      return null
     }
-    
-    // Matrix × Vector: [m×n] × [n×1] = [m×1]
+
+    // Matrix × Vector: [m×n] × [n] = [m]
     if (parsed1.isMatrix && parsed2.isArray) {
       if (parsed1.cols === parsed2.arraySize) {
         return `${parsed1.baseType}[${parsed1.rows}]`
       }
+      return null
     }
-    
+
     // Matrix × Matrix: [m×n] × [n×p] = [m×p]
     if (parsed1.isMatrix && parsed2.isMatrix) {
       if (parsed1.cols === parsed2.rows) {
         return `${parsed1.baseType}[${parsed1.rows}][${parsed2.cols}]`
       }
+      return null
     }
-    
+
     return null
   } catch {
     return null
@@ -2336,50 +2310,16 @@ export const matrixOperationRules: Record<string, MatrixOperationRule> = {
     },
     getOutputType: (inputs) => {
       const [a, b] = inputs
-      
-      // Scalar cases
-      if (!a.isMatrix && !a.isArray && !b.isMatrix && !b.isArray) {
-        return a
+      const t = calculateMatrixMultiplyOutputType(
+        typeToString(a),
+        typeToString(b)
+      )
+      if (!t) return null
+      try {
+        return parseType(t)
+      } catch {
+        return null
       }
-      if (!a.isMatrix && !a.isArray && b.isMatrix) {
-        return b
-      }
-      if (a.isMatrix && !b.isMatrix && !b.isArray) {
-        return a
-      }
-      
-      // Vector × Matrix
-      if (a.isArray && b.isMatrix && a.arraySize === b.rows) {
-        return {
-          baseType: a.baseType,
-          isArray: true,
-          arraySize: b.cols,
-          isMatrix: false
-        }
-      }
-      
-      // Matrix × Vector
-      if (a.isMatrix && b.isArray && a.cols === b.arraySize) {
-        return {
-          baseType: a.baseType,
-          isArray: true,
-          arraySize: a.rows,
-          isMatrix: false
-        }
-      }
-      
-      // Matrix × Matrix
-      if (a.isMatrix && b.isMatrix && a.cols === b.rows) {
-        return {
-          baseType: a.baseType,
-          isArray: false,
-          isMatrix: true,
-          rows: a.rows,
-          cols: b.cols
-        }
-      }
-      
-      return null
     }
   },
   
