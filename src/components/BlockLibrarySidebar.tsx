@@ -44,6 +44,14 @@ const blockTypes: BlockType[] = [
     vectorSupport: 'full'
   },
   {
+    id: 'divide',
+    name: 'Divide',
+    category: 'Math',
+    description: 'Element-wise num / den',
+    icon: '÷',
+    vectorSupport: 'full'
+  },
+  {
     id: 'scale',
     name: 'Scale',
     category: 'Math',
@@ -75,14 +83,82 @@ const blockTypes: BlockType[] = [
     icon: '-x',
     vectorSupport: 'full'
   },
+  {
+    id: 'sign',
+    name: 'Sign',
+    category: 'Math',
+    description: 'Signum: −1, 0, or +1',
+    icon: '±',
+    vectorSupport: 'full'
+  },
 
-  // Signal Processing
+  // Signal Processing / Discontinuities
   {
     id: 'limit',
     name: 'Limit',
     category: 'Signal',
     description: 'Clamp signal to range',
     icon: '⊏⊐',
+    vectorSupport: 'full'
+  },
+  {
+    id: 'relay',
+    name: 'Relay',
+    category: 'Discontinuities',
+    description: 'Hysteresis switch',
+    icon: '⟳',
+    vectorSupport: 'scalar-only'
+  },
+  {
+    id: 'rate_limiter',
+    name: 'Rate Limiter',
+    category: 'Discontinuities',
+    description: 'Limit rate of change',
+    icon: '⊿',
+    vectorSupport: 'scalar-only'
+  },
+  {
+    id: 'quantizer',
+    name: 'Quantizer',
+    category: 'Discontinuities',
+    description: 'Round to quantum steps',
+    icon: '◫',
+    vectorSupport: 'full'
+  },
+  {
+    id: 'edge_detect',
+    name: 'Edge Detect',
+    category: 'Discontinuities',
+    description: 'Pulse on rising/falling edge',
+    icon: '⌃',
+    vectorSupport: 'scalar-only'
+  },
+
+  // Matrix / signal plumbing
+  {
+    id: 'selector',
+    name: 'Selector',
+    category: 'Matrix',
+    description: 'Pick vector elements by index',
+    icon: '[:] ',
+    vectorSupport: 'partial'
+  },
+
+  // Data stores (model-scoped shared signals)
+  {
+    id: 'data_store_write',
+    name: 'Data Store Write',
+    category: 'Data',
+    description: 'Write named model store',
+    icon: 'DS↓',
+    vectorSupport: 'full'
+  },
+  {
+    id: 'data_store_read',
+    name: 'Data Store Read',
+    category: 'Data',
+    description: 'Read named model store',
+    icon: 'DS↑',
     vectorSupport: 'full'
   },
 
@@ -109,6 +185,14 @@ const blockTypes: BlockType[] = [
     category: 'Dynamic',
     description: 'Integrate signal over time',
     icon: '∫',
+    vectorSupport: 'element-wise'
+  },
+  {
+    id: 'unit_delay',
+    name: 'Unit Delay',
+    category: 'Dynamic',
+    description: 'z⁻¹ delay (previous sample)',
+    icon: 'z⁻¹',
     vectorSupport: 'element-wise'
   },
 
@@ -284,6 +368,14 @@ const blockTypes: BlockType[] = [
   },
 
   // Aerospace
+  {
+    id: 'atmosphere',
+    name: 'Atmosphere',
+    category: 'Aerospace',
+    description: 'COESA 1976: T, P, ρ, a vs altitude',
+    icon: 'Atm',
+    vectorSupport: 'scalar-only'
+  },
   {
     id: 'orientation_conversion',
     name: 'Orientation Conversion',

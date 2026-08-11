@@ -70,8 +70,8 @@ export default function IntegratorConfig({ block, onUpdate, onClose }: Integrato
     >
       <Stack gap="md">
         <Checkbox
-          label="Show Initialization Port"
-          description="Use external signal to set initial value via x(0) port"
+          label="Show x(0) Port"
+          description="Add a left-side data port for external initial condition. At t=0 (and on reset), state is taken from this signal instead of Initial Value."
           checked={showInitPort}
           onChange={(e) => setShowInitPort(e.currentTarget.checked)}
         />
@@ -81,24 +81,26 @@ export default function IntegratorConfig({ block, onUpdate, onClose }: Integrato
           value={initialValue}
           onChange={(val) => setInitialValue(typeof val === 'number' ? val : 0)}
           decimalScale={10}
-          description="The starting value of the integrator at t=0"
+          description={showInitPort
+            ? 'Ignored while x(0) port is shown (used only if x(0) is unconnected → 0)'
+            : 'Starting value of the integrator at t=0; also used on reset when x(0) is not shown'}
           placeholder="Enter initial value"
           disabled={showInitPort}
         />
 
-        <Divider label="Optional Inputs" labelPosition="left" />
+        <Divider label="Control ports" labelPosition="left" />
 
         <Stack gap="xs">
           <Checkbox
             label="Show Enable Input"
-            description="When enabled input is 0, integration is paused (output holds)"
+            description="Top control port: when false/0, integration is paused (output holds)"
             checked={showEnableInput}
             onChange={(e) => setShowEnableInput(e.currentTarget.checked)}
           />
 
           <Checkbox
             label="Show Reset Input"
-            description="On rising edge, resets output to initial value"
+            description="Bottom control port: rising edge reloads state from x(0) if shown, otherwise from Initial Value"
             checked={showResetInput}
             onChange={(e) => setShowResetInput(e.currentTarget.checked)}
           />

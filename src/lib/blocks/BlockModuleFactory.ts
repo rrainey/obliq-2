@@ -3,6 +3,8 @@
 import { IBlockModule } from './BlockModule'
 import { SumBlockModule } from './SumBlockModule'
 import { MultiplyBlockModule } from './MultiplyBlockModule'
+import { DivideBlockModule } from './DivideBlockModule'
+import { SignBlockModule } from './SignBlockModule'
 import { InputPortBlockModule } from './InputPortBlockModule'
 import { OutputPortBlockModule } from './OutputPortBlockModule'
 import { SourceBlockModule } from './SourceBlockModule'
@@ -25,11 +27,20 @@ import { ConditionBlockModule } from './ConditionBlockModule'
 import { AbsoluteValueBlockModule } from './AbsoluteValueBlockModule'
 import { UnaryMinusBlockModule } from './UnaryMinusBlockModule'
 import { LimitBlockModule } from './LimitBlockModule'
+import { RelayBlockModule } from './RelayBlockModule'
+import { RateLimiterBlockModule } from './RateLimiterBlockModule'
+import { QuantizerBlockModule } from './QuantizerBlockModule'
+import { SelectorBlockModule } from './SelectorBlockModule'
+import { DataStoreWriteBlockModule } from './DataStoreWriteBlockModule'
+import { DataStoreReadBlockModule } from './DataStoreReadBlockModule'
 import { IntegratorBlockModule } from './IntegratorBlockModule'
+import { UnitDelayBlockModule } from './UnitDelayBlockModule'
 import { OrientationConversionBlockModule } from './OrientationConversionBlockModule'
 import { UnitsConversionBlockModule } from './UnitsConversionBlockModule'
 import { DiscreteTransformBlockModule } from './DiscreteTransformBlockModule'
 import { Body2QuaternionRatesBlockModule } from './Body2QuaternionRatesBlockModule'
+import { EdgeDetectBlockModule } from './EdgeDetectBlockModule'
+import { AtmosphereBlockModule } from './AtmosphereBlockModule'
 
 import { SheetLabelSinkBlockModule } from './SheetLabelSinkBlockModule'
 import { SheetLabelSourceBlockModule } from './SheetLabelSourceBlockModule'
@@ -77,6 +88,12 @@ export class BlockModuleFactory {
         
       case 'multiply':
         return new MultiplyBlockModule()
+
+      case 'divide':
+        return new DivideBlockModule()
+
+      case 'sign':
+        return new SignBlockModule()
         
       case 'input_port':
         return new InputPortBlockModule()
@@ -162,8 +179,29 @@ export class BlockModuleFactory {
       case 'limit':
         return new LimitBlockModule()
 
+      case 'relay':
+        return new RelayBlockModule()
+
+      case 'rate_limiter':
+        return new RateLimiterBlockModule()
+
+      case 'quantizer':
+        return new QuantizerBlockModule()
+
+      case 'selector':
+        return new SelectorBlockModule()
+
+      case 'data_store_write':
+        return new DataStoreWriteBlockModule()
+
+      case 'data_store_read':
+        return new DataStoreReadBlockModule()
+
       case 'integrator':
         return new IntegratorBlockModule()
+
+      case 'unit_delay':
+        return new UnitDelayBlockModule()
 
       case 'orientation_conversion':
         return new OrientationConversionBlockModule()
@@ -176,6 +214,12 @@ export class BlockModuleFactory {
 
       case 'body2quaternion_rates':
         return new Body2QuaternionRatesBlockModule()
+
+      case 'edge_detect':
+        return new EdgeDetectBlockModule()
+
+      case 'atmosphere':
+        return new AtmosphereBlockModule()
 
       default:
         return null
@@ -196,6 +240,8 @@ export class BlockModuleFactory {
     return [
       'sum',
       'multiply',
+      'divide',
+      'sign',
       'input_port',
       'output_port',
       'source',
@@ -221,11 +267,20 @@ export class BlockModuleFactory {
       'abs',
       'uminus',
       'limit',
+      'relay',
+      'rate_limiter',
+      'quantizer',
+      'selector',
+      'data_store_write',
+      'data_store_read',
       'integrator',
+      'unit_delay',
       'orientation_conversion',
       'units_conversion',
       'discrete_transform',
-      'body2quaternion_rates'
+      'body2quaternion_rates',
+      'edge_detect',
+      'atmosphere'
     ]
   }
   

@@ -166,13 +166,23 @@ const MetadataSchema = z.object({
   description: z.string().optional()
 })
 
+// Model-scoped data store declaration
+const DataStoreSchema = z.object({
+  name: z.string()
+    .min(1, 'Data store name cannot be empty')
+    .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, 'Data store name must be a valid C identifier'),
+  dataType: SignalTypeSchema.optional().default('double' as any),
+  initialValue: z.string().optional().default('0')
+})
+
 // Main model data schema - only contains root-level sheets
 export const ModelDataSchema = z.object({
-  version: z.enum(['1.0', '2.0', '2.1']).default('2.0'), // Support v1.0, v2.0, v2.1 (with parameters)
+  version: z.enum(['1.0', '2.0', '2.1', '2.2']).default('2.0'), // 2.2 adds dataStores
   metadata: MetadataSchema,
   sheets: z.array(SheetSchema).min(1, 'Model must have at least one sheet'),
   globalSettings: GlobalSettingsSchema,
-  parameters: z.array(ModelParameterSchema).optional().default([]) // Feature 1: Model parameters
+  parameters: z.array(ModelParameterSchema).optional().default([]), // Feature 1: Model parameters
+  dataStores: z.array(DataStoreSchema).optional().default([])
 }).superRefine((data, ctx) => {
   // Validate parameter names are unique
   if (data.parameters && data.parameters.length > 0) {
@@ -223,6 +233,7 @@ export const ModelSchema = z.object({
 // Type exports
 export type ModelData = z.infer<typeof ModelDataSchema>
 export type ModelParameter = z.infer<typeof ModelParameterSchema>
+export type DataStore = z.infer<typeof DataStoreSchema>
 export type Block = z.infer<typeof BlockSchema>
 export type Wire = z.infer<typeof WireSchema>
 export type WireRouting = z.infer<typeof WireRoutingSchema>

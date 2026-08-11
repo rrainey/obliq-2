@@ -598,8 +598,183 @@ export function validateBlockParameters(
     case BlockTypes.CROSS:
     case BlockTypes.DOT:
     case BlockTypes.MAG:
+    case BlockTypes.RELAY: {
+      const onThr = parameters.onThreshold !== undefined
+        ? Number(parameters.onThreshold)
+        : (defaults.onThreshold ?? 0)
+      const offThr = parameters.offThreshold !== undefined
+        ? Number(parameters.offThreshold)
+        : (defaults.offThreshold ?? 0)
+      if (isNaN(onThr)) {
+        errors.push('onThreshold must be a number')
+      } else {
+        sanitized.onThreshold = onThr
+      }
+      if (isNaN(offThr)) {
+        errors.push('offThreshold must be a number')
+      } else {
+        sanitized.offThreshold = offThr
+      }
+      if (!isNaN(onThr) && !isNaN(offThr) && onThr < offThr) {
+        errors.push('onThreshold must be >= offThreshold')
+      }
+      if (parameters.onOutput !== undefined) {
+        const v = Number(parameters.onOutput)
+        if (isNaN(v)) errors.push('onOutput must be a number')
+        else sanitized.onOutput = v
+      } else {
+        sanitized.onOutput = defaults.onOutput ?? 1
+      }
+      if (parameters.offOutput !== undefined) {
+        const v = Number(parameters.offOutput)
+        if (isNaN(v)) errors.push('offOutput must be a number')
+        else sanitized.offOutput = v
+      } else {
+        sanitized.offOutput = defaults.offOutput ?? 0
+      }
+      if (parameters.initialOn !== undefined) {
+        if (typeof parameters.initialOn !== 'boolean') {
+          errors.push('initialOn must be a boolean')
+        } else {
+          sanitized.initialOn = parameters.initialOn
+        }
+      } else {
+        sanitized.initialOn = defaults.initialOn ?? false
+      }
+      break
+    }
+
+    case BlockTypes.RATE_LIMITER: {
+      const rising = parameters.risingSlewLimit !== undefined
+        ? Number(parameters.risingSlewLimit)
+        : (defaults.risingSlewLimit ?? 1)
+      const falling = parameters.fallingSlewLimit !== undefined
+        ? Number(parameters.fallingSlewLimit)
+        : (defaults.fallingSlewLimit ?? -1)
+      if (isNaN(rising) || rising <= 0) {
+        errors.push('risingSlewLimit must be a number > 0')
+      } else {
+        sanitized.risingSlewLimit = rising
+      }
+      if (isNaN(falling) || falling >= 0) {
+        errors.push('fallingSlewLimit must be a number < 0')
+      } else {
+        sanitized.fallingSlewLimit = falling
+      }
+      if (parameters.initialOutput !== undefined) {
+        const v = Number(parameters.initialOutput)
+        if (isNaN(v)) errors.push('initialOutput must be a number')
+        else sanitized.initialOutput = v
+      } else {
+        sanitized.initialOutput = defaults.initialOutput ?? 0
+      }
+      break
+    }
+
+    case BlockTypes.QUANTIZER: {
+      if (parameters.quantum !== undefined) {
+        const q = Number(parameters.quantum)
+        if (isNaN(q) || q <= 0) {
+          errors.push('quantum must be a number > 0')
+        } else {
+          sanitized.quantum = q
+        }
+      } else {
+        sanitized.quantum = defaults.quantum ?? 1
+      }
+      break
+    }
+
+    case BlockTypes.SELECTOR: {
+      if (parameters.indices !== undefined) {
+        if (!Array.isArray(parameters.indices) || parameters.indices.length === 0) {
+          errors.push('indices must be a non-empty array of non-negative integers')
+        } else {
+          const idx = parameters.indices.map((n: any) => Number(n))
+          if (idx.some((n: number) => isNaN(n) || n < 0 || !Number.isInteger(n))) {
+            errors.push('indices must be non-negative integers')
+          } else {
+            sanitized.indices = idx
+          }
+        }
+      } else {
+        sanitized.indices = defaults.indices ?? [0]
+      }
+      break
+    }
+
+    case BlockTypes.DATA_STORE_WRITE:
+    case BlockTypes.DATA_STORE_READ: {
+      const storeName = parameters.storeName !== undefined
+        ? String(parameters.storeName)
+        : (defaults.storeName ?? 'store')
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(storeName)) {
+        errors.push('storeName must be a valid C identifier')
+      } else {
+        sanitized.storeName = storeName
+      }
+      if (parameters.dataType !== undefined) {
+        if (!isValidType(parameters.dataType)) {
+          errors.push(`Invalid dataType: ${getTypeValidationError(parameters.dataType)}`)
+        } else {
+          sanitized.dataType = parameters.dataType
+        }
+      } else {
+        sanitized.dataType = defaults.dataType ?? 'double'
+      }
+      if (blockType === BlockTypes.DATA_STORE_WRITE) {
+        if (parameters.initialValue !== undefined) {
+          sanitized.initialValue = String(parameters.initialValue)
+        } else {
+          sanitized.initialValue = defaults.initialValue ?? '0'
+        }
+      }
+      break
+    }
+
+    case BlockTypes.EDGE_DETECT: {
+      const edge = parameters.edge ?? defaults.edge ?? 'rising'
+      if (!['rising', 'falling', 'either'].includes(edge)) {
+        errors.push("edge must be 'rising', 'falling', or 'either'")
+      } else {
+        sanitized.edge = edge
+      }
+      if (parameters.threshold !== undefined) {
+        const t = Number(parameters.threshold)
+        if (isNaN(t)) errors.push('threshold must be a number')
+        else sanitized.threshold = t
+      } else {
+        sanitized.threshold = defaults.threshold ?? 0.5
+      }
+      break
+    }
+
+    case BlockTypes.ATMOSPHERE: {
+      const model = parameters.model ?? defaults.model ?? 'coesa1976'
+      if (!['coesa1976', 'table'].includes(model)) {
+        errors.push("model must be 'coesa1976' or 'table'")
+      } else {
+        sanitized.model = model
+      }
+      const extr = parameters.extrapolation ?? defaults.extrapolation ?? 'clamp'
+      if (!['clamp', 'extrapolate'].includes(extr)) {
+        errors.push("extrapolation must be 'clamp' or 'extrapolate'")
+      } else {
+        sanitized.extrapolation = extr
+      }
+      // Optional custom tables
+      if (parameters.altitudeBreakpoints) sanitized.altitudeBreakpoints = parameters.altitudeBreakpoints
+      if (parameters.temperatureValues) sanitized.temperatureValues = parameters.temperatureValues
+      if (parameters.pressureValues) sanitized.pressureValues = parameters.pressureValues
+      if (parameters.densityValues) sanitized.densityValues = parameters.densityValues
+      if (parameters.speedOfSoundValues) sanitized.speedOfSoundValues = parameters.speedOfSoundValues
+      break
+    }
+
     case BlockTypes.ABS:
     case BlockTypes.UMINUS:
+    case BlockTypes.DIVIDE:
+    case BlockTypes.SIGN:
       // These blocks have no configurable parameters
     case BlockTypes.IF:
       // type validation performed at connection time
@@ -678,6 +853,17 @@ export function validateBlockParameters(
         sanitized.initialValue = defaults.initialValue;
       }
 
+      // Validate showInitPort (x(0) left-side data port)
+      if (parameters.showInitPort !== undefined) {
+        if (typeof parameters.showInitPort !== 'boolean') {
+          errors.push('showInitPort must be a boolean');
+        } else {
+          sanitized.showInitPort = parameters.showInitPort;
+        }
+      } else {
+        sanitized.showInitPort = defaults.showInitPort ?? false;
+      }
+
       // Validate showEnableInput
       if (parameters.showEnableInput !== undefined) {
         if (typeof parameters.showEnableInput !== 'boolean') {
@@ -740,6 +926,30 @@ export function validateBlockParameters(
         if (sanitized.lowerLimit > sanitized.upperLimit) {
           errors.push('lowerLimit must be less than or equal to upperLimit');
         }
+      }
+      break;
+
+    case BlockTypes.UNIT_DELAY:
+      if (parameters.initialValue !== undefined) {
+        const init = Number(parameters.initialValue);
+        if (isNaN(init)) {
+          errors.push('initialValue must be a number');
+        } else {
+          sanitized.initialValue = init;
+        }
+      } else {
+        sanitized.initialValue = defaults.initialValue ?? 0;
+      }
+
+      if (parameters.sampleInterval !== undefined) {
+        const si = Number(parameters.sampleInterval);
+        if (isNaN(si) || si < 0) {
+          errors.push('sampleInterval must be a non-negative number');
+        } else {
+          sanitized.sampleInterval = si;
+        }
+      } else {
+        sanitized.sampleInterval = defaults.sampleInterval ?? 0;
       }
       break;
 

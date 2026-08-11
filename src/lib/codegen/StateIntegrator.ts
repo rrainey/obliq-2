@@ -149,7 +149,8 @@ export class StateIntegrator {
     const subName = sub.sanitizedName
     let code = ''
 
-    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    // Prefer flattened name for uniqueness; segregated subsystem states nest under subName
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName || block.block.name)
     const typeInfo = this.getSubsystemBlockTypeInfo(sub, block)
     const stateOrder = this.getBlockStateOrder(block)
     const simplified = this.usesSimplifiedStateAccess(block)
@@ -467,7 +468,7 @@ export class StateIntegrator {
       code += `    /* Subsystem: ${sub.subsystemName} */\n`
 
       for (const block of statefulBlocks) {
-        const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+        const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName || block.block.name)
         const typeInfo = this.getSubsystemBlockTypeInfo(sub, block)
         const stateOrder = this.getBlockStateOrder(block)
         const simplified = this.usesSimplifiedStateAccess(block)
@@ -583,7 +584,7 @@ export class StateIntegrator {
     const subName = sub.sanitizedName
     let code = ''
 
-    const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName || block.block.name)
     const stateOrder = this.getBlockStateOrder(block)
     const simplified = this.usesSimplifiedStateAccess(block)
 

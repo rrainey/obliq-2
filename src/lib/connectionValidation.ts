@@ -126,19 +126,9 @@ export function validateConnection(
         errorMessage: `Reset port requires boolean signal, but source provides ${sourceType}`
       }
     }
-  } else if (targetPort.portIndex === -3) {
-    // Special handling for init port (port index -3, x(0) for integrator)
-    // Verify this is an integrator with init port enabled
-    if (targetBlock.type !== 'integrator' || !targetBlock.parameters?.showInitPort) {
-      return {
-        isValid: false,
-        errorMessage: "Block does not have an initialization port"
-      }
-    }
-    // Init port signal type should match the integrator's expected signal type
-    // (We don't strictly validate this here - the code generator will handle type matching)
   } else {
-    // Regular port validation
+    // Regular data ports (including integrator x(0) at port 1 when showInitPort)
+    // Control ports are only -1 (enable) and -2 (reset)
     if (sourcePort.portIndex >= sourcePortCount) {
       return {
         isValid: false,

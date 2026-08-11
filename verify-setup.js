@@ -14,10 +14,24 @@ async function verifySupabase() {
 
   if (!supabaseUrl || !supabaseKey) {
     console.error('❌ Missing Supabase credentials in .env.local');
-    console.log('\nExpected:');
-    console.log('  NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321');
-    console.log('  NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>');
+    console.log('\nExpected (see .env.local.example):');
+    console.log('  NEXT_PUBLIC_SUPABASE_URL=http://localhost:8000   # self-hosted Docker');
+    console.log('  # or http://127.0.0.1:54321                     # Supabase CLI');
+    console.log('  NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon JWT from Supabase .env / status>');
+    console.log('  SUPABASE_SERVICE_ROLE_KEY=<service_role JWT>');
+    if (supabaseUrl && supabaseUrl.startsWith('postgres')) {
+      console.error('\n❌ NEXT_PUBLIC_SUPABASE_URL looks like a Postgres connection string.');
+      console.error('   Use the HTTP API URL (e.g. http://localhost:8000), not postgresql://…');
+    }
     process.exit(1);
+  }
+
+  if (supabaseUrl.startsWith('postgres')) {
+    console.error('❌ NEXT_PUBLIC_SUPABASE_URL must be an HTTP(S) API URL, not postgresql://…');
+    console.error(`   Got: ${supabaseUrl}`);
+    console.error('   Self-hosted Docker: http://localhost:8000 (SUPABASE_PUBLIC_URL)');
+    console.error('   Supabase CLI:      http://127.0.0.1:54321 (from `npx supabase status`)');
+    return false;
   }
 
   console.log(`✓ Supabase URL: ${supabaseUrl}`);
@@ -34,7 +48,9 @@ async function verifySupabase() {
 
     if (error && error.message.includes('relation "public.models" does not exist')) {
       console.log('\n⚠️  Models table does not exist yet');
-      console.log('   Run: npm run db:setup (or apply database-scripts/setup.sql)');
+      console.log('   Apply database-scripts/ in order (see database-scripts/README.md):');
+      console.log('     setup.sql → versioning.sql → 03-API-tokens.sql →');
+      console.log('     04-wasm-cache.sql → 05-wasm-storage-bucket.sql');
       return false;
     } else if (error) {
       console.error('\n❌ Database error:', error.message);

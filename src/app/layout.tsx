@@ -2,7 +2,9 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import '@mantine/core/styles.css'
+import '@mantine/notifications/styles.css'
 import { ColorSchemeScript, MantineProvider, createTheme } from '@mantine/core'
+import { Notifications } from '@mantine/notifications'
 import { AuthProvider } from '@/lib/auth'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -36,6 +38,7 @@ export default function RootLayout({
       </head>
       <body className={inter.className} suppressHydrationWarning>
         <MantineProvider theme={theme} defaultColorScheme="light">
+          <Notifications position="top-right" />
           <AuthProvider>
             {children}
           </AuthProvider>

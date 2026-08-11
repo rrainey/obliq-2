@@ -13,6 +13,7 @@ import { Sheet } from '@/lib/simulationTypes'
 import { CCodeBuilder } from '@/lib/codegen/CCodeBuilder'
 import { ModelFlattener } from '@/lib/codegen/ModelFlattener'
 import { TypePropagator } from '@/lib/codegen/TypePropagator'
+import { getSignalMemberName } from '@/lib/codegen/signalMemberName'
 
 export interface WasmCodeGenerationOptions extends CodeGenerationOptions {
   /** Whether to include Emscripten-specific exports (default: true) */
@@ -124,13 +125,33 @@ export class WasmCodeGenerator extends CodeGenerator {
   ): {
     inputMap: Map<string, number>
     outputMap: Map<string, number>
-    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; isFlattened: boolean; portIndex: number; outputPortName?: string; flattenedSignalPath?: string }>
+    outputSourceMap: Map<string, {
+      blockName: string
+      blockType: string
+      isSubsystem: boolean
+      isFlattened: boolean
+      portIndex: number
+      outputPortName?: string
+      flattenedSignalPath?: string
+      signalMemberName?: string
+      sourceBlock?: any
+    }>
     collectorTypeMap: Map<string, string> // Maps collector name to input signal type
     outputTypeMap: Map<string, string> // Maps output port name to signal type
   } {
     const inputMap = new Map<string, number>()
     const outputMap = new Map<string, number>()
-    const outputSourceMap = new Map<string, { blockName: string; isSubsystem: boolean; isFlattened: boolean; portIndex: number; outputPortName?: string; flattenedSignalPath?: string }>()
+    const outputSourceMap = new Map<string, {
+      blockName: string
+      blockType: string
+      isSubsystem: boolean
+      isFlattened: boolean
+      portIndex: number
+      outputPortName?: string
+      flattenedSignalPath?: string
+      signalMemberName?: string
+      sourceBlock?: any
+    }>()
     const collectorTypeMap = new Map<string, string>()
     const outputTypeMap = new Map<string, string>()
 
@@ -235,11 +256,21 @@ export class WasmCodeGenerator extends CodeGenerator {
               }
               outputSourceMap.set(portName, {
                 blockName: sourceBlock.name,
+                blockType: sourceBlock.type,
                 isSubsystem,
                 isFlattened,
                 portIndex: feedingConnection.sourcePortIndex,
                 outputPortName,
-                flattenedSignalPath
+                flattenedSignalPath,
+                signalMemberName: isSubsystem
+                  ? undefined
+                  : getSignalMemberName(
+                      sourceBlock.name,
+                      sourceBlock.type,
+                      feedingConnection.sourcePortIndex,
+                      sourceBlock
+                    ),
+                sourceBlock,
               })
               // Get the type from typeMap (handles Transfer Functions properly)
               const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
@@ -274,11 +305,21 @@ export class WasmCodeGenerator extends CodeGenerator {
               }
               outputSourceMap.set(loggerName, {
                 blockName: sourceBlock.name,
+                blockType: sourceBlock.type,
                 isSubsystem,
                 isFlattened,
                 portIndex: feedingConnection.sourcePortIndex,
                 outputPortName,
-                flattenedSignalPath
+                flattenedSignalPath,
+                signalMemberName: isSubsystem
+                  ? undefined
+                  : getSignalMemberName(
+                      sourceBlock.name,
+                      sourceBlock.type,
+                      feedingConnection.sourcePortIndex,
+                      sourceBlock
+                    ),
+                sourceBlock,
               })
               // Get the type from typeMap (handles Transfer Functions properly)
               const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
@@ -313,11 +354,21 @@ export class WasmCodeGenerator extends CodeGenerator {
               }
               outputSourceMap.set(displayName, {
                 blockName: sourceBlock.name,
+                blockType: sourceBlock.type,
                 isSubsystem,
                 isFlattened,
                 portIndex: feedingConnection.sourcePortIndex,
                 outputPortName,
-                flattenedSignalPath
+                flattenedSignalPath,
+                signalMemberName: isSubsystem
+                  ? undefined
+                  : getSignalMemberName(
+                      sourceBlock.name,
+                      sourceBlock.type,
+                      feedingConnection.sourcePortIndex,
+                      sourceBlock
+                    ),
+                sourceBlock,
               })
               // Get the type from typeMap (handles Transfer Functions properly)
               const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
@@ -338,7 +389,17 @@ export class WasmCodeGenerator extends CodeGenerator {
     modelName: string,
     inputMap: Map<string, number>,
     outputMap: Map<string, number>,
-    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; isFlattened: boolean; portIndex: number; outputPortName?: string; flattenedSignalPath?: string }>,
+    outputSourceMap: Map<string, {
+      blockName: string
+      blockType: string
+      isSubsystem: boolean
+      isFlattened: boolean
+      portIndex: number
+      outputPortName?: string
+      flattenedSignalPath?: string
+      signalMemberName?: string
+      sourceBlock?: any
+    }>,
     collectorTypeMap: Map<string, string>,
     outputTypeMap: Map<string, string>,
     hasCleanupFunction: boolean
@@ -503,7 +564,17 @@ ${keepalive}void wasm_set_input(int index, double value) {
   private generateWasmGetOutputFunction(
     modelName: string,
     outputMap: Map<string, number>,
-    outputSourceMap: Map<string, { blockName: string; isSubsystem: boolean; isFlattened: boolean; portIndex: number; outputPortName?: string; flattenedSignalPath?: string }>,
+    outputSourceMap: Map<string, {
+      blockName: string
+      blockType: string
+      isSubsystem: boolean
+      isFlattened: boolean
+      portIndex: number
+      outputPortName?: string
+      flattenedSignalPath?: string
+      signalMemberName?: string
+      sourceBlock?: any
+    }>,
     outputTypeMap: Map<string, string>
   ): string {
     const keepalive = this.wasmOptions.includeEmscriptenExports
@@ -553,9 +624,16 @@ ${keepalive}double wasm_get_output(int index) {
               code += `        // case ${index}: skipped - could not trace flattened subsystem output for ${portName}\n`
             }
           } else {
-            // Regular blocks have their output in signals struct
-            const sanitizedSource = CCodeBuilder.sanitizeIdentifier(sourceInfo.blockName)
-            code += `        case ${index}: return ${modelName}_instance.signals.${sanitizedSource};\n`
+            // Regular blocks (including multi-output: atmosphere, etc.)
+            const member =
+              sourceInfo.signalMemberName ||
+              getSignalMemberName(
+                sourceInfo.blockName,
+                sourceInfo.blockType,
+                sourceInfo.portIndex,
+                sourceInfo.sourceBlock
+              )
+            code += `        case ${index}: return ${modelName}_instance.signals.${member};\n`
           }
         } else {
           // Fallback: try outputs struct (may not exist)

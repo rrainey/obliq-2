@@ -222,6 +222,15 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     dynamicPorts: 'Number of inputs determined by numInputs parameter'
   },
   {
+    type: 'divide',
+    displayName: 'Divide',
+    category: 'Math',
+    description: 'Element-wise division (num/den). Denominator may be a scalar broadcast onto a vector/matrix numerator. Scalar numerator over non-scalar denominator is not supported.',
+    parameters: {},
+    inputs: ['num', 'den'],
+    outputs: ['out']
+  },
+  {
     type: 'scale',
     displayName: 'Scale',
     category: 'Math',
@@ -253,6 +262,114 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     parameters: {},
     inputs: ['input'],
     outputs: ['output']
+  },
+  {
+    type: 'sign',
+    displayName: 'Sign',
+    category: 'Math',
+    description: 'Signum function: returns −1, 0, or +1 (element-wise for vectors/matrices)',
+    parameters: {},
+    inputs: ['in'],
+    outputs: ['out']
+  },
+  {
+    type: 'relay',
+    displayName: 'Relay',
+    category: 'Discontinuities',
+    description: 'Hysteresis switch: turns ON when input ≥ onThreshold, OFF when input ≤ offThreshold. Holds state between thresholds.',
+    parameters: {
+      onThreshold: { type: 'number', description: 'Switch ON when u ≥ this', default: 0 },
+      offThreshold: { type: 'number', description: 'Switch OFF when u ≤ this (must be ≤ onThreshold)', default: 0 },
+      onOutput: { type: 'number', description: 'Output when ON', default: 1 },
+      offOutput: { type: 'number', description: 'Output when OFF', default: 0 },
+      initialOn: { type: 'boolean', description: 'Start with ON state', default: false }
+    },
+    inputs: ['in'],
+    outputs: ['out']
+  },
+  {
+    type: 'rate_limiter',
+    displayName: 'Rate Limiter',
+    category: 'Discontinuities',
+    description: 'Limits rate of change of output using simulation dt. risingSlewLimit > 0, fallingSlewLimit < 0 (units/sec).',
+    parameters: {
+      risingSlewLimit: { type: 'number', description: 'Max positive dy/dt (must be > 0)', default: 1 },
+      fallingSlewLimit: { type: 'number', description: 'Min negative dy/dt (must be < 0)', default: -1 },
+      initialOutput: { type: 'number', description: 'Output at t=0', default: 0 }
+    },
+    inputs: ['in'],
+    outputs: ['out']
+  },
+  {
+    type: 'quantizer',
+    displayName: 'Quantizer',
+    category: 'Discontinuities',
+    description: 'Rounds input to nearest multiple of quantum: y = quantum * floor(u/quantum + 0.5). Element-wise for vectors/matrices.',
+    parameters: {
+      quantum: { type: 'number', description: 'Quantization step size (> 0)', default: 1 }
+    },
+    inputs: ['in'],
+    outputs: ['out']
+  },
+  {
+    type: 'selector',
+    displayName: 'Selector',
+    category: 'Matrix',
+    description: 'Select elements from a vector by 0-based indices. One index → scalar; multiple → vector in listed order.',
+    parameters: {
+      indices: { type: 'array', description: '0-based indices into the input vector', default: [0], items: { type: 'number' } }
+    },
+    inputs: ['in'],
+    outputs: ['out']
+  },
+  {
+    type: 'data_store_write',
+    displayName: 'Data Store Write',
+    category: 'Data',
+    description: 'Write input to a model-scoped named data store (shared across sheets/subsystems). No output.',
+    parameters: {
+      storeName: { type: 'string', description: 'Valid C identifier for the store', default: 'store' },
+      dataType: { type: 'string', description: 'Declared type (e.g. double, double[3])', default: 'double' },
+      initialValue: { type: 'string', description: 'C99 initializer for store at t=0', default: '0' }
+    },
+    inputs: ['in'],
+    outputs: []
+  },
+  {
+    type: 'data_store_read',
+    displayName: 'Data Store Read',
+    category: 'Data',
+    description: 'Read a model-scoped named data store. Match storeName with a Data Store Write.',
+    parameters: {
+      storeName: { type: 'string', description: 'Valid C identifier for the store', default: 'store' },
+      dataType: { type: 'string', description: 'Output type (must match write)', default: 'double' }
+    },
+    inputs: [],
+    outputs: ['out']
+  },
+  {
+    type: 'edge_detect',
+    displayName: 'Edge Detect',
+    category: 'Discontinuities',
+    description: 'Outputs a one-step pulse (1.0) on rising, falling, or either edge. Use with integrator reset for engine start timers.',
+    parameters: {
+      edge: { type: 'string', description: "'rising' | 'falling' | 'either'", default: 'rising' },
+      threshold: { type: 'number', description: 'High when input ≥ threshold', default: 0.5 }
+    },
+    inputs: ['in'],
+    outputs: ['pulse']
+  },
+  {
+    type: 'atmosphere',
+    displayName: 'Atmosphere',
+    category: 'Aerospace',
+    description: '1976 COESA atmosphere vs geometric altitude (m). Four outputs: temperature_K, pressure_Pa, density_kgpm3, speed_of_sound_mps. Build q̄ = ½ρV² in the model.',
+    parameters: {
+      model: { type: 'string', description: "'coesa1976' | 'table'", default: 'coesa1976' },
+      extrapolation: { type: 'string', description: "'clamp' | 'extrapolate'", default: 'clamp' }
+    },
+    inputs: ['altitude_m'],
+    outputs: ['temperature_K', 'pressure_Pa', 'density_kgpm3', 'speed_of_sound_mps']
   },
   {
     type: 'limit',
@@ -351,17 +468,17 @@ const blockTypeSchemas: BlockTypeInfo[] = [
       },
       showInitPort: {
         type: 'boolean',
-        description: 'Show x(0) initialization port. When enabled, initial value comes from connected signal instead of initialValue parameter. The connected signal type must match the integrator input type.',
+        description: 'Show x(0) as a left-side data port (port 1). At t=0 and on reset, state is taken from this signal instead of initialValue. Unconnected x(0) initializes to 0.',
         default: false
       },
       showEnableInput: {
         type: 'boolean',
-        description: 'Show enable input port (when false/0, integration is paused)',
+        description: 'Show enable control port on top (port -1). When false/0, integration is paused.',
         default: false
       },
       showResetInput: {
         type: 'boolean',
-        description: 'Show reset input port (on rising edge, state resets to initial value)',
+        description: 'Show reset control port on bottom (port -2). Rising edge reloads state from x(0) if shown, else initialValue.',
         default: false
       },
       useLimits: {
@@ -380,9 +497,29 @@ const blockTypeSchemas: BlockTypeInfo[] = [
         default: Infinity
       }
     },
-    inputs: ['input'],
+    inputs: ['Derivative', 'x(0) when showInitPort'],
     outputs: ['output'],
-    dynamicPorts: 'Additional ports: enable (top, port -1) when showEnableInput=true; reset (bottom, port -2) when showResetInput=true; x(0) init (bottom, port -3) when showInitPort=true'
+    dynamicPorts: 'Data ports: [0] Derivative, [1] x(0) when showInitPort. Control ports: enable (top, -1), reset (bottom, -2).'
+  },
+  {
+    type: 'unit_delay',
+    displayName: 'Unit Delay',
+    category: 'Dynamic',
+    description: 'Unit delay (z⁻¹ / Memory): output is the previous sample of the input. No direct feedthrough; breaks algebraic loops. Used for discrete guidance memory (e.g. IGM last-χ).',
+    parameters: {
+      initialValue: {
+        type: 'number',
+        description: 'Value of the delayed output at the first sample (t=0)',
+        default: 0
+      },
+      sampleInterval: {
+        type: 'number',
+        description: 'Sample period in seconds. 0 = update every simulation step; >0 = hold and update on that period.',
+        default: 0
+      }
+    },
+    inputs: ['in'],
+    outputs: ['out']
   },
   {
     type: 'discrete_transform',

@@ -333,6 +333,99 @@ function validateBlockInputType(
       // This is validated separately in validateMultiInputBlock
       break
 
+    case 'divide':
+      // num/den: same shape, or non-scalar / scalar broadcast. Scalar / non-scalar invalid.
+      // Full multi-input check in validateBlockOperation
+      if (parsedInputType.baseType === 'bool') {
+        return {
+          blockId: block.id,
+          message: `${block.name} cannot process boolean signals`,
+          severity: 'error',
+          details: {
+            expectedType: 'numeric',
+            actualType: inputType
+          }
+        }
+      }
+      break
+
+    case 'sign':
+    case 'quantizer':
+      // Accept any numeric type (scalar, vector, or matrix)
+      if (parsedInputType.baseType === 'bool') {
+        return {
+          blockId: block.id,
+          message: `${block.name} cannot process boolean signals`,
+          severity: 'error',
+          details: {
+            expectedType: 'numeric',
+            actualType: inputType
+          }
+        }
+      }
+      break
+
+    case 'relay':
+    case 'rate_limiter':
+    case 'edge_detect':
+    case 'atmosphere':
+      // Scalar only (v1) — edge_detect accepts bool as well
+      if (parsedInputType.isArray || parsedInputType.isMatrix) {
+        return {
+          blockId: block.id,
+          message: `${block.name} requires scalar input but received ${inputType} from ${sourceBlock.name}`,
+          severity: 'error',
+          details: {
+            expectedType: 'double',
+            actualType: inputType
+          }
+        }
+      }
+      if (parsedInputType.baseType === 'bool' && block.type !== 'edge_detect') {
+        return {
+          blockId: block.id,
+          message: `${block.name} cannot process boolean signals`,
+          severity: 'error',
+          details: {
+            expectedType: 'numeric scalar',
+            actualType: inputType
+          }
+        }
+      }
+      break
+
+    case 'selector':
+      // Vector input preferred; indices validated in parameters
+      if (parsedInputType.baseType === 'bool') {
+        return {
+          blockId: block.id,
+          message: `${block.name} cannot process boolean signals`,
+          severity: 'error',
+          details: {
+            expectedType: 'numeric vector',
+            actualType: inputType
+          }
+        }
+      }
+      if (parsedInputType.isArray && block.parameters?.indices) {
+        const indices = block.parameters.indices as number[]
+        const size = parsedInputType.arraySize || 0
+        for (const idx of indices) {
+          if (idx < 0 || idx >= size) {
+            return {
+              blockId: block.id,
+              message: `${block.name}: index ${idx} out of range for vector size ${size}`,
+              severity: 'error',
+              details: {
+                expectedType: `index in [0, ${size - 1}]`,
+                actualType: String(idx)
+              }
+            }
+          }
+        }
+      }
+      break
+
     case 'transpose':
       // Transpose accepts vectors or matrices (not scalars)
       // Actually, we'll allow scalars too - they just pass through
@@ -723,6 +816,47 @@ export function validateBlockOperation(
                 actualType: inputTypes[i]
               }
             }
+          }
+        }
+      }
+      break
+
+    case 'divide':
+      if (inputTypes.length >= 2) {
+        try {
+          const num = parseType(inputTypes[0])
+          const den = parseType(inputTypes[1])
+          const numScalar = !num.isArray && !num.isMatrix
+          const denScalar = !den.isArray && !den.isMatrix
+          if (numScalar && !denScalar) {
+            return {
+              blockId: block.id,
+              message: `${block.name} does not support scalar / vector-or-matrix (denominator must be scalar or match numerator shape)`,
+              severity: 'error',
+              details: {
+                expectedType: inputTypes[0],
+                actualType: inputTypes[1]
+              }
+            }
+          }
+          if (!numScalar && !denScalar) {
+            if (!areTypesCompatible(inputTypes[0], inputTypes[1])) {
+              return {
+                blockId: block.id,
+                message: `${block.name} requires matching shapes for non-scalar division`,
+                severity: 'error',
+                details: {
+                  expectedType: inputTypes[0],
+                  actualType: inputTypes[1]
+                }
+              }
+            }
+          }
+        } catch {
+          return {
+            blockId: block.id,
+            message: `${block.name} received invalid input types`,
+            severity: 'error'
           }
         }
       }

@@ -3,6 +3,19 @@
 // Integrator is mathematically equivalent to a 1/s transfer function.
 // We use the same _states[] pattern as TransferFunction for code reuse.
 // State order is 1 (single state variable per element).
+//
+// Port model:
+//   Data ports (left edge, index >= 0):
+//     [0] Derivative  (always)
+//     [1] x(0)        (when showInitPort) — external initial condition
+//   Control ports (visual placement only, negative indices):
+//     [-1] Enable     (top, when showEnableInput)
+//     [-2] Reset      (bottom, when showResetInput) — rising edge
+//
+// Codegen input array (built by AlgebraicEvaluator):
+//   [0] derivative
+//   [1] x(0) if showInitPort
+//   [last] reset expression if showResetInput (appended after data ports)
 
 import { BlockData } from '@/components/BlockNode'
 import { BlockState, SimulationState } from '@/lib/simulationTypes'
@@ -12,13 +25,13 @@ export class IntegratorBlockModule implements IBlockModule {
   /**
    * Generate computation code - outputs current state value only.
    * State integration is handled by StateIntegrator (Euler/RK4).
-   * Also handles enable/reset logic which affects state but not integration method.
+   * Also handles reset logic which affects state but not integration method.
    */
   generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     const intName = BlockModuleUtils.sanitizeIdentifier(block.name)
     const {
-      showEnableInput = false,
+      showInitPort = false,
       showResetInput = false,
       useLimits = false,
       upperLimit = Infinity,
@@ -36,59 +49,44 @@ export class IntegratorBlockModule implements IBlockModule {
     const outputType = this.getOutputType(block, inputTypes || [])
     const typeInfo = BlockModuleUtils.parseType(outputType)
 
-    // Determine port indices based on configuration
-    let resetPortIndex = -1
-    let currentPortIndex = 1
-
-    if (showEnableInput) {
-      currentPortIndex++ // Skip enable port (handled in integration layer)
+    // Layout of inputs[] from AlgebraicEvaluator:
+    //   [0] derivative
+    //   [1] x(0) if showInitPort
+    //   [last] reset if showResetInput
+    let nextIndex = 1
+    let initExpr: string | undefined
+    if (showInitPort) {
+      initExpr = inputs[nextIndex]
+      nextIndex++
     }
+    let resetExpr: string | undefined
     if (showResetInput) {
-      resetPortIndex = currentPortIndex++
+      resetExpr = inputs[nextIndex]
     }
 
-    // Reset logic (rising edge detection) - this affects state directly
-    if (showResetInput && resetPortIndex >= 0 && inputs[resetPortIndex]) {
-      code += `    bool ${intName}_reset = (bool)${inputs[resetPortIndex]};\n`
+    // Reset logic (rising edge detection)
+    if (showResetInput && resetExpr) {
+      code += `    bool ${intName}_reset = (bool)${resetExpr};\n`
       code += `    bool ${intName}_rising_edge = ${intName}_reset && !model->states.${intName}_reset_prev;\n`
       code += `    if (${intName}_rising_edge) {\n`
 
-      // Reset to initial value (clamped if limits are used)
-      // State access matches signal dimensions: scalar[0], vector[i], matrix[i][j]
-      if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-        code += `        for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
-        code += `            for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
-        const initVal = typeof initialValue === 'number' ? initialValue : `${initialValue}[i][j]`
-        if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-          code += `                model->states.${intName}_states[i][j] = fmax(${lowerLimit}, fmin(${upperLimit}, ${initVal}));\n`
-        } else {
-          code += `                model->states.${intName}_states[i][j] = ${initVal};\n`
-        }
-        code += `            }\n`
-        code += `        }\n`
-      } else if (typeInfo.isArray && typeInfo.arraySize) {
-        code += `        for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-        const initVal = typeof initialValue === 'number' ? initialValue : `${initialValue}[i]`
-        if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-          code += `            model->states.${intName}_states[i] = fmax(${lowerLimit}, fmin(${upperLimit}, ${initVal}));\n`
-        } else {
-          code += `            model->states.${intName}_states[i] = ${initVal};\n`
-        }
-        code += `        }\n`
-      } else {
-        // Scalar: _states[0]
-        if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-          code += `        model->states.${intName}_states[0] = fmax(${lowerLimit}, fmin(${upperLimit}, ${initialValue}));\n`
-        } else {
-          code += `        model->states.${intName}_states[0] = ${initialValue};\n`
-        }
-      }
+      // Prefer live x(0) signal when showInitPort; otherwise parameter initialValue
+      code += this.generateStateAssignFromSource(
+        intName,
+        typeInfo,
+        showInitPort && initExpr ? initExpr : null,
+        initialValue,
+        useLimits,
+        lowerLimit,
+        upperLimit,
+        '        '
+      )
+
       code += `    }\n`
       code += `    model->states.${intName}_reset_prev = ${intName}_reset;\n`
     }
 
-    // Output current state value (integration done separately by StateIntegrator)
-    // State access matches signal dimensions: scalar[0], vector[i], matrix[i][j]
+    // Output current state value
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
@@ -100,7 +98,6 @@ export class IntegratorBlockModule implements IBlockModule {
       code += `        ${outputName}[i] = model->states.${intName}_states[i];\n`
       code += `    }\n`
     } else {
-      // Scalar: _states[0]
       code += `    ${outputName} = model->states.${intName}_states[0];\n`
     }
 
@@ -108,9 +105,65 @@ export class IntegratorBlockModule implements IBlockModule {
   }
 
   /**
+   * Assign integrator state from either a signal expression or a static initial value.
+   */
+  private generateStateAssignFromSource(
+    intName: string,
+    typeInfo: ReturnType<typeof BlockModuleUtils.parseType>,
+    initExpr: string | null,
+    initialValue: number | number[] | number[][],
+    useLimits: boolean,
+    lowerLimit: number,
+    upperLimit: number,
+    indent: string
+  ): string {
+    const clamp = (expr: string): string => {
+      if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
+        return `fmax(${lowerLimit}, fmin(${upperLimit}, ${expr}))`
+      }
+      return expr
+    }
+
+    let code = ''
+    if (initExpr) {
+      // Live x(0) signal
+      if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+        code += `${indent}for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
+        code += `${indent}    for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
+        code += `${indent}        model->states.${intName}_states[i][j] = ${clamp(`${initExpr}[i][j]`)};\n`
+        code += `${indent}    }\n`
+        code += `${indent}}\n`
+      } else if (typeInfo.isArray && typeInfo.arraySize) {
+        code += `${indent}for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
+        code += `${indent}    model->states.${intName}_states[i] = ${clamp(`${initExpr}[i]`)};\n`
+        code += `${indent}}\n`
+      } else {
+        code += `${indent}model->states.${intName}_states[0] = ${clamp(initExpr)};\n`
+      }
+    } else {
+      // Static parameter initialValue
+      const scalarInitial = typeof initialValue === 'number' ? initialValue : 0
+      if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+        code += `${indent}for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
+        code += `${indent}    for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
+        const initVal = typeof initialValue === 'number' ? String(initialValue) : `${scalarInitial}`
+        code += `${indent}        model->states.${intName}_states[i][j] = ${clamp(initVal)};\n`
+        code += `${indent}    }\n`
+        code += `${indent}}\n`
+      } else if (typeInfo.isArray && typeInfo.arraySize) {
+        code += `${indent}for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
+        code += `${indent}    model->states.${intName}_states[i] = ${clamp(String(scalarInitial))};\n`
+        code += `${indent}}\n`
+      } else {
+        code += `${indent}model->states.${intName}_states[0] = ${clamp(String(scalarInitial))};\n`
+      }
+    }
+    return code
+  }
+
+  /**
    * Generate state derivative computation for RK4/Euler integration.
-   * For an integrator (1/s), the derivative is simply the input signal.
-   * State access matches signal dimensions: scalar[0], vector[i], matrix[i][j]
+   * For an integrator (1/s), the derivative is simply the input signal (port 0).
    */
   generateStateDerivative(
     block: BlockData,
@@ -128,15 +181,12 @@ export class IntegratorBlockModule implements IBlockModule {
 
     let code = `    /* State derivatives for ${block.name} (integrator: 1/s) */\n`
 
-    // For integrator, derivative = input (with optional saturation check)
-    // State access matches signal dimensions: scalar[0], vector[i], matrix[i][j]
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
       if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
         code += `            double ${intName}_current = ${stateAccessor}->${intName}_states[i][j];\n`
         code += `            double ${intName}_deriv = ${inputExpr}[i][j];\n`
-        code += `            // Saturation: zero derivative if at limit and would exceed\n`
         code += `            if ((${intName}_current >= ${upperLimit} && ${intName}_deriv > 0.0) ||\n`
         code += `                (${intName}_current <= ${lowerLimit} && ${intName}_deriv < 0.0)) {\n`
         code += `                state_derivatives->${intName}_states[i][j] = 0.0;\n`
@@ -153,7 +203,6 @@ export class IntegratorBlockModule implements IBlockModule {
       if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
         code += `        double ${intName}_current = ${stateAccessor}->${intName}_states[i];\n`
         code += `        double ${intName}_deriv = ${inputExpr}[i];\n`
-        code += `        // Saturation: zero derivative if at limit and would exceed\n`
         code += `        if ((${intName}_current >= ${upperLimit} && ${intName}_deriv > 0.0) ||\n`
         code += `            (${intName}_current <= ${lowerLimit} && ${intName}_deriv < 0.0)) {\n`
         code += `            state_derivatives->${intName}_states[i] = 0.0;\n`
@@ -165,11 +214,9 @@ export class IntegratorBlockModule implements IBlockModule {
       }
       code += `    }\n`
     } else {
-      // Scalar: _states[0]
       if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
         code += `    double ${intName}_current = ${stateAccessor}->${intName}_states[0];\n`
         code += `    double ${intName}_deriv = ${inputExpr};\n`
-        code += `    // Saturation: zero derivative if at limit and would exceed\n`
         code += `    if ((${intName}_current >= ${upperLimit} && ${intName}_deriv > 0.0) ||\n`
         code += `        (${intName}_current <= ${lowerLimit} && ${intName}_deriv < 0.0)) {\n`
         code += `        state_derivatives->${intName}_states[0] = 0.0;\n`
@@ -185,20 +232,35 @@ export class IntegratorBlockModule implements IBlockModule {
   }
 
   getOutputType(block: BlockData, inputTypes: string[]): string {
-    // Integrator output type matches derivative input type
-    if (inputTypes.length === 0) {
-      return 'double' // Default type
+    // Output type is the state type. Prefer derivative (port 0) when known;
+    // with showInitPort, x(0) (port 1) is often the only typed input in a
+    // kinematics feedback loop (q̇ depends on q) until a later pass.
+    const showInitPort = !!block.parameters?.showInitPort
+    const deriv = inputTypes[0]
+    const ic = showInitPort ? inputTypes[1] : undefined
+
+    const isDimensional = (t?: string) => !!t && t.includes('[')
+    const isKnown = (t?: string) => !!t && t.length > 0
+
+    // Prefer any non-scalar type (quaternion/vector integrators)
+    if (isDimensional(deriv)) return deriv!
+    if (isDimensional(ic)) return ic!
+
+    if (isKnown(deriv)) return deriv!
+    if (isKnown(ic)) return ic!
+
+    // Fallback: first provided type, else double
+    for (const t of inputTypes) {
+      if (isKnown(t)) return t
     }
-    return inputTypes[0]
+    return 'double'
   }
 
   generateStructMember(block: BlockData, outputType: string): string | null {
-    // Integrator blocks always need signal storage
     return BlockModuleUtils.generateStructMember(block.name, outputType)
   }
 
   requiresState(block: BlockData): boolean {
-    // Integrators always require state
     return true
   }
 
@@ -208,9 +270,6 @@ export class IntegratorBlockModule implements IBlockModule {
     const members: string[] = []
     const { showResetInput = false } = block.parameters || {}
 
-    // Integrator state matches signal dimensions (no extra [1] for state order)
-    // Scalar: _states[1] (array of 1), Vector: _states[size], Matrix: _states[rows][cols]
-    // Note: Scalar keeps [1] to maintain array semantics for consistency
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       members.push(`    double ${intName}_states[${typeInfo.rows}][${typeInfo.cols}];`)
     } else if (typeInfo.isArray && typeInfo.arraySize) {
@@ -219,7 +278,6 @@ export class IntegratorBlockModule implements IBlockModule {
       members.push(`    double ${intName}_states[1];`)
     }
 
-    // Add reset edge detection state if reset input is enabled
     if (showResetInput) {
       members.push(`    bool ${intName}_reset_prev;`)
     }
@@ -239,12 +297,8 @@ export class IntegratorBlockModule implements IBlockModule {
     } = block.parameters || {}
 
     let code = ''
-
-    // Parse the output type to determine dimensions
-    // State structure matches signal: scalar -> [1], vector[n] -> [n], matrix[m][n] -> [m][n]
     const typeInfo = BlockModuleUtils.parseType(outputType || 'double')
 
-    // Helper to generate clamped value expression
     const getClampedValue = (val: number): string => {
       if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
         return `fmax(${lowerLimit}, fmin(${upperLimit}, ${val}))`
@@ -252,7 +306,6 @@ export class IntegratorBlockModule implements IBlockModule {
       return String(val)
     }
 
-    // Helper to generate clamped expression for signal values
     const getClampedExpr = (expr: string): string => {
       if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
         return `fmax(${lowerLimit}, fmin(${upperLimit}, ${expr}))`
@@ -260,7 +313,7 @@ export class IntegratorBlockModule implements IBlockModule {
       return expr
     }
 
-    // If using init port and we have the signal expression, initialize from it
+    // showInitPort: initialize from x(0) signal expression (port 1) when connected
     if (showInitPort && initSignalExpr) {
       code += `    // Initialize ${intName}_states from x(0) port signal\n`
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
@@ -277,7 +330,7 @@ export class IntegratorBlockModule implements IBlockModule {
         code += `    model->states.${intName}_states[0] = ${getClampedExpr(initSignalExpr)};\n`
       }
     } else if (showInitPort) {
-      // Init port enabled but no signal expression provided (not connected) - use 0
+      // Init port enabled but not connected — use 0
       code += `    // Initialize ${intName}_states to 0 (x(0) port not connected)\n`
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
         for (let i = 0; i < typeInfo.rows; i++) {
@@ -293,11 +346,10 @@ export class IntegratorBlockModule implements IBlockModule {
         code += `    model->states.${intName}_states[0] = 0.0;\n`
       }
     } else {
-      // Use static initial value from parameters
+      // Static initial value from parameters
       const scalarInitial = typeof initialValue === 'number' ? initialValue : 0
 
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-        // Matrix: _states[i][j]
         code += `    // Initialize ${intName}_states (matrix ${typeInfo.rows}x${typeInfo.cols})\n`
         for (let i = 0; i < typeInfo.rows; i++) {
           for (let j = 0; j < typeInfo.cols; j++) {
@@ -311,7 +363,6 @@ export class IntegratorBlockModule implements IBlockModule {
           }
         }
       } else if (typeInfo.isArray && typeInfo.arraySize) {
-        // Vector: _states[i]
         code += `    // Initialize ${intName}_states (vector size ${typeInfo.arraySize})\n`
         for (let i = 0; i < typeInfo.arraySize; i++) {
           let val: number
@@ -323,12 +374,10 @@ export class IntegratorBlockModule implements IBlockModule {
           code += `    model->states.${intName}_states[${i}] = ${getClampedValue(val)};\n`
         }
       } else {
-        // Scalar: _states[0]
         code += `    model->states.${intName}_states[0] = ${getClampedValue(scalarInitial)};\n`
       }
     }
 
-    // Initialize reset edge detection
     if (showResetInput) {
       code += `    model->states.${intName}_reset_prev = false;\n`
     }
@@ -336,10 +385,6 @@ export class IntegratorBlockModule implements IBlockModule {
     return code
   }
 
-  /**
-   * Post-integration limiting - clamp state after integration step if limits are enabled
-   * State access matches signal dimensions: scalar[0], vector[i], matrix[i][j]
-   */
   generatePostIntegrationLimiting(block: BlockData, outputType: string): string {
     const intName = BlockModuleUtils.sanitizeIdentifier(block.name)
     const {
@@ -372,31 +417,9 @@ export class IntegratorBlockModule implements IBlockModule {
     return code
   }
 
-  private applyLimits(
-    value: number | number[] | number[][],
-    lowerLimit: number,
-    upperLimit: number
-  ): number | number[] | number[][] {
-    if (typeof value === 'number') {
-      return Math.max(lowerLimit, Math.min(upperLimit, value))
-    } else if (Array.isArray(value)) {
-      if (Array.isArray(value[0])) {
-        // Matrix
-        return (value as number[][]).map(row =>
-          row.map(v => Math.max(lowerLimit, Math.min(upperLimit, v)))
-        )
-      } else {
-        // Vector
-        return (value as number[]).map(v => Math.max(lowerLimit, Math.min(upperLimit, v)))
-      }
-    }
-    return value
-  }
-
   getInputPortCount(block: BlockData): number {
-    // Only the derivative input is on the left edge
-    // Enable is on top edge (port index -1), Reset is on bottom edge (port index -2)
-    return 1
+    // Data ports only (left edge). Enable/reset are control ports (negative indices).
+    return block.parameters?.showInitPort ? 2 : 1
   }
 
   getOutputPortCount(block: BlockData): number {
@@ -404,8 +427,9 @@ export class IntegratorBlockModule implements IBlockModule {
   }
 
   getInputPortLabels(block: BlockData): string[] | undefined {
-    // Only the derivative input is on the left edge
-    // Enable (top) and Reset (bottom) are special ports, not listed here
+    if (block.parameters?.showInitPort) {
+      return ['Derivative', 'x(0)']
+    }
     return ['Derivative']
   }
 
@@ -413,12 +437,9 @@ export class IntegratorBlockModule implements IBlockModule {
     return ['Output']
   }
 
-  /**
-   * Integrators do NOT have direct feedthrough.
-   * The output is the integrated past values, not a function of the current input.
-   * This is critical for algebraic loop detection - integrators break algebraic loops.
-   */
   isDirectFeedthrough(block: BlockData): boolean {
+    // Output is integrated state, not a direct function of derivative input.
+    // Note: when showInitPort is on, x(0) is only used at init and on reset, not continuously.
     return false
   }
 
@@ -427,14 +448,12 @@ export class IntegratorBlockModule implements IBlockModule {
     inputs: (number | number[] | boolean | boolean[] | number[][])[],
     time: number
   ): number[] | undefined {
-    // For integrator, the derivative is simply the input
     const derivative = inputs[0]
 
     if (typeof derivative === 'number') {
       return [derivative]
     } else if (Array.isArray(derivative)) {
       if (Array.isArray(derivative[0])) {
-        // Flatten matrix
         return (derivative as unknown as number[][]).flat()
       } else {
         return derivative as number[]

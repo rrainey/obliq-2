@@ -29,7 +29,7 @@ import { createClient } from '@supabase/supabase-js'
 import { WasmCodeGenerator } from '@/lib/wasm/codegen/WasmCodeGenerator'
 import { SupabaseCacheManager, generateCacheKey, hashModel } from '@/lib/wasm/cache'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
-import { authenticateApiRequest } from '@/lib/apiAuthMiddleware'
+import { authenticateRequest } from '@/lib/apiAuthMiddleware'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import * as fs from 'fs/promises'
@@ -54,37 +54,15 @@ const DOCKER_IMAGE = 'obliq-emscripten:latest'
 // Compilation timeout (30 seconds)
 const COMPILATION_TIMEOUT = 30000
 
-/**
- * Extract Bearer token from Authorization header
- */
-function extractBearerToken(request: NextRequest): string | null {
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader) return null
-
-  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i)
-  if (bearerMatch) return bearerMatch[1]
-
-  return authHeader
-}
-
 async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
   const startTime = Date.now()
   console.log('[compile-wasm] API called')
 
-  // Authenticate the request
-  const token = extractBearerToken(request)
-  if (!token) {
-    throw new AppError(
-      'Missing Authorization header. Use: Authorization: Bearer <token>',
-      401,
-      ErrorTypes.UNAUTHORIZED
-    )
-  }
-
-  const authResult = await authenticateApiRequest(token)
+  // Browser session (cookie / JWT) or user API token
+  const authResult = await authenticateRequest(request)
   if (!authResult.authenticated) {
     throw new AppError(
-      authResult.error || 'Invalid or expired API token',
+      authResult.error || 'Authentication required',
       401,
       ErrorTypes.UNAUTHORIZED
     )

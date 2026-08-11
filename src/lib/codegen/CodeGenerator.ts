@@ -13,6 +13,7 @@ import { CCodeBuilder } from './CCodeBuilder'
 import { CodeGenerationValidator } from './CodeGenerationValidator'
 import { TypePropagator } from './TypePropagator'
 import { ModelParameter } from '@/lib/modelSchema'
+import { DataStoreDeclaration, refineDataStoreTypes } from '@/lib/dataStoreUtils'
 import { SubsystemCodeGenerator, SubsystemCodeResult } from './SubsystemCodeGenerator'
 /**
  * Options for code generation
@@ -83,7 +84,11 @@ export class CodeGenerator {
   /**
    * Generate C code from model sheets
    */
-  generate(sheets: Sheet[], parameters: ModelParameter[] = []): CodeGenerationResult {
+  generate(
+    sheets: Sheet[],
+    parameters: ModelParameter[] = [],
+    dataStores: DataStoreDeclaration[] = []
+  ): CodeGenerationResult {
     // Step 1: Flatten the model
     const flattener = new ModelFlattener({
       preserveOriginalNames: this.options.includeDebugComments,
@@ -92,7 +97,7 @@ export class CodeGenerator {
       nameSeparator: '_'
     })
 
-    const flatteningResult = flattener.flattenModel(sheets, this.options.modelName, parameters)
+    const flatteningResult = flattener.flattenModel(sheets, this.options.modelName, parameters, dataStores)
     const model = flatteningResult.model
     
     // Step 2: Validate the flattened model
@@ -134,6 +139,14 @@ export class CodeGenerator {
     // Step 3: Propagate types through the model
     const typePropagator = new TypePropagator(model)
     const typeMap = typePropagator.propagate()
+
+    // Refine data store types from write-block inputs
+    model.dataStores = refineDataStoreTypes(
+      model.dataStores || [],
+      model.blocks,
+      model.connections,
+      typeMap
+    )
     
     // Step 4: Generate segregated subsystem code files
     const subsystemFiles: SubsystemCodeResult[] = []

@@ -329,5 +329,49 @@ describe('lookup blocks', () => {
       const result = propagateSignalTypes(blocks, wires)
       expect(result).toBeDefined()
     })
+
+    it('should type integrators in a feedback loop via x(0) ports', () => {
+      // Minimal free-fall: ṙ = v, v̇ = -mu/r² with external ICs
+      const blocks: BlockData[] = [
+        createBlock('mu', 'source', { dataType: 'double', signalType: 'constant', value: 1 }),
+        createBlock('r0', 'source', { dataType: 'double', signalType: 'constant', value: 1 }),
+        createBlock('v0', 'source', { dataType: 'double', signalType: 'constant', value: 0 }),
+        createBlock('r', 'integrator', { showInitPort: true, initialValue: 0 }),
+        createBlock('v', 'integrator', { showInitPort: true, initialValue: 0 }),
+        createBlock('r_sq', 'multiply', { numInputs: 2 }),
+        createBlock('mu_over_r2', 'divide'),
+        createBlock('accel', 'uminus'),
+        createBlock('r_out', 'output_port'),
+        createBlock('v_out', 'output_port'),
+        createBlock('a_out', 'output_port'),
+      ]
+      const wires: WireData[] = [
+        createWire('w_r0', 'r0', 'r', 0, 1),
+        createWire('w_v0', 'v0', 'v', 0, 1),
+        createWire('w_v_to_r', 'v', 'r', 0, 0),
+        createWire('w_a_to_v', 'accel', 'v', 0, 0),
+        createWire('w_r_mul0', 'r', 'r_sq', 0, 0),
+        createWire('w_r_mul1', 'r', 'r_sq', 0, 1),
+        createWire('w_mu_div', 'mu', 'mu_over_r2', 0, 0),
+        createWire('w_rsq_div', 'r_sq', 'mu_over_r2', 0, 1),
+        createWire('w_div_um', 'mu_over_r2', 'accel', 0, 0),
+        createWire('w_r_out', 'r', 'r_out'),
+        createWire('w_v_out', 'v', 'v_out'),
+        createWire('w_a_out', 'accel', 'a_out'),
+      ]
+
+      const result = propagateSignalTypes(blocks, wires)
+
+      expect(result.blockOutputTypes.get('r:0')).toBe('double')
+      expect(result.blockOutputTypes.get('v:0')).toBe('double')
+      expect(result.blockOutputTypes.get('accel:0')).toBe('double')
+      expect(result.signalTypes.get('w_v_to_r')?.type).toBe('double')
+      expect(result.signalTypes.get('w_a_to_v')?.type).toBe('double')
+      expect(result.signalTypes.get('w_r_out')?.type).toBe('double')
+      for (const w of wires) {
+        expect(result.signalTypes.has(w.id)).toBe(true)
+      }
+    })
+
   })
 })

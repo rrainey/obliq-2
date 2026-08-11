@@ -3,8 +3,13 @@
 
 import { useUser } from '@/lib/auth'
 import { supabase } from '@/lib/supabaseClient'
-import { Model, ModelVersion, ModelWithVersion } from '@/lib/types'
+import { Model, ModelWithVersion } from '@/lib/types'
 import { createDefaultModel } from '@/lib/defaultModel'
+import {
+  parseModelImportFile,
+  ModelImportError,
+  type ImportedModelPayload,
+} from '@/lib/modelImport'
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -28,6 +33,7 @@ import {
   useMantineColorScheme,
   useComputedColorScheme
 } from '@mantine/core'
+import { notifications } from '@mantine/notifications'
 import {
   IconDotsVertical,
   IconEdit,
@@ -37,7 +43,8 @@ import {
   IconArrowRight,
   IconCopy,
   IconSun,
-  IconMoon
+  IconMoon,
+  IconFileImport
 } from '@tabler/icons-react'
 
 export default function ModelsPage() {
@@ -59,6 +66,13 @@ export default function ModelsPage() {
   const [renameValue, setRenameValue] = useState('')
   const [duplicateName, setDuplicateName] = useState('')
   const [duplicating, setDuplicating] = useState(false)
+  const [showImportDialog, setShowImportDialog] = useState(false)
+  const [importName, setImportName] = useState('')
+  const [importPayload, setImportPayload] = useState<ImportedModelPayload | null>(null)
+  const [importFileLabel, setImportFileLabel] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importParseError, setImportParseError] = useState<string | null>(null)
+  const importFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -297,6 +311,96 @@ export default function ModelsPage() {
     }
   }
 
+  const resetImportDialog = () => {
+    setShowImportDialog(false)
+    setImportName('')
+    setImportPayload(null)
+    setImportFileLabel('')
+    setImportParseError(null)
+    if (importFileInputRef.current) {
+      importFileInputRef.current.value = ''
+    }
+  }
+
+  const openImportDialog = () => {
+    setImportName('')
+    setImportPayload(null)
+    setImportFileLabel('')
+    setImportParseError(null)
+    setShowImportDialog(true)
+  }
+
+  const handleImportFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setImportParseError(null)
+    setImportPayload(null)
+    setImportFileLabel(file.name)
+
+    try {
+      const payload = await parseModelImportFile(file)
+      setImportPayload(payload)
+      setImportName(payload.name)
+    } catch (error) {
+      const message =
+        error instanceof ModelImportError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'Failed to read model file'
+      setImportParseError(message)
+      setImportPayload(null)
+    }
+  }
+
+  const handleImportModel = async () => {
+    if (!user || importing || !importPayload || !importName.trim()) return
+
+    setImporting(true)
+    try {
+      const { data: modelData, error: modelError } = await supabase
+        .from('models')
+        .insert({
+          user_id: user.id,
+          name: importName.trim(),
+          latest_version: 1,
+        })
+        .select()
+        .single()
+
+      if (modelError) throw modelError
+
+      const { error: versionError } = await supabase
+        .from('model_versions')
+        .insert({
+          model_id: modelData.id,
+          version: 1,
+          data: importPayload.data,
+        })
+
+      if (versionError) throw versionError
+
+      notifications.show({
+        title: 'Model imported',
+        message: `"${importName.trim()}" created as a new model`,
+        color: 'green',
+      })
+
+      resetImportDialog()
+      router.push(`/models/${modelData.id}`)
+    } catch (error) {
+      console.error('Error importing model:', error)
+      notifications.show({
+        title: 'Import failed',
+        message: error instanceof Error ? error.message : 'Failed to import model',
+        color: 'red',
+      })
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const handleModelOpen = async (model: ModelWithVersion) => {
     const selectedVersion = selectedVersions[model.id] || model.latest_version || 1
     
@@ -346,6 +450,13 @@ export default function ModelsPage() {
               New Model
             </Button>
             <Button
+              variant="default"
+              leftSection={<IconFileImport size={16} />}
+              onClick={openImportDialog}
+            >
+              Import
+            </Button>
+            <Button
               component={Link}
               href="/tokens"
               variant="default"
@@ -367,7 +478,21 @@ export default function ModelsPage() {
           <Center py={60}>
             <Stack align="center">
               <Text size="lg" c="dimmed" mb="xs">No models yet</Text>
-              <Text c="dimmed">Create your first model to get started</Text>
+              <Text c="dimmed" mb="md">
+                Create a new model or import a JSON export / sample fixture
+              </Text>
+              <Group>
+                <Button leftSection={<IconPlus size={16} />} onClick={() => setShowNewModelDialog(true)}>
+                  New Model
+                </Button>
+                <Button
+                  variant="default"
+                  leftSection={<IconFileImport size={16} />}
+                  onClick={openImportDialog}
+                >
+                  Import Model
+                </Button>
+              </Group>
             </Stack>
           </Center>
         ) : (
@@ -610,6 +735,87 @@ export default function ModelsPage() {
               loading={duplicating}
             >
               Duplicate
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Import Model Modal */}
+      <Modal
+        opened={showImportDialog}
+        onClose={resetImportDialog}
+        title="Import Model"
+        centered
+      >
+        <Stack>
+          <Text size="sm" c="dimmed">
+            Import creates a <strong>new</strong> model from an obliq-2 export or a sample
+            fixture under <code>docs/sample-models/</code> (e.g. Saturn slices). It does not
+            replace an existing model.
+          </Text>
+
+          <input
+            ref={importFileInputRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: 'none' }}
+            onChange={handleImportFileChange}
+          />
+
+          <Group>
+            <Button
+              variant="default"
+              leftSection={<IconFileImport size={16} />}
+              onClick={() => importFileInputRef.current?.click()}
+            >
+              Choose JSON file
+            </Button>
+            {importFileLabel && (
+              <Text size="sm" c="dimmed" style={{ flex: 1 }} lineClamp={1}>
+                {importFileLabel}
+              </Text>
+            )}
+          </Group>
+
+          {importParseError && (
+            <Text size="sm" c="red">
+              {importParseError}
+            </Text>
+          )}
+
+          {importPayload && !importParseError && (
+            <Text size="sm" c="dimmed">
+              Detected {importPayload.sourceLabel}
+              {Array.isArray(importPayload.data.sheets)
+                ? ` · ${(importPayload.data.sheets as unknown[]).length} sheet(s)`
+                : ''}
+            </Text>
+          )}
+
+          <TextInput
+            label="Model name"
+            value={importName}
+            onChange={(e) => setImportName(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && importPayload && importName.trim()) {
+                handleImportModel()
+              }
+            }}
+            placeholder="Name for the new model"
+            disabled={!importPayload}
+            data-autofocus={!!importPayload}
+          />
+
+          <Group justify="flex-end">
+            <Button variant="default" onClick={resetImportDialog}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleImportModel}
+              disabled={!importPayload || !importName.trim() || importing}
+              loading={importing}
+            >
+              Import
             </Button>
           </Group>
         </Stack>

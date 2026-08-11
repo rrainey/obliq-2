@@ -110,75 +110,255 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 
 ## Installation and Development Setup
 
+obliq-2 needs three things running together:
+
+1. **Supabase** — Auth, Postgres (models), and Storage (WASM cache)
+2. **This Next.js app** — `npm run dev` on port 3000
+3. **Docker** — used by the app to compile models to WebAssembly when you click **Run Simulation**
+
+There is no single “seed everything” command. You start Supabase, apply the SQL under [`database-scripts/`](./database-scripts/), configure `.env.local`, then create a user in the UI. Sample model JSON files are loaded separately (see [Loading sample models](#loading-sample-models-into-the-database)).
+
 ### Prerequisites
-- Node.js 20+ and npm/yarn
-- Supabase account (or local Supabase instance)
-- Docker Desktop
 
-### Setup
+| Requirement | Notes |
+|-------------|--------|
+| **Node.js 20+** and npm | App and tests |
+| **Docker** | Supabase self-host *and* WASM compile image (`obliq-emscripten`) |
+| **Git** | Clone this repo and (for self-host) the Supabase Docker config |
+| ~4–8 GB RAM free | Full self-hosted Supabase stack is heavy |
 
-1. Clone the repository:
+### 1. Clone and install the app
+
 ```bash
 git clone https://github.com/rrainey/obliq-2.git
 cd obliq-2
-```
-
-2. Install dependencies:
-```bash
 npm install
-# or
-yarn install
 ```
 
-3. Set up environment variables:
-Create a `.env.local` file in the project root:
-```env
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+Copy the env template (you will fill keys after Supabase is up):
 
-# Automation API Token (generate a secure token)
-AUTOMATION_API_TOKEN=your_secure_automation_token
-```
-
-4. Set up the database:
-In your Supabase project, create the models table:
-```sql
-CREATE TABLE models (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  data JSONB NOT NULL,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Enable Row Level Security
-ALTER TABLE models ENABLE ROW LEVEL SECURITY;
-
--- Create policy for users to manage their own models
-CREATE POLICY "Users can manage their own models" ON models
-  FOR ALL USING (auth.uid() = user_id);
-```
-
-## Running Locally
-
-1. Start the development server:
 ```bash
-npx supabase start -x vector
+cp .env.local.example .env.local
+```
 
-# then,
+### 2. Choose a Supabase backend
+
+Pick **one** of the options below. Most local development that mirrors production uses **Option A** (self-hosted Docker).
+
+#### Option A — Self-hosted Supabase with Docker (recommended)
+
+Follow the official guide: [Self-Hosting with Docker](https://supabase.com/docs/guides/self-hosting/docker#manual-installation).
+
+Example layout (sibling directories):
+
+```text
+~/src/
+├── supabase-project/    # Docker Compose stack (API on :8000)
+└── obliq-2/             # This application (dev server on :3000)
+```
+
+**Manual install (summary)** — pin to a current `self-hosted/v*` tag from the [Supabase tags](https://github.com/supabase/supabase/tags) list:
+
+```bash
+# Outside the obliq-2 tree
+git clone --depth 1 --branch self-hosted/v0.8.0 https://github.com/supabase/supabase
+mkdir -p ~/src/supabase-project
+cp -rf supabase/docker/. ~/src/supabase-project/
+
+cd ~/src/supabase-project
+cp .env.example .env
+printf 'ref=self-hosted/v0.8.0\n' > .supabase-version
+
+# Generate secrets and API keys (do not use placeholder defaults in production)
+sh utils/generate-keys.sh
+sh utils/add-new-auth-keys.sh   # if present on your version
+
+# Align Auth redirects with the Next.js app
+# In .env set (or confirm):
+#   SUPABASE_PUBLIC_URL=http://localhost:8000
+#   API_EXTERNAL_URL=http://localhost:8000/auth/v1
+#   SITE_URL=http://localhost:3000
+# For local email signup without a real SMTP server:
+#   ENABLE_EMAIL_AUTOCONFIRM=true
+
+docker compose pull
+sh run.sh start                 # or: docker compose up -d --wait
+docker compose ps               # all services should be healthy
+```
+
+**Where credentials live**
+
+| Value you need for obliq-2 | Source in `~/src/supabase-project/.env` |
+|----------------------------|----------------------------------------|
+| API base URL | `SUPABASE_PUBLIC_URL` (default `http://localhost:8000`) |
+| Anon / publishable key | `ANON_KEY` or `SUPABASE_PUBLISHABLE_KEY` |
+| Service role / secret key | `SERVICE_ROLE_KEY` or `SUPABASE_SECRET_KEY` |
+| Studio login | `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` |
+| Postgres password | `POSTGRES_PASSWORD` |
+
+Print them anytime:
+
+```bash
+cd ~/src/supabase-project && sh run.sh secrets
+```
+
+**Studio (dashboard):** open [http://localhost:8000](http://localhost:8000) and use the dashboard username/password.
+
+> **Important:** `NEXT_PUBLIC_SUPABASE_URL` must be the **HTTP API gateway URL** (e.g. `http://localhost:8000`), **not** a `postgresql://…` connection string. The browser and `supabase-js` talk to Auth/REST/Storage over that URL.
+
+**Local signup tip:** Default `ENABLE_EMAIL_AUTOCONFIRM=false` means new users never get confirmed without mail. For local dev, set `ENABLE_EMAIL_AUTOCONFIRM=true` in the Supabase `.env`, then `sh run.sh recreate` (or recreate the Auth service). Alternatively confirm users manually in Studio → Authentication.
+
+**Google OAuth** on the login page only works if you configure OAuth in self-hosted Auth. Email/password works out of the box once autoconfirm (or manual confirm) is set.
+
+Stop / start later:
+
+```bash
+cd ~/src/supabase-project
+sh run.sh stop
+sh run.sh start
+```
+
+#### Option B — Supabase CLI (lighter local stack)
+
+If you prefer the official CLI project inside this repo (different ports than Option A):
+
+```bash
+# From obliq-2 root (requires Docker)
+npx supabase start
+npx supabase status   # prints API URL (often http://127.0.0.1:54321) and keys
+```
+
+Map those values into `.env.local`. You still must apply the SQL in [`database-scripts/`](./database-scripts/) — the CLI does not ship this app’s schema.
+
+#### Option C — Hosted Supabase (cloud project)
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Project **Settings → API**: copy Project URL, `anon` key, and `service_role` key into `.env.local`.
+3. Apply the same SQL scripts via the SQL Editor.
+
+### 3. Configure `.env.local` (obliq-2)
+
+Edit `obliq-2/.env.local` (see [`.env.local.example`](./.env.local.example)):
+
+```env
+# Self-hosted Docker defaults shown — use CLI/cloud values if you chose those options
+NEXT_PUBLIC_SUPABASE_URL=http://localhost:8000
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY from supabase-project .env>
+SUPABASE_SERVICE_ROLE_KEY=<SERVICE_ROLE_KEY from supabase-project .env>
+
+# Long random secrets (any secure strings) for server-side API routes
+AUTOMATION_API_TOKEN=<openssl rand -hex 32>
+MODEL_BUILDER_API_TOKEN=<openssl rand -hex 32>
+```
+
+| Variable | Used for |
+|----------|----------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Browser + server Supabase client base URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public client key (RLS applies) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only: WASM cache, admin storage, bypasses RLS when needed |
+| `AUTOMATION_API_TOKEN` | `/api/automations/...` |
+| `MODEL_BUILDER_API_TOKEN` | Optional fixed Model Builder token (user tokens via UI also exist) |
+
+Restart `npm run dev` after changing env vars.
+
+### 4. Initialize the database schema
+
+The incomplete single-table snippet that used to live in this README is **not enough**. The app stores model JSON in **`model_versions`**, tracks **`latest_version`**, and uses extra tables for API tokens and WASM caching.
+
+Apply scripts **in this order** (full detail: [`database-scripts/README.md`](./database-scripts/README.md)):
+
+1. `database-scripts/setup.sql` — `models` + RLS  
+2. `database-scripts/versioning.sql` — `model_versions`, removes inline `models.data`, adds `latest_version`  
+3. `database-scripts/03-API-tokens.sql` — `api_tokens`  
+4. `database-scripts/04-wasm-cache.sql` — cache metadata + metrics  
+5. `database-scripts/05-wasm-storage-bucket.sql` — Storage bucket `wasm-cache`  
+
+**Via Studio SQL Editor** (self-hosted: [http://localhost:8000](http://localhost:8000) → SQL Editor): paste each file and run.
+
+**Via Docker `psql`** (self-hosted):
+
+```bash
+cd ~/src/supabase-project
+SCRIPTS=~/src/obliq-2/database-scripts
+
+for f in setup.sql versioning.sql 03-API-tokens.sql 04-wasm-cache.sql 05-wasm-storage-bucket.sql; do
+  echo "=== $f ==="
+  docker compose exec -T db psql -U postgres -d postgres < "$SCRIPTS/$f"
+done
+```
+
+Sanity-check in SQL Editor:
+
+```sql
+SELECT table_name FROM information_schema.tables
+WHERE table_schema = 'public'
+  AND table_name IN ('models', 'model_versions', 'api_tokens', 'wasm_cache_metadata')
+ORDER BY 1;
+```
+
+Optional connection check from the app tree:
+
+```bash
+node verify-setup.js
+```
+
+### 5. (Optional) WASM compile image for simulation
+
+Needed before **Run Simulation** compiles models:
+
+```bash
+npm run wasm:build-docker
+# Builds Docker image: obliq-emscripten:latest
+```
+
+See also [`WASM-SETUP-INSTRUCTIONS.md`](./WASM-SETUP-INSTRUCTIONS.md).
+
+### 6. Start the web application
+
+With Supabase already healthy:
+
+```bash
+cd ~/src/obliq-2
 npm run dev
-# or
-yarn dev
 ```
 
-2. Open your browser and navigate to:
-```
-http://localhost:3000
+Open [http://localhost:3000](http://localhost:3000) → sign up / log in → **Models**.
+
+Create a blank model from the UI to verify inserts into `models` + `model_versions` work under RLS.
+
+### Loading sample models (Import)
+
+From **My Models** (`/models`), use **Import** to create a new model from JSON. This matches the **Export** format and the fixtures under [`docs/sample-models/`](./docs/sample-models/) (including Saturn slices in [`docs/sample-models/saturn/`](./docs/sample-models/saturn/)):
+
+```json
+{
+  "name": "saturn-8.1-gravity-ballistics",
+  "data": { "version": "2.2", "sheets": [ ... ], "parameters": [ ... ], "globalSettings": { ... } }
+}
 ```
 
-3. Create an account or log in to start building models.
+**Recommended workflow**
+
+1. Log in → **My Models** → **Import**.
+2. Choose a file such as `docs/sample-models/saturn/saturn-8.1-gravity-ballistics.json`.
+3. Confirm or edit the model name → **Import** (opens the editor).
+4. Optionally add **Signal Display** / **Signal Logger** sinks (many fixtures only expose output ports).
+5. **Run Simulation** (Docker + `npm run wasm:build-docker` required for compile).
+
+Import always creates a **new** model (version 1); it does not replace an existing one. Bare `{ "sheets": [...] }` data objects are also accepted (name defaults from the file name).
+
+SQL / Studio inserts remain possible for automation; they are no longer required for interactive use.
+### Common setup mistakes
+
+| Symptom | Likely cause |
+|---------|----------------|
+| Auth / network errors in browser | `NEXT_PUBLIC_SUPABASE_URL` is a `postgres://` URL instead of `http://localhost:8000` |
+| “relation models does not exist” | Schema scripts not applied |
+| Can create models but open is empty / errors on version | `versioning.sql` not applied (`model_versions` missing) |
+| Signup hangs or “email not confirmed” | `ENABLE_EMAIL_AUTOCONFIRM` still false; no SMTP |
+| Run Simulation compile fails | Docker not running or `npm run wasm:build-docker` never run |
+| Studio 401 on :8000 | Wrong `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` |
+| Wrong port vs docs that mention 54321 | That port is **Supabase CLI**; self-hosted Docker defaults to **8000** |
 
 ### Development Commands
 
@@ -200,6 +380,13 @@ npm start
 
 # Run linter
 npm run lint
+
+# WASM Docker image + tests
+npm run wasm:build-docker
+npm run test:wasm
+
+# Quick env / Docker / models-table check
+node verify-setup.js
 ```
 
 ## Project Structure
@@ -301,7 +488,7 @@ obliq-2/
 ├── examples/                         # Example scripts
 │   └── model-builder-api/            # API usage examples
 │
-└── database-scripts/                 # Supabase SQL setup
+└── database-scripts/                 # Schema SQL (apply in order — see that folder’s README)
 ```
 
 ## Testing

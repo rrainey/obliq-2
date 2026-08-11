@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { ModelCodeGenerator } from '@/lib/codeGenerationNew'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
-import { authenticateApiRequest } from '@/lib/apiAuthMiddleware'
+import { authenticateRequest } from '@/lib/apiAuthMiddleware'
 import JSZip from 'jszip'
 
 // Create a server-side Supabase client
@@ -17,36 +17,14 @@ const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
   }
 })
 
-/**
- * Extract Bearer token from Authorization header
- */
-function extractBearerToken(request: NextRequest): string | null {
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader) return null
-
-  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i)
-  if (bearerMatch) return bearerMatch[1]
-
-  return authHeader
-}
-
 async function generateCodeHandler(request: NextRequest): Promise<NextResponse> {
   console.log('Generate code API called')
 
-  // Authenticate the request
-  const token = extractBearerToken(request)
-  if (!token) {
-    throw new AppError(
-      'Missing Authorization header. Use: Authorization: Bearer <token>',
-      401,
-      ErrorTypes.UNAUTHORIZED
-    )
-  }
-
-  const authResult = await authenticateApiRequest(token)
+  // Browser session (cookie / JWT) or user API token
+  const authResult = await authenticateRequest(request)
   if (!authResult.authenticated) {
     throw new AppError(
-      authResult.error || 'Invalid or expired API token',
+      authResult.error || 'Authentication required',
       401,
       ErrorTypes.UNAUTHORIZED
     )

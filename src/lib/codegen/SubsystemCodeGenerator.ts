@@ -519,6 +519,9 @@ export class SubsystemCodeGenerator {
         const safeName = CCodeBuilder.sanitizeIdentifier(block.block.name)
         const modifiedInputs = [...inputs, `model->states.${safeName}_states`]
         code += generator.generateComputation(block.block, modifiedInputs, inputTypes, context)
+      } else if (block.block.type === 'integrator') {
+        const integratorInputs = this.getIntegratorInputExpressions(block)
+        code += generator.generateComputation(block.block, integratorInputs, inputTypes, context)
       } else {
         code += generator.generateComputation(block.block, inputs, inputTypes, context)
       }
@@ -619,6 +622,46 @@ export class SubsystemCodeGenerator {
     if (dataType) return dataType
 
     return 'double'
+  }
+
+  /**
+   * Integrator data + control inputs for codegen:
+   *   [0] derivative (port 0), [1] x(0) if showInitPort, [last] reset if showResetInput
+   */
+  private getIntegratorInputExpressions(block: FlattenedBlock): string[] {
+    const showInitPort = !!block.block.parameters?.showInitPort
+    const showResetInput = !!block.block.parameters?.showResetInput
+    const inputs: string[] = []
+
+    inputs.push(this.getInputExpressionForPort(block, 0) || '0.0')
+    if (showInitPort) {
+      inputs.push(this.getInputExpressionForPort(block, 1) || '0.0')
+    }
+    if (showResetInput) {
+      inputs.push(this.getInputExpressionForPort(block, -2) || '0')
+    }
+    return inputs
+  }
+
+  private getInputExpressionForPort(block: FlattenedBlock, portIndex: number): string | null {
+    const connection = this.info.flattenedModel.connections.find(c =>
+      c.targetBlockId === block.originalId && c.targetPortIndex === portIndex
+    )
+    if (!connection) return null
+
+    const sourceBlock = this.info.flattenedModel.blocks.find(b =>
+      b.originalId === connection.sourceBlockId
+    )
+    if (!sourceBlock) return null
+
+    if (sourceBlock.block.type === 'input_port') {
+      const portName = sourceBlock.block.parameters?.portName || sourceBlock.block.name
+      const safeName = CCodeBuilder.sanitizeIdentifier(portName)
+      return `model->inputs.${safeName}`
+    }
+
+    const safeName = CCodeBuilder.sanitizeIdentifier(sourceBlock.block.name)
+    return `model->signals.${safeName}`
   }
 
   private getBlockInputExpressions(block: FlattenedBlock): string[] {

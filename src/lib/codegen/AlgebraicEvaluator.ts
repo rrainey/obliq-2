@@ -5,6 +5,7 @@ import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 import { SubsystemInfo } from './SubsystemInfo'
 import { CodeGenContext } from '../blocks/BlockModule'
+import { getSignalMemberName } from './signalMemberName'
 
 /**
  * Generates the algebraic evaluation function for a flattened model.
@@ -246,6 +247,12 @@ export class AlgebraicEvaluator {
         if (block.block.type === 'transfer_function') {
           const modifiedInputs = this.getTransferFunctionInputs(block, inputs)
           code += generator.generateComputation(blockWithFlattenedName, modifiedInputs, inputTypes, context)
+        } else if (block.block.type === 'integrator') {
+          // Data ports (left): [0]=derivative, [1]=x(0) if showInitPort
+          // Control reset (-2) is appended after data ports for rising-edge reset logic
+          const integratorInputs = this.getIntegratorInputExpressions(block)
+          const integratorInputTypes = this.getIntegratorInputTypes(block)
+          code += generator.generateComputation(blockWithFlattenedName, integratorInputs, integratorInputTypes, context)
         } else {
           code += generator.generateComputation(blockWithFlattenedName, inputs, inputTypes, context)
         }
@@ -321,8 +328,8 @@ export class AlgebraicEvaluator {
     const inputs: string[] = []
 
     // Find all connections to this block, sorted by target port index
-    // Filter out special ports (negative indices: -1 enable, -2 reset, -3 init)
-    // These are handled separately and should not be in the regular inputs array
+    // Filter out control ports (negative indices: -1 enable, -2 reset)
+    // Data ports (including integrator x(0) at port 1) remain
     const connections = this.model.connections
       .filter(c => c.targetBlockId === block.originalId && c.targetPortIndex >= 0)
       .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
@@ -377,14 +384,20 @@ export class AlgebraicEvaluator {
       }
     }
 
-    // Use flattened name for signal access to handle subsystem blocks correctly
-    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
+    // Multi-output blocks: append port label/suffix (atmosphere, orientation euler, etc.)
+    const memberName = getSignalMemberName(
+      block.flattenedName,
+      block.block.type,
+      portIndex,
+      block.block
+    )
+
     // Updated to append ->signals. when signalsVar is 'model'
     if (signalsVar === 'model') {
-      return `${signalsVar}->signals.${safeName}`
+      return `${signalsVar}->signals.${memberName}`
     } else {
       // For backward compatibility with other uses
-      return `${signalsVar}.${safeName}`
+      return `${signalsVar}.${memberName}`
     }
   }
 
@@ -442,7 +455,7 @@ export class AlgebraicEvaluator {
     const types: string[] = []
 
     // Find all connections to this block, sorted by target port index
-    // Filter out special ports (negative indices: -1 enable, -2 reset, -3 init)
+    // Filter out special control ports (negative indices: -1 enable, -2 reset)
     const connections = this.model.connections
       .filter(c => c.targetBlockId === block.originalId && c.targetPortIndex >= 0)
       .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
@@ -450,6 +463,56 @@ export class AlgebraicEvaluator {
     for (const connection of connections) {
       const sourceType = this.typeMap.get(connection.sourceBlockId) || 'double'
       types.push(sourceType)
+    }
+
+    return types
+  }
+
+  /**
+   * Build integrator codegen inputs:
+   *   [0] derivative (port 0)
+   *   [1] x(0) when showInitPort (port 1)
+   *   [last] reset control when showResetInput (port -2)
+   */
+  private getIntegratorInputExpressions(block: FlattenedBlock): string[] {
+    const showInitPort = !!block.block.parameters?.showInitPort
+    const showResetInput = !!block.block.parameters?.showResetInput
+    const inputs: string[] = []
+
+    // Port 0: derivative
+    inputs.push(this.getInputExpressionForPort(block, 0) || '0.0')
+
+    // Port 1: x(0) external IC
+    if (showInitPort) {
+      inputs.push(this.getInputExpressionForPort(block, 1) || '0.0')
+    }
+
+    // Control port -2: reset (rising edge)
+    if (showResetInput) {
+      inputs.push(this.getInputExpressionForPort(block, -2) || '0')
+    }
+
+    return inputs
+  }
+
+  /**
+   * Input types for integrator data ports only (derivative, optional x(0)).
+   * Reset is control and not used for type propagation.
+   */
+  private getIntegratorInputTypes(block: FlattenedBlock): string[] {
+    const showInitPort = !!block.block.parameters?.showInitPort
+    const types: string[] = []
+
+    const derivConn = this.model.connections.find(
+      c => c.targetBlockId === block.originalId && c.targetPortIndex === 0
+    )
+    types.push(derivConn ? (this.typeMap.get(derivConn.sourceBlockId) || 'double') : 'double')
+
+    if (showInitPort) {
+      const initConn = this.model.connections.find(
+        c => c.targetBlockId === block.originalId && c.targetPortIndex === 1
+      )
+      types.push(initConn ? (this.typeMap.get(initConn.sourceBlockId) || 'double') : 'double')
     }
 
     return types

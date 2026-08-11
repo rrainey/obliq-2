@@ -123,14 +123,55 @@ export function getDefaultBlockParameters(blockType: string): Record<string, any
     case BlockTypes.LIMIT:
       return { lowerLimit: -1, upperLimit: 1 };
 
+    case BlockTypes.RELAY:
+      return {
+        onThreshold: 0,
+        offThreshold: 0,
+        onOutput: 1,
+        offOutput: 0,
+        initialOn: false
+      };
+
+    case BlockTypes.RATE_LIMITER:
+      return {
+        risingSlewLimit: 1,
+        fallingSlewLimit: -1,
+        initialOutput: 0
+      };
+
+    case BlockTypes.QUANTIZER:
+      return { quantum: 1 };
+
+    case BlockTypes.SELECTOR:
+      return { indices: [0] };
+
+    case BlockTypes.DATA_STORE_WRITE:
+      return { storeName: 'store', dataType: 'double', initialValue: '0' };
+
+    case BlockTypes.DATA_STORE_READ:
+      return { storeName: 'store', dataType: 'double' };
+
+    case BlockTypes.EDGE_DETECT:
+      return { edge: 'rising', threshold: 0.5 };
+
+    case BlockTypes.ATMOSPHERE:
+      return { model: 'coesa1976', extrapolation: 'clamp' };
+
     case BlockTypes.INTEGRATOR:
       return {
         initialValue: 0,
+        showInitPort: false,
         showEnableInput: false,
         showResetInput: false,
         useLimits: false,
         lowerLimit: -Infinity,
         upperLimit: Infinity
+      };
+
+    case BlockTypes.UNIT_DELAY:
+      return {
+        initialValue: 0,
+        sampleInterval: 0
       };
 
     case BlockTypes.TRANSFER_FUNCTION:
@@ -202,6 +243,10 @@ export function getDefaultBlockParameters(blockType: string): Record<string, any
       return {
         numInputs: 2
       };
+
+    case BlockTypes.DIVIDE:
+    case BlockTypes.SIGN:
+      return {};
 
     case BlockTypes.TRIG:
       return {

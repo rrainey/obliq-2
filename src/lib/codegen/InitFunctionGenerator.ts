@@ -55,6 +55,9 @@ export class InitFunctionGenerator {
     // Initialize all structures to zero
     code += this.generateStructureInit()
 
+    // Initialize data store non-zero initial values (after memset zeros)
+    code += this.generateDataStoreInit()
+
     // Initialize segregated subsystems
     code += this.generateSubsystemInit()
 
@@ -104,8 +107,37 @@ export class InitFunctionGenerator {
     memset(&model->outputs, 0, sizeof(model->outputs));
     memset(&model->signals, 0, sizeof(model->signals));
     memset(&model->states, 0, sizeof(model->states));
+    memset(&model->data_stores, 0, sizeof(model->data_stores));
 
 `
+  }
+
+  /**
+   * Initialize data stores with declared initial values (skip pure zeros already set by memset)
+   */
+  private generateDataStoreInit(): string {
+    const stores = this.model.dataStores || []
+    if (stores.length === 0) return ''
+
+    let code = '    /* Initialize data stores */\n'
+    for (const store of stores) {
+      const init = (store.initialValue ?? '0').trim()
+      if (init === '0' || init === '0.0' || init === '{0}') {
+        continue // already zeroed
+      }
+      const safe = CCodeBuilder.sanitizeIdentifier(store.name)
+      // Scalar or C99 compound literal assignment
+      if (init.startsWith('{')) {
+        code += `    {\n`
+        code += `        ${store.dataType || 'double'} ${safe}_init = ${init};\n`
+        code += `        memcpy(&model->data_stores.${safe}, &${safe}_init, sizeof(model->data_stores.${safe}));\n`
+        code += `    }\n`
+      } else {
+        code += `    model->data_stores.${safe} = ${init};\n`
+      }
+    }
+    code += '\n'
+    return code
   }
 
   /**
@@ -163,13 +195,23 @@ export class InitFunctionGenerator {
         if (generator.generateInitialization) {
           const outputType = this.getBlockOutputType(block)
 
-          // Check for init port connection (port index -3) for integrator blocks
+          // Check for x(0) data port connection (port index 1) for integrator blocks
           let initSignalExpr: string | undefined
           if (block.block.type === 'integrator' && block.block.parameters?.showInitPort) {
             initSignalExpr = this.getInitPortSignalExpr(block)
           }
 
-          const initCode = generator.generateInitialization(block.block, outputType, initSignalExpr)
+          // Use flattened name so nested subsystem states match the header
+          // (e.g. S_IB_Stage_propellant_used_states, not propellant_used_states)
+          const blockWithFlattenedName = {
+            ...block.block,
+            name: block.flattenedName
+          }
+          const initCode = generator.generateInitialization(
+            blockWithFlattenedName,
+            outputType,
+            initSignalExpr
+          )
           if (initCode && initCode.trim()) {
             if (!hasBlockInit) {
               code += '    /* Initialize block-specific states */\n'
@@ -201,12 +243,12 @@ export class InitFunctionGenerator {
   }
 
   /**
-   * Get the C expression for a signal connected to an integrator's init port (port -3)
+   * Get the C expression for a signal connected to an integrator's x(0) data port (port 1)
    */
   private getInitPortSignalExpr(block: typeof this.model.blocks[0]): string | undefined {
-    // Find connection to port -3 (init port) for this block
+    // x(0) is a normal left-side data port at index 1 (not a control port)
     const initConnection = this.model.connections.find(c =>
-      c.targetBlockId === block.originalId && c.targetPortIndex === -3
+      c.targetBlockId === block.originalId && c.targetPortIndex === 1
     )
 
     if (!initConnection) {

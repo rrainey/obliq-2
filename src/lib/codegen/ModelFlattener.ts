@@ -5,6 +5,7 @@ import { WireData } from '@/components/Wire'
 import { Sheet } from '@/lib/simulationTypes'
 import { CCodeBuilder } from '@/lib/codegen/CCodeBuilder'
 import { ModelParameter } from '@/lib/modelSchema'
+import { DataStoreDeclaration, collectDataStores } from '@/lib/dataStoreUtils'
 import { SubsystemInfo, SubsystemPort } from './SubsystemInfo'
 import { TypePropagator } from './TypePropagator'
 /**
@@ -91,6 +92,9 @@ export interface FlattenedModel {
 
   /** Global model parameters (Feature 3) */
   parameters: ModelParameter[]
+
+  /** Model-scoped data stores (shared named signals) */
+  dataStores?: DataStoreDeclaration[]
 
   /** Model metadata */
   metadata: {
@@ -1041,7 +1045,12 @@ export class ModelFlattener {
   /**
    * Main method to flatten a complete model
    */
-  flattenModel(sheets: Sheet[], modelName: string = 'model', parameters: ModelParameter[] = []): FlatteningResult {
+  flattenModel(
+    sheets: Sheet[],
+    modelName: string = 'model',
+    parameters: ModelParameter[] = [],
+    explicitDataStores: DataStoreDeclaration[] = []
+  ): FlatteningResult {
     // Validate input
     if (!sheets || !Array.isArray(sheets)) {
       throw new Error('Invalid sheets parameter: expected array of sheets')
@@ -1093,7 +1102,11 @@ export class ModelFlattener {
       Math.max(max, block.subsystemPath.length), 0
     )
     
-    // Step 7: Create the flattened model
+    // Step 7: Collect model-scoped data stores from declarations + blocks
+    // Include all blocks (before filtering labels) so write/read inside sheets are found
+    const dataStores = collectDataStores(blocks, explicitDataStores)
+
+    // Step 8: Create the flattened model
     const flattenedModel: FlattenedModel = {
       blocks: finalBlocks,
       connections: resolvedConnections,
@@ -1102,6 +1115,7 @@ export class ModelFlattener {
       subsystemEnableInfo: this.subsystemEnableInfo,
       segregatedSubsystems: this.segregatedSubsystems,
       parameters, // Feature 3: Include model parameters
+      dataStores,
       metadata: {
         modelName,
         totalBlocks: finalBlocks.length,

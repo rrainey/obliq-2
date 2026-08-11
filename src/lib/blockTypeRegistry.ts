@@ -24,14 +24,17 @@ export const BlockTypes = {
   // Math blocks
   SUM: 'sum',
   MULTIPLY: 'multiply',
+  DIVIDE: 'divide',
   SCALE: 'scale',
   ABS: 'abs',
   UMINUS: 'uminus',
+  SIGN: 'sign',
   EVALUATE: 'evaluate',
   
   // Dynamic blocks
   TRANSFER_FUNCTION: 'transfer_function',
   DISCRETE_TRANSFORM: 'discrete_transform',
+  UNIT_DELAY: 'unit_delay',
   
   // Lookup blocks
   LOOKUP_1D: 'lookup_1d',
@@ -64,16 +67,29 @@ export const BlockTypes = {
   IF: 'if',
   CONDITION: 'condition',
 
-  // Limit block
+  // Limit / discontinuities
   LIMIT: 'limit',
+  RELAY: 'relay',
+  RATE_LIMITER: 'rate_limiter',
+  QUANTIZER: 'quantizer',
+  SELECTOR: 'selector',
+  DATA_STORE_WRITE: 'data_store_write',
+  DATA_STORE_READ: 'data_store_read',
 
   // Integrator block
   INTEGRATOR: 'integrator',
+
+  // Unit delay (also registered under Dynamic)
+  // UNIT_DELAY defined above with Dynamic blocks
 
   // Aerospace blocks
   ORIENTATION_CONVERSION: 'orientation_conversion',
   UNITS_CONVERSION: 'units_conversion',
   BODY2QUATERNION_RATES: 'body2quaternion_rates',
+  ATMOSPHERE: 'atmosphere',
+
+  // Discrete events
+  EDGE_DETECT: 'edge_detect',
 
   // Annotation blocks
   COMMENT: 'comment',
@@ -162,6 +178,19 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     ],
     outputs: [{ name: 'output' }],
     description: 'Multiplies multiple input signals'
+  },
+
+  [BlockTypes.DIVIDE]: {
+    type: BlockTypes.DIVIDE,
+    displayName: 'Divide',
+    category: 'Math',
+    defaultParameters: {},
+    inputs: [
+      { name: 'num' },
+      { name: 'den' }
+    ],
+    outputs: [{ name: 'out' }],
+    description: 'Element-wise division (num/den). Denominator may be scalar broadcast onto vector/matrix numerator.'
   },
   
   [BlockTypes.SCALE]: {
@@ -505,6 +534,16 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     description: 'Negates input (element-wise for vectors/matrices)'
   },
 
+  [BlockTypes.SIGN]: {
+    type: BlockTypes.SIGN,
+    displayName: 'Sign',
+    category: 'Math',
+    defaultParameters: {},
+    inputs: [{ name: 'in' }],
+    outputs: [{ name: 'out' }],
+    description: 'Signum function: −1, 0, or +1 (element-wise for vectors/matrices)'
+  },
+
   [BlockTypes.LIMIT]: {
     type: BlockTypes.LIMIT,
     displayName: 'Limit',
@@ -518,21 +557,116 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     description: 'Limits (clamps) signal values to specified range'
   },
 
+  [BlockTypes.RELAY]: {
+    type: BlockTypes.RELAY,
+    displayName: 'Relay',
+    category: 'Discontinuities',
+    defaultParameters: {
+      onThreshold: 0,
+      offThreshold: 0,
+      onOutput: 1,
+      offOutput: 0,
+      initialOn: false
+    },
+    inputs: [{ name: 'in' }],
+    outputs: [{ name: 'out' }],
+    description: 'Hysteresis switch: on when u ≥ onThreshold, off when u ≤ offThreshold'
+  },
+
+  [BlockTypes.RATE_LIMITER]: {
+    type: BlockTypes.RATE_LIMITER,
+    displayName: 'Rate Limiter',
+    category: 'Discontinuities',
+    defaultParameters: {
+      risingSlewLimit: 1,
+      fallingSlewLimit: -1,
+      initialOutput: 0
+    },
+    inputs: [{ name: 'in' }],
+    outputs: [{ name: 'out' }],
+    description: 'Limits rate of change of the output (units/sec) using simulation dt'
+  },
+
+  [BlockTypes.QUANTIZER]: {
+    type: BlockTypes.QUANTIZER,
+    displayName: 'Quantizer',
+    category: 'Discontinuities',
+    defaultParameters: {
+      quantum: 1
+    },
+    inputs: [{ name: 'in' }],
+    outputs: [{ name: 'out' }],
+    description: 'Rounds input to nearest multiple of quantum (element-wise)'
+  },
+
+  [BlockTypes.SELECTOR]: {
+    type: BlockTypes.SELECTOR,
+    displayName: 'Selector',
+    category: 'Matrix',
+    defaultParameters: {
+      indices: [0]
+    },
+    inputs: [{ name: 'in' }],
+    outputs: [{ name: 'out' }],
+    description: 'Select vector elements by 0-based indices (scalar if one index)'
+  },
+
+  [BlockTypes.DATA_STORE_WRITE]: {
+    type: BlockTypes.DATA_STORE_WRITE,
+    displayName: 'Data Store Write',
+    category: 'Data',
+    defaultParameters: {
+      storeName: 'store',
+      dataType: 'double',
+      initialValue: '0'
+    },
+    inputs: [{ name: 'in' }],
+    outputs: [],
+    description: 'Write signal to model-scoped named data store (shared across sheets/subsystems)'
+  },
+
+  [BlockTypes.DATA_STORE_READ]: {
+    type: BlockTypes.DATA_STORE_READ,
+    displayName: 'Data Store Read',
+    category: 'Data',
+    defaultParameters: {
+      storeName: 'store',
+      dataType: 'double'
+    },
+    inputs: [],
+    outputs: [{ name: 'out' }],
+    description: 'Read model-scoped named data store'
+  },
+
   [BlockTypes.INTEGRATOR]: {
     type: BlockTypes.INTEGRATOR,
     displayName: 'Integrator',
     category: 'Dynamic',
     defaultParameters: {
       initialValue: 0,
+      showInitPort: false,
       showEnableInput: false,
       showResetInput: false,
       useLimits: false,
       upperLimit: Infinity,
       lowerLimit: -Infinity
     },
-    inputs: [{ name: 'input' }],
+    inputs: [{ name: 'Derivative' }],
     outputs: [{ name: 'output' }],
-    description: 'Integrator block (equivalent to 1/s transfer function)'
+    description: 'Integrator block (equivalent to 1/s transfer function). Optional x(0) left-side data port for external IC; enable (top) and reset (bottom) control ports.'
+  },
+
+  [BlockTypes.UNIT_DELAY]: {
+    type: BlockTypes.UNIT_DELAY,
+    displayName: 'Unit Delay',
+    category: 'Dynamic',
+    defaultParameters: {
+      initialValue: 0,
+      sampleInterval: 0
+    },
+    inputs: [{ name: 'in' }],
+    outputs: [{ name: 'out' }],
+    description: 'Unit delay (z⁻¹): output is the previous sample of the input. sampleInterval 0 = every step.'
   },
 
   [BlockTypes.ORIENTATION_CONVERSION]: {
@@ -562,6 +696,37 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [{ name: 'input' }],
     outputs: [{ name: 'output' }],
     description: 'Converts between SI and American/Imperial engineering units'
+  },
+
+  [BlockTypes.EDGE_DETECT]: {
+    type: BlockTypes.EDGE_DETECT,
+    displayName: 'Edge Detect',
+    category: 'Discontinuities',
+    defaultParameters: {
+      edge: 'rising',
+      threshold: 0.5
+    },
+    inputs: [{ name: 'in' }],
+    outputs: [{ name: 'pulse' }],
+    description: 'One-step pulse on rising/falling/either edge (for engine start timers)'
+  },
+
+  [BlockTypes.ATMOSPHERE]: {
+    type: BlockTypes.ATMOSPHERE,
+    displayName: 'Atmosphere',
+    category: 'Aerospace',
+    defaultParameters: {
+      model: 'coesa1976',
+      extrapolation: 'clamp'
+    },
+    inputs: [{ name: 'altitude_m' }],
+    outputs: [
+      { name: 'temperature_K' },
+      { name: 'pressure_Pa' },
+      { name: 'density_kgpm3' },
+      { name: 'speed_of_sound_mps' }
+    ],
+    description: '1976 COESA atmosphere: T, P, ρ, a vs geometric altitude (m)'
   },
 
   [BlockTypes.BODY2QUATERNION_RATES]: {

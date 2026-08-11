@@ -38,7 +38,16 @@ import SumConfig from '@/components/SumConfig'
 import ConditionConfig from '@/components/ConditionConfig'
 import EvaluateConfig from '@/components/EvaluateConfig'
 import LimitConfig from '@/components/LimitConfig'
+import RelayConfig from '@/components/RelayConfig'
+import RateLimiterConfig from '@/components/RateLimiterConfig'
+import QuantizerConfig from '@/components/QuantizerConfig'
+import SelectorConfig from '@/components/SelectorConfig'
+import DataStoreWriteConfig from '@/components/DataStoreWriteConfig'
+import DataStoreReadConfig from '@/components/DataStoreReadConfig'
+import EdgeDetectConfig from '@/components/EdgeDetectConfig'
+import AtmosphereConfig from '@/components/AtmosphereConfig'
 import IntegratorConfig from '@/components/IntegratorConfig'
+import UnitDelayConfig from '@/components/UnitDelayConfig'
 import OrientationConversionConfig from '@/components/OrientationConversionConfig'
 import UnitsConversionConfig from '@/components/UnitsConversionConfig'
 import CommentConfig from '@/components/CommentConfig'
@@ -104,7 +113,7 @@ interface ModelEditorPageProps {
 }
 
 export default function ModelEditorPage({ params }: ModelEditorPageProps) {
-  const { user, loading } = useUser()
+  const { user, session, loading } = useUser()
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -756,24 +765,28 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     
     // Save current sheet data first
     saveCurrentSheetData()
-    
-    // Create the model data structure
+
+    // Match fixture / import format (schema 2.2: parameters + dataStores)
+    const timeStep = parseFloat(simulationSettings.timeStep)
+    const duration = parseFloat(simulationSettings.duration)
     const exportData = {
       name: model.name,
       version: currentVersion,
       created: model.created_at,
       updated: model.updated_at,
       data: {
-        version: '2.1', // Current schema version with parameter support
+        version: '2.2',
         metadata: {
           created: new Date().toISOString(),
           description: `Exported from obliq-2 on ${new Date().toLocaleDateString()}`
         },
         sheets,
-        parameters, // Feature 3: Include model parameters
+        parameters,
+        dataStores: [],
         globalSettings: {
-          simulationTimeStep: 0.01,
-          simulationDuration: 10
+          simulationTimeStep: Number.isFinite(timeStep) ? timeStep : 0.01,
+          simulationDuration: Number.isFinite(duration) ? duration : 10,
+          integrationAlgorithm: simulationSettings.integrationAlgorithm || 'rk4'
         }
       }
     }
@@ -935,9 +948,17 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         try {
           // Use version 0 (auto-save) if we just saved, otherwise latest version
           const versionToCompile = isDirty ? 0 : undefined
+          const compileHeaders: Record<string, string> = {
+            'Content-Type': 'application/json',
+          }
+          // Prefer explicit session JWT; cookie session is a server-side fallback
+          if (session?.access_token) {
+            compileHeaders['Authorization'] = `Bearer ${session.access_token}`
+          }
+
           const response = await fetch('/api/compile-wasm-stream', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: compileHeaders,
             body: JSON.stringify({
               modelId: model.id,
               version: versionToCompile,
@@ -947,7 +968,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           })
 
           if (!response.ok) {
-            throw new Error(`Compilation failed: ${response.status}`)
+            let detail = `Compilation failed: ${response.status}`
+            try {
+              const errBody = await response.json()
+              if (errBody?.error) detail = errBody.error
+            } catch {
+              /* ignore non-JSON error bodies */
+            }
+            throw new Error(detail)
           }
 
           // Read the SSE stream to get the result
@@ -1292,11 +1320,16 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       // Save current work before generating code
       saveCurrentSheetData()
 
+      const genHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      if (session?.access_token) {
+        genHeaders['Authorization'] = `Bearer ${session.access_token}`
+      }
+
       const response = await fetch('/api/generate-code', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: genHeaders,
         body: JSON.stringify({
           modelId: model.id,
           version: currentVersion
@@ -1304,7 +1337,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.error || 'Code generation failed')
       }
 
@@ -1350,7 +1383,16 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'source' ||
       block.type === 'scale' ||
       block.type === 'limit' ||
+      block.type === 'relay' ||
+      block.type === 'rate_limiter' ||
+      block.type === 'quantizer' ||
+      block.type === 'selector' ||
+      block.type === 'data_store_write' ||
+      block.type === 'data_store_read' ||
+      block.type === 'edge_detect' ||
+      block.type === 'atmosphere' ||
       block.type === 'integrator' ||
+      block.type === 'unit_delay' ||
       block.type === 'transfer_function' ||
       block.type === 'discrete_transform' ||
       block.type === 'subsystem' ||
@@ -2044,8 +2086,71 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onClose={() => setConfigBlock(null)}
             />
           )}
+          {configBlock.type === 'relay' && (
+            <RelayConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'rate_limiter' && (
+            <RateLimiterConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'quantizer' && (
+            <QuantizerConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'selector' && (
+            <SelectorConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'data_store_write' && (
+            <DataStoreWriteConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'data_store_read' && (
+            <DataStoreReadConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'edge_detect' && (
+            <EdgeDetectConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'atmosphere' && (
+            <AtmosphereConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
           {configBlock.type === 'integrator' && (
             <IntegratorConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'unit_delay' && (
+            <UnitDelayConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

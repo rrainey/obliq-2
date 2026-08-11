@@ -325,7 +325,8 @@ export const useModelStore = create<ModelStore>()(
             simulationDuration: globalSettings?.simulationDuration ?? 10.0,
             integrationAlgorithm: globalSettings?.integrationAlgorithm ?? 'rk4'
           },
-          parameters: updatedState.parameters  // Feature 1: Include parameters
+          parameters: updatedState.parameters,  // Feature 1: Include parameters
+          dataStores: (updatedState as any).dataStores || []
         }
 
         // Get the next version number

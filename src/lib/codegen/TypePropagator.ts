@@ -44,59 +44,96 @@ export class TypePropagator {
     
     // Calculate execution order for type propagation
     const executionOrder = this.calculateExecutionOrder()
-    
-    // Second pass: Propagate types through the execution order
-    for (const block of executionOrder) {
-      if (block.block.type === 'input_port' || block.block.type === 'source') {
-        continue // Already handled
-      }
 
-      // Special handling for segregated subsystems
-      // Their output types are determined by internal type propagation, not by the block module
-      if (block.isSegregated && block.block.type === 'subsystem') {
-        const subInfo = this.model.segregatedSubsystems?.find(
-          sub => sub.subsystemId === block.originalId
-        )
-        if (subInfo && subInfo.outputPorts.length > 0) {
-          // For subsystems with single output, use that type
-          // For multiple outputs, store first type (connections use port index)
-          const outputType = subInfo.outputPorts[0].dataType
-          if (isValidType(outputType)) {
-            this.blockOutputTypes.set(block.originalId, normalizeType(outputType))
-          } else {
+    // Multiple passes: integrators break loops and may only know x(0) on the first
+    // pass; once q is typed, body2quaternion_rates etc. refine on later passes.
+    const maxPasses = Math.max(3, this.model.blocks.length)
+    for (let pass = 0; pass < maxPasses; pass++) {
+      let changed = false
+
+      for (const block of executionOrder) {
+        if (block.block.type === 'input_port' || block.block.type === 'source') {
+          continue // Already handled
+        }
+
+        // Special handling for segregated subsystems
+        // Their output types are determined by internal type propagation, not by the block module
+        if (block.isSegregated && block.block.type === 'subsystem') {
+          const subInfo = this.model.segregatedSubsystems?.find(
+            sub => sub.subsystemId === block.originalId
+          )
+          if (subInfo && subInfo.outputPorts.length > 0) {
+            // For subsystems with single output, use that type
+            // For multiple outputs, store first type (connections use port index)
+            const outputType = subInfo.outputPorts[0].dataType
+            if (isValidType(outputType)) {
+              const next = normalizeType(outputType)
+              if (this.blockOutputTypes.get(block.originalId) !== next) {
+                this.blockOutputTypes.set(block.originalId, next)
+                changed = true
+              }
+            } else if (!this.blockOutputTypes.has(block.originalId)) {
+              this.blockOutputTypes.set(block.originalId, 'double')
+              changed = true
+            }
+          } else if (!this.blockOutputTypes.has(block.originalId)) {
             this.blockOutputTypes.set(block.originalId, 'double')
+            changed = true
           }
-        } else {
-          this.blockOutputTypes.set(block.originalId, 'double')
+          continue
         }
-        continue
-      }
 
-      // Get input types for this block
-      const inputTypes = this.getBlockInputTypes(block)
+        // Get input types for this block
+        const inputTypes = this.getBlockInputTypes(block)
 
-      // Skip if block type is not supported
-      if (!BlockModuleFactory.isSupported(block.block.type)) {
-        continue
-      }
-
-      try {
-        const module1 = BlockModuleFactory.getBlockModule(block.block.type)
-        const outputType = module1.getOutputType(block.block, inputTypes)
-
-        // Sink blocks (signal_logger, signal_display) have void output type - this is valid
-        if (outputType === 'void') {
-          this.blockOutputTypes.set(block.originalId, 'void')
-        } else if (isValidType(outputType)) {
-          this.blockOutputTypes.set(block.originalId, normalizeType(outputType))
-        } else {
-          console.warn(`Invalid output type for block ${block.block.name}: ${outputType}`)
-          this.blockOutputTypes.set(block.originalId, 'double')
+        // Skip if block type is not supported
+        if (!BlockModuleFactory.isSupported(block.block.type)) {
+          continue
         }
-      } catch (error) {
-        console.warn(`Failed to determine output type for block ${block.block.name}:`, error)
-        this.blockOutputTypes.set(block.originalId, 'double') // Default
+
+        try {
+          const module1 = BlockModuleFactory.getBlockModule(block.block.type)
+          const outputType = module1.getOutputType(block.block, inputTypes)
+
+          // Sink blocks (signal_logger, signal_display) have void output type - this is valid
+          let next: string | null = null
+          if (outputType === 'void') {
+            next = 'void'
+          } else if (isValidType(outputType)) {
+            next = normalizeType(outputType)
+          } else {
+            console.warn(`Invalid output type for block ${block.block.name}: ${outputType}`)
+            next = 'double'
+          }
+
+          if (next) {
+            const prev = this.blockOutputTypes.get(block.originalId)
+            if (!prev) {
+              this.blockOutputTypes.set(block.originalId, next)
+              changed = true
+            } else if (prev !== next) {
+              // Prefer dimensional types over a poisoned scalar default; never
+              // downgrade matrix/vector → plain double.
+              const prevDim = prev.includes('[')
+              const nextDim = next.includes('[')
+              if (prevDim && !nextDim) {
+                // keep dimensional
+              } else {
+                this.blockOutputTypes.set(block.originalId, next)
+                changed = true
+              }
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to determine output type for block ${block.block.name}:`, error)
+          if (!this.blockOutputTypes.has(block.originalId)) {
+            this.blockOutputTypes.set(block.originalId, 'double') // Default
+            changed = true
+          }
+        }
       }
+
+      if (!changed) break
     }
     
     return this.blockOutputTypes
@@ -110,21 +147,30 @@ export class TypePropagator {
   }
   
   /**
-   * Get input types for a block based on its connections
+   * Get input types for a block based on its connections.
+   * Indexed by target port index (sparse holes are empty string if unconnected/untyped).
+   * Does NOT invent 'double' for unknown sources — that poisons matrix integrators in loops.
    */
   private getBlockInputTypes(block: FlattenedBlock): string[] {
-    const types: string[] = []
-    
-    // Find all connections to this block, sorted by target port index
+    // Data ports only (index >= 0). Control ports (-1 enable, -2 reset) are excluded.
     const connections = this.model.connections
-      .filter(c => c.targetBlockId === block.originalId)
+      .filter(c => c.targetBlockId === block.originalId && c.targetPortIndex >= 0)
       .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
-    
-    for (const connection of connections) {
-      const sourceType = this.blockOutputTypes.get(connection.sourceBlockId) || 'double'
-      types.push(sourceType)
+
+    let maxPort = -1
+    for (const c of connections) {
+      if (c.targetPortIndex > maxPort) maxPort = c.targetPortIndex
     }
-    
+
+    const types: string[] = Array.from({ length: maxPort + 1 }, () => '')
+
+    for (const connection of connections) {
+      const sourceType = this.blockOutputTypes.get(connection.sourceBlockId)
+      if (sourceType) {
+        types[connection.targetPortIndex] = sourceType
+      }
+    }
+
     return types
   }
   

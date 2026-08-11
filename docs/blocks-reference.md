@@ -3,6 +3,7 @@
 ## Table of Contents
 - [Mathematical Operations](#mathematical-operations)
 - [Dynamic Systems](#dynamic-systems)
+  - Integrator, Unit Delay, Transfer Function
 - [Input/Output](#inputoutput)
 - [Signal Display](#signal-display)
 - [Lookup Tables](#lookup-tables)
@@ -43,6 +44,29 @@
 
 ---
 
+### Divide Block
+**Purpose**: Element-wise division of two inputs (`num / den`).
+
+**Parameters**: None
+
+**Ports**:
+- `num` (port 0): Numerator
+- `den` (port 1): Denominator
+
+**Signal Compatibility**:
+- Same shape T / T → T
+- Vector or matrix / scalar → numerator shape (scalar denominator broadcast)
+- Scalar / vector or matrix → **invalid**
+- Output: Same base type as numerator
+
+**Notes**:
+- IEEE division-by-zero behavior (no trap / saturation in v1)
+- Direct feedthrough
+
+**Example**: Gravity-style `mu * r_vec / r_mag` uses multiply + divide with scalar denominator.
+
+---
+
 ### Scale Block
 **Purpose**: Multiplies the input signal by a constant factor.
 
@@ -76,6 +100,22 @@
 - Output: Same type as input
 
 **Note**: For vectors and matrices, negation is applied element-wise.
+
+---
+
+### Sign Block
+**Purpose**: Signum function (element-wise).
+
+**Parameters**: None
+
+**Semantics**:
+- `y = 1` if `u > 0`
+- `y = -1` if `u < 0`
+- `y = 0` if `u == 0`
+
+**Signal Compatibility**:
+- Input: Any numeric type (scalar, vector, or matrix)
+- Output: Same type as input
 
 ---
 
@@ -118,6 +158,109 @@
 
 ---
 
+## Discontinuities
+
+### Relay Block
+**Purpose**: Hysteresis (Schmitt) switch for rate modulators and bang-bang control.
+
+**Parameters**:
+- `onThreshold` (number): Switch ON when `u ≥ onThreshold`
+- `offThreshold` (number): Switch OFF when `u ≤ offThreshold` (must be ≤ onThreshold)
+- `onOutput` / `offOutput` (number): Output levels (default 1 / 0)
+- `initialOn` (boolean): Initial hysteresis state
+
+**Algorithm**: Between thresholds the previous ON/OFF state is held.
+
+**Signal Compatibility**: Scalar numeric only (v1). Direct feedthrough — use `unit_delay` in feedback to avoid algebraic loops.
+
+---
+
+### Rate Limiter Block
+**Purpose**: Limits how fast the output may change (command rate limiting).
+
+**Parameters**:
+- `risingSlewLimit` (number, > 0): Maximum positive dy/dt (units/sec)
+- `fallingSlewLimit` (number, < 0): Minimum (most negative) dy/dt
+- `initialOutput` (number): Output at t = 0
+
+**Algorithm** (fixed-step `model->dt`):
+```
+delta = clamp(u - y_prev, fallingSlewLimit*dt, risingSlewLimit*dt)
+y = y_prev + delta
+```
+
+**Signal Compatibility**: Scalar numeric only (v1).
+
+---
+
+### Quantizer Block
+**Purpose**: Round to nearest multiple of a step size (sensor / D-A quantization).
+
+**Parameters**:
+- `quantum` (number, > 0): Quantization step
+
+**Semantics**: `y = quantum * floor(u / quantum + 0.5)` (element-wise for vectors/matrices)
+
+**Signal Compatibility**: Any numeric type; output matches input type.
+
+---
+
+### Edge Detect Block
+**Purpose**: Emit a one-step pulse when the input crosses a threshold (engine start / stage timers).
+
+**Parameters**:
+- `edge` (`rising` | `falling` | `either`): which transitions produce a pulse
+- `threshold` (number, default 0.5): input is high when ≥ threshold
+
+**Output**: `double` 1.0 for one simulation step on edge, else 0.0
+
+**State**: previous high/low for edge detection
+
+**Typical use**: pulse → integrator **reset** (start integrating), or capture clock into unit_delay for “time since start”.
+
+---
+
+## Matrix / Signal Plumbing
+
+### Selector Block
+**Purpose**: Select elements from a vector by 0-based indices (v1: vector only).
+
+**Parameters**:
+- `indices` (number[]): e.g. `[0, 2]` picks first and third elements
+
+**Output type**:
+- One index → scalar
+- K indices → `double[K]` (same base type as input)
+
+**Notes**: Direct feedthrough. Out-of-range indices fail type/connection validation when input size is known.
+
+---
+
+## Data Stores (model-scoped)
+
+Shared named signals across the entire model hierarchy (not limited to one sheet like sheet labels). Used for IGM modes, timers, shared navigation state.
+
+### Data Store Write
+**Purpose**: Write input into `model->data_stores.<storeName>`.
+
+**Parameters**:
+- `storeName` (string): Valid C identifier
+- `dataType` (string): Declared type (codegen prefers live input type)
+- `initialValue` (string): C99 initializer at t=0
+
+**Ports**: One input, no outputs (sink).
+
+### Data Store Read
+**Purpose**: Read `model->data_stores.<storeName>` into an output signal.
+
+**Parameters**:
+- `storeName` (string)
+- `dataType` (string): Output type (should match the write)
+
+**Semantics**: Same-step write→read works if the write block is ordered first (topological). Otherwise the previous step / initial value is read. Avoid write↔read algebraic loops without a unit delay.
+
+---
+
 ## Dynamic Systems
 
 ### Transfer Function Block
@@ -137,6 +280,60 @@
 - State variables are maintained separately for each element
 
 **Example**: H(s) = (s + 2)/(s² + 3s + 1) has numerator [1, 2] and denominator [1, 3, 1]
+
+---
+
+### Integrator Block
+**Purpose**: Continuous-time integrator (equivalent to 1/s). Integration method (Euler/RK4) is selected at the model level.
+
+**Data ports** (left edge, index ≥ 0):
+| Port | Index | When |
+|------|-------|------|
+| Derivative | 0 | Always |
+| x(0) | 1 | When `showInitPort` is true |
+
+**Control ports** (visual placement only; negative indices):
+| Port | Index | Placement | When |
+|------|-------|-----------|------|
+| Enable | −1 | Top | `showEnableInput` |
+| Reset | −2 | Bottom | `showResetInput` (rising edge) |
+
+**Parameters**:
+- `initialValue` (number): State at t=0 when x(0) is not shown
+- `showInitPort` (boolean): Expose left-side x(0) data port for external IC
+- `showEnableInput` / `showResetInput` (boolean): Control ports
+- `useLimits`, `lowerLimit`, `upperLimit`: Optional saturation
+
+**Initial condition and reset semantics**:
+- At t=0 with `showInitPort`: state ← connected x(0) signal, or **0** if unconnected
+- At t=0 without `showInitPort`: state ← `initialValue`
+- On rising-edge **reset** with `showInitPort`: state ← **current** x(0) signal (re-sampled)
+- On rising-edge **reset** without `showInitPort`: state ← `initialValue`
+
+**Signal Compatibility**:
+- Derivative and x(0) (if present): same numeric type (scalar, vector, or matrix)
+- Output: same type as derivative input
+- **No direct feedthrough** (breaks algebraic loops through the derivative path)
+
+---
+
+### Unit Delay Block
+**Purpose**: Discrete unit delay (z⁻¹ / Memory). Output is the previous sample of the input.
+
+**Parameters**:
+- `initialValue` (number): Delayed output value at the first sample (t=0)
+- `sampleInterval` (number, seconds): `0` = update every simulation step; `>0` = hold and update on that period (same pattern as Discrete Transform)
+
+**Signal Compatibility**:
+- Input: Any numeric type (scalar, vector, or matrix)
+- Output: Same type as input
+- **No direct feedthrough** (classic algebraic-loop breaker)
+
+**Notes**:
+- State is updated during algebraic evaluation once per simulation step (not continuously integrated)
+- Useful for IGM history, last χ commands, and discrete feedback
+
+**Example**: Constant input u=1 with initialValue=0 yields y sequence 0, 1, 1, 1, … at successive steps.
 
 ---
 
@@ -400,6 +597,30 @@
 - Output: Same type as the connected sink's input
 
 **Note**: Source and sink pairs must be within the same subsystem scope.
+
+---
+
+### Atmosphere Block
+**Purpose**: 1976 COESA / US Standard Atmosphere vs geometric altitude.
+
+**Input**: `altitude_m` — geometric altitude above MSL (meters)
+
+**Outputs** (four scalar ports):
+| Port | Quantity |
+|------|----------|
+| 0 | `temperature_K` |
+| 1 | `pressure_Pa` |
+| 2 | `density_kgpm3` |
+| 3 | `speed_of_sound_mps` |
+
+**Parameters**:
+- `model`: `coesa1976` (embedded 0–80 km table) or `table` (custom breakpoints)
+- `extrapolation`: `clamp` (default) or `extrapolate`
+
+**Notes**:
+- Linear interpolation between table points
+- Build dynamic pressure as a subsystem: `q = 0.5 * density * mag(V_rel)^2`
+- Mach ≈ `mag(V) / speed_of_sound`
 
 ---
 

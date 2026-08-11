@@ -5,6 +5,7 @@ import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 import { EnableEvaluator } from './EnableEvaluator'
 import { SubsystemInfo } from './SubsystemInfo'
+import { getSignalMemberName } from './signalMemberName'
 
 /**
  * Generates derivatives function for stateful blocks
@@ -222,9 +223,15 @@ export class RK4Generator {
               }
             }
           } else {
-            const safeName = CCodeBuilder.sanitizeIdentifier(sourceBlock.block.name)
-            // Access signals via model pointer
-            inputExpr = `model->signals.${safeName}`
+            // Flattened name + multi-output port suffix (matches AlgebraicEvaluator)
+            const portIndex = inputConnections[0].sourcePortIndex
+            const member = getSignalMemberName(
+              sourceBlock.flattenedName,
+              sourceBlock.block.type,
+              portIndex,
+              sourceBlock.block
+            )
+            inputExpr = `model->signals.${member}`
           }
         }
       }
@@ -232,9 +239,15 @@ export class RK4Generator {
       // Get output type for the block
       const outputType = this.getBlockOutputType(block)
 
+      // Flattened name so state members match the header struct
+      const blockWithFlattenedName = {
+        ...block.block,
+        name: block.flattenedName
+      }
+
       // Call the module's generateStateDerivative method
       return generator.generateStateDerivative(
-        block.block,
+        blockWithFlattenedName,
         inputExpr,
         'current_states',
         outputType

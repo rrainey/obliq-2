@@ -3,14 +3,65 @@
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { areTypesCompatible, getTypeCompatibilityError, parseType, ParsedType, typeToString, isMatrixType, getMatrixDimensions } from './typeValidator'
+import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
 
 // Debug flag for verbose logging - set to true to enable detailed trace output
-const DEBUG_PROPAGATION = true
+const DEBUG_PROPAGATION = false
 
 function debugLog(...args: unknown[]) {
   if (DEBUG_PROPAGATION) {
     console.log('[SignalPropagation]', ...args)
   }
+}
+
+/**
+ * Blocks that hold state and commonly close feedback loops. Their output type can
+ * be resolved from an IC / x(0) port (or default double) without waiting for the
+ * derivative/input that often depends on this block's own output.
+ *
+ * transfer_function / discrete_transform are *not* seeded early — they wait for
+ * inputs so scalar float/double chains still preserve the driving type. They only
+ * use a double default if still untyped after propagation (see final pass).
+ */
+function isTypeLoopBreaker(blockType: string): boolean {
+  return blockType === 'integrator' || blockType === 'unit_delay'
+}
+
+function isDeferredStateBlock(blockType: string): boolean {
+  return (
+    blockType === 'transfer_function' ||
+    blockType === 'discrete_transform'
+  )
+}
+
+/**
+ * Whether a target block can be enqueued for type resolution given currently
+ * known input types.
+ */
+function canEnqueueForTypePropagation(
+  targetBlock: BlockData,
+  knownInputCount: number,
+  expectedInputCount: number
+): boolean {
+  if (knownInputCount >= expectedInputCount) return true
+  // Sinks and subsystems don't need full input resolution to be "processed"
+  if (
+    [
+      'signal_display',
+      'signal_logger',
+      'no_connection',
+      'output_port',
+      'sheet_label_sink',
+      'subsystem',
+    ].includes(targetBlock.type)
+  ) {
+    return true
+  }
+  // State blocks: can resolve with partial inputs (or none → default double)
+  if (isTypeLoopBreaker(targetBlock.type)) {
+    return true
+  }
+  return false
 }
 
 /**
@@ -74,17 +125,44 @@ function getBlockOutputType(block: BlockData): string | null {
     
     case 'sum':
     case 'multiply':
+    case 'divide':
     case 'scale':
     case 'limit':
     case 'integrator':
+    case 'unit_delay':
     case 'units_conversion':
     case 'transfer_function':
     case 'discrete_transform':
     case 'lookup_1d':
     case 'lookup_2d':
     case 'matrix_multiply':  // New: matrix multiply output depends on inputs
+    case 'sign':
+    case 'quantizer':
       // These blocks output type depends on their inputs
       // Will be determined during propagation
+      return null
+
+    case 'relay':
+    case 'rate_limiter':
+    case 'edge_detect':
+      // Scalar double outputs (v1)
+      return 'double'
+
+    case 'atmosphere':
+      // Multi-output scalars; first port type for map
+      return 'double'
+
+    case 'data_store_read':
+      return block.parameters?.dataType || 'double'
+
+    case 'data_store_write':
+    case 'signal_display':
+    case 'signal_logger':
+    case 'no_connection':
+      return null
+
+    case 'selector':
+      // Output type depends on indices + input — determined during propagation
       return null
 
     case 'evaluate':
@@ -151,6 +229,7 @@ function getBlockOutputType(block: BlockData): string | null {
     case 'if':
     case 'abs':
     case 'uminus':
+    case 'sign':
     case 'transpose':
       return null
 
@@ -162,14 +241,82 @@ function getBlockOutputType(block: BlockData): string | null {
 /**
  * Determines the output type for arithmetic and processing blocks based on input types
  */
+/**
+ * Prefer explicit per-port types for state blocks so x(0) can set the output
+ * type when the derivative is still unresolved (feedback loops).
+ */
+function getPortInputType(
+  block: BlockData,
+  portIndex: number,
+  wiresByTarget: Map<string, WireData[]>,
+  blockOutputTypes: BlockOutputTypes
+): string | null {
+  const targetKey = `${block.id}:${portIndex}`
+  const wires = wiresByTarget.get(targetKey) || []
+  for (const wire of wires) {
+    const sourceKey = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+    const sourceType = blockOutputTypes.get(sourceKey)
+    if (sourceType) return sourceType
+  }
+  return null
+}
+
+/**
+ * Resolve output type for integrator / unit_delay / transfer_function family.
+ * Uses derivative/input when known, else x(0)/IC, else default double.
+ */
+function determineStateBlockOutputType(
+  block: BlockData,
+  wiresByTarget: Map<string, WireData[]>,
+  blockOutputTypes: BlockOutputTypes
+): string {
+  if (block.type === 'integrator') {
+    const deriv = getPortInputType(block, 0, wiresByTarget, blockOutputTypes)
+    if (deriv) return deriv
+    if (block.parameters?.showInitPort) {
+      const ic = getPortInputType(block, 1, wiresByTarget, blockOutputTypes)
+      if (ic) return ic
+    }
+    return block.parameters?.dataType || 'double'
+  }
+  if (block.type === 'unit_delay') {
+    const input = getPortInputType(block, 0, wiresByTarget, blockOutputTypes)
+    if (input) return input
+    return block.parameters?.dataType || 'double'
+  }
+  // transfer_function / discrete_transform: match input when known
+  const input = getPortInputType(block, 0, wiresByTarget, blockOutputTypes)
+  if (input) return input
+  return block.parameters?.dataType || 'double'
+}
+
 function determineProcessingBlockOutputType(
   blockType: string,
-  inputTypes: string[]
+  inputTypes: string[],
+  block?: BlockData
 ): string | null {
-  if (inputTypes.length === 0) return null
+  // Fixed-output blocks (do not require typed inputs)
+  if (blockType === 'atmosphere') {
+    // All four ports are always scalar double (COESA / table)
+    return 'double'
+  }
+
+  // Filter empty placeholders from sparse port maps
+  const knownInputTypes = inputTypes.filter((t) => !!t && t.length > 0)
+
+  if (knownInputTypes.length === 0) {
+    if (blockType === 'data_store_read' && block) {
+      return block.parameters?.dataType || 'double'
+    }
+    // Integrator / unit_delay default to double when no inputs are typed yet
+    if (isTypeLoopBreaker(blockType) || isDeferredStateBlock(blockType)) {
+      return block?.parameters?.dataType || 'double'
+    }
+    return null
+  }
   
-  // Parse all input types
-  const parsedTypes = inputTypes.map(type => {
+  // Parse all known input types
+  const parsedTypes = knownInputTypes.map(type => {
     try {
       return parseType(type)
     } catch {
@@ -180,8 +327,12 @@ function determineProcessingBlockOutputType(
   if (parsedTypes.length === 0) return null
   
   switch (blockType) {
+    case 'atmosphere':
+      // All outputs are scalar double regardless of altitude type (must be scalar)
+      return 'double'
+
     case 'sum':
-    case 'multiply':
+    case 'multiply': {
       // For arithmetic operations, all inputs must have the same type
       // Output type matches input type (works for scalars, arrays, and matrices)
       const firstType = parsedTypes[0]
@@ -198,13 +349,63 @@ function determineProcessingBlockOutputType(
         return typeToString(firstType)
       }
       return null // Type mismatch
+    }
+
+    case 'divide': {
+      // Same shape → that shape; non-scalar / scalar → numerator shape; scalar / non-scalar invalid
+      if (parsedTypes.length < 2) {
+        return typeToString(parsedTypes[0])
+      }
+      const num = parsedTypes[0]
+      const den = parsedTypes[1]
+      const numScalar = !num.isArray && !num.isMatrix
+      const denScalar = !den.isArray && !den.isMatrix
+      if (numScalar && !denScalar) {
+        return null
+      }
+      if (!numScalar && denScalar) {
+        return typeToString(num)
+      }
+      // Same dimensionality required when both non-scalar
+      if (!numScalar && !denScalar) {
+        const same =
+          num.baseType === den.baseType &&
+          num.isArray === den.isArray &&
+          num.arraySize === den.arraySize &&
+          num.isMatrix === den.isMatrix &&
+          num.rows === den.rows &&
+          num.cols === den.cols
+        return same ? typeToString(num) : null
+      }
+      return typeToString(num)
+    }
     
     case 'scale':
     case 'limit':
     case 'integrator':
+    case 'unit_delay':
     case 'units_conversion':
-      // Scale/Limit/Integrator/Units Conversion block: output type matches input type (scalar, array, or matrix)
+    case 'sign':
+    case 'quantizer':
+      // Scale/Limit/Integrator/UnitDelay/Units Conversion/Sign/Quantizer: output type matches input type
       return typeToString(parsedTypes[0])
+
+    case 'selector': {
+      if (block) {
+        try {
+          return BlockModuleFactory.getBlockModule('selector').getOutputType(block, inputTypes)
+        } catch {
+          /* fall through */
+        }
+      }
+      // Fallback without block params: first element scalar
+      return parsedTypes[0].baseType
+    }
+
+    case 'relay':
+    case 'rate_limiter':
+      // Scalar double (v1)
+      return 'double'
 
     case 'transfer_function':
     case 'discrete_transform':
@@ -356,10 +557,15 @@ export function propagateSignalTypes(
     if (outputType) {
       // Validate the type
       try {
-        const parsedType = parseType(outputType)
-        const key = `${block.id}:0` // Source blocks have single output at port 0
-        blockOutputTypes.set(key, outputType)
-        debugLog(`    "${block.name}" (${block.type}): ${key} = ${outputType}`)
+        parseType(outputType)
+        const portCount = getBlockOutputPortCount(block)
+        // Multi-output fixed-type blocks (e.g. atmosphere) need every port keyed
+        const n = Math.max(1, portCount)
+        for (let p = 0; p < n; p++) {
+          const key = `${block.id}:${p}`
+          blockOutputTypes.set(key, outputType)
+          debugLog(`    "${block.name}" (${block.type}): ${key} = ${outputType}`)
+        }
       } catch (error) {
         errors.push({
           blockId: block.id,
@@ -388,6 +594,15 @@ export function propagateSignalTypes(
   // because their internal input_port blocks have explicit dataType parameters
   for (const block of blocks) {
     if (block.type === 'subsystem' && !processedBlocks.has(block.id)) {
+      processingQueue.push(block.id)
+      processedBlocks.add(block.id)
+    }
+  }
+
+  // Seed state blocks so feedback loops (e.g. ẋ = f(x)) can type-resolve.
+  // Output type comes from x(0)/IC when available, else default double.
+  for (const block of blocks) {
+    if (isTypeLoopBreaker(block.type) && !processedBlocks.has(block.id)) {
       processingQueue.push(block.id)
       processedBlocks.add(block.id)
     }
@@ -451,8 +666,18 @@ export function propagateSignalTypes(
             // Add target block to processing queue
             const targetBlock = blockMap.get(wire.targetBlockId)
             if (targetBlock && !processedBlocks.has(wire.targetBlockId)) {
-              processingQueue.push(wire.targetBlockId)
-              processedBlocks.add(wire.targetBlockId)
+              const targetInputs = getBlockInputTypes(targetBlock, wiresByTarget, blockOutputTypes)
+              const expectedInputs = getBlockInputPortCount(targetBlock)
+              if (
+                canEnqueueForTypePropagation(
+                  targetBlock,
+                  targetInputs.length,
+                  expectedInputs
+                )
+              ) {
+                processingQueue.push(wire.targetBlockId)
+                processedBlocks.add(wire.targetBlockId)
+              }
             }
           } catch (error) {
             errors.push({
@@ -603,7 +828,20 @@ export function propagateSignalTypes(
         // Try to determine output type based on inputs
         const inputTypes = getBlockInputTypes(currentBlock, wiresByTarget, blockOutputTypes)
         debugLog(`      Port ${portIndex}: No preset type. inputTypes=[${inputTypes.join(', ')}]`)
-        const determinedType = determineProcessingBlockOutputType(currentBlock.type, inputTypes)
+        let determinedType: string | null = null
+        if (isTypeLoopBreaker(currentBlock.type)) {
+          determinedType = determineStateBlockOutputType(
+            currentBlock,
+            wiresByTarget,
+            blockOutputTypes
+          )
+        } else {
+          determinedType = determineProcessingBlockOutputType(
+            currentBlock.type,
+            inputTypes,
+            currentBlock
+          )
+        }
 
         if (determinedType) {
           blockOutputTypes.set(outputKey, determinedType)
@@ -677,9 +915,13 @@ export function propagateSignalTypes(
               const expectedInputs = getBlockInputPortCount(targetBlock)
 
               debugLog(`        -> Target "${targetBlock.name}" (${targetBlock.type}): ${targetInputs.length}/${expectedInputs} inputs`)
-              // Subsystems can be processed independently - their internal input_ports have explicit types
-              if (targetInputs.length === expectedInputs ||
-                  ['signal_display', 'signal_logger', 'no_connection', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
+              if (
+                canEnqueueForTypePropagation(
+                  targetBlock,
+                  targetInputs.length,
+                  expectedInputs
+                )
+              ) {
                 processingQueue.push(wire.targetBlockId)
                 processedBlocks.add(wire.targetBlockId)
                 debugLog(`           Added to queue`)
@@ -697,6 +939,35 @@ export function propagateSignalTypes(
             })
           }
         }
+      }
+    }
+  }
+
+  // Final pass: deferred state blocks (TF / discrete) still missing a type → double
+  for (const block of blocks) {
+    if (!isDeferredStateBlock(block.type)) continue
+    const outputKey = `${block.id}:0`
+    if (blockOutputTypes.has(outputKey)) continue
+    const fallback =
+      getPortInputType(block, 0, wiresByTarget, blockOutputTypes) ||
+      block.parameters?.dataType ||
+      'double'
+    blockOutputTypes.set(outputKey, fallback)
+    const connectedWires = wiresBySource.get(outputKey) || []
+    for (const wire of connectedWires) {
+      try {
+        const parsedType = parseType(fallback)
+        signalTypes.set(wire.id, {
+          wireId: wire.id,
+          sourceBlockId: wire.sourceBlockId,
+          sourcePortIndex: wire.sourcePortIndex,
+          targetBlockId: wire.targetBlockId,
+          targetPortIndex: wire.targetPortIndex,
+          type: fallback,
+          parsedType
+        })
+      } catch {
+        /* ignore */
       }
     }
   }
@@ -1243,10 +1514,13 @@ function propagateSignalTypesWithPreset(
     if (outputType) {
       try {
         parseType(outputType)
-        const key = `${block.id}:0`
-        if (!blockOutputTypes.has(key)) {
-          blockOutputTypes.set(key, outputType)
-          debugLog(`    Init block "${block.name}" (${block.type}): ${key} = ${outputType}`)
+        const portCount = Math.max(1, getBlockOutputPortCount(block))
+        for (let p = 0; p < portCount; p++) {
+          const key = `${block.id}:${p}`
+          if (!blockOutputTypes.has(key)) {
+            blockOutputTypes.set(key, outputType)
+            debugLog(`    Init block "${block.name}" (${block.type}): ${key} = ${outputType}`)
+          }
         }
       } catch (error) {
         errors.push({
@@ -1290,6 +1564,14 @@ function propagateSignalTypesWithPreset(
   // because their internal input_port blocks have explicit dataType parameters
   for (const block of blocks) {
     if (block.type === 'subsystem' && !processedBlocks.has(block.id)) {
+      processingQueue.push(block.id)
+      processedBlocks.add(block.id)
+    }
+  }
+
+  // Seed state blocks so feedback loops can type-resolve
+  for (const block of blocks) {
+    if (isTypeLoopBreaker(block.type) && !processedBlocks.has(block.id)) {
       processingQueue.push(block.id)
       processedBlocks.add(block.id)
     }
@@ -1355,9 +1637,13 @@ function propagateSignalTypesWithPreset(
               const expectedInputs = getBlockInputPortCount(targetBlock)
 
               debugLog(`        Target "${targetBlock.name}": has ${targetInputs.length}/${expectedInputs} inputs`)
-              // Subsystems can be processed independently - their internal input_ports have explicit types
-              if (targetInputs.length === expectedInputs ||
-                  ['signal_display', 'signal_logger', 'no_connection', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
+              if (
+                canEnqueueForTypePropagation(
+                  targetBlock,
+                  targetInputs.length,
+                  expectedInputs
+                )
+              ) {
                 processingQueue.push(wire.targetBlockId)
                 processedBlocks.add(wire.targetBlockId)
                 debugLog(`        -> Added to queue`)
@@ -1451,7 +1737,20 @@ function propagateSignalTypesWithPreset(
         // Try to determine output type based on inputs
         const inputTypes = getBlockInputTypes(currentBlock, wiresByTarget, blockOutputTypes)
         debugLog(`      Port ${portIndex}: No preset type. inputTypes=[${inputTypes.join(', ')}]`)
-        const determinedType = determineProcessingBlockOutputType(currentBlock.type, inputTypes)
+        let determinedType: string | null = null
+        if (isTypeLoopBreaker(currentBlock.type)) {
+          determinedType = determineStateBlockOutputType(
+            currentBlock,
+            wiresByTarget,
+            blockOutputTypes
+          )
+        } else {
+          determinedType = determineProcessingBlockOutputType(
+            currentBlock.type,
+            inputTypes,
+            currentBlock
+          )
+        }
 
         if (determinedType) {
           blockOutputTypes.set(outputKey, determinedType)
@@ -1489,9 +1788,13 @@ function propagateSignalTypesWithPreset(
               const expectedInputs = getBlockInputPortCount(targetBlock)
 
               debugLog(`        -> Target "${targetBlock.name}" (${targetBlock.type}): ${targetInputs.length}/${expectedInputs} inputs`)
-              // Subsystems can be processed independently - their internal input_ports have explicit types
-              if (targetInputs.length === expectedInputs ||
-                  ['signal_display', 'signal_logger', 'no_connection', 'output_port', 'sheet_label_sink', 'subsystem'].includes(targetBlock.type)) {
+              if (
+                canEnqueueForTypePropagation(
+                  targetBlock,
+                  targetInputs.length,
+                  expectedInputs
+                )
+              ) {
                 processingQueue.push(wire.targetBlockId)
                 processedBlocks.add(wire.targetBlockId)
                 debugLog(`           Added to queue`)
@@ -1526,9 +1829,11 @@ function getBlockOutputPortCount(block: BlockData): number {
   switch (block.type) {
     case 'sum':
     case 'multiply':
+    case 'divide':
     case 'scale':
     case 'limit':
     case 'integrator':
+    case 'unit_delay':
     case 'units_conversion':
     case 'transfer_function':
     case 'discrete_transform':
@@ -1541,15 +1846,24 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'evaluate':
     case 'if':
     case 'condition':
+    case 'sign':
+    case 'abs':
+    case 'uminus':
     case 'mag':
     case 'cross':
     case 'dot':
-    case 'abs':
-    case 'uminus':
     case 'transpose':
     case 'mux':  // Mux always has single output (vector/matrix)
     case 'body2quaternion_rates':  // Always outputs 4x1 quaternion rate vector
+    case 'relay':
+    case 'rate_limiter':
+    case 'quantizer':
+    case 'selector':
+    case 'data_store_read':
+    case 'edge_detect':
       return 1
+    case 'atmosphere':
+      return 4
     case 'trig': {
       // sincos has 2 outputs, all others have 1
       const func = block.parameters?.function || 'sin'
@@ -1559,6 +1873,7 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'signal_display':
     case 'signal_logger':
     case 'no_connection':
+    case 'data_store_write':
       return 0
     case 'subsystem':
       return block.parameters?.outputPorts?.length || 1
@@ -1601,18 +1916,29 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'no_connection':
     case 'output_port':
     case 'lookup_1d':
+    case 'sign':
+    case 'relay':
+    case 'rate_limiter':
+    case 'quantizer':
+    case 'selector':
+    case 'data_store_write':
+    case 'edge_detect':
+    case 'atmosphere':
       return 1
+    case 'data_store_read':
+      return 0
     case 'integrator': {
-      // Dynamic port count based on showEnableInput/showResetInput
-      let count = 1 // Base: derivative input
-      if (block.parameters?.showEnableInput) count++
-      if (block.parameters?.showResetInput) count++
-      return count
+      // Data ports only: derivative (+ x(0) when showInitPort).
+      // Enable (-1) and reset (-2) are control ports, not counted here.
+      return block.parameters?.showInitPort ? 2 : 1
     }
+    case 'unit_delay':
+      return 1
     case 'lookup_2d':
     case 'matrix_multiply':
     case 'cross':  // Cross product takes 2 vectors
     case 'dot':    // Dot product takes 2 vectors
+    case 'divide':
       return 2
     case 'if':
       // If block takes 3 inputs: input1, control, input2
@@ -1857,11 +2183,22 @@ export function getMatrixBlockOutputType(
 
     case 'limit':
     case 'integrator':
+    case 'unit_delay':
     case 'units_conversion':
     case 'transfer_function':
     case 'discrete_transform':
-      // Limit, integrator, units conversion, and transfer functions process each element independently
+    case 'sign':
+    case 'quantizer':
+      // Limit, integrator, unit delay, units conversion, sign, quantizer, and transfer functions process each element independently
       return parsedInputs.length > 0 ? typeToString(parsedInputs[0]) : null
+
+    case 'divide':
+      // Output follows numerator; scalar/vector broadcast handled in determineProcessingBlockOutputType
+      return parsedInputs.length > 0 ? typeToString(parsedInputs[0]) : null
+
+    case 'relay':
+    case 'rate_limiter':
+      return 'double'
     
     default:
       return null

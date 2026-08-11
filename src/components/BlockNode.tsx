@@ -526,9 +526,11 @@ const getBlockSymbol = (data: BlockNodeData) => {
   const symbols: Record<string, string> = {
     'sum': '∑',
     'multiply': '×',
+    'divide': '÷',
     'scale': data.parameters?.gain || 'K',
     'abs': '|x|',
     'uminus': '-x',
+    'sign': 'sgn',
     'input_port': '▶',
     'output_port': '▶',
     'source': '~',
@@ -550,6 +552,16 @@ const getBlockSymbol = (data: BlockNodeData) => {
     'orientation_conversion': 'E↔DCM', // Fallback for orientation conversion
     'units_conversion': 'Units', // Fallback for units conversion
     'body2quaternion_rates': 'ω→q̇', // Body rates to quaternion rates
+    'integrator': '∫',
+    'unit_delay': 'z⁻¹',
+    'relay': 'Relay',
+    'rate_limiter': 'd/dt⊏',
+    'quantizer': 'Q',
+    'selector': 'Sel',
+    'data_store_write': 'DS↓',
+    'data_store_read': 'DS↑',
+    'edge_detect': '⌃',
+    'atmosphere': 'Atm',
   }
 
   return symbols[data.type] || '?'
@@ -897,21 +909,6 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
     boxShadow: '0 0 0 2px #fca5a5',
   }
 
-  // Special style for init handle (x(0) port)
-  const initHandleStyle: CSSProperties = {
-    width: 12,
-    height: 12,
-    borderRadius: '50%',
-    backgroundColor: '#059669', // Green color for init
-    border: '2px solid #ffffff',
-    cursor: 'crosshair',
-  }
-
-  const initHandleHoverStyle: CSSProperties = {
-    backgroundColor: '#10b981',
-    boxShadow: '0 0 0 2px #6ee7b7',
-  }
-
   // CSS additions for port labels
   const blockNodeStyles = `
     .port-labels {
@@ -1089,34 +1086,12 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             className="absolute text-red-600 font-bold pointer-events-none"
             style={{
               bottom: -8,
-              // Position left if init port is also shown, otherwise center
-              left: data.parameters?.showInitPort
-                ? blockWidth / 2 - 20
-                : blockWidth / 2 - 6,
+              left: blockWidth / 2 - 6,
               fontSize: '0.75rem',
               transform: 'translateX(-50%)',
             }}
           >
             ▲
-          </div>
-        )}
-
-        {/* Init port indicator for integrator blocks with showInitPort */}
-        {data.type === 'integrator' && data.parameters?.showInitPort && (
-          <div
-            className="absolute text-green-600 font-bold pointer-events-none"
-            style={{
-              bottom: -18,  /* -10 base - 8 (1.0 char) shift down */
-              // Position right if reset port is also shown, otherwise center
-              // Shifted left by 8px (1.0 char) from original positions
-              left: data.parameters?.showResetInput
-                ? blockWidth / 2
-                : blockWidth / 2 - 14,
-              fontSize: '0.55rem',
-              transform: 'translateX(-50%)',
-            }}
-          >
-            x(0)
           </div>
         )}
 
@@ -1282,7 +1257,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           />
         )}
 
-        {/* Reset Handle - Special port at bottom for integrator blocks with showResetInput */}
+        {/* Reset Handle - Special control port at bottom for integrator blocks with showResetInput */}
         {data.type === 'integrator' && data.parameters?.showResetInput && (
           <Handle
             type="target"
@@ -1291,10 +1266,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             style={{
               ...resetHandleStyle,
               bottom: -6,
-              // Position left if init port is also shown, otherwise center
-              left: data.parameters?.showInitPort
-                ? blockWidth / 2 - 14
-                : blockWidth / 2,
+              left: blockWidth / 2,
               transform: 'translateX(-50%)',
             }}
             onMouseEnter={(e) => {
@@ -1308,33 +1280,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           />
         )}
 
-        {/* Init Handle - Special port at bottom for integrator blocks with showInitPort */}
-        {data.type === 'integrator' && data.parameters?.showInitPort && (
-          <Handle
-            type="target"
-            position={Position.Bottom}
-            id="_init_"
-            style={{
-              ...initHandleStyle,
-              bottom: -6,
-              // Position right if reset port is also shown, otherwise center
-              left: data.parameters?.showResetInput
-                ? blockWidth / 2 + 14
-                : blockWidth / 2,
-              transform: 'translateX(-50%)',
-            }}
-            onMouseEnter={(e) => {
-              const target = e.target as HTMLElement
-              Object.assign(target.style, initHandleHoverStyle)
-            }}
-            onMouseLeave={(e) => {
-              const target = e.target as HTMLElement
-              Object.assign(target.style, initHandleStyle)
-            }}
-          />
-        )}
-
-        {/* Input Handles with tooltips showing signs for sum blocks */}
+        {/* Input Handles (left edge data ports, including integrator x(0) when shown) */}
         {Array.from({ length: inputCount }).map((_, index) => (
           <Handle
             key={`input-${index}`}
@@ -1349,6 +1295,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             title={
               data.type === 'sum' && sumSigns && sumSigns[index]
                 ? `Input ${index + 1} (${sumSigns[index] === '+' ? 'Add' : 'Subtract'})`
+                : data.type === 'integrator' && data.parameters?.showInitPort && index === 1
+                ? 'x(0) initial condition'
                 : `Input ${index + 1}`
             }
             onMouseEnter={(e) => {
@@ -1439,17 +1387,17 @@ export const blockDataToNode = (
 
 // Helper function to convert WireData to ReactFlow edge format
 export const wireDataToEdge = (wire: any) => {
-  // Map special port indices to handle IDs
-  // -1 = enable port (top edge)
-  // -2 = reset port (bottom edge)
-  // -3 = init port (bottom edge, x(0) for integrator)
+  // Map special control port indices to handle IDs
+  // -1 = enable (top), -2 = reset (bottom)
+  // Legacy: -3 was bottom x(0); remap to left data port input-1
   let targetHandle: string
   if (wire.targetPortIndex === -1) {
     targetHandle = '_enable_'
   } else if (wire.targetPortIndex === -2) {
     targetHandle = '_reset_'
   } else if (wire.targetPortIndex === -3) {
-    targetHandle = '_init_'
+    // Migrate old bottom x(0) wiring to left-side data port 1
+    targetHandle = 'input-1'
   } else {
     targetHandle = `input-${wire.targetPortIndex}`
   }

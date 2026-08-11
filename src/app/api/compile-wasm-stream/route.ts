@@ -27,7 +27,7 @@ import { createClient } from '@supabase/supabase-js'
 import { WasmCodeGenerator } from '@/lib/wasm/codegen/WasmCodeGenerator'
 import { SupabaseCacheManager, generateCacheKey, hashModel } from '@/lib/wasm/cache'
 import { validateRequiredFields } from '@/lib/apiErrorHandler'
-import { authenticateApiRequest } from '@/lib/apiAuthMiddleware'
+import { authenticateRequest } from '@/lib/apiAuthMiddleware'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import * as fs from 'fs/promises'
@@ -64,19 +64,6 @@ function sanitizeModelName(name: string): string {
 }
 
 /**
- * Extract Bearer token from Authorization header
- */
-function extractBearerToken(request: NextRequest): string | null {
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader) return null
-
-  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i)
-  if (bearerMatch) return bearerMatch[1]
-
-  return authHeader
-}
-
-/**
  * Send SSE event to client
  */
 function sendEvent(controller: ReadableStreamDefaultController, event: string, data: any) {
@@ -88,21 +75,11 @@ function sendEvent(controller: ReadableStreamDefaultController, event: string, d
  * Main compilation handler with progress streaming
  */
 export async function POST(request: NextRequest) {
-  // Authenticate the request before creating the stream
-  const token = extractBearerToken(request)
-  if (!token) {
-    return new Response(JSON.stringify({
-      error: 'Missing Authorization header. Use: Authorization: Bearer <token>'
-    }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' }
-    })
-  }
-
-  const authResult = await authenticateApiRequest(token)
+  // Accept browser session (cookie or access_token JWT) or user API token
+  const authResult = await authenticateRequest(request)
   if (!authResult.authenticated) {
     return new Response(JSON.stringify({
-      error: authResult.error || 'Invalid or expired API token'
+      error: authResult.error || 'Authentication required. Sign in, or pass Authorization: Bearer <token>.'
     }), {
       status: 401,
       headers: { 'Content-Type': 'application/json' }

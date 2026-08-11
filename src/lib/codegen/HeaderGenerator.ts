@@ -4,6 +4,7 @@ import { FlattenedModel } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 import { parseType, isValidType } from '@/lib/typeValidator'
+import { dataStoreMemberDecl } from '@/lib/dataStoreUtils'
 
 /**
  * Generates the C header file for a flattened model
@@ -97,6 +98,10 @@ export class HeaderGenerator {
     // Generate signals structure
     types += this.generateSignalsStruct()
     types += '\n'
+
+    // Generate data stores structure (model-scoped shared signals)
+    types += this.generateDataStoresStruct()
+    types += '\n'
     
     // Generate states structure
     types += this.generateStatesStruct()
@@ -117,6 +122,7 @@ export class HeaderGenerator {
     members.push(`    ${this.modelName}_outputs_t outputs;`)
     members.push(`    ${this.modelName}_signals_t signals;`)
     members.push(`    ${this.modelName}_states_t states;`)
+    members.push(`    ${this.modelName}_data_stores_t data_stores;`)
     members.push(`    enable_states_t enable_states;`) // Always include
 
     // Add segregated subsystem instances
@@ -586,6 +592,33 @@ export class HeaderGenerator {
 
     // Default to double if no connection found
     return 'double'
+  }
+
+  /**
+   * Generate model-scoped data stores structure
+   */
+  private generateDataStoresStruct(): string {
+    const members: string[] = []
+    const stores = this.model.dataStores || []
+
+    for (const store of stores) {
+      members.push(dataStoreMemberDecl(store) + ` /* data store: ${store.name} */`)
+    }
+
+    if (members.length === 0) {
+      members.push(CCodeBuilder.generateStructMember(
+        'int',
+        'dummy',
+        undefined,
+        'No data stores defined'
+      ))
+    }
+
+    return CCodeBuilder.generateStruct(
+      `${this.modelName}_data_stores`,
+      members,
+      'Model-scoped named data stores (shared across hierarchy)'
+    )
   }
 
   /**
