@@ -1261,6 +1261,344 @@ export function buildSixDofClosedLoopPitchRateDamp(): SliceModel {
   }
 }
 
+/**
+ * Phase 9.3 — Open-loop 6-DoF ascent with simple aero drag into EOM
+ *
+ * Extends the 9.1 plant by coupling atmosphere/q̄ into body force:
+ *   D = q̄ · Cd · A_ref
+ *   F_aero = −D · v̂_b   (v̂_b = v_b / max(|v_b|, ε))
+ *   F_b = F_thrust + F_aero
+ *
+ * Cd·A_ref defaults are order-of-magnitude Saturn-IB (A≈34 m², Cd≈0.5 → 17 m²).
+ * Not a full aero table (no CN, Cm, α-dependent moments) — plant check only.
+ *
+ * Validation: qualitative h(t)/mass vs TN-AP-67-158 Table 5
+ * (docs/sample-models/saturn/as205-reference/as205_trajectory_reference.csv).
+ * Simulink may disagree with the TN; prefer TN when debugging residuals.
+ */
+export function buildSixDofOpenLoopAscentWithAero(): SliceModel {
+  resetIds()
+  const { eomSubsystem, core, ports } = buildEomSubsystemBlock(720, 280)
+
+  // ── Propulsion schedule (same shape as 9.1) ──
+  const liftoff = B('source', 'liftoff', 40, 40, {
+    signalType: 'step',
+    stepTime: 1.0,
+    stepValue: 1.0,
+    dataType: 'double'
+  })
+  const edge = B('edge_detect', 'liftoff_edge', 180, 40, {
+    edge: 'rising',
+    threshold: 0.5
+  })
+  const one = B('source', 'one', 40, 120, {
+    signalType: 'constant',
+    value: 1,
+    dataType: 'double'
+  })
+  const tBurn = B('integrator', 't_burn', 180, 120, {
+    showResetInput: true,
+    initialValue: 0,
+    showInitPort: false
+  })
+  const thrustMag = B('lookup_1d', 'ThrustMag_N', 340, 120, {
+    inputValues: [0, 0.5, 2, 10, 50, 100, 130, 145, 150, 160],
+    outputValues: [0, 5e5, 8.5e5, 8.9e5, 8.9e5, 8.9e5, 8.9e5, 6e5, 1e5, 0],
+    extrapolation: 'clamp'
+  })
+  const mdotScale = B('source', 'mdot_scale', 340, 220, {
+    signalType: 'constant',
+    value: 1 / 2550,
+    dataType: 'double'
+  })
+  const mdotCmd = B('matrix_multiply', 'mdot_cmd', 480, 180, {})
+  const zero = B('source', 'zero', 340, 300, {
+    signalType: 'constant',
+    value: 0,
+    dataType: 'double'
+  })
+  // Axial thrust vector [T, 0, 0]
+  const Fthrust = B('mux', 'F_thrust', 480, 120, {
+    rows: 1,
+    cols: 3,
+    baseType: 'double',
+    outputType: 'double[3]',
+    outputShape: 'vector'
+  })
+  const Mb = B('source', 'M_b_cmd', 480, 320, {
+    signalType: 'constant',
+    value: [0, 0, 0],
+    dataType: 'double[3]'
+  })
+
+  // ── Atmosphere + q̄ ──
+  const Re = B('source', 'R_earth', 720, 520, {
+    signalType: 'constant',
+    value: 6371000,
+    dataType: 'double'
+  })
+  const alt = B('sum', 'altitude_m', 880, 480, {
+    signs: '+-',
+    numInputs: 2
+  })
+  const atm = B('atmosphere', 'Atm', 1040, 480, {
+    model: 'coesa1976',
+    extrapolation: 'clamp'
+  })
+  const half = B('source', 'half', 880, 600, {
+    signalType: 'constant',
+    value: 0.5,
+    dataType: 'double'
+  })
+  const Vmag = B('mag', 'V_mag', 880, 380, {})
+  const Vsq = B('multiply', 'V_sq', 1020, 380, { numInputs: 2 })
+  const halfRho = B('multiply', 'half_rho', 1160, 440, { numInputs: 2 })
+  const qbar = B('multiply', 'qbar', 1300, 400, { numInputs: 2 })
+
+  // ── Aero drag: F_aero = −(q̄·CdA) · v̂_b ──
+  // CdA ≈ Cd * π*(D/2)²; D≈6.6 m, Cd≈0.5 → ~17 m²
+  const CdA = B('source', 'CdA_m2', 880, 300, {
+    signalType: 'constant',
+    value: 17.0,
+    dataType: 'double'
+  })
+  const Dmag = B('multiply', 'D_mag', 1160, 340, { numInputs: 2 })
+  // |v| floor to avoid /0 on the pad
+  const Vsafe = B('evaluate', 'V_safe', 1020, 300, {
+    numInputs: 1,
+    expression: 'in(0) > 1e-3 ? in(0) : 1e-3'
+  })
+  const demuxV = B('demux', 'demux_vb', 880, 220, {
+    outputCount: 3,
+    inputDimensions: [3]
+  })
+  const vh0 = B('divide', 'vhat_x', 1020, 180, {})
+  const vh1 = B('divide', 'vhat_y', 1020, 220, {})
+  const vh2 = B('divide', 'vhat_z', 1020, 260, {})
+  const vhat = B('mux', 'v_hat', 1160, 220, {
+    rows: 1,
+    cols: 3,
+    baseType: 'double',
+    outputType: 'double[3]',
+    outputShape: 'vector'
+  })
+  // D_vec = Dmag * vhat, then F_aero = −D_vec
+  const Dvec = B('matrix_multiply', 'D_vec', 1300, 280, {})
+  const Faero = B('uminus', 'F_aero', 1440, 280, {})
+  // F_b = F_thrust + F_aero
+  const Fb = B('sum', 'F_b_cmd', 1580, 180, {
+    signs: '++',
+    numInputs: 2
+  })
+
+  // ── Ports + visualization ──
+  const outR = B('output_port', 'r_i', 1100, 40, { portName: 'r_i' })
+  const outV = B('output_port', 'v_b', 1100, 100, { portName: 'v_b' })
+  const outW = B('output_port', 'omega_b', 1100, 160, { portName: 'omega_b' })
+  const outQ = B('output_port', 'q', 1260, 40, { portName: 'q' })
+  const outM = B('output_port', 'mass', 1260, 100, { portName: 'mass_kg' })
+  const outRmag = B('output_port', 'r_mag', 1260, 160, { portName: 'r_mag_m' })
+  const outT = B('output_port', 'thrust', 640, 40, { portName: 'thrust_N' })
+  const outAlt = B('output_port', 'h', 1440, 480, { portName: 'altitude_m' })
+  const outRho = B('output_port', 'rho', 1440, 540, { portName: 'rho_kgpm3' })
+  const outQbar = B('output_port', 'qbar_out', 1440, 400, { portName: 'qbar_Pa' })
+  const outDrag = B('output_port', 'drag', 1580, 340, { portName: 'drag_N' })
+
+  const dispR = B('signal_display', 'disp_r_mag', 1700, 40, {
+    title: 'Geocentric radius |r| (m)'
+  })
+  const dispM = B('signal_display', 'disp_mass', 1700, 120, {
+    title: 'Mass (kg)'
+  })
+  const dispH = B('signal_display', 'disp_altitude', 1700, 200, {
+    title: 'Altitude MSL (m)'
+  })
+  const dispQbar = B('signal_display', 'disp_qbar', 1700, 280, {
+    title: 'Dynamic pressure q̄ (Pa)'
+  })
+  const dispV = B('signal_display', 'disp_V', 1700, 360, {
+    title: 'Body speed |v_b| (m/s)'
+  })
+  const dispD = B('signal_display', 'disp_drag', 1700, 440, {
+    title: 'Drag magnitude (N)'
+  })
+
+  const logH = B('signal_logger', 'log_altitude', 1860, 120, {})
+  const logM = B('signal_logger', 'log_mass', 1860, 200, {})
+  const logQbar = B('signal_logger', 'log_qbar', 1860, 280, {})
+  const logV = B('signal_logger', 'log_V', 1860, 360, {})
+
+  const parentBlocks = [
+    liftoff,
+    edge,
+    one,
+    tBurn,
+    thrustMag,
+    mdotScale,
+    mdotCmd,
+    zero,
+    Fthrust,
+    Mb,
+    eomSubsystem,
+    Re,
+    alt,
+    atm,
+    half,
+    Vmag,
+    Vsq,
+    halfRho,
+    qbar,
+    CdA,
+    Dmag,
+    Vsafe,
+    demuxV,
+    vh0,
+    vh1,
+    vh2,
+    vhat,
+    Dvec,
+    Faero,
+    Fb,
+    outR,
+    outV,
+    outW,
+    outQ,
+    outM,
+    outRmag,
+    outT,
+    outAlt,
+    outRho,
+    outQbar,
+    outDrag,
+    dispR,
+    dispM,
+    dispH,
+    dispQbar,
+    dispV,
+    dispD,
+    logH,
+    logM,
+    logQbar,
+    logV
+  ]
+
+  const parentWires: SliceWire[] = [
+    // Propulsion
+    W(liftoff, edge),
+    W(one, tBurn, 0, 0),
+    W(edge, tBurn, 0, -2),
+    W(tBurn, thrustMag),
+    W(thrustMag, outT),
+    W(thrustMag, mdotCmd, 0, 0),
+    W(mdotScale, mdotCmd, 0, 1),
+    W(thrustMag, Fthrust, 0, 0),
+    W(zero, Fthrust, 0, 1),
+    W(zero, Fthrust, 0, 2),
+    // Atmosphere path
+    W(eomSubsystem, alt, ports.r_mag, 0),
+    W(Re, alt, 0, 1),
+    W(alt, atm),
+    W(eomSubsystem, Vmag, ports.v_b, 0),
+    W(Vmag, Vsq, 0, 0),
+    W(Vmag, Vsq, 0, 1),
+    W(half, halfRho, 0, 0),
+    W(atm, halfRho, 2, 1),
+    W(halfRho, qbar, 0, 0),
+    W(Vsq, qbar, 0, 1),
+    // Aero unit velocity
+    W(eomSubsystem, demuxV, ports.v_b, 0),
+    W(Vmag, Vsafe),
+    W(demuxV, vh0, 0, 0),
+    W(Vsafe, vh0, 0, 1),
+    W(demuxV, vh1, 1, 0),
+    W(Vsafe, vh1, 0, 1),
+    W(demuxV, vh2, 2, 0),
+    W(Vsafe, vh2, 0, 1),
+    W(vh0, vhat, 0, 0),
+    W(vh1, vhat, 0, 1),
+    W(vh2, vhat, 0, 2),
+    // Drag force
+    W(qbar, Dmag, 0, 0),
+    W(CdA, Dmag, 0, 1),
+    W(Dmag, Dvec, 0, 0),
+    W(vhat, Dvec, 0, 1),
+    W(Dvec, Faero),
+    W(Fthrust, Fb, 0, 0),
+    W(Faero, Fb, 0, 1),
+    // EOM inputs
+    W(Fb, eomSubsystem, 0, ports.F_b),
+    W(Mb, eomSubsystem, 0, ports.M_b),
+    W(mdotCmd, eomSubsystem, 0, ports.mdot),
+    // EOM outs
+    W(eomSubsystem, outR, ports.r_i, 0),
+    W(eomSubsystem, outV, ports.v_b, 0),
+    W(eomSubsystem, outW, ports.omega_b, 0),
+    W(eomSubsystem, outQ, ports.q, 0),
+    W(eomSubsystem, outM, ports.mass, 0),
+    W(eomSubsystem, outRmag, ports.r_mag, 0),
+    W(alt, outAlt),
+    W(atm, outRho, 2, 0),
+    W(qbar, outQbar),
+    W(Dmag, outDrag),
+    // Displays
+    W(eomSubsystem, dispR, ports.r_mag, 0),
+    W(eomSubsystem, dispM, ports.mass, 0),
+    W(alt, dispH),
+    W(qbar, dispQbar),
+    W(Vmag, dispV),
+    W(Dmag, dispD),
+    // Loggers (TN compare channels)
+    W(alt, logH),
+    W(eomSubsystem, logM, ports.mass, 0),
+    W(qbar, logQbar),
+    W(Vmag, logV)
+  ]
+
+  return {
+    name: 'saturn-9.3-open-loop-6dof-ascent-aero',
+    description:
+      'Open-loop 6-DoF ascent with simple aero drag (F_aero = −q̄·CdA·v̂_b) into EOM. Compare h/mass/q̄ to TN-AP-67-158 (not Simulink).',
+    sheets: [
+      {
+        id: 'main',
+        name: 'OpenLoopAscentAero',
+        blocks: parentBlocks,
+        connections: parentWires,
+        extents: { width: 2000, height: 720 }
+      }
+    ],
+    parameters: [
+      ...(core.parameters || []),
+      {
+        name: 'R_earth_m',
+        dataType: 'double',
+        defaultValue: '6371000.0',
+        signalType: 'double',
+        value: 6371000
+      },
+      {
+        name: 'CdA_m2',
+        dataType: 'double',
+        defaultValue: '17.0',
+        signalType: 'double',
+        value: 17.0
+      },
+      {
+        name: 'Isp_s',
+        dataType: 'double',
+        defaultValue: '260',
+        signalType: 'double',
+        value: 260
+      }
+    ],
+    globalSettings: {
+      simulationTimeStep: 0.05,
+      simulationDuration: 180,
+      integrationAlgorithm: 'rk4'
+    }
+  }
+}
+
 /** @deprecated use buildSixDofVehicleBurnDemo */
 export function buildSixDofVarMassSubsystemDemo(): SliceModel {
   return buildSixDofVehicleBurnDemo()

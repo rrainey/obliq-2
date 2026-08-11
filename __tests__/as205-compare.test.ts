@@ -83,19 +83,39 @@ describe('AS-205 trajectory compare utilities', () => {
     expect(s?.qbar_Pa).toBe(3000)
   })
 
-  test('optional real TN CSV loads if present', () => {
+  test('TN-AP-67-158 reference CSV loads with S-IB coverage', () => {
     const realPath = path.join(REF_DIR, 'as205_trajectory_reference.csv')
-    if (!fs.existsSync(realPath)) {
-      return // not required until digitized
-    }
+    expect(fs.existsSync(realPath)).toBe(true)
     const text = fs.readFileSync(realPath, 'utf8')
-    // May be template-only (header, no rows)
-    try {
-      const series = loadTrajectoryCsv(text, 'tn-ap-67-158')
-      expect(series.name).toBe('tn-ap-67-158')
-    } catch (e) {
-      // header-only template without t_s data rows is ok
-      expect(String(e)).toMatch(/t_s/)
+    const series = loadTrajectoryCsv(text, 'tn-ap-67-158')
+    expect(series.samples.length).toBeGreaterThanOrEqual(30)
+    // First motion + staging markers
+    expect(series.samples[0].t_s).toBe(0)
+    expect(series.samples[0].h_m).toBe(30)
+    expect(series.samples[0].mass_kg).toBe(586593)
+    const sep = series.samples.find(s => s.t_s === 147.26)
+    expect(sep?.h_m).toBe(61260)
+    expect(sep?.mass_kg).toBe(183924)
+    // Max-q near t=78 s (~31.9 kPa from TN kgf/m² column)
+    const maxq = series.samples.find(s => s.t_s === 78)
+    expect(maxq?.qbar_Pa).toBeGreaterThan(30000)
+    expect(maxq?.qbar_Pa).toBeLessThan(35000)
+  })
+
+  test('TN reference self-compare is near-zero residual', () => {
+    const text = fs.readFileSync(
+      path.join(REF_DIR, 'as205_trajectory_reference.csv'),
+      'utf8'
+    )
+    const ref = loadTrajectoryCsv(text, 'tn')
+    const result = compareTrajectories(ref, ref, {
+      fields: ['h_m', 'v_mps', 'mass_kg', 'qbar_Pa'],
+      timeMatchTol_s: 0.1
+    })
+    expect(result.paired).toBe(ref.samples.length)
+    for (const r of result.residuals) {
+      if (r.n === 0) continue
+      expect(r.maxAbs).toBeLessThan(1e-9)
     }
   })
 })

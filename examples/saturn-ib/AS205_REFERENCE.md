@@ -79,11 +79,28 @@ Or use unit tests that load both CSVs when present.
 
 | Phase | Expectation |
 |-------|-------------|
-| 9.x plant / rate loop | **Qualitative** agreement only (shape of h(t), mass drop). No TN numeric pass/fail yet. |
-| After aero + mass props | Quantitative windows vs TN (to be defined with extracted tables). |
+| 9.1 / 9.2 plant / rate loop | **Qualitative** agreement only (shape of h(t), mass drop). |
+| 9.3 + Table 5 CSV | Residual **reports** enabled; still no hard pass/fail gates. Prefer h, mass first. |
+| After aero tables + mass props + χ program | Quantitative windows vs TN (to be defined). |
 | Full IGM stack | Guidance presettings from TN + trajectory tables. |
 
-## Extracting tables from the PDF
+**Frame caveat:** TN Table 5 velocity is **space-fixed** (~409 m/s at first motion from Earth rotation). 9.x demos integrate body \(v_b\) from near rest. Compare \(h(t)\) and \(m(t)\) before chasing \(\|v\|\) residuals.
+
+## Digitized tables (repo)
+
+| File | Content |
+|------|---------|
+| `as205_trajectory_reference.csv` | **Table 5 S-IB** (t=0…147.26 s), SI, ~5 s steps + event times |
+| `as205_trajectory_template.csv` | Column contract |
+| `as205_trajectory_smoke.csv` | Synthetic unit-test series only |
+
+S-IVB Table 6 and Appendix C English listings are **not** fully digitized yet.
+
+### Dynamic pressure unit note
+
+TN Table 5 column header is **DYNAMIC PRESSURE (KG/M2)**. Values at max-q (~3254) are treated as **kgf/m²** and converted with \(q_{\mathrm{Pa}} = q_{\mathrm{TN}}\times 9.80665\) (~31.9 kPa ≈ 666 psf). If a later audit shows the TN intended N/m² already, re-scale the CSV and re-run residuals — do not retune the plant to a wrong unit.
+
+## Extracting more tables from the PDF
 
 The TN is multi-page with trajectory listings. Recommended process:
 
@@ -91,13 +108,14 @@ The TN is multi-page with trajectory listings. Recommended process:
 2. Identify the **revised reference trajectory** time history tables (not only summary plots).  
 3. Digitize selected rows (or full table) into `as205_trajectory_reference.csv`.  
 4. Record **page numbers** and **column definitions** in `source_note` / README.  
-5. Never commit OCR garbage without a human spot-check against the PDF.
+5. Never commit OCR garbage without a human spot-check against the PDF (mass continuity \(\dot m\sim 2.7\,\mathrm{t/s}\) is a good check).
 
 ## Related models
 
 | Model | Use for |
 |-------|---------|
-| `saturn-9.1-open-loop-6dof-ascent` | h, mass, q̄, \|r\| vs time (plant) |
+| `saturn-9.1-open-loop-6dof-ascent` | h, mass, q̄, \|r\| vs time (plant, no aero force) |
 | `saturn-9.2-closed-loop-pitch-rate-damp` | rate loop only — **not** TN trajectory match |
+| `saturn-9.3-open-loop-6dof-ascent-aero` | plant + constant-CdA drag; primary residual candidate |
 | `saturn-8.8-chi-time-tilt` | χ program shape vs time (open-loop) |
-| Future 9.3+ | Explicit TN residual report model / script |
+| Future 9.4+ | χ program on 6-DoF plant; quantitative residual gates |

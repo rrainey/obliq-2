@@ -14,15 +14,22 @@ See [`examples/saturn-ib/AS205_REFERENCE.md`](../../../examples/saturn-ib/AS205_
 | File | Purpose |
 |------|---------|
 | `as205_trajectory_template.csv` | Column contract + header comments |
-| `as205_trajectory_reference.csv` | **Filled TN tables** (add when digitized; optional until then) |
+| `as205_trajectory_reference.csv` | **TN Table 5 S-IB** (digitized SI; see header comments) |
 | `as205_trajectory_smoke.csv` | Tiny synthetic series for unit tests only (not flight data) |
 
-## Adding real TN data
+## Current digitization status
+
+- **S-IB Table 5** (printed p.17+): present in `as205_trajectory_reference.csv` (~5 s steps, 0–147.26 s).  
+- **S-IVB Table 6 / App. C English**: not yet.  
+- Dynamic pressure: TN `KG/M2` treated as kgf/m² → Pa via ×9.80665 (see CSV header).  
+- Mass continuity spot-check: Δm/Δt ≈ 2.7–2.8 t/s under boost.
+
+## Adding / correcting TN data
 
 1. Open TN-AP-67-158 and locate the revised reference trajectory time history.  
 2. Convert units to SI (m, m/s, kg, Pa, rad).  
 3. Paste rows into `as205_trajectory_reference.csv` following the template header.  
 4. Put page / table IDs in `source_note`.  
-5. Spot-check a few rows against the PDF before trusting residuals.
+5. Spot-check a few rows against the PDF before trusting residuals — **prefer TN over Simulink** when they disagree.
 
-Until `as205_trajectory_reference.csv` exists, comparisons against the TN are **not** automated; use qualitative plots on 9.1 / future plant models only.
+Use with 9.3 loggers + `examples/saturn-ib/as205Compare.ts` for residual reports (still qualitative acceptance).

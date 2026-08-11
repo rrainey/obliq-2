@@ -27,6 +27,7 @@ npm test -- --testPathPattern=saturn-ib-slices
 | 8.10 | open-loop-ascent-1d | Liftoff + thrust table + gravity + atmosphere (1D stack) |
 | **9.1** | **open-loop-6dof-ascent** | **Sprint: EOM + burn + altitude/atmosphere/q̄ plots + displays** |
 | **9.2** | **closed-loop-pitch-rate-damp** | **Sprint: Q feedback via TF+limit → My into EOM** |
+| **9.3** | **open-loop-6dof-ascent-aero** | **Sprint: 9.1 + simple aero drag F_aero=−q̄·CdA·v̂ into EOM** |
 
 ## Parameters
 
@@ -50,8 +51,9 @@ npm test -- --testPathPattern=sixdof-varmass-eom
 
 ## Not yet modeled (full stack still TBD)
 
-- Aero forces/moments coupled into EOM (9.1 samples atmosphere only)
+- Full aero tables (CN, Cm, α-dependent moments) — 9.3 is constant-CdA drag only
 - Full inertia tensor (products of inertia) and mass-property LUTs
+- Open-loop χ pitch program into attitude (8.8 exists; not yet on 6-DoF plant)
 - Full IGM χ steering (9.2 is pitch-rate damp only)
 - Multi-engine H-1 cluster + APS
-- Digitized full TN-AP-67-158 tables + quantitative pass/fail windows
+- Quantitative TN pass/fail windows (reference CSV digitized; residuals still qualitative)

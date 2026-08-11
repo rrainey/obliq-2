@@ -1,15 +1,15 @@
 {
-  "name": "saturn-9.1-open-loop-6dof-ascent",
+  "name": "saturn-9.3-open-loop-6dof-ascent-aero",
   "data": {
     "version": "2.2",
     "metadata": {
       "created": "2026-08-11T23:50:06.455Z",
-      "description": "Open-loop 6-DoF ascent: EOM + liftoff/thrust/mdot + altitude/atmosphere/q̄ plots (no aero force). Sprint integration model."
+      "description": "Open-loop 6-DoF ascent with simple aero drag (F_aero = −q̄·CdA·v̂_b) into EOM. Compare h/mass/q̄ to TN-AP-67-158 (not Simulink)."
     },
     "sheets": [
       {
         "id": "main",
-        "name": "OpenLoopAscent",
+        "name": "OpenLoopAscentAero",
         "blocks": [
           {
             "id": "source_164",
@@ -17,7 +17,7 @@
             "type": "source",
             "position": {
               "x": 40,
-              "y": 60
+              "y": 40
             },
             "parameters": {
               "signalType": "step",
@@ -32,7 +32,7 @@
             "type": "edge_detect",
             "position": {
               "x": 180,
-              "y": 60
+              "y": 40
             },
             "parameters": {
               "edge": "rising",
@@ -45,7 +45,7 @@
             "type": "source",
             "position": {
               "x": 40,
-              "y": 140
+              "y": 120
             },
             "parameters": {
               "signalType": "constant",
@@ -59,7 +59,7 @@
             "type": "integrator",
             "position": {
               "x": 180,
-              "y": 140
+              "y": 120
             },
             "parameters": {
               "showResetInput": true,
@@ -73,7 +73,7 @@
             "type": "lookup_1d",
             "position": {
               "x": 340,
-              "y": 140
+              "y": 120
             },
             "parameters": {
               "inputValues": [
@@ -109,7 +109,7 @@
             "type": "source",
             "position": {
               "x": 340,
-              "y": 240
+              "y": 220
             },
             "parameters": {
               "signalType": "constant",
@@ -123,7 +123,7 @@
             "type": "matrix_multiply",
             "position": {
               "x": 480,
-              "y": 200
+              "y": 180
             },
             "parameters": {}
           },
@@ -133,7 +133,7 @@
             "type": "source",
             "position": {
               "x": 340,
-              "y": 320
+              "y": 300
             },
             "parameters": {
               "signalType": "constant",
@@ -143,11 +143,11 @@
           },
           {
             "id": "mux_172",
-            "name": "F_b_cmd",
+            "name": "F_thrust",
             "type": "mux",
             "position": {
               "x": 480,
-              "y": 140
+              "y": 120
             },
             "parameters": {
               "rows": 1,
@@ -180,8 +180,8 @@
             "name": "EOM_6DoF_VarMass",
             "type": "subsystem",
             "position": {
-              "x": 560,
-              "y": 260
+              "x": 720,
+              "y": 280
             },
             "parameters": {
               "sheets": [
@@ -1723,8 +1723,8 @@
             "name": "R_earth",
             "type": "source",
             "position": {
-              "x": 560,
-              "y": 480
+              "x": 720,
+              "y": 520
             },
             "parameters": {
               "signalType": "constant",
@@ -1737,8 +1737,8 @@
             "name": "altitude_m",
             "type": "sum",
             "position": {
-              "x": 720,
-              "y": 440
+              "x": 880,
+              "y": 480
             },
             "parameters": {
               "signs": "+-",
@@ -1750,8 +1750,8 @@
             "name": "Atm",
             "type": "atmosphere",
             "position": {
-              "x": 880,
-              "y": 440
+              "x": 1040,
+              "y": 480
             },
             "parameters": {
               "model": "coesa1976",
@@ -1763,8 +1763,8 @@
             "name": "half",
             "type": "source",
             "position": {
-              "x": 720,
-              "y": 560
+              "x": 880,
+              "y": 600
             },
             "parameters": {
               "signalType": "constant",
@@ -1777,8 +1777,8 @@
             "name": "V_mag",
             "type": "mag",
             "position": {
-              "x": 720,
-              "y": 360
+              "x": 880,
+              "y": 380
             },
             "parameters": {}
           },
@@ -1787,8 +1787,8 @@
             "name": "V_sq",
             "type": "multiply",
             "position": {
-              "x": 860,
-              "y": 360
+              "x": 1020,
+              "y": 380
             },
             "parameters": {
               "numInputs": 2
@@ -1799,8 +1799,8 @@
             "name": "half_rho",
             "type": "multiply",
             "position": {
-              "x": 1000,
-              "y": 420
+              "x": 1160,
+              "y": 440
             },
             "parameters": {
               "numInputs": 2
@@ -1811,7 +1811,7 @@
             "name": "qbar",
             "type": "multiply",
             "position": {
-              "x": 1140,
+              "x": 1300,
               "y": 400
             },
             "parameters": {
@@ -1819,95 +1819,228 @@
             }
           },
           {
-            "id": "output_port_182",
+            "id": "source_182",
+            "name": "CdA_m2",
+            "type": "source",
+            "position": {
+              "x": 880,
+              "y": 300
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 17,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "multiply_183",
+            "name": "D_mag",
+            "type": "multiply",
+            "position": {
+              "x": 1160,
+              "y": 340
+            },
+            "parameters": {
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "evaluate_184",
+            "name": "V_safe",
+            "type": "evaluate",
+            "position": {
+              "x": 1020,
+              "y": 300
+            },
+            "parameters": {
+              "numInputs": 1,
+              "expression": "in(0) > 1e-3 ? in(0) : 1e-3"
+            }
+          },
+          {
+            "id": "demux_185",
+            "name": "demux_vb",
+            "type": "demux",
+            "position": {
+              "x": 880,
+              "y": 220
+            },
+            "parameters": {
+              "outputCount": 3,
+              "inputDimensions": [
+                3
+              ]
+            }
+          },
+          {
+            "id": "divide_186",
+            "name": "vhat_x",
+            "type": "divide",
+            "position": {
+              "x": 1020,
+              "y": 180
+            },
+            "parameters": {}
+          },
+          {
+            "id": "divide_187",
+            "name": "vhat_y",
+            "type": "divide",
+            "position": {
+              "x": 1020,
+              "y": 220
+            },
+            "parameters": {}
+          },
+          {
+            "id": "divide_188",
+            "name": "vhat_z",
+            "type": "divide",
+            "position": {
+              "x": 1020,
+              "y": 260
+            },
+            "parameters": {}
+          },
+          {
+            "id": "mux_189",
+            "name": "v_hat",
+            "type": "mux",
+            "position": {
+              "x": 1160,
+              "y": 220
+            },
+            "parameters": {
+              "rows": 1,
+              "cols": 3,
+              "baseType": "double",
+              "outputType": "double[3]",
+              "outputShape": "vector"
+            }
+          },
+          {
+            "id": "matrix_multiply_190",
+            "name": "D_vec",
+            "type": "matrix_multiply",
+            "position": {
+              "x": 1300,
+              "y": 280
+            },
+            "parameters": {}
+          },
+          {
+            "id": "uminus_191",
+            "name": "F_aero",
+            "type": "uminus",
+            "position": {
+              "x": 1440,
+              "y": 280
+            },
+            "parameters": {}
+          },
+          {
+            "id": "sum_192",
+            "name": "F_b_cmd",
+            "type": "sum",
+            "position": {
+              "x": 1580,
+              "y": 180
+            },
+            "parameters": {
+              "signs": "++",
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "output_port_193",
             "name": "r_i",
             "type": "output_port",
             "position": {
-              "x": 900,
-              "y": 100
+              "x": 1100,
+              "y": 40
             },
             "parameters": {
               "portName": "r_i"
             }
           },
           {
-            "id": "output_port_183",
+            "id": "output_port_194",
             "name": "v_b",
             "type": "output_port",
             "position": {
-              "x": 900,
-              "y": 160
+              "x": 1100,
+              "y": 100
             },
             "parameters": {
               "portName": "v_b"
             }
           },
           {
-            "id": "output_port_184",
+            "id": "output_port_195",
             "name": "omega_b",
             "type": "output_port",
             "position": {
-              "x": 900,
-              "y": 220
+              "x": 1100,
+              "y": 160
             },
             "parameters": {
               "portName": "omega_b"
             }
           },
           {
-            "id": "output_port_185",
+            "id": "output_port_196",
             "name": "q",
             "type": "output_port",
             "position": {
-              "x": 900,
-              "y": 280
+              "x": 1260,
+              "y": 40
             },
             "parameters": {
               "portName": "q"
             }
           },
           {
-            "id": "output_port_186",
+            "id": "output_port_197",
             "name": "mass",
             "type": "output_port",
             "position": {
-              "x": 900,
-              "y": 340
+              "x": 1260,
+              "y": 100
             },
             "parameters": {
               "portName": "mass_kg"
             }
           },
           {
-            "id": "output_port_187",
+            "id": "output_port_198",
             "name": "r_mag",
             "type": "output_port",
             "position": {
-              "x": 900,
-              "y": 520
+              "x": 1260,
+              "y": 160
             },
             "parameters": {
               "portName": "r_mag_m"
             }
           },
           {
-            "id": "output_port_188",
+            "id": "output_port_199",
             "name": "thrust",
             "type": "output_port",
             "position": {
-              "x": 720,
-              "y": 60
+              "x": 640,
+              "y": 40
             },
             "parameters": {
               "portName": "thrust_N"
             }
           },
           {
-            "id": "output_port_189",
+            "id": "output_port_200",
             "name": "h",
             "type": "output_port",
             "position": {
-              "x": 1140,
+              "x": 1440,
               "y": 480
             },
             "parameters": {
@@ -1915,11 +2048,11 @@
             }
           },
           {
-            "id": "output_port_190",
+            "id": "output_port_201",
             "name": "rho",
             "type": "output_port",
             "position": {
-              "x": 1140,
+              "x": 1440,
               "y": 540
             },
             "parameters": {
@@ -1927,11 +2060,11 @@
             }
           },
           {
-            "id": "output_port_191",
+            "id": "output_port_202",
             "name": "qbar_out",
             "type": "output_port",
             "position": {
-              "x": 1280,
+              "x": 1440,
               "y": 400
             },
             "parameters": {
@@ -1939,417 +2072,562 @@
             }
           },
           {
-            "id": "signal_display_192",
+            "id": "output_port_203",
+            "name": "drag",
+            "type": "output_port",
+            "position": {
+              "x": 1580,
+              "y": 340
+            },
+            "parameters": {
+              "portName": "drag_N"
+            }
+          },
+          {
+            "id": "signal_display_204",
             "name": "disp_r_mag",
             "type": "signal_display",
             "position": {
-              "x": 1100,
-              "y": 100
+              "x": 1700,
+              "y": 40
             },
             "parameters": {
               "title": "Geocentric radius |r| (m)"
             }
           },
           {
-            "id": "signal_display_193",
+            "id": "signal_display_205",
             "name": "disp_mass",
             "type": "signal_display",
             "position": {
-              "x": 1100,
-              "y": 180
+              "x": 1700,
+              "y": 120
             },
             "parameters": {
               "title": "Mass (kg)"
             }
           },
           {
-            "id": "signal_display_194",
-            "name": "disp_thrust",
-            "type": "signal_display",
-            "position": {
-              "x": 1100,
-              "y": 260
-            },
-            "parameters": {
-              "title": "Thrust (N)"
-            }
-          },
-          {
-            "id": "signal_display_195",
+            "id": "signal_display_206",
             "name": "disp_altitude",
             "type": "signal_display",
             "position": {
-              "x": 1280,
-              "y": 100
+              "x": 1700,
+              "y": 200
             },
             "parameters": {
               "title": "Altitude MSL (m)"
             }
           },
           {
-            "id": "signal_display_196",
+            "id": "signal_display_207",
             "name": "disp_qbar",
             "type": "signal_display",
             "position": {
-              "x": 1280,
-              "y": 180
+              "x": 1700,
+              "y": 280
             },
             "parameters": {
               "title": "Dynamic pressure q̄ (Pa)"
             }
           },
           {
-            "id": "signal_display_197",
+            "id": "signal_display_208",
             "name": "disp_V",
             "type": "signal_display",
             "position": {
-              "x": 1280,
-              "y": 260
+              "x": 1700,
+              "y": 360
             },
             "parameters": {
               "title": "Body speed |v_b| (m/s)"
             }
           },
           {
-            "id": "signal_logger_198",
-            "name": "log_r_mag",
-            "type": "signal_logger",
+            "id": "signal_display_209",
+            "name": "disp_drag",
+            "type": "signal_display",
             "position": {
-              "x": 1100,
-              "y": 340
+              "x": 1700,
+              "y": 440
             },
-            "parameters": {}
+            "parameters": {
+              "title": "Drag magnitude (N)"
+            }
           },
           {
-            "id": "signal_logger_199",
-            "name": "log_mass",
-            "type": "signal_logger",
-            "position": {
-              "x": 1100,
-              "y": 400
-            },
-            "parameters": {}
-          },
-          {
-            "id": "signal_logger_200",
+            "id": "signal_logger_210",
             "name": "log_altitude",
             "type": "signal_logger",
             "position": {
-              "x": 1280,
-              "y": 340
+              "x": 1860,
+              "y": 120
             },
             "parameters": {}
           },
           {
-            "id": "signal_logger_201",
+            "id": "signal_logger_211",
+            "name": "log_mass",
+            "type": "signal_logger",
+            "position": {
+              "x": 1860,
+              "y": 200
+            },
+            "parameters": {}
+          },
+          {
+            "id": "signal_logger_212",
             "name": "log_qbar",
             "type": "signal_logger",
             "position": {
-              "x": 1280,
-              "y": 480
+              "x": 1860,
+              "y": 280
+            },
+            "parameters": {}
+          },
+          {
+            "id": "signal_logger_213",
+            "name": "log_V",
+            "type": "signal_logger",
+            "position": {
+              "x": 1860,
+              "y": 360
             },
             "parameters": {}
           }
         ],
         "connections": [
           {
-            "id": "w_202",
+            "id": "w_214",
             "sourceBlockId": "source_164",
             "sourcePortIndex": 0,
             "targetBlockId": "edge_detect_165",
             "targetPortIndex": 0
           },
           {
-            "id": "w_203",
+            "id": "w_215",
             "sourceBlockId": "source_166",
             "sourcePortIndex": 0,
             "targetBlockId": "integrator_167",
             "targetPortIndex": 0
           },
           {
-            "id": "w_204",
+            "id": "w_216",
             "sourceBlockId": "edge_detect_165",
             "sourcePortIndex": 0,
             "targetBlockId": "integrator_167",
             "targetPortIndex": -2
           },
           {
-            "id": "w_205",
+            "id": "w_217",
             "sourceBlockId": "integrator_167",
             "sourcePortIndex": 0,
             "targetBlockId": "lookup_1d_168",
             "targetPortIndex": 0
           },
           {
-            "id": "w_206",
+            "id": "w_218",
             "sourceBlockId": "lookup_1d_168",
             "sourcePortIndex": 0,
-            "targetBlockId": "output_port_188",
+            "targetBlockId": "output_port_199",
             "targetPortIndex": 0
           },
           {
-            "id": "w_207",
+            "id": "w_219",
             "sourceBlockId": "lookup_1d_168",
             "sourcePortIndex": 0,
             "targetBlockId": "matrix_multiply_170",
             "targetPortIndex": 0
           },
           {
-            "id": "w_208",
+            "id": "w_220",
             "sourceBlockId": "source_169",
             "sourcePortIndex": 0,
             "targetBlockId": "matrix_multiply_170",
             "targetPortIndex": 1
           },
           {
-            "id": "w_209",
+            "id": "w_221",
             "sourceBlockId": "lookup_1d_168",
             "sourcePortIndex": 0,
             "targetBlockId": "mux_172",
             "targetPortIndex": 0
           },
           {
-            "id": "w_210",
+            "id": "w_222",
             "sourceBlockId": "source_171",
             "sourcePortIndex": 0,
             "targetBlockId": "mux_172",
             "targetPortIndex": 1
           },
           {
-            "id": "w_211",
+            "id": "w_223",
             "sourceBlockId": "source_171",
             "sourcePortIndex": 0,
             "targetBlockId": "mux_172",
             "targetPortIndex": 2
           },
           {
-            "id": "w_212",
-            "sourceBlockId": "mux_172",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sub_eom",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_213",
-            "sourceBlockId": "source_173",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sub_eom",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_214",
-            "sourceBlockId": "matrix_multiply_170",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sub_eom",
-            "targetPortIndex": 2
-          },
-          {
-            "id": "w_215",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 0,
-            "targetBlockId": "output_port_182",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_216",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 1,
-            "targetBlockId": "output_port_183",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_217",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 2,
-            "targetBlockId": "output_port_184",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_218",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 3,
-            "targetBlockId": "output_port_185",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_219",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 4,
-            "targetBlockId": "output_port_186",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_220",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 5,
-            "targetBlockId": "output_port_187",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_221",
+            "id": "w_224",
             "sourceBlockId": "sub_eom",
             "sourcePortIndex": 5,
             "targetBlockId": "sum_175",
             "targetPortIndex": 0
           },
           {
-            "id": "w_222",
+            "id": "w_225",
             "sourceBlockId": "source_174",
             "sourcePortIndex": 0,
             "targetBlockId": "sum_175",
             "targetPortIndex": 1
           },
           {
-            "id": "w_223",
+            "id": "w_226",
             "sourceBlockId": "sum_175",
             "sourcePortIndex": 0,
             "targetBlockId": "atmosphere_176",
             "targetPortIndex": 0
           },
           {
-            "id": "w_224",
+            "id": "w_227",
             "sourceBlockId": "sub_eom",
             "sourcePortIndex": 1,
             "targetBlockId": "mag_178",
             "targetPortIndex": 0
           },
           {
-            "id": "w_225",
+            "id": "w_228",
             "sourceBlockId": "mag_178",
             "sourcePortIndex": 0,
             "targetBlockId": "multiply_179",
             "targetPortIndex": 0
           },
           {
-            "id": "w_226",
+            "id": "w_229",
             "sourceBlockId": "mag_178",
             "sourcePortIndex": 0,
             "targetBlockId": "multiply_179",
             "targetPortIndex": 1
           },
           {
-            "id": "w_227",
+            "id": "w_230",
             "sourceBlockId": "source_177",
             "sourcePortIndex": 0,
             "targetBlockId": "multiply_180",
             "targetPortIndex": 0
           },
           {
-            "id": "w_228",
+            "id": "w_231",
             "sourceBlockId": "atmosphere_176",
             "sourcePortIndex": 2,
             "targetBlockId": "multiply_180",
             "targetPortIndex": 1
           },
           {
-            "id": "w_229",
+            "id": "w_232",
             "sourceBlockId": "multiply_180",
             "sourcePortIndex": 0,
             "targetBlockId": "multiply_181",
             "targetPortIndex": 0
           },
           {
-            "id": "w_230",
+            "id": "w_233",
             "sourceBlockId": "multiply_179",
             "sourcePortIndex": 0,
             "targetBlockId": "multiply_181",
             "targetPortIndex": 1
           },
           {
-            "id": "w_231",
-            "sourceBlockId": "sum_175",
-            "sourcePortIndex": 0,
-            "targetBlockId": "output_port_189",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_232",
-            "sourceBlockId": "atmosphere_176",
-            "sourcePortIndex": 2,
-            "targetBlockId": "output_port_190",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_233",
-            "sourceBlockId": "multiply_181",
-            "sourcePortIndex": 0,
-            "targetBlockId": "output_port_191",
-            "targetPortIndex": 0
-          },
-          {
             "id": "w_234",
             "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 5,
-            "targetBlockId": "signal_display_192",
+            "sourcePortIndex": 1,
+            "targetBlockId": "demux_185",
             "targetPortIndex": 0
           },
           {
             "id": "w_235",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 4,
-            "targetBlockId": "signal_display_193",
+            "sourceBlockId": "mag_178",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_184",
             "targetPortIndex": 0
           },
           {
             "id": "w_236",
-            "sourceBlockId": "lookup_1d_168",
+            "sourceBlockId": "demux_185",
             "sourcePortIndex": 0,
-            "targetBlockId": "signal_display_194",
+            "targetBlockId": "divide_186",
             "targetPortIndex": 0
           },
           {
             "id": "w_237",
-            "sourceBlockId": "sum_175",
+            "sourceBlockId": "evaluate_184",
             "sourcePortIndex": 0,
-            "targetBlockId": "signal_display_195",
-            "targetPortIndex": 0
+            "targetBlockId": "divide_186",
+            "targetPortIndex": 1
           },
           {
             "id": "w_238",
-            "sourceBlockId": "multiply_181",
-            "sourcePortIndex": 0,
-            "targetBlockId": "signal_display_196",
+            "sourceBlockId": "demux_185",
+            "sourcePortIndex": 1,
+            "targetBlockId": "divide_187",
             "targetPortIndex": 0
           },
           {
             "id": "w_239",
-            "sourceBlockId": "mag_178",
+            "sourceBlockId": "evaluate_184",
             "sourcePortIndex": 0,
-            "targetBlockId": "signal_display_197",
-            "targetPortIndex": 0
+            "targetBlockId": "divide_187",
+            "targetPortIndex": 1
           },
           {
             "id": "w_240",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 5,
-            "targetBlockId": "signal_logger_198",
+            "sourceBlockId": "demux_185",
+            "sourcePortIndex": 2,
+            "targetBlockId": "divide_188",
             "targetPortIndex": 0
           },
           {
             "id": "w_241",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 4,
-            "targetBlockId": "signal_logger_199",
-            "targetPortIndex": 0
+            "sourceBlockId": "evaluate_184",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_188",
+            "targetPortIndex": 1
           },
           {
             "id": "w_242",
-            "sourceBlockId": "sum_175",
+            "sourceBlockId": "divide_186",
             "sourcePortIndex": 0,
-            "targetBlockId": "signal_logger_200",
+            "targetBlockId": "mux_189",
             "targetPortIndex": 0
           },
           {
             "id": "w_243",
+            "sourceBlockId": "divide_187",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_189",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_244",
+            "sourceBlockId": "divide_188",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_189",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_245",
             "sourceBlockId": "multiply_181",
             "sourcePortIndex": 0,
-            "targetBlockId": "signal_logger_201",
+            "targetBlockId": "multiply_183",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_246",
+            "sourceBlockId": "source_182",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_183",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_247",
+            "sourceBlockId": "multiply_183",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_190",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_248",
+            "sourceBlockId": "mux_189",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_190",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_249",
+            "sourceBlockId": "matrix_multiply_190",
+            "sourcePortIndex": 0,
+            "targetBlockId": "uminus_191",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_250",
+            "sourceBlockId": "mux_172",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_192",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_251",
+            "sourceBlockId": "uminus_191",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_192",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_252",
+            "sourceBlockId": "sum_192",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sub_eom",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_253",
+            "sourceBlockId": "source_173",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sub_eom",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_254",
+            "sourceBlockId": "matrix_multiply_170",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sub_eom",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_255",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_193",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_256",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 1,
+            "targetBlockId": "output_port_194",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_257",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 2,
+            "targetBlockId": "output_port_195",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_258",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 3,
+            "targetBlockId": "output_port_196",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_259",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 4,
+            "targetBlockId": "output_port_197",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_260",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 5,
+            "targetBlockId": "output_port_198",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_261",
+            "sourceBlockId": "sum_175",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_200",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_262",
+            "sourceBlockId": "atmosphere_176",
+            "sourcePortIndex": 2,
+            "targetBlockId": "output_port_201",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_263",
+            "sourceBlockId": "multiply_181",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_202",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_264",
+            "sourceBlockId": "multiply_183",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_203",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_265",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 5,
+            "targetBlockId": "signal_display_204",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_266",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 4,
+            "targetBlockId": "signal_display_205",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_267",
+            "sourceBlockId": "sum_175",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_display_206",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_268",
+            "sourceBlockId": "multiply_181",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_display_207",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_269",
+            "sourceBlockId": "mag_178",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_display_208",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_270",
+            "sourceBlockId": "multiply_183",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_display_209",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_271",
+            "sourceBlockId": "sum_175",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_logger_210",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_272",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 4,
+            "targetBlockId": "signal_logger_211",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_273",
+            "sourceBlockId": "multiply_181",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_logger_212",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_274",
+            "sourceBlockId": "mag_178",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_logger_213",
             "targetPortIndex": 0
           }
         ],
         "extents": {
-          "width": 1500,
-          "height": 700
+          "width": 2000,
+          "height": 720
         }
       }
     ],
@@ -2374,6 +2652,13 @@
         "defaultValue": "6371000.0",
         "signalType": "double",
         "value": 6371000
+      },
+      {
+        "name": "CdA_m2",
+        "dataType": "double",
+        "defaultValue": "17.0",
+        "signalType": "double",
+        "value": 17
       },
       {
         "name": "Isp_s",

@@ -3,7 +3,7 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-11T23:43:25.258Z",
+      "created": "2026-08-11T23:50:06.454Z",
       "description": "6-DOF variable-mass EOM with unit-quaternion renormalization, principal inertia ∝ mass, point-mass gravity, body forces/moments"
     },
     "sheets": [

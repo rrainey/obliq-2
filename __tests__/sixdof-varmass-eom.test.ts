@@ -9,7 +9,8 @@ import {
   buildSixDofVariableMassEom,
   buildSixDofVehicleBurnDemo,
   buildSixDofOpenLoopAscent,
-  buildSixDofClosedLoopPitchRateDamp
+  buildSixDofClosedLoopPitchRateDamp,
+  buildSixDofOpenLoopAscentWithAero
 } from '../examples/saturn-ib/sixDofVarMassEom'
 import { sliceToModelData } from '../examples/saturn-ib/sliceModels'
 
@@ -145,6 +146,34 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(result.source).toContain('_step')
   })
 
+  test('9.3 open-loop 6-DoF + aero drag: q̄·CdA·v̂ into F_b', () => {
+    const m = buildSixDofOpenLoopAscentWithAero()
+    const types = new Set(m.sheets[0].blocks.map(b => b.type))
+    expect(types.has('subsystem')).toBe(true)
+    expect(types.has('atmosphere')).toBe(true)
+    expect(types.has('uminus')).toBe(true)
+    expect(types.has('signal_logger')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'F_aero')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'CdA_m2')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'F_b_cmd')).toBe(true)
+    // F_b_cmd (sum) feeds EOM F_b, not bare thrust
+    const eom = m.sheets[0].blocks.find(b => b.name === 'EOM_6DoF_VarMass')!
+    const Fb = m.sheets[0].blocks.find(b => b.name === 'F_b_cmd')!
+    expect(
+      m.sheets[0].connections.some(
+        c => c.sourceBlockId === Fb.id && c.targetBlockId === eom.id
+      )
+    ).toBe(true)
+
+    const gen = new CodeGenerator({
+      modelName: 'sixdof_ascent_aero',
+      integrationAlgorithm: 'rk4'
+    })
+    const result = gen.generate(m.sheets as any, m.parameters || [])
+    expect(result.source).not.toMatch(/Error generating code for/)
+    expect(result.source).toContain('_step')
+  })
+
   test('exports JSON fixtures', () => {
     const dir = path.join(__dirname, '../docs/sample-models/saturn')
     fs.mkdirSync(dir, { recursive: true })
@@ -152,7 +181,8 @@ describe('6-DOF variable-mass quaternion EOM', () => {
       model,
       buildSixDofVehicleBurnDemo(),
       buildSixDofOpenLoopAscent(),
-      buildSixDofClosedLoopPitchRateDamp()
+      buildSixDofClosedLoopPitchRateDamp(),
+      buildSixDofOpenLoopAscentWithAero()
     ]) {
       const data = sliceToModelData(m as any)
       const fp = path.join(dir, `${m.name}.json`)

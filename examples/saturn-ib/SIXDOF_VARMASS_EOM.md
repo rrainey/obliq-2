@@ -153,6 +153,42 @@ npm test -- --testPathPattern=sixdof-varmass-eom
 
 Fixture: `docs/sample-models/saturn/saturn-9.2-closed-loop-pitch-rate-damp.json`
 
+## 9.3 Open-loop 6-DoF ascent with aero drag
+
+`buildSixDofOpenLoopAscentWithAero()` — plant step toward AS-205 trajectory shape:
+
+| Piece | Role |
+|-------|------|
+| Same boost as 9.1 | Axial thrust + mdot into EOM |
+| Atmosphere + \(q̄\) | COESA ρ, \(q=½\rho\|v_b\|^2\) |
+| Simple drag | \(F_{\mathrm{aero}} = -q̄\,C_D A\,\hat{\mathbf{v}}_b\) |
+| \(F_b = F_{\mathrm{thrust}}+F_{\mathrm{aero}}\) | Drag **coupled** into EOM (not plot-only) |
+
+Default \(C_D A \approx 17\,\mathrm{m}^2\) (order-of-magnitude: \(D\approx6.6\,\mathrm{m}\), \(C_D\approx0.5\)).
+
+### Recommended sim settings
+
+| Setting | Value |
+|---------|-------|
+| Time step | **0.05 s** |
+| Duration | **180 s** |
+| Integration | **RK4** |
+
+### What you should see
+
+- Same qualitative boost as 9.1, but **drag magnitude** peaks near max-\(q̄\)
+- Altitude/speed slightly lower than 9.1 vacuum-aero-less plant for the same thrust table
+- Loggers for altitude, mass, \(q̄\), \(|v|\) ready for TN residual scripts
+
+### Compare to TN-AP-67-158
+
+Reference CSV: `docs/sample-models/saturn/as205-reference/as205_trajectory_reference.csv`  
+(Table 5 S-IB, SI). Prefer **altitude** and **mass** first — TN velocity is space-fixed (~409 m/s at liftoff from Earth rate); 9.x body speed starts near zero.
+
+**Do not “fix” the model to match Simulink** if Simulink and the TN disagree.
+
+Fixture: `docs/sample-models/saturn/saturn-9.3-open-loop-6dof-ascent-aero.json`
+
 ## Validation baseline
 
 Trajectory comparison target: **TN-AP-67-158 (AS-205 revised launch reference)**.  
@@ -162,10 +198,10 @@ See [`AS205_REFERENCE.md`](./AS205_REFERENCE.md). Simulink is secondary and may 
 
 - Principal-axis inertia only; no \(I_{xy}\) etc.
 - No thruster relative-velocity / plume force beyond user `F_b`
-- No aero forces into EOM (9.1 samples atmosphere for plots only)
+- 9.1 samples atmosphere for plots only; **9.3 adds constant-\(C_D A\) drag** (no CN/Cm/α tables)
 - 9.2 is pitch-rate damping only — not full IGM χ steering
 - Multi-engine / APS still TBD
-- Quantitative TN residual pass/fail not yet declared (digitize tables first)
+- Quantitative TN residual pass/fail windows not yet declared (CSV digitized for S-IB Table 5)
 - DCM convention assumed body→inertial; verify sign for a specific trajectory frame
 
 ## Run codegen test
