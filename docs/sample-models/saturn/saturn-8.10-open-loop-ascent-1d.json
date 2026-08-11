@@ -1,0 +1,588 @@
+{
+  "name": "saturn-8.10-open-loop-ascent-1d",
+  "data": {
+    "version": "2.2",
+    "metadata": {
+      "created": "2026-08-11T22:46:20.435Z",
+      "description": "1D open-loop ascent: liftoff edge → thrust table, gravity, atmosphere density (order-of-magnitude stack)"
+    },
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "source_1",
+            "name": "liftoff",
+            "type": "source",
+            "position": {
+              "x": 40,
+              "y": 40
+            },
+            "parameters": {
+              "signalType": "step",
+              "stepTime": 0.5,
+              "stepValue": 1,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "edge_detect_2",
+            "name": "liftoff_edge",
+            "type": "edge_detect",
+            "position": {
+              "x": 180,
+              "y": 40
+            },
+            "parameters": {
+              "edge": "rising",
+              "threshold": 0.5
+            }
+          },
+          {
+            "id": "source_3",
+            "name": "one",
+            "type": "source",
+            "position": {
+              "x": 40,
+              "y": 120
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 1,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "integrator_4",
+            "name": "t_burn",
+            "type": "integrator",
+            "position": {
+              "x": 180,
+              "y": 120
+            },
+            "parameters": {
+              "showResetInput": true,
+              "initialValue": 0,
+              "showInitPort": false
+            }
+          },
+          {
+            "id": "lookup_1d_5",
+            "name": "Thrust_N",
+            "type": "lookup_1d",
+            "position": {
+              "x": 340,
+              "y": 120
+            },
+            "parameters": {
+              "inputValues": [
+                0,
+                0.5,
+                1,
+                2,
+                10,
+                50,
+                100,
+                140,
+                150
+              ],
+              "outputValues": [
+                0,
+                500000,
+                800000,
+                890000,
+                890000,
+                890000,
+                890000,
+                800000,
+                0
+              ],
+              "extrapolation": "clamp"
+            }
+          },
+          {
+            "id": "source_6",
+            "name": "mass_kg",
+            "type": "source",
+            "position": {
+              "x": 40,
+              "y": 280
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 590000,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "source_7",
+            "name": "mu",
+            "type": "source",
+            "position": {
+              "x": 40,
+              "y": 360
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 398600441800000,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "source_8",
+            "name": "r0",
+            "type": "source",
+            "position": {
+              "x": 40,
+              "y": 440
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 6371034,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "source_9",
+            "name": "v0",
+            "type": "source",
+            "position": {
+              "x": 40,
+              "y": 520
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 0,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "integrator_10",
+            "name": "r",
+            "type": "integrator",
+            "position": {
+              "x": 520,
+              "y": 400
+            },
+            "parameters": {
+              "showInitPort": true,
+              "initialValue": 0
+            }
+          },
+          {
+            "id": "integrator_11",
+            "name": "v",
+            "type": "integrator",
+            "position": {
+              "x": 520,
+              "y": 520
+            },
+            "parameters": {
+              "showInitPort": true,
+              "initialValue": 0
+            }
+          },
+          {
+            "id": "divide_12",
+            "name": "a_thrust",
+            "type": "divide",
+            "position": {
+              "x": 500,
+              "y": 200
+            },
+            "parameters": {}
+          },
+          {
+            "id": "multiply_13",
+            "name": "r_sq",
+            "type": "multiply",
+            "position": {
+              "x": 680,
+              "y": 360
+            },
+            "parameters": {
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "divide_14",
+            "name": "g_mag",
+            "type": "divide",
+            "position": {
+              "x": 820,
+              "y": 360
+            },
+            "parameters": {}
+          },
+          {
+            "id": "uminus_15",
+            "name": "g_acc",
+            "type": "uminus",
+            "position": {
+              "x": 940,
+              "y": 360
+            },
+            "parameters": {}
+          },
+          {
+            "id": "sum_16",
+            "name": "a_tot",
+            "type": "sum",
+            "position": {
+              "x": 700,
+              "y": 240
+            },
+            "parameters": {
+              "signs": "++",
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "source_17",
+            "name": "Re",
+            "type": "source",
+            "position": {
+              "x": 40,
+              "y": 600
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 6371000,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "sum_18",
+            "name": "altitude",
+            "type": "sum",
+            "position": {
+              "x": 680,
+              "y": 480
+            },
+            "parameters": {
+              "signs": "+-",
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "atmosphere_19",
+            "name": "Atm",
+            "type": "atmosphere",
+            "position": {
+              "x": 860,
+              "y": 480
+            },
+            "parameters": {
+              "model": "coesa1976",
+              "extrapolation": "clamp"
+            }
+          },
+          {
+            "id": "output_port_20",
+            "name": "r_m",
+            "type": "output_port",
+            "position": {
+              "x": 1100,
+              "y": 400
+            },
+            "parameters": {
+              "portName": "r_m"
+            }
+          },
+          {
+            "id": "output_port_21",
+            "name": "v_mps",
+            "type": "output_port",
+            "position": {
+              "x": 1100,
+              "y": 520
+            },
+            "parameters": {
+              "portName": "v_mps"
+            }
+          },
+          {
+            "id": "output_port_22",
+            "name": "thrust_N",
+            "type": "output_port",
+            "position": {
+              "x": 500,
+              "y": 80
+            },
+            "parameters": {
+              "portName": "thrust_N"
+            }
+          },
+          {
+            "id": "output_port_23",
+            "name": "h_m",
+            "type": "output_port",
+            "position": {
+              "x": 1100,
+              "y": 480
+            },
+            "parameters": {
+              "portName": "h_m"
+            }
+          },
+          {
+            "id": "output_port_24",
+            "name": "rho",
+            "type": "output_port",
+            "position": {
+              "x": 1100,
+              "y": 560
+            },
+            "parameters": {
+              "portName": "rho_kgpm3"
+            }
+          },
+          {
+            "id": "output_port_25",
+            "name": "a_mps2",
+            "type": "output_port",
+            "position": {
+              "x": 1100,
+              "y": 240
+            },
+            "parameters": {
+              "portName": "a_mps2"
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "wire_26",
+            "sourceBlockId": "source_1",
+            "sourcePortIndex": 0,
+            "targetBlockId": "edge_detect_2",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_27",
+            "sourceBlockId": "source_3",
+            "sourcePortIndex": 0,
+            "targetBlockId": "integrator_4",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_28",
+            "sourceBlockId": "edge_detect_2",
+            "sourcePortIndex": 0,
+            "targetBlockId": "integrator_4",
+            "targetPortIndex": -2
+          },
+          {
+            "id": "wire_29",
+            "sourceBlockId": "integrator_4",
+            "sourcePortIndex": 0,
+            "targetBlockId": "lookup_1d_5",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_30",
+            "sourceBlockId": "lookup_1d_5",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_22",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_31",
+            "sourceBlockId": "lookup_1d_5",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_12",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_32",
+            "sourceBlockId": "source_6",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_12",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_33",
+            "sourceBlockId": "source_8",
+            "sourcePortIndex": 0,
+            "targetBlockId": "integrator_10",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_34",
+            "sourceBlockId": "source_9",
+            "sourcePortIndex": 0,
+            "targetBlockId": "integrator_11",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_35",
+            "sourceBlockId": "integrator_11",
+            "sourcePortIndex": 0,
+            "targetBlockId": "integrator_10",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_36",
+            "sourceBlockId": "sum_16",
+            "sourcePortIndex": 0,
+            "targetBlockId": "integrator_11",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_37",
+            "sourceBlockId": "integrator_10",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_13",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_38",
+            "sourceBlockId": "integrator_10",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_13",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_39",
+            "sourceBlockId": "source_7",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_14",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_40",
+            "sourceBlockId": "multiply_13",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_14",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_41",
+            "sourceBlockId": "divide_14",
+            "sourcePortIndex": 0,
+            "targetBlockId": "uminus_15",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_42",
+            "sourceBlockId": "divide_12",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_16",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_43",
+            "sourceBlockId": "uminus_15",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_16",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_44",
+            "sourceBlockId": "integrator_10",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_18",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_45",
+            "sourceBlockId": "source_17",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_18",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_46",
+            "sourceBlockId": "sum_18",
+            "sourcePortIndex": 0,
+            "targetBlockId": "atmosphere_19",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_47",
+            "sourceBlockId": "integrator_10",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_20",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_48",
+            "sourceBlockId": "integrator_11",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_21",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_49",
+            "sourceBlockId": "sum_18",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_23",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_50",
+            "sourceBlockId": "atmosphere_19",
+            "sourcePortIndex": 2,
+            "targetBlockId": "output_port_24",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_51",
+            "sourceBlockId": "sum_16",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_25",
+            "targetPortIndex": 0
+          }
+        ],
+        "extents": {
+          "width": 1200,
+          "height": 800
+        }
+      }
+    ],
+    "parameters": [
+      {
+        "name": "V_T_mps",
+        "dataType": "double",
+        "defaultValue": "7780.976",
+        "signalType": "double",
+        "value": 7780.976
+      },
+      {
+        "name": "R_T_m",
+        "dataType": "double",
+        "defaultValue": "6570774.0",
+        "signalType": "double",
+        "value": 6570774
+      },
+      {
+        "name": "A_z_deg",
+        "dataType": "double",
+        "defaultValue": "82.8200",
+        "signalType": "double",
+        "value": 82.82
+      },
+      {
+        "name": "mu_earth",
+        "dataType": "double",
+        "defaultValue": "3.986004418e14",
+        "signalType": "double",
+        "value": 398600441800000
+      },
+      {
+        "name": "R_earth_m",
+        "dataType": "double",
+        "defaultValue": "6371000.0",
+        "signalType": "double",
+        "value": 6371000
+      }
+    ],
+    "dataStores": [],
+    "globalSettings": {
+      "simulationTimeStep": 0.1,
+      "simulationDuration": 160,
+      "integrationAlgorithm": "rk4"
+    }
+  }
+}

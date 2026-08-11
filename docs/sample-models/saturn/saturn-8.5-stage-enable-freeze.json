@@ -1,0 +1,214 @@
+{
+  "name": "saturn-8.5-stage-enable-freeze",
+  "data": {
+    "version": "2.2",
+    "metadata": {
+      "created": "2026-08-11T22:46:20.435Z",
+      "description": "S-IB stage subsystem with enable: integrates propellant while enable=1, freezes after sep (t≥10s)"
+    },
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "clock_1",
+            "name": "t",
+            "type": "clock",
+            "position": {
+              "x": 40,
+              "y": 40
+            },
+            "parameters": {}
+          },
+          {
+            "id": "condition_2",
+            "name": "enable_SIB",
+            "type": "condition",
+            "position": {
+              "x": 180,
+              "y": 120
+            },
+            "parameters": {
+              "condition": "< 10.0"
+            }
+          },
+          {
+            "id": "source_3",
+            "name": "mdot",
+            "type": "source",
+            "position": {
+              "x": 40,
+              "y": 280
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 1000,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "sub_sib",
+            "name": "S_IB_Stage",
+            "type": "subsystem",
+            "position": {
+              "x": 360,
+              "y": 200
+            },
+            "parameters": {
+              "sheets": [
+                {
+                  "id": "sub_sib_sheet",
+                  "name": "S_IB_Stage Internals",
+                  "blocks": [
+                    {
+                      "id": "sub_sib_in",
+                      "name": "mdot_in",
+                      "type": "input_port",
+                      "position": {
+                        "x": 40,
+                        "y": 200
+                      },
+                      "parameters": {
+                        "portName": "mdot_in",
+                        "dataType": "double",
+                        "defaultValue": 0
+                      }
+                    },
+                    {
+                      "id": "sub_sib_int",
+                      "name": "propellant_used",
+                      "type": "integrator",
+                      "position": {
+                        "x": 200,
+                        "y": 190
+                      },
+                      "parameters": {
+                        "initialValue": 0,
+                        "showInitPort": false,
+                        "showResetInput": false,
+                        "showEnableInput": false
+                      }
+                    },
+                    {
+                      "id": "sub_sib_out",
+                      "name": "prop_used",
+                      "type": "output_port",
+                      "position": {
+                        "x": 360,
+                        "y": 200
+                      },
+                      "parameters": {
+                        "portName": "prop_used"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "sub_sib_w1",
+                      "sourceBlockId": "sub_sib_in",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sub_sib_int",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "sub_sib_w2",
+                      "sourceBlockId": "sub_sib_int",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sub_sib_out",
+                      "targetPortIndex": 0
+                    }
+                  ],
+                  "extents": {
+                    "width": 500,
+                    "height": 400
+                  }
+                }
+              ],
+              "inputPorts": [
+                "mdot_in"
+              ],
+              "outputPorts": [
+                "prop_used"
+              ],
+              "showEnableInput": true,
+              "codeGenStrategy": "flatten"
+            }
+          },
+          {
+            "id": "output_port_4",
+            "name": "prop_used_kg",
+            "type": "output_port",
+            "position": {
+              "x": 560,
+              "y": 200
+            },
+            "parameters": {
+              "portName": "prop_used_kg"
+            }
+          },
+          {
+            "id": "output_port_5",
+            "name": "enable_out",
+            "type": "output_port",
+            "position": {
+              "x": 360,
+              "y": 80
+            },
+            "parameters": {
+              "portName": "enable"
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "wire_6",
+            "sourceBlockId": "clock_1",
+            "sourcePortIndex": 0,
+            "targetBlockId": "condition_2",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_7",
+            "sourceBlockId": "condition_2",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_5",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_8",
+            "sourceBlockId": "condition_2",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sub_sib",
+            "targetPortIndex": -1
+          },
+          {
+            "id": "wire_9",
+            "sourceBlockId": "source_3",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sub_sib",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_10",
+            "sourceBlockId": "sub_sib",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_4",
+            "targetPortIndex": 0
+          }
+        ],
+        "extents": {
+          "width": 1200,
+          "height": 800
+        }
+      }
+    ],
+    "parameters": [],
+    "dataStores": [],
+    "globalSettings": {
+      "simulationTimeStep": 0.1,
+      "simulationDuration": 20,
+      "integrationAlgorithm": "rk4"
+    }
+  }
+}

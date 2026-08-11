@@ -1,0 +1,248 @@
+{
+  "name": "saturn-8.4-atmosphere-qbar",
+  "data": {
+    "version": "2.2",
+    "metadata": {
+      "created": "2026-08-11T22:46:20.435Z",
+      "description": "COESA atmosphere + dynamic pressure q=0.5*rho*V^2 during climb"
+    },
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "source_1",
+            "name": "altitude_m",
+            "type": "source",
+            "position": {
+              "x": 40,
+              "y": 200
+            },
+            "parameters": {
+              "signalType": "ramp",
+              "startValue": 0,
+              "slope": 1000,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "source_2",
+            "name": "V_mps",
+            "type": "source",
+            "position": {
+              "x": 40,
+              "y": 360
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 500,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "atmosphere_3",
+            "name": "Atm",
+            "type": "atmosphere",
+            "position": {
+              "x": 250,
+              "y": 180
+            },
+            "parameters": {
+              "model": "coesa1976",
+              "extrapolation": "clamp"
+            }
+          },
+          {
+            "id": "source_4",
+            "name": "half",
+            "type": "source",
+            "position": {
+              "x": 40,
+              "y": 440
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 0.5,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "multiply_5",
+            "name": "Vsq",
+            "type": "multiply",
+            "position": {
+              "x": 250,
+              "y": 360
+            },
+            "parameters": {
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "multiply_6",
+            "name": "half_rho",
+            "type": "multiply",
+            "position": {
+              "x": 450,
+              "y": 280
+            },
+            "parameters": {
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "multiply_7",
+            "name": "qbar",
+            "type": "multiply",
+            "position": {
+              "x": 620,
+              "y": 320
+            },
+            "parameters": {
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "output_port_8",
+            "name": "rho",
+            "type": "output_port",
+            "position": {
+              "x": 450,
+              "y": 160
+            },
+            "parameters": {
+              "portName": "rho_kgpm3"
+            }
+          },
+          {
+            "id": "output_port_9",
+            "name": "T",
+            "type": "output_port",
+            "position": {
+              "x": 450,
+              "y": 80
+            },
+            "parameters": {
+              "portName": "T_K"
+            }
+          },
+          {
+            "id": "output_port_10",
+            "name": "qbar",
+            "type": "output_port",
+            "position": {
+              "x": 800,
+              "y": 320
+            },
+            "parameters": {
+              "portName": "qbar_Pa"
+            }
+          },
+          {
+            "id": "output_port_11",
+            "name": "a_sound",
+            "type": "output_port",
+            "position": {
+              "x": 450,
+              "y": 240
+            },
+            "parameters": {
+              "portName": "a_mps"
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "wire_12",
+            "sourceBlockId": "source_1",
+            "sourcePortIndex": 0,
+            "targetBlockId": "atmosphere_3",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_13",
+            "sourceBlockId": "atmosphere_3",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_9",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_14",
+            "sourceBlockId": "atmosphere_3",
+            "sourcePortIndex": 2,
+            "targetBlockId": "output_port_8",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_15",
+            "sourceBlockId": "atmosphere_3",
+            "sourcePortIndex": 3,
+            "targetBlockId": "output_port_11",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_16",
+            "sourceBlockId": "source_2",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_5",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_17",
+            "sourceBlockId": "source_2",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_5",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_18",
+            "sourceBlockId": "source_4",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_6",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_19",
+            "sourceBlockId": "atmosphere_3",
+            "sourcePortIndex": 2,
+            "targetBlockId": "multiply_6",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_20",
+            "sourceBlockId": "multiply_6",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_7",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "wire_21",
+            "sourceBlockId": "multiply_5",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_7",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "wire_22",
+            "sourceBlockId": "multiply_7",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_10",
+            "targetPortIndex": 0
+          }
+        ],
+        "extents": {
+          "width": 1200,
+          "height": 800
+        }
+      }
+    ],
+    "parameters": [],
+    "dataStores": [],
+    "globalSettings": {
+      "simulationTimeStep": 0.1,
+      "simulationDuration": 60,
+      "integrationAlgorithm": "rk4"
+    }
+  }
+}
