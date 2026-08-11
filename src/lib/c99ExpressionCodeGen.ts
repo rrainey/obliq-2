@@ -24,12 +24,18 @@ export function c99ExpressionToCode(
   
   function generateExpression(expr: Expression): string {
     switch (expr.type) {
-      case 'NumberLiteral':
-        // Ensure floating point literals have decimal point
-        if (expr.isFloat && !expr.value.toString().includes('.')) {
-          return `${expr.value}.0`
+      case 'NumberLiteral': {
+        // Emit valid C floating-point literals
+        // NOTE: do not append ".0" to scientific notation (1e-12 → "1e-12.0" is invalid)
+        const s = String(expr.value)
+        if (expr.isFloat) {
+          if (/[eE]/.test(s) || s.includes('.')) {
+            return s
+          }
+          return `${s}.0`
         }
-        return expr.value.toString()
+        return s
+      }
 
       case 'Identifier':
         // Parameter reference - emit the parameter name directly

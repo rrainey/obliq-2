@@ -743,13 +743,17 @@ export function allSaturnSlices(): SliceModel[] {
   // Lazy import to avoid circular dependency with sixDofVarMassEom
   const {
     buildSixDofVariableMassEom,
-    buildSixDofVehicleBurnDemo
+    buildSixDofVehicleBurnDemo,
+    buildSixDofOpenLoopAscent,
+    buildSixDofClosedLoopPitchRateDamp
   } = require('./sixDofVarMassEom') as typeof import('./sixDofVarMassEom')
   return [
     buildGravityBallistics(),
     buildSixDofVacuumKinematics(),
     buildSixDofVariableMassEom(),
     buildSixDofVehicleBurnDemo(),
+    buildSixDofOpenLoopAscent(),
+    buildSixDofClosedLoopPitchRateDamp(),
     buildEngineThrustTimer(),
     buildAtmosphereDynamicPressure(),
     buildStageEnableFreeze(),

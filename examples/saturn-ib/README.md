@@ -25,6 +25,8 @@ npm test -- --testPathPattern=saturn-ib-slices
 | 8.8 | chi-time-tilt | Pitch program LUT + rate_limiter |
 | 8.9 | igm-mode-shell | nIGMMode via data_store read/write |
 | 8.10 | open-loop-ascent-1d | Liftoff + thrust table + gravity + atmosphere (1D stack) |
+| **9.1** | **open-loop-6dof-ascent** | **Sprint: EOM + burn + altitude/atmosphere/q̄ plots + displays** |
+| **9.2** | **closed-loop-pitch-rate-damp** | **Sprint: Q feedback via TF+limit → My into EOM** |
 
 ## Parameters
 
@@ -40,8 +42,8 @@ npm test -- --testPathPattern=sixdof-varmass-eom
 
 ## Not yet modeled (full stack still TBD)
 
+- Aero forces/moments coupled into EOM (9.1 samples atmosphere only)
 - Full inertia tensor (products of inertia) and mass-property LUTs
-- Closed-loop IGM chi steering
+- Closed-loop IGM chi steering / FCC → moments
 - Multi-engine H-1 cluster + APS
 - Trajectory matching against AS-205 reference tables
-- Quaternion renormalization / high-gain normalize

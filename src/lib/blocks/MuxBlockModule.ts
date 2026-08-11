@@ -10,11 +10,13 @@ export class MuxBlockModule implements IBlockModule {
     const rows = block.parameters?.rows || 2
     const cols = block.parameters?.cols || 2
     const expectedInputs = rows * cols
+    const outputType = this.getOutputType(block, [])
+    const typeInfo = BlockModuleUtils.parseType(outputType)
     
     let code = `    // Mux block: ${block.name} (${rows}×${cols})\n`
     
     // Special case: 1×1 mux is a pass-through
-    if (rows === 1 && cols === 1) {
+    if (rows === 1 && cols === 1 && !typeInfo.isMatrix && !typeInfo.isArray) {
       if (inputs.length > 0) {
         code += `    ${outputName} = ${inputs[0]};\n`
       } else {
@@ -22,8 +24,38 @@ export class MuxBlockModule implements IBlockModule {
       }
       return code
     }
+
+    // Prefer declared matrix shape (e.g. double[4][1] quaternion column)
+    // over treating n×1 / 1×n as a 1D vector — C type must match indexing.
+    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+      code += `    // Matrix output (row-major order)\n`
+      for (let i = 0; i < typeInfo.rows; i++) {
+        for (let j = 0; j < typeInfo.cols; j++) {
+          const inputIndex = i * typeInfo.cols + j
+          if (inputIndex < inputs.length) {
+            code += `    ${outputName}[${i}][${j}] = ${inputs[inputIndex]};\n`
+          } else {
+            code += `    ${outputName}[${i}][${j}] = 0.0;\n`
+          }
+        }
+      }
+      return code
+    }
     
-    // Case 1: Vector output (either 1×n or n×1)
+    // Vector output (1D array type, or 1×n / n×1 without matrix declaration)
+    if (typeInfo.isArray && typeInfo.arraySize) {
+      const size = typeInfo.arraySize
+      code += `    // Vector output\n`
+      for (let i = 0; i < size; i++) {
+        if (i < inputs.length) {
+          code += `    ${outputName}[${i}] = ${inputs[i]};\n`
+        } else {
+          code += `    ${outputName}[${i}] = 0.0;\n`
+        }
+      }
+      return code
+    }
+
     if (rows === 1 || cols === 1) {
       const size = Math.max(rows, cols)
       code += `    // Vector output\n`
@@ -35,7 +67,7 @@ export class MuxBlockModule implements IBlockModule {
         }
       }
     } else {
-      // Case 2: Matrix output
+      // Matrix output
       code += `    // Matrix output (row-major order)\n`
       for (let i = 0; i < rows; i++) {
         for (let j = 0; j < cols; j++) {

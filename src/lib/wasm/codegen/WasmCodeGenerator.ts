@@ -174,52 +174,132 @@ export class WasmCodeGenerator extends CodeGenerator {
       return fallbackType
     }
 
-    // Helper function to find the flattened signal path for a subsystem output port
-    // For flattened subsystems, we need to trace inside to find the block that feeds the output port
-    const getFlattenedSignalPath = (subsystemBlock: any, outputPortIndex: number): string | undefined => {
+    /**
+     * Trace the internal block that feeds a subsystem output port.
+     * Returns { path, type } for flattened signal access and scalar filtering.
+     */
+    const resolveSubsystemOutput = (
+      subsystemBlock: any,
+      outputPortIndex: number
+    ): { path?: string; type: string; internalSource?: any } => {
       const codeGenStrategy = subsystemBlock.parameters?.codeGenStrategy || 'flatten'
       if (codeGenStrategy === 'segregated' || codeGenStrategy === 'segregated_atomic') {
-        return undefined // Segregated subsystems have their own struct
+        return { type: 'double' }
       }
 
       const subsystemSheets = subsystemBlock.parameters?.sheets as Sheet[] | undefined
-      if (!subsystemSheets) return undefined
+      if (!subsystemSheets) return { type: 'double' }
 
       const outputPorts = subsystemBlock.parameters?.outputPorts as string[] | undefined
-      if (!outputPorts) return undefined
+      if (!outputPorts) return { type: 'double' }
 
       const targetPortName = outputPorts[outputPortIndex]
-      if (!targetPortName) return undefined
+      if (!targetPortName) return { type: 'double' }
 
-      // Find the output_port block inside the subsystem
       for (const subSheet of subsystemSheets) {
         const outputPortBlock = subSheet.blocks.find(
-          b => b.type === 'output_port' && b.parameters?.portName === targetPortName
+          (b: any) => b.type === 'output_port' && b.parameters?.portName === targetPortName
         )
         if (!outputPortBlock) continue
 
-        // Find the connection feeding this output port
-        const feedingConn = subSheet.connections.find(c => c.targetBlockId === outputPortBlock.id)
+        const feedingConn = subSheet.connections.find(
+          (c: any) => c.targetBlockId === outputPortBlock.id
+        )
         if (!feedingConn) continue
 
-        // Find the source block
-        const sourceBlock = subSheet.blocks.find(b => b.id === feedingConn.sourceBlockId)
+        const sourceBlock = subSheet.blocks.find((b: any) => b.id === feedingConn.sourceBlockId)
         if (!sourceBlock) continue
 
-        // Handle nested input_port (passthrough) - trace back through subsystem inputs
         if (sourceBlock.type === 'input_port') {
-          // This output is connected directly to a subsystem input - trace external connection
-          // For now, skip this case as it requires tracing external connections
-          continue
+          // Passthrough of subsystem input — type from input_port dataType
+          return {
+            type: sourceBlock.parameters?.dataType || 'double',
+            internalSource: sourceBlock,
+          }
         }
 
-        // Construct the flattened signal path: SubsystemName_BlockName
         const subsystemName = CCodeBuilder.sanitizeIdentifier(subsystemBlock.name)
-        const blockName = CCodeBuilder.sanitizeIdentifier(sourceBlock.name)
-        return `${subsystemName}_${blockName}`
+        // Multi-output internal blocks need port suffix; single-out use Subsystem_BlockName
+        let path: string
+        if (
+          sourceBlock.type === 'atmosphere' ||
+          sourceBlock.type === 'orientation_conversion' ||
+          sourceBlock.type === 'demux'
+        ) {
+          path = getSignalMemberName(
+            `${subsystemName}_${sourceBlock.name}`,
+            sourceBlock.type,
+            feedingConn.sourcePortIndex,
+            { ...sourceBlock, name: `${subsystemName}_${sourceBlock.name}` }
+          )
+        } else {
+          path = `${subsystemName}_${CCodeBuilder.sanitizeIdentifier(sourceBlock.name)}`
+        }
+
+        // Type from type propagator (key is original nested block id)
+        let signalType =
+          typeMap.get(sourceBlock.id) ||
+          getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
+
+        // Fallback: scan flattened model for matching block under this subsystem
+        if (!signalType || signalType === 'double') {
+          const fb = flattenedModel.blocks.find(
+            (b: any) =>
+              b.block?.name === sourceBlock.name ||
+              b.flattenedName === `${subsystemBlock.name}_${sourceBlock.name}` ||
+              b.flattenedName?.endsWith(`_${sourceBlock.name}`)
+          )
+          if (fb) {
+            const t = typeMap.get(fb.originalId)
+            if (t) signalType = t
+          }
+        }
+
+        if (sourceBlock.parameters?.dataType && sourceBlock.parameters.dataType.includes('[')) {
+          signalType = sourceBlock.parameters.dataType
+        } else if (sourceBlock.parameters?.outputType && sourceBlock.parameters.outputType.includes('[')) {
+          signalType = sourceBlock.parameters.outputType
+        } else if (!signalType || signalType === 'double') {
+          // EOM-style vector/quaternion names when type map is incomplete
+          const n = sourceBlock.name
+          if (n === 'r_i' || n === 'v_b' || n === 'omega_b' || n === 'F_b' || n === 'M_b') {
+            signalType = 'double[3]'
+          } else if (n === 'q' || n === 'q_hat' || n === 'q_raw') {
+            signalType = 'double[4][1]'
+          }
+        }
+
+        return {
+          path,
+          type: signalType || 'double',
+          internalSource: sourceBlock,
+        }
       }
 
-      return undefined
+      return { type: 'double' }
+    }
+
+    // Helper function to find the flattened signal path for a subsystem output port
+    // For flattened subsystems, we need to trace inside to find the block that feeds the output port
+    const getFlattenedSignalPath = (subsystemBlock: any, outputPortIndex: number): string | undefined => {
+      return resolveSubsystemOutput(subsystemBlock, outputPortIndex).path
+    }
+
+    const getSourceSignalType = (
+      sourceBlock: any,
+      sourcePortIndex: number
+    ): string => {
+      if (sourceBlock.type === 'subsystem') {
+        return resolveSubsystemOutput(sourceBlock, sourcePortIndex).type
+      }
+      // Multi-output blocks: all scalar ports unless known otherwise
+      if (sourceBlock.type === 'atmosphere') {
+        return 'double'
+      }
+      return getBlockType(
+        sourceBlock.id,
+        sourceBlock.parameters?.dataType || sourceBlock.parameters?.outputType || 'double'
+      )
     }
 
     // Process all sheets to find input/output ports and signal loggers
@@ -272,8 +352,11 @@ export class WasmCodeGenerator extends CodeGenerator {
                     ),
                 sourceBlock,
               })
-              // Get the type from typeMap (handles Transfer Functions properly)
-              const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
+              // Resolve type including nested subsystem outputs (vectors must not go to wasm_get_output)
+              const sourceType = getSourceSignalType(
+                sourceBlock,
+                feedingConnection.sourcePortIndex
+              )
               outputTypeMap.set(portName, sourceType)
             }
           }
@@ -321,8 +404,10 @@ export class WasmCodeGenerator extends CodeGenerator {
                     ),
                 sourceBlock,
               })
-              // Get the type from typeMap (handles Transfer Functions properly)
-              const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
+              const sourceType = getSourceSignalType(
+                sourceBlock,
+                feedingConnection.sourcePortIndex
+              )
               collectorTypeMap.set(loggerName, sourceType)
             }
           }
@@ -370,8 +455,10 @@ export class WasmCodeGenerator extends CodeGenerator {
                     ),
                 sourceBlock,
               })
-              // Get the type from typeMap (handles Transfer Functions properly)
-              const sourceType = getBlockType(sourceBlock.id, sourceBlock.parameters?.dataType || 'double')
+              const sourceType = getSourceSignalType(
+                sourceBlock,
+                feedingConnection.sourcePortIndex
+              )
               collectorTypeMap.set(displayName, sourceType)
             }
           }

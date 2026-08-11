@@ -300,7 +300,15 @@ export class StateIntegrator {
       // Apply post-integration limiting if configured (for integrators with limits)
       if (generator.generatePostIntegrationLimiting) {
         const outputType = this.getBlockOutputType(block)
-        const limitCode = generator.generatePostIntegrationLimiting(block.block, outputType)
+        // Flattened subsystem states are named with full path (e.g. EOM_6DoF_VarMass_mass)
+        const blockWithFlattenedName = {
+          ...block.block,
+          name: block.flattenedName
+        }
+        const limitCode = generator.generatePostIntegrationLimiting(
+          blockWithFlattenedName,
+          outputType
+        )
         if (limitCode) {
           code += limitCode.split('\n').map((line: string) => indent.slice(4) + line).join('\n')
         }
@@ -751,7 +759,15 @@ export class StateIntegrator {
         const generator = BlockModuleFactory.getBlockModule(block.block.type)
         if (generator.generatePostIntegrationLimiting) {
           const outputType = this.getBlockOutputType(block)
-          const limitCode = generator.generatePostIntegrationLimiting(block.block, outputType)
+          // Flattened subsystem states use full path name in parent states struct
+          const blockWithFlattenedName = {
+            ...block.block,
+            name: block.flattenedName
+          }
+          const limitCode = generator.generatePostIntegrationLimiting(
+            blockWithFlattenedName,
+            outputType
+          )
           if (limitCode) {
             code += limitCode.split('\n').map((line: string) => indent.slice(4) + line).join('\n')
           }

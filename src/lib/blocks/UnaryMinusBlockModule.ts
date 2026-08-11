@@ -5,7 +5,7 @@ import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class UnaryMinusBlockModule implements IBlockModule {
-  generateComputation(block: BlockData, inputs: string[]): string {
+  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     
     let code = `    // Unary minus block: ${block.name}\n`
@@ -16,7 +16,8 @@ export class UnaryMinusBlockModule implements IBlockModule {
     }
     
     const inputExpr = inputs[0]
-    const outputType = this.getOutputType(block, [])
+    // Must use propagated input types — empty [] defaults to scalar and breaks vectors
+    const outputType = this.getOutputType(block, inputTypes || [])
     const typeInfo = BlockModuleUtils.parseType(outputType)
     
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {

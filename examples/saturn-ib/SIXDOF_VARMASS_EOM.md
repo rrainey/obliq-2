@@ -89,11 +89,77 @@ Parent: liftoff **edge_detect**, axial thrust LUT (`F=[T,0,0]`), \(\dot m \appro
 
 Fixture: `docs/sample-models/saturn/saturn-6dof-vehicle-burn-demo.json`
 
+## 9.1 Open-loop 6-DoF ascent (sprint model)
+
+`buildSixDofOpenLoopAscent()` — integration slice for the “open-loop 6-DoF vehicle ascent” sprint:
+
+| Piece | Role |
+|-------|------|
+| `EOM_6DoF_VarMass` | Full variable-mass quaternion EOM (subsystem) |
+| Liftoff edge + burn timer | Starts thrust schedule at \(t=1\) s |
+| Thrust LUT + mdot | Axial \(F_b=[T,0,0]\), \(\dot m \approx T/2550\) (~Isp 260 s) |
+| Altitude / atmosphere | \(h=|r|-R_E\); COESA density (plot only) |
+| Dynamic pressure | \(q=½\rho V^2\), \(V=|v_b|\) (plot only; **no aero force**) |
+| Displays + loggers | \(|r|\), mass, thrust, altitude, \(q̄\), speed |
+
+### Recommended sim settings
+
+| Setting | Value |
+|---------|-------|
+| Time step | **0.05 s** |
+| Duration | **180 s** |
+| Integration | **RK4** |
+
+### What you should see
+
+- **Thrust** rises after liftoff, holds, then tails off by ~150–160 s  
+- **Mass** decreases during burn  
+- **\(|r|\) / altitude** increase under boost (order-of-magnitude stack, not AS-205 matched)  
+- **\(q̄\)** peaks early in the dense atmosphere then falls  
+- **Attitude** evolves from EOM IC body rate (no closed-loop moments)
+
+Fixture: `docs/sample-models/saturn/saturn-9.1-open-loop-6dof-ascent.json`
+
+```bash
+npm test -- --testPathPattern=sixdof-varmass-eom
+# My Models → Import → saturn-9.1-open-loop-6dof-ascent.json → Run Simulation
+```
+
+## 9.2 Closed-loop pitch-rate damping
+
+`buildSixDofClosedLoopPitchRateDamp()` — FCC-style rate loop into EOM moments:
+
+| Piece | Role |
+|-------|------|
+| Short axial boost | Open-loop \(F_b\), mdot (same pattern as 9.1, shorter table) |
+| Demux \(\omega_b\) | Extract pitch rate \(Q\) |
+| \(Q_{\mathrm{cmd}}-Q\) | Error (default \(Q_{\mathrm{cmd}}=0\) → damp to zero) |
+| TF + gain + limit | 8.6-style filter → \(M_y\) (N·m), limited |
+| \(M_b=[0,M_y,0]\) | Body pitch moment into EOM |
+
+### Recommended sim settings
+
+| Setting | Value |
+|---------|-------|
+| Time step | **0.02 s** |
+| Duration | **60 s** |
+| Integration | **RK4** |
+
+### What you should see
+
+- **Q** starts nonzero (EOM IC \(\omega_y\approx0.01\)) and **decays** under feedback  
+- **My** opposes pitch rate early, then settles near 0  
+- Short **thrust** pulse then coast; **|r|** still increases during boost  
+
+Fixture: `docs/sample-models/saturn/saturn-9.2-closed-loop-pitch-rate-damp.json`
+
 ## Limitations (v1)
 
 - Principal-axis inertia only; no \(I_{xy}\) etc.
 - No thruster relative-velocity / plume force beyond user `F_b`
-- No aero; couple `atmosphere` + aero tables externally
+- No aero forces into EOM (9.1 samples atmosphere for plots only)
+- 9.2 is pitch-rate damping only — not full IGM χ steering
+- Multi-engine / APS and AS-205 trajectory matching still TBD
 - DCM convention assumed body→inertial; verify sign for a specific trajectory frame
 
 ## Run codegen test

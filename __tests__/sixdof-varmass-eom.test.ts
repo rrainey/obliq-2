@@ -7,7 +7,9 @@ import * as path from 'path'
 import { CodeGenerator } from '@/lib/codegen/CodeGenerator'
 import {
   buildSixDofVariableMassEom,
-  buildSixDofVehicleBurnDemo
+  buildSixDofVehicleBurnDemo,
+  buildSixDofOpenLoopAscent,
+  buildSixDofClosedLoopPitchRateDamp
 } from '../examples/saturn-ib/sixDofVarMassEom'
 import { sliceToModelData } from '../examples/saturn-ib/sliceModels'
 
@@ -90,10 +92,68 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(result.source).toContain('_step')
   })
 
+  test('9.1 open-loop 6-DoF ascent: propulsion + atmosphere plots + sinks', () => {
+    const ascent = buildSixDofOpenLoopAscent()
+    const types = new Set(ascent.sheets[0].blocks.map(b => b.type))
+    expect(types.has('subsystem')).toBe(true)
+    expect(types.has('edge_detect')).toBe(true)
+    expect(types.has('lookup_1d')).toBe(true)
+    expect(types.has('atmosphere')).toBe(true)
+    expect(types.has('signal_display')).toBe(true)
+    expect(types.has('signal_logger')).toBe(true)
+    expect(ascent.globalSettings.simulationDuration).toBeGreaterThanOrEqual(150)
+    expect(ascent.globalSettings.simulationTimeStep).toBeLessThanOrEqual(0.1)
+
+    const gen = new CodeGenerator({
+      modelName: 'sixdof_open_loop_ascent',
+      integrationAlgorithm: 'rk4'
+    })
+    const result = gen.generate(ascent.sheets as any, ascent.parameters || [])
+    expect(result.source).not.toMatch(/Error generating code for/)
+    expect(result.source).toContain('_step')
+    expect(result.header).toMatch(/Atm_density|altitude|ThrustMag/i)
+  })
+
+  test('9.2 closed-loop pitch-rate damp: Q feedback TF+limit → My', () => {
+    const m = buildSixDofClosedLoopPitchRateDamp()
+    const types = new Set(m.sheets[0].blocks.map(b => b.type))
+    expect(types.has('subsystem')).toBe(true)
+    expect(types.has('transfer_function')).toBe(true)
+    expect(types.has('limit')).toBe(true)
+    expect(types.has('demux')).toBe(true)
+    // My wired to EOM M_b
+    const eom = m.sheets[0].blocks.find(b => b.name === 'EOM_6DoF_VarMass')!
+    const myLim = m.sheets[0].blocks.find(b => b.name === 'My_limit')!
+    const Mb = m.sheets[0].blocks.find(b => b.name === 'M_b_cmd')!
+    expect(
+      m.sheets[0].connections.some(
+        c => c.sourceBlockId === myLim.id && c.targetBlockId === Mb.id
+      )
+    ).toBe(true)
+    expect(
+      m.sheets[0].connections.some(
+        c => c.sourceBlockId === Mb.id && c.targetBlockId === eom.id
+      )
+    ).toBe(true)
+
+    const gen = new CodeGenerator({
+      modelName: 'sixdof_cl_pitch_damp',
+      integrationAlgorithm: 'rk4'
+    })
+    const result = gen.generate(m.sheets as any, m.parameters || [])
+    expect(result.source).not.toMatch(/Error generating code for/)
+    expect(result.source).toContain('_step')
+  })
+
   test('exports JSON fixtures', () => {
     const dir = path.join(__dirname, '../docs/sample-models/saturn')
     fs.mkdirSync(dir, { recursive: true })
-    for (const m of [model, buildSixDofVehicleBurnDemo()]) {
+    for (const m of [
+      model,
+      buildSixDofVehicleBurnDemo(),
+      buildSixDofOpenLoopAscent(),
+      buildSixDofClosedLoopPitchRateDamp()
+    ]) {
       const data = sliceToModelData(m as any)
       const fp = path.join(dir, `${m.name}.json`)
       fs.writeFileSync(fp, JSON.stringify({ name: m.name, data }, null, 2))

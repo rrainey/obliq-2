@@ -533,20 +533,26 @@ export function buildSixDofVariableMassEom(): SliceModel {
   }
 }
 
-/**
- * Package EOM physics as a subsystem with ports:
- *   in:  F_b[3], M_b[3], mdot_prop
- *   out: r_i[3], v_b[3], omega_b[3], q[4x1], mass, r_mag
- * Parent applies axial thrust + burn schedule for a short boost demo.
- */
-export function buildSixDofVehicleBurnDemo(): SliceModel {
-  resetIds()
-
-  // Build core EOM once and convert F/M/mdot sources → input ports inside a subsystem
+/** EOM as flattenable subsystem (shared by burn demos). */
+function buildEomSubsystemBlock(x = 520, y = 220): {
+  eomSubsystem: SliceBlock
+  core: SliceModel
+  /** Port indices on EOM subsystem */
+  ports: {
+    F_b: number
+    M_b: number
+    mdot: number
+    r_i: number
+    v_b: number
+    omega_b: number
+    q: number
+    mass: number
+    r_mag: number
+  }
+} {
   const core = buildSixDofVariableMassEom()
   const coreSheet = core.sheets[0]
 
-  // Clone and rewrite external drive sources to input ports
   const renamePort: Record<string, { portName: string; dataType: string }> = {
     F_b: { portName: 'F_b', dataType: 'double[3]' },
     M_b: { portName: 'M_b', dataType: 'double[3]' },
@@ -567,11 +573,9 @@ export function buildSixDofVehicleBurnDemo(): SliceModel {
         }
       }
     }
-    // Drop outer output_port wrappers' port names stay as subsystem outputs
     return { ...b }
   })
 
-  // Keep output ports as subsystem outputs (already portName set)
   const outputPortNames = ['r_i', 'v_b', 'omega_b', 'q', 'mass', 'r_mag']
   const inputPortNames = ['F_b', 'M_b', 'mdot_prop']
 
@@ -579,7 +583,7 @@ export function buildSixDofVehicleBurnDemo(): SliceModel {
     id: 'sub_eom',
     name: 'EOM_6DoF_VarMass',
     type: 'subsystem',
-    position: { x: 400, y: 200 },
+    position: { x, y },
     parameters: {
       sheets: [
         {
@@ -596,6 +600,33 @@ export function buildSixDofVehicleBurnDemo(): SliceModel {
       codeGenStrategy: 'flatten'
     }
   }
+
+  return {
+    eomSubsystem,
+    core,
+    ports: {
+      F_b: 0,
+      M_b: 1,
+      mdot: 2,
+      r_i: 0,
+      v_b: 1,
+      omega_b: 2,
+      q: 3,
+      mass: 4,
+      r_mag: 5
+    }
+  }
+}
+
+/**
+ * Package EOM physics as a subsystem with ports:
+ *   in:  F_b[3], M_b[3], mdot_prop
+ *   out: r_i[3], v_b[3], omega_b[3], q[4x1], mass, r_mag
+ * Parent applies axial thrust + burn schedule for a short boost demo.
+ */
+export function buildSixDofVehicleBurnDemo(): SliceModel {
+  resetIds()
+  const { eomSubsystem, core, ports } = buildEomSubsystemBlock(520, 220)
 
   // Parent: axial thrust after liftoff + propellant flow
   const liftoff = B('source', 'liftoff', 40, 80, {
@@ -650,15 +681,12 @@ export function buildSixDofVehicleBurnDemo(): SliceModel {
     dataType: 'double[3]'
   })
 
-  const outR = B('output_port', 'r_i', 700, 160, { portName: 'r_i' })
-  const outV = B('output_port', 'v_b', 700, 220, { portName: 'v_b' })
-  const outM = B('output_port', 'mass', 700, 280, { portName: 'mass' })
-  const outQ = B('output_port', 'q', 700, 340, { portName: 'q' })
-  const outRmag = B('output_port', 'r_mag', 700, 400, { portName: 'r_mag' })
-  const outT = B('output_port', 'thrust', 700, 100, { portName: 'thrust_N' })
-
-  // Find subsystem output port indices by order of outputPorts
-  // outputPorts: r_i=0, v_b=1, omega_b=2, q=3, mass=4, r_mag=5
+  const outR = B('output_port', 'r_i', 780, 160, { portName: 'r_i' })
+  const outV = B('output_port', 'v_b', 780, 220, { portName: 'v_b' })
+  const outM = B('output_port', 'mass', 780, 280, { portName: 'mass' })
+  const outQ = B('output_port', 'q', 780, 340, { portName: 'q' })
+  const outRmag = B('output_port', 'r_mag', 780, 400, { portName: 'r_mag' })
+  const outT = B('output_port', 'thrust', 780, 100, { portName: 'thrust_N' })
 
   const parentBlocks = [
     liftoff,
@@ -691,14 +719,14 @@ export function buildSixDofVehicleBurnDemo(): SliceModel {
     W(thrustMag, Fb, 0, 0), // Fx
     W(zero, Fb, 0, 1), // Fy
     W(zero, Fb, 0, 2), // Fz
-    W(Fb, eomSubsystem, 0, 0), // F_b
-    W(Mb, eomSubsystem, 0, 1), // M_b
-    W(mdotCmd, eomSubsystem, 0, 2), // mdot
-    W(eomSubsystem, outR, 0, 0),
-    W(eomSubsystem, outV, 1, 0),
-    W(eomSubsystem, outQ, 3, 0),
-    W(eomSubsystem, outM, 4, 0),
-    W(eomSubsystem, outRmag, 5, 0)
+    W(Fb, eomSubsystem, 0, ports.F_b),
+    W(Mb, eomSubsystem, 0, ports.M_b),
+    W(mdotCmd, eomSubsystem, 0, ports.mdot),
+    W(eomSubsystem, outR, ports.r_i, 0),
+    W(eomSubsystem, outV, ports.v_b, 0),
+    W(eomSubsystem, outQ, ports.q, 0),
+    W(eomSubsystem, outM, ports.mass, 0),
+    W(eomSubsystem, outRmag, ports.r_mag, 0)
   ]
 
   return {
@@ -718,6 +746,514 @@ export function buildSixDofVehicleBurnDemo(): SliceModel {
     globalSettings: {
       simulationTimeStep: 0.05,
       simulationDuration: 120,
+      integrationAlgorithm: 'rk4'
+    }
+  }
+}
+
+/**
+ * Phase 9.1 — Open-loop 6-DoF ascent (sprint integration model)
+ *
+ * Composes:
+ *   - EOM_6DoF_VarMass (variable-mass quaternion dynamics)
+ *   - Liftoff edge → burn timer → axial thrust LUT + mdot
+ *   - Geometric altitude from |r| − R_earth
+ *   - Atmosphere + dynamic pressure (plots only; no aero force yet)
+ *   - Signal displays + loggers for demo without extra wiring
+ *
+ * Success criteria: import, run ~150 s, see r_mag grow, mass drop, altitude climb,
+ * density/q̄ during atmosphere, attitude (q) evolve from IC body rate.
+ */
+export function buildSixDofOpenLoopAscent(): SliceModel {
+  resetIds()
+  const { eomSubsystem, core, ports } = buildEomSubsystemBlock(560, 260)
+
+  // ── Propulsion schedule (open-loop S-IB–ish boost, order-of-magnitude) ──
+  const liftoff = B('source', 'liftoff', 40, 60, {
+    signalType: 'step',
+    stepTime: 1.0,
+    stepValue: 1.0,
+    dataType: 'double'
+  })
+  const edge = B('edge_detect', 'liftoff_edge', 180, 60, {
+    edge: 'rising',
+    threshold: 0.5
+  })
+  const one = B('source', 'one', 40, 140, {
+    signalType: 'constant',
+    value: 1,
+    dataType: 'double'
+  })
+  const tBurn = B('integrator', 't_burn', 180, 140, {
+    showResetInput: true,
+    initialValue: 0,
+    showInitPort: false
+  })
+  // Longer axial thrust table (N) vs burn time (s) — simplified Saturn-IB stack
+  const thrustMag = B('lookup_1d', 'ThrustMag_N', 340, 140, {
+    inputValues: [0, 0.5, 2, 10, 50, 100, 130, 145, 150, 160],
+    outputValues: [0, 5e5, 8.5e5, 8.9e5, 8.9e5, 8.9e5, 8.9e5, 6e5, 1e5, 0],
+    extrapolation: 'clamp'
+  })
+  // ṁ ≈ T / (Isp * g0); Isp ~ 260 s → T/2550
+  const mdotScale = B('source', 'mdot_scale', 340, 240, {
+    signalType: 'constant',
+    value: 1 / 2550,
+    dataType: 'double'
+  })
+  const mdotCmd = B('matrix_multiply', 'mdot_cmd', 480, 200, {})
+  const zero = B('source', 'zero', 340, 320, {
+    signalType: 'constant',
+    value: 0,
+    dataType: 'double'
+  })
+  const Fb = B('mux', 'F_b_cmd', 480, 140, {
+    rows: 1,
+    cols: 3,
+    baseType: 'double',
+    outputType: 'double[3]',
+    outputShape: 'vector'
+  })
+  // Open-loop: zero commanded body moment (attitude free-response from IC ω)
+  const Mb = B('source', 'M_b_cmd', 480, 320, {
+    signalType: 'constant',
+    value: [0, 0, 0],
+    dataType: 'double[3]'
+  })
+
+  // ── Atmosphere sampling (plots; not force-coupled in v1) ──
+  const Re = B('source', 'R_earth', 560, 480, {
+    signalType: 'constant',
+    value: 6371000,
+    dataType: 'double'
+  })
+  // h = |r| − R_e
+  const alt = B('sum', 'altitude_m', 720, 440, {
+    signs: '+-',
+    numInputs: 2
+  })
+  const atm = B('atmosphere', 'Atm', 880, 440, {
+    model: 'coesa1976',
+    extrapolation: 'clamp'
+  })
+  const half = B('source', 'half', 720, 560, {
+    signalType: 'constant',
+    value: 0.5,
+    dataType: 'double'
+  })
+  const Vmag = B('mag', 'V_mag', 720, 360, {})
+  const Vsq = B('multiply', 'V_sq', 860, 360, { numInputs: 2 })
+  const halfRho = B('multiply', 'half_rho', 1000, 420, { numInputs: 2 })
+  const qbar = B('multiply', 'qbar', 1140, 400, { numInputs: 2 })
+
+  // ── Ports + visualization sinks ──
+  const outR = B('output_port', 'r_i', 900, 100, { portName: 'r_i' })
+  const outV = B('output_port', 'v_b', 900, 160, { portName: 'v_b' })
+  const outW = B('output_port', 'omega_b', 900, 220, { portName: 'omega_b' })
+  const outQ = B('output_port', 'q', 900, 280, { portName: 'q' })
+  const outM = B('output_port', 'mass', 900, 340, { portName: 'mass_kg' })
+  const outRmag = B('output_port', 'r_mag', 900, 520, { portName: 'r_mag_m' })
+  const outT = B('output_port', 'thrust', 720, 60, { portName: 'thrust_N' })
+  const outAlt = B('output_port', 'h', 1140, 480, { portName: 'altitude_m' })
+  const outRho = B('output_port', 'rho', 1140, 540, { portName: 'rho_kgpm3' })
+  const outQbar = B('output_port', 'qbar_out', 1280, 400, { portName: 'qbar_Pa' })
+
+  // Displays (real-time plots in app)
+  const dispR = B('signal_display', 'disp_r_mag', 1100, 100, {
+    title: 'Geocentric radius |r| (m)'
+  })
+  const dispM = B('signal_display', 'disp_mass', 1100, 180, {
+    title: 'Mass (kg)'
+  })
+  const dispT = B('signal_display', 'disp_thrust', 1100, 260, {
+    title: 'Thrust (N)'
+  })
+  const dispH = B('signal_display', 'disp_altitude', 1280, 100, {
+    title: 'Altitude MSL (m)'
+  })
+  const dispQbar = B('signal_display', 'disp_qbar', 1280, 180, {
+    title: 'Dynamic pressure q̄ (Pa)'
+  })
+  const dispV = B('signal_display', 'disp_V', 1280, 260, {
+    title: 'Body speed |v_b| (m/s)'
+  })
+
+  // Loggers (CSV export)
+  const logR = B('signal_logger', 'log_r_mag', 1100, 340, {})
+  const logM = B('signal_logger', 'log_mass', 1100, 400, {})
+  const logH = B('signal_logger', 'log_altitude', 1280, 340, {})
+  const logQbar = B('signal_logger', 'log_qbar', 1280, 480, {})
+
+  const parentBlocks = [
+    liftoff,
+    edge,
+    one,
+    tBurn,
+    thrustMag,
+    mdotScale,
+    mdotCmd,
+    zero,
+    Fb,
+    Mb,
+    eomSubsystem,
+    Re,
+    alt,
+    atm,
+    half,
+    Vmag,
+    Vsq,
+    halfRho,
+    qbar,
+    outR,
+    outV,
+    outW,
+    outQ,
+    outM,
+    outRmag,
+    outT,
+    outAlt,
+    outRho,
+    outQbar,
+    dispR,
+    dispM,
+    dispT,
+    dispH,
+    dispQbar,
+    dispV,
+    logR,
+    logM,
+    logH,
+    logQbar
+  ]
+
+  const parentWires: SliceWire[] = [
+    // Propulsion
+    W(liftoff, edge),
+    W(one, tBurn, 0, 0),
+    W(edge, tBurn, 0, -2),
+    W(tBurn, thrustMag),
+    W(thrustMag, outT),
+    W(thrustMag, mdotCmd, 0, 0),
+    W(mdotScale, mdotCmd, 0, 1),
+    W(thrustMag, Fb, 0, 0),
+    W(zero, Fb, 0, 1),
+    W(zero, Fb, 0, 2),
+    W(Fb, eomSubsystem, 0, ports.F_b),
+    W(Mb, eomSubsystem, 0, ports.M_b),
+    W(mdotCmd, eomSubsystem, 0, ports.mdot),
+    // EOM outs
+    W(eomSubsystem, outR, ports.r_i, 0),
+    W(eomSubsystem, outV, ports.v_b, 0),
+    W(eomSubsystem, outW, ports.omega_b, 0),
+    W(eomSubsystem, outQ, ports.q, 0),
+    W(eomSubsystem, outM, ports.mass, 0),
+    W(eomSubsystem, outRmag, ports.r_mag, 0),
+    // Atmosphere path: h = |r| − Re, V = |v_b|
+    W(eomSubsystem, alt, ports.r_mag, 0),
+    W(Re, alt, 0, 1),
+    W(alt, atm),
+    W(eomSubsystem, Vmag, ports.v_b, 0),
+    W(Vmag, Vsq, 0, 0),
+    W(Vmag, Vsq, 0, 1),
+    W(half, halfRho, 0, 0),
+    W(atm, halfRho, 2, 1), // density
+    W(halfRho, qbar, 0, 0),
+    W(Vsq, qbar, 0, 1),
+    W(alt, outAlt),
+    W(atm, outRho, 2, 0),
+    W(qbar, outQbar),
+    // Displays
+    W(eomSubsystem, dispR, ports.r_mag, 0),
+    W(eomSubsystem, dispM, ports.mass, 0),
+    W(thrustMag, dispT),
+    W(alt, dispH),
+    W(qbar, dispQbar),
+    W(Vmag, dispV),
+    // Loggers
+    W(eomSubsystem, logR, ports.r_mag, 0),
+    W(eomSubsystem, logM, ports.mass, 0),
+    W(alt, logH),
+    W(qbar, logQbar)
+  ]
+
+  return {
+    name: 'saturn-9.1-open-loop-6dof-ascent',
+    description:
+      'Open-loop 6-DoF ascent: EOM + liftoff/thrust/mdot + altitude/atmosphere/q̄ plots (no aero force). Sprint integration model.',
+    sheets: [
+      {
+        id: 'main',
+        name: 'OpenLoopAscent',
+        blocks: parentBlocks,
+        connections: parentWires,
+        extents: { width: 1500, height: 700 }
+      }
+    ],
+    parameters: [
+      ...(core.parameters || []),
+      {
+        name: 'R_earth_m',
+        dataType: 'double',
+        defaultValue: '6371000.0',
+        signalType: 'double',
+        value: 6371000
+      },
+      {
+        name: 'Isp_s',
+        dataType: 'double',
+        defaultValue: '260',
+        signalType: 'double',
+        value: 260
+      }
+    ],
+    globalSettings: {
+      // Fixed-step RK4: 0.05 s is a balance of rate-limit fidelity and run time
+      simulationTimeStep: 0.05,
+      // Cover boost (~150 s table) + short coast for plots
+      simulationDuration: 180,
+      integrationAlgorithm: 'rk4'
+    }
+  }
+}
+
+/**
+ * Phase 9.2 — Closed-loop pitch-rate damping (simple FCC-style loop)
+ *
+ * Composes:
+ *   - EOM_6DoF_VarMass with open-loop axial thrust (short boost)
+ *   - Body rate feedback: demux ω → Q (pitch)
+ *   - Error = Q_cmd − Q (default Q_cmd = 0 → rate damp)
+ *   - transfer_function + limit → My (body pitch moment)
+ *   - M_b = [0, My, 0]
+ *
+ * EOM IC includes a small pitch rate (ω_y ≈ 0.01 rad/s) so damping is visible.
+ * Success: My opposes pitch rate; |Q| decays after boost; mass/thrust still move.
+ */
+export function buildSixDofClosedLoopPitchRateDamp(): SliceModel {
+  resetIds()
+  const { eomSubsystem, core, ports } = buildEomSubsystemBlock(720, 280)
+
+  // ── Short open-loop boost (so attitude loop is visible, not only coast) ──
+  const liftoff = B('source', 'liftoff', 40, 40, {
+    signalType: 'step',
+    stepTime: 0.5,
+    stepValue: 1.0,
+    dataType: 'double'
+  })
+  const edge = B('edge_detect', 'liftoff_edge', 180, 40, {
+    edge: 'rising',
+    threshold: 0.5
+  })
+  const one = B('source', 'one', 40, 120, {
+    signalType: 'constant',
+    value: 1,
+    dataType: 'double'
+  })
+  const tBurn = B('integrator', 't_burn', 180, 120, {
+    showResetInput: true,
+    initialValue: 0,
+    showInitPort: false
+  })
+  const thrustMag = B('lookup_1d', 'ThrustMag_N', 340, 120, {
+    inputValues: [0, 0.5, 2, 10, 20, 30, 40],
+    outputValues: [0, 5e5, 8e5, 8.5e5, 8e5, 2e5, 0],
+    extrapolation: 'clamp'
+  })
+  const mdotScale = B('source', 'mdot_scale', 340, 200, {
+    signalType: 'constant',
+    value: 1 / 2550,
+    dataType: 'double'
+  })
+  const mdotCmd = B('matrix_multiply', 'mdot_cmd', 480, 180, {})
+  const zero = B('source', 'zero', 340, 280, {
+    signalType: 'constant',
+    value: 0,
+    dataType: 'double'
+  })
+  const Fb = B('mux', 'F_b_cmd', 480, 120, {
+    rows: 1,
+    cols: 3,
+    baseType: 'double',
+    outputType: 'double[3]',
+    outputShape: 'vector'
+  })
+
+  // ── Pitch-rate loop (FCC skeleton → body moment) ──
+  // demux ω_b = [P, Q, R]
+  const demuxW = B('demux', 'demux_omega', 900, 200, {
+    outputCount: 3,
+    inputDimensions: [3]
+  })
+  // Commanded pitch rate (rad/s): 0 = damp to zero
+  const Qcmd = B('source', 'Q_cmd', 900, 80, {
+    signalType: 'constant',
+    value: 0,
+    dataType: 'double'
+  })
+  // err = Q_cmd − Q
+  const Qerr = B('sum', 'Q_err', 1040, 140, {
+    signs: '+-',
+    numInputs: 2
+  })
+  // S-IB-ish first-order filter (from 8.6 FCC slice)
+  const Qfilt = B('transfer_function', 'Q_filter', 1180, 140, {
+    numerator: [1],
+    denominator: [0.1556, 1]
+  })
+  // Gain: error (rad/s) → moment command scale (N·m)
+  const Kq = B('source', 'K_q', 1180, 60, {
+    signalType: 'constant',
+    value: 5e6,
+    dataType: 'double'
+  })
+  const MyRaw = B('matrix_multiply', 'My_raw', 1320, 140, {})
+  // Actuator/command limit (N·m)
+  const MyLim = B('limit', 'My_limit', 1460, 140, {
+    lowerLimit: -2e7,
+    upperLimit: 2e7
+  })
+  // M_b = [0, My, 0]
+  const Mb = B('mux', 'M_b_cmd', 1600, 200, {
+    rows: 1,
+    cols: 3,
+    baseType: 'double',
+    outputType: 'double[3]',
+    outputShape: 'vector'
+  })
+
+  // ── Ports + visualization ──
+  const outR = B('output_port', 'r_i', 900, 360, { portName: 'r_i' })
+  const outV = B('output_port', 'v_b', 900, 420, { portName: 'v_b' })
+  const outW = B('output_port', 'omega_b', 900, 480, { portName: 'omega_b' })
+  const outQ = B('output_port', 'q', 900, 540, { portName: 'q' })
+  const outM = B('output_port', 'mass', 900, 600, { portName: 'mass_kg' })
+  const outRmag = B('output_port', 'r_mag', 900, 660, { portName: 'r_mag_m' })
+  const outThrust = B('output_port', 'thrust', 720, 40, { portName: 'thrust_N' })
+  const outMy = B('output_port', 'My', 1600, 80, { portName: 'My_Nm' })
+  const outQrate = B('output_port', 'Q_rps', 1040, 40, { portName: 'Q_rps' })
+
+  const dispQ = B('signal_display', 'disp_Q', 1200, 360, {
+    title: 'Pitch rate Q (rad/s)'
+  })
+  const dispMy = B('signal_display', 'disp_My', 1200, 440, {
+    title: 'Pitch moment My (N·m)'
+  })
+  const dispThrust = B('signal_display', 'disp_thrust', 1200, 520, {
+    title: 'Thrust (N)'
+  })
+  const dispRmag = B('signal_display', 'disp_r_mag', 1200, 600, {
+    title: 'Geocentric radius |r| (m)'
+  })
+  const logQ = B('signal_logger', 'log_Q', 1400, 360, {})
+  const logMy = B('signal_logger', 'log_My', 1400, 440, {})
+
+  const parentBlocks = [
+    liftoff,
+    edge,
+    one,
+    tBurn,
+    thrustMag,
+    mdotScale,
+    mdotCmd,
+    zero,
+    Fb,
+    demuxW,
+    Qcmd,
+    Qerr,
+    Qfilt,
+    Kq,
+    MyRaw,
+    MyLim,
+    Mb,
+    eomSubsystem,
+    outR,
+    outV,
+    outW,
+    outQ,
+    outM,
+    outRmag,
+    outThrust,
+    outMy,
+    outQrate,
+    dispQ,
+    dispMy,
+    dispThrust,
+    dispRmag,
+    logQ,
+    logMy
+  ]
+
+  const parentWires: SliceWire[] = [
+    // Propulsion
+    W(liftoff, edge),
+    W(one, tBurn, 0, 0),
+    W(edge, tBurn, 0, -2),
+    W(tBurn, thrustMag),
+    W(thrustMag, outThrust),
+    W(thrustMag, mdotCmd, 0, 0),
+    W(mdotScale, mdotCmd, 0, 1),
+    W(thrustMag, Fb, 0, 0),
+    W(zero, Fb, 0, 1),
+    W(zero, Fb, 0, 2),
+    W(Fb, eomSubsystem, 0, ports.F_b),
+    W(mdotCmd, eomSubsystem, 0, ports.mdot),
+    // Rate loop: ω → demux → Q
+    W(eomSubsystem, demuxW, ports.omega_b, 0),
+    W(Qcmd, Qerr, 0, 0),
+    W(demuxW, Qerr, 1, 1), // Q = pitch = port 1
+    W(Qerr, Qfilt),
+    W(Qfilt, MyRaw, 0, 0),
+    W(Kq, MyRaw, 0, 1),
+    W(MyRaw, MyLim),
+    // M_b = [0, My, 0]
+    W(zero, Mb, 0, 0),
+    W(MyLim, Mb, 0, 1),
+    W(zero, Mb, 0, 2),
+    W(Mb, eomSubsystem, 0, ports.M_b),
+    // EOM outs
+    W(eomSubsystem, outR, ports.r_i, 0),
+    W(eomSubsystem, outV, ports.v_b, 0),
+    W(eomSubsystem, outW, ports.omega_b, 0),
+    W(eomSubsystem, outQ, ports.q, 0),
+    W(eomSubsystem, outM, ports.mass, 0),
+    W(eomSubsystem, outRmag, ports.r_mag, 0),
+    W(MyLim, outMy),
+    W(demuxW, outQrate, 1, 0),
+    // Displays / logs
+    W(demuxW, dispQ, 1, 0),
+    W(MyLim, dispMy),
+    W(thrustMag, dispThrust),
+    W(eomSubsystem, dispRmag, ports.r_mag, 0),
+    W(demuxW, logQ, 1, 0),
+    W(MyLim, logMy)
+  ]
+
+  return {
+    name: 'saturn-9.2-closed-loop-pitch-rate-damp',
+    description:
+      'Closed-loop pitch-rate damp: EOM + short boost + Q feedback through TF/limit → My (FCC-style). Sprint 9.2.',
+    sheets: [
+      {
+        id: 'main',
+        name: 'ClosedLoopRate',
+        blocks: parentBlocks,
+        connections: parentWires,
+        extents: { width: 1800, height: 750 }
+      }
+    ],
+    parameters: [
+      ...(core.parameters || []),
+      {
+        name: 'K_q',
+        dataType: 'double',
+        defaultValue: '5e6',
+        signalType: 'double',
+        value: 5e6
+      }
+    ],
+    globalSettings: {
+      simulationTimeStep: 0.02,
+      simulationDuration: 60,
       integrationAlgorithm: 'rk4'
     }
   }

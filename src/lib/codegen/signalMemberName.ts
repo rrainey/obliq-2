@@ -47,6 +47,13 @@ export function getSignalMemberName(
       return `${safeName}_${eulerSuffix[portIndex] ?? portIndex}`
     }
 
+    // Demux struct members are always name_0, name_1, … (see DemuxBlockModule).
+    // Do not use getOutputPortLabels here — labels like "[0]" / "row0_col0"
+    // sanitize to different identifiers and break codegen.
+    if (blockType === 'demux') {
+      return `${safeName}_${portIndex}`
+    }
+
     const labels = mod.getOutputPortLabels?.(stub)
     if (labels && labels[portIndex] !== undefined) {
       const suffix = CCodeBuilder.sanitizeIdentifier(labels[portIndex])

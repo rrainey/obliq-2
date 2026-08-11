@@ -107,33 +107,12 @@ export class DemuxBlockModule implements IBlockModule {
 
 
   getOutputPortLabels?(block: BlockData): string[] | undefined {
-    // Generate custom labels for matrix outputs
+    // Labels must match generateStructMember / generateComputation suffixes: name_0, name_1, …
+    // (Do not use "[0]" or "row0_col0" — those sanitize to different C identifiers.)
     const outputCount = block.parameters?.outputCount || 1
-    const inputDimensions = block.parameters?.inputDimensions || [1]
-    
     if (outputCount === 1) {
-      return undefined // Use default for single output
+      return undefined
     }
-    
-    const labels: string[] = []
-    
-    if (inputDimensions.length === 1) {
-      // Vector input - simple numeric labels
-      for (let i = 0; i < outputCount; i++) {
-        labels.push(`[${i}]`)
-      }
-    } else if (inputDimensions.length === 2) {
-      // Matrix input - row/col labels
-      const rows = inputDimensions[0]
-      const cols = inputDimensions[1]
-      
-      for (let i = 0; i < rows; i++) {
-        for (let j = 0; j < cols; j++) {
-          labels.push(`row${i}_col${j}`)
-        }
-      }
-    }
-    
-    return labels
+    return Array.from({ length: outputCount }, (_, i) => String(i))
   }
 }
