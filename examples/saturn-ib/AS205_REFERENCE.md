@@ -19,21 +19,43 @@ This report defines the **launch vehicle reference trajectory** and associated *
 
 When model output disagrees with **both** Simulink and the TN, prefer investigating against the **TN**. When Simulink and the TN disagree, **do not “fix” the obliq model to match Simulink** without an explicit decision and a note in the comparison report.
 
-## Comparable quantities (recommended)
+## Frame correspondence (EDD ↔ TN) — working assumption
 
-Map TN-AP-67-158 columns (names vary by table) to model signals:
+| TN wording (typical) | EDD / IU system | Notes |
+|----------------------|-----------------|--------|
+| **Space frame** / space-fixed trajectory state | **S (plumbline)** | Space-fixed at \(T_{\mathrm{GRR}}\) ⇒ non-rotating ⇒ **inertial** in EDD language; site-defined axes (up + downrange) |
+| (Classical) celestial inertial / equinox | **E** | Apollo Std 4; Simulink ECI world — **not** current identity for TN “Space frame” |
+| Vehicle body | **B** | \(X_B\) forward/thrust, pitch about \(Y_B\) |
 
-| Quantity | Typical TN role | Preferred model signal(s) |
-|----------|-----------------|---------------------------|
-| Time from liftoff | Independent variable | sim time (logger) − \(t_{\mathrm{liftoff}}\) |
-| Altitude (MSL / geometric) | Trajectory table | `altitude_m` (9.1) or \(\|r\| - R_E\) |
-| Inertial / relative velocity | Trajectory table | \(\|v\|\) (inertial if available; else body \(\|v_b\|\) with note) |
-| Flight path angle γ | Trajectory table | derived from \(v_i\) and \(r_i\) when exported |
-| Mass | Propellant table | `mass` / `mass_kg` |
-| Dynamic pressure q̄ | Loads | `qbar_Pa` (9.1) |
-| Attitude / χ | Guidance | open-loop χ (8.8) or body rates (9.2) — **not** yet full IGM |
+No explicit TN↔EDD call-out found yet; this is a **belief/working map**. Revisit if TN text equates Space frame to equinox/E.
+
+**ECI→S:** Fixed after launch epoch / \(T_{\mathrm{GRR}}\) (defines \(X_S,Z_S\) in E). Needed for S-component residuals and SM outputs; not required for scalar validation below.
+
+Full discussion: [`APOLLO_COORDINATE_FRAMES.md`](./APOLLO_COORDINATE_FRAMES.md).
+
+## Comparable quantities
+
+### Use **now** (do not require S-frame components)
+
+| Quantity | TN role | Model signal | Notes |
+|----------|---------|--------------|--------|
+| Time from liftoff | Independent var | logger time − \(t_{\mathrm{liftoff}}\) | |
+| Altitude | Trajectory table | `altitude_m` / \(\|r\|-R_{\mathrm{pad}}\) | Scalar |
+| Mass | Propellant table | `mass_kg` | Scalar |
+| Dynamic pressure \(q̄\) | Loads | `qbar_Pa` | Model-aero dependent |
+| Thrust / \(a_x\) (if digitized) | Performance | `thrust_N` | Scalar |
+
+### Defer until ECI→S / SM path matches Simulink
+
+| Quantity | Why deferred |
+|----------|----------------|
+| Space-fixed velocity magnitude & path angle (TN “space-fixed”) | Expressed in **Space/S** frame |
+| Position components \(X,Y,Z\) (plumbline / space listing) | S-basis components |
+| Full \(\mathbf{v}\) residual in E or S | Needs consistent transform |
 
 **Units:** Prefer SI in CSV (m, m/s, kg, Pa, rad). Convert English units from the TN once when building the reference CSV and record the conversion in the file header comment.
+
+**Simulink:** Continue translating the original model (ECI primary, Body/SM as in EDD). Prefer TN over Simulink when they disagree; do not retune plant to Simulink without a decision.
 
 ## Reference CSV layout
 

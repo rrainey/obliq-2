@@ -4,12 +4,11 @@
  * Sources:
  * - saturn-1B/AS205_presettings.m (LC-34 site, azimuth, R_L)
  * - satinstunitibm §2: S-system X_S = local up (anti-gravity), Z_S = downrange
- * - TN inertial state assumed in E (vernal equinox); S is space-fixed at GRR
- *   and related to E by a constant rotation after freeze (not required for
- *   central-gravity dynamics integrated in S).
+ * - TN “Space frame” ≈ EDD S (working assumption; space-fixed at GRR ⇒ inertial).
+ * - Classical ECI = E-system (Simulink world); ECI→S is fixed after T_GRR/epoch.
+ * - Validate with TN h, mass, q̄ until S-component outputs match Simulink ECI→S.
  *
- * 9.x plant integrates r,v in **S** (space-fixed), with B‖S at t=0 (identity quat).
- * Altitude |r|−R still comparable to TN; full E-vector residuals need epoch later.
+ * 9.x plant integrates r,v in an S-like triad, with B‖S at t=0 (identity quat).
  */
 
 /** AS-205 / LC-34 constants from AS205_presettings.m */

@@ -12,22 +12,26 @@ Cross-refs in that section:
 
 **Policy for obliq Saturn work:** Prefer this document + TN-AP-67-158 over ad-hoc frames. Simulink site→ECI is secondary unless it matches these definitions.
 
-### TN “inertial” ≈ **E-system** (working assumption)
+### TN “Space frame” ≈ **S-system** (working assumption)
 
-TN-AP-67-158 tables that speak of **space-fixed / inertial** position, velocity, and path angle almost certainly use (or are equivalent to) the **E-system** (Apollo Std 4 / geocentric inertial: \(X_E\) vernal equinox, \(Z_E\) north).
+**Project decision (pending explicit TN call-out):** In TN-AP-67-158, references to the **Space frame** / space-fixed trajectory state are treated as the **EDD/IU S-frame (plumbline)**, not the E-system (vernal equinox).
 
-**Rationale (project decision):** A true inertial frame must be **non-rotating relative to the stars**. Among the IU frames:
+| System | Space-fixed (EDD)? | Axis definition | Role vs TN |
+|--------|--------------------|-----------------|------------|
+| **S** | **Yes** — frozen at \(T_{\mathrm{GRR}}\); non-rotating ⇒ **inertial** | Local vertical + platform azimuth (downrange) at GRR | **TN “Space frame” (assumed)** |
+| **E** | Yes | Vernal equinox / north pole (Apollo Std 4 / classical ECI) | Celestial ECI; Simulink `veh_q_ECI` world |
+| **G** | Yes (GRR meridian) | Launch meridian at GRR | Gravity/drag intermediate |
+| **A** | No | Earth-fixed site meridian | Rotating Earth |
 
-| System | Space-fixed? | Axis definition |
-|--------|--------------|-----------------|
-| **E** | Yes | Celestial (equinox / pole) — **canonical inertial** |
-| **S** | Yes (frozen at \(T_{\mathrm{GRR}}\)) | Local vertical + platform azimuth at GRR — **space-fixed but site-defined** |
-| **G** | Yes (at GRR meridian) | Launch meridian at GRR + south pole |
-| **A** | No | Earth-fixed (rotates with Earth) |
+**Why S fits the TN wording better than E alone**
 
-So **S is also non-rotating after GRR**, but it is **not** the classical celestial ECI. For TN listing “inertial” state, treat **E** as the TN inertial frame unless the TN states otherwise.
+1. EDD explicitly calls **S space-fixed** (orientation fixed to the celestial sphere after freeze) — so it **is** inertial in the EDD sense, even though axes are **site-defined** at GRR.  
+2. TN “space-fixed” path angle / velocity / position listings for ascent are naturally expressed with **local vertical and downrange**, which are exactly **\(X_S\)** and **\(Z_S\)**.  
+3. No TN line yet found that equates “Space frame” to equinox/E; if one appears, update this note.
 
-**Table 2B \(\chi_c\)** (“from inertial vertical, negative downrange”) is still a **local geometric** angle: vertical and downrange at the pad. Those directions are **fixed in S at GRR** and are known in **E** via `[MES]` / launch geometry. Steering is applied in **B** (and gimbals vs **S**). Do not confuse “TN state in E” with “pitch program measured in E basis vectors.”
+**E remains important:** classical ECI and the Simulink primary inertial (`Body to ECI`, `veh_q_ECI`). **S ↔ E** is a **fixed** rotation after GRR (launch site + azimuth + epoch at \(T_{\mathrm{GRR}}\)). Building that transform is time-based only in the sense that **\(T_{\mathrm{GRR}}\) / launch epoch fixes the S axes in E**; after freeze, both frames are inertial and the DCM is constant.
+
+**Table 2B \(\chi_c\)** (from inertial vertical, negative downrange) lives in the **S pitch plane** (\(X_S\)–\(Z_S\)). Steering closes in **B** (via gimbals / `[MBS]` in the full IU stack).
 
 ---
 
