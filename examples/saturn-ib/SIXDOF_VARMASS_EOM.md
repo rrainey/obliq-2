@@ -276,16 +276,57 @@ Fixture: `docs/sample-models/saturn/saturn-9.6-chi-table2b-attitude-pd.json`
 Trajectory comparison target: **TN-AP-67-158 (AS-205 revised launch reference)**.  
 See [`AS205_REFERENCE.md`](./AS205_REFERENCE.md). Simulink is secondary and may disagree with the TN.
 
+## Reference frames (conventions)
+
+### Vehicle body (AIAA / user stack) — **matches 9.x EOM intent**
+
+| Axis | Meaning |
+|------|---------|
+| **\(+X_b\)** | Forward / **thrust axis** — plant uses \(\mathbf{F}_b=[T,0,0]\) |
+| **\(+Y_b\)** | Pitch axis — **positive pitch rate \(Q=\omega_y\) = pitch up**; plant uses \(M_b=[0,M_y,0]\) |
+| **\(+Z_b\)** | Yaw axis — right-handed triad with \(X_b,Y_b\) |
+
+This is the usual aerospace body frame (later AIAA-style). 9.x was built with that layout in mind.
+
+### ECI / ECF (standard) — **not fully modeled yet**
+
+| Frame | Definition (user / standard) |
+|-------|------------------------------|
+| **ECI** | Earth-centered inertial: \(+Z\) along Earth spin (north), \(+X\) toward vernal equinox, \(+Y\) completes RH |
+| **ECF** | Earth-centered Earth-fixed: \(+Z\) spin north, \(+X\) in equatorial plane at 0° longitude (Greenwich), RH |
+
+User Simulink maps **launch-site ECF → ECI** from launch epoch (astronomy). TN “inertial” is expected to be the same class of frame once confirmed in the document.
+
+### What 9.x actually uses today (simplified plant triad)
+
+At \(t=0\):
+
+- \(\mathbf{r}_i \approx [R_E+50,\,0,\,0]\) — pad on a **demo “radial” \(+X_i\)**, **not** true ECI \(+X\) (vernal equinox)
+- Identity quaternion ⇒ body aligned with that triad at liftoff ⇒ **body \(+X\) ≈ local “up” (along \(\mathbf{r}\))** at pad
+- No Earth rotation, no ECF, no launch azimuth / site latitude transform
+
+So:
+
+- **Body axes** ≈ AIAA (good).  
+- **Inertial axes** ≠ full ECI until we add site → ECI (or TN-equivalent) and IC \(C_{b\!i}(0)\).  
+- Table 2B \(\chi_c\) (from **inertial vertical**, negative **downrange**) is only mapped as elev \(=90+\chi_c\) into body pitch about \(Y_b\); that is **not** yet a certified map from TN inertial / downrange into ECI.
+
+### Pitch sign (for residual / χ work)
+
+User: **positive pitch = pitch up**.  
+TN Table 2B: \(\chi_c\) more **negative** as vehicle pitches **downrange** (nose down from vertical).  
+Plant elev schedule decreases from 90° as \(\chi_c\) decreases — “nose down from vertical” in elev language. Whether \(M_y>0\) produces the correct ECI tip relative to **downrange** still depends on how pad \(Y_b/Z_b\) align with the launch azimuth once true ECI ICs exist.
+
 ## Limitations (v1)
 
 - Principal-axis inertia only; no \(I_{xy}\) etc.
 - No thruster relative-velocity / plume force beyond user `F_b`
 - 9.1 samples atmosphere for plots only; **9.3/9.4 add constant-\(C_D A\) drag** (no CN/Cm/α tables)
 - 9.2 is pitch-rate damping only; **9.4 tracks \(\dot\chi\)**, not closed-loop attitude error
-- χ program is simplified (not full TN Table 2B)
+- 9.5/9.6 use Table 2B elev map; **not** full ECI/ECF or TN inertial
+- No Earth rate / launch-site ECF→ECI IC (user Simulink has this)
 - Multi-engine / APS still TBD
 - Quantitative TN residual pass/fail windows not yet declared (CSV digitized for S-IB Table 5)
-- DCM convention assumed body→inertial; verify sign for a specific trajectory frame
 
 ## Run codegen test
 

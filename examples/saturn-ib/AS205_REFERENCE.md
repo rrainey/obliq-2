@@ -139,3 +139,17 @@ The TN is multi-page with trajectory listings. Recommended process:
 - TN **χ_c**: deg from **inertial vertical**, **negative downrange** (0 at pad vertical).  
 - Plant elev used for open-loop \(Q_{\mathrm{cmd}}\): **elev = 90 + χ_c**.  
 - Full platform / IGM frame transforms are **not** implemented here.
+
+### Frames (user stack vs 9.x plant)
+
+| Frame | User / standard | Apollo IU (satinstunitibm §2) | 9.x plant today |
+|-------|-----------------|------------------------------|-----------------|
+| **Body** | AIAA: \(+X\) thrust, \(+Y\) pitch up, \(+Z\) yaw | **B-system** \(X_B\) forward, pitch about \(Y_B\) | \(F_b=[T,0,0]\), \(M_y\), \(Q=\omega_y\) |
+| **ECI** | Vernal equinox / north spin | **E-system** (Apollo Std 4) | **Not used** |
+| **Nav inertial** | — | **S-system** plumbline: \(X_S\) local up at GRR, \(Z_S\) downrange (Apollo Std 13) | Approximated only via elev schedule |
+| **Earth-fixed** | ECF / site | **A-system** (site meridian) | **Not used** |
+| **Site → inertial** | Simulink astronomy | `[MEG]`, `[MES]`, etc. | **Not used** |
+
+Full write-up: [`APOLLO_COORDINATE_FRAMES.md`](./APOLLO_COORDINATE_FRAMES.md) (from `satinstunitibm_1.pdf` §2).
+
+TN Table 2B \(\chi_c\) (vertical, negative downrange) sits naturally in the **S-frame** pitch plane (\(X_S\)–\(Z_S\)), not in the demo pad triad. Until pad **S** ICs + **B↔S** are wired, late \(\Delta h\) after tight elev tracking is likely **geometry**, not mass.
