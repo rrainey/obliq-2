@@ -297,36 +297,29 @@ This is the usual aerospace body frame (later AIAA-style). 9.x was built with th
 
 User Simulink maps **launch-site ECF → ECI** from launch epoch (astronomy). TN “inertial” is expected to be the same class of frame once confirmed in the document.
 
-### What 9.x actually uses today (simplified plant triad)
+### What 9.4+ plant uses (S-frame pad)
 
-At \(t=0\):
+At \(t=0\) (`as205PadFrames.ts`, LC-34 / AS-205):
 
-- \(\mathbf{r}_i \approx [R_E+50,\,0,\,0]\) — pad on a **demo “radial” \(+X_i\)**, **not** true ECI \(+X\) (vernal equinox)
-- Identity quaternion ⇒ body aligned with that triad at liftoff ⇒ **body \(+X\) ≈ local “up” (along \(\mathbf{r}\))** at pad
-- No Earth rotation, no ECF, no launch azimuth / site latitude transform
-
-So:
-
-- **Body axes** ≈ AIAA (good).  
-- **Inertial axes** ≠ full ECI until we add site → ECI (or TN-equivalent) and IC \(C_{b\!i}(0)\).  
-- Table 2B \(\chi_c\) (from **inertial vertical**, negative **downrange**) is only mapped as elev \(=90+\chi_c\) into body pitch about \(Y_b\); that is **not** yet a certified map from TN inertial / downrange into ECI.
+- Space-fixed integration triad = **S** (plumbline at GRR): \(X_S\) local up, \(Z_S\) downrange (\(A_z\)), \(Y_S\) RH  
+- \(\mathbf{r}_S=[R_L,0,0]\), \(\mathbf{v}_S=\) Earth-rate velocity in S (\(|v|\approx 409\,\mathrm{m/s}\), matches TN first-motion \(V\))  
+- Identity quat ⇒ **B‖S** (thrust along local up at pad)  
+- TN **E** (true equinox inertial) not yet used for state; altitude/mass still comparable
 
 ### Pitch sign (for residual / χ work)
 
 User: **positive pitch = pitch up**.  
-TN Table 2B: \(\chi_c\) more **negative** as vehicle pitches **downrange** (nose down from vertical).  
-Plant elev schedule decreases from 90° as \(\chi_c\) decreases — “nose down from vertical” in elev language. Whether \(M_y>0\) produces the correct ECI tip relative to **downrange** still depends on how pad \(Y_b/Z_b\) align with the launch azimuth once true ECI ICs exist.
+TN Table 2B: \(\chi_c\) more **negative** as vehicle pitches **downrange**.  
+Plant elev \(=90+\chi_c\) decreases as \(\chi_c\) decreases. Tip plane is intended \(X_S\)–\(Z_S\) (body \(Y\)).
 
 ## Limitations (v1)
 
 - Principal-axis inertia only; no \(I_{xy}\) etc.
 - No thruster relative-velocity / plume force beyond user `F_b`
-- 9.1 samples atmosphere for plots only; **9.3/9.4 add constant-\(C_D A\) drag** (no CN/Cm/α tables)
-- 9.2 is pitch-rate damping only; **9.4 tracks \(\dot\chi\)**, not closed-loop attitude error
-- 9.5/9.6 use Table 2B elev map; **not** full ECI/ECF or TN inertial
-- No Earth rate / launch-site ECF→ECI IC (user Simulink has this)
+- Full **E** state + epoch / `[MES]` for vector residual vs TN — not yet  
+- `pad_roll_L` not applied to \(q_0\)  
 - Multi-engine / APS still TBD
-- Quantitative TN residual pass/fail windows not yet declared (CSV digitized for S-IB Table 5)
+- Quantitative TN residual pass/fail windows not yet declared
 
 ## Run codegen test
 

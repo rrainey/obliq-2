@@ -38,6 +38,7 @@ import {
   table5ThrustN,
   table5MdotFromMass
 } from './as205ThrustTable'
+import { as205DefaultPadStateS } from './as205PadFrames'
 
 /** Local types (avoid circular import with sliceModels) */
 export interface SliceBlock {
@@ -552,6 +553,17 @@ export interface EomSubsystemOptions {
   m_ref_kg?: number
   /** Body rate IC [P,Q,R] (rad/s). Default core has small Q≈0.01. */
   omega0?: number[]
+  /**
+   * Inertial position IC in the plant space-fixed frame (m).
+   * For AS-205 plant: **S-frame** r0 ≈ [R_L, 0, 0] (pad on +X_S = local up).
+   */
+  r0_i?: number[]
+  /**
+   * Body velocity IC (m/s). With B‖S at t=0, this is v in S (Earth rate at pad).
+   */
+  v0_b?: number[]
+  /** Quaternion IC scalar-first 4×1. Identity = B‖S at pad. */
+  q0?: number[][]
 }
 
 /** EOM as flattenable subsystem (shared by burn demos). */
@@ -587,6 +599,9 @@ function buildEomSubsystemBlock(
   const m0 = options.m0_kg
   const mRef = options.m_ref_kg ?? options.m0_kg
   const omega0 = options.omega0
+  const r0 = options.r0_i
+  const v0 = options.v0_b
+  const q0 = options.q0
 
   const subBlocks = coreSheet.blocks.map(b => {
     if (renamePort[b.name]) {
@@ -613,6 +628,28 @@ function buildEomSubsystemBlock(
       return {
         ...b,
         parameters: { ...b.parameters, value: omega0, dataType: 'double[3]' }
+      }
+    }
+    if (r0 !== undefined && b.name === 'r0_i') {
+      return {
+        ...b,
+        parameters: { ...b.parameters, value: r0, dataType: 'double[3]' }
+      }
+    }
+    if (v0 !== undefined && b.name === 'v0_b') {
+      return {
+        ...b,
+        parameters: { ...b.parameters, value: v0, dataType: 'double[3]' }
+      }
+    }
+    if (q0 !== undefined && b.name === 'q0') {
+      return {
+        ...b,
+        parameters: {
+          ...b.parameters,
+          value: q0,
+          dataType: 'double[4][1]'
+        }
       }
     }
     return { ...b }
@@ -1674,9 +1711,15 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   resetIds()
   // TN Table 5 first-motion mass (~586593 kg); m_ref tracks m0 for I ∝ m/m_ref
   const m0Tn = 586593
+  // Pad in S-frame (plumbline space-fixed at GRR): X_S up, Z_S downrange, B‖S
+  const pad = as205DefaultPadStateS()
   const { eomSubsystem, core, ports } = buildEomSubsystemBlock(720, 300, {
     m0_kg: m0Tn,
-    m_ref_kg: m0Tn
+    m_ref_kg: m0Tn,
+    r0_i: pad.r0_S,
+    v0_b: pad.v0_S,
+    omega0: [0, 0, 0],
+    q0: [[1], [0], [0], [0]] // B‖S at pad
   })
   const dt = 0.05
   const duration = 180
@@ -1732,9 +1775,10 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   })
 
   // ── Atmosphere + q̄ + aero drag (9.3) ──
+  // Geometric altitude ≈ |r| − R_L (S-frame pad radius from AS-205)
   const Re = B('source', 'R_earth', 720, 560, {
     signalType: 'constant',
-    value: 6371000,
+    value: pad.r0_S[0],
     dataType: 'double'
   })
   const alt = B('sum', 'altitude_m', 880, 520, {
@@ -2066,7 +2110,7 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   return {
     name: 'saturn-9.4-open-loop-chi-6dof-ascent',
     description:
-      'Open-loop χ time-tilt on 6-DoF plant with aero: TN-class S-IB thrust (~7 MN), m0≈586593 kg, full-run logger buffers, χ(t)→Q_cmd→My. Prefer TN residuals over Simulink.',
+      'Open-loop χ on 6-DoF in S-frame (LC-34 pad up/downrange, Earth-rate v0, B‖S), TN thrust/mdot, χ→My. TN inertial≈E; h/mass vs Table 5.',
     sheets: [
       {
         id: 'main',
@@ -2079,11 +2123,18 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     parameters: [
       ...(core.parameters || []),
       {
+        name: 'R_pad_m',
+        dataType: 'double',
+        defaultValue: String(pad.r0_S[0]),
+        signalType: 'double',
+        value: pad.r0_S[0]
+      },
+      {
         name: 'R_earth_m',
         dataType: 'double',
-        defaultValue: '6371000.0',
+        defaultValue: String(pad.r0_S[0]),
         signalType: 'double',
-        value: 6371000
+        value: pad.r0_S[0]
       },
       {
         name: 'CdA_m2',

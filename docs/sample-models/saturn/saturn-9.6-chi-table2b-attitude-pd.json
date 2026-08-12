@@ -3,7 +3,7 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-12T00:59:45.928Z",
+      "created": "2026-08-12T01:55:12.252Z",
       "description": "9.5 plant + body-pitch attitude PD: θ̂=∫Q, My=Kp(elev_cmd−θ̂)−Kd·Q. Table 2B elev program; no platform frames. TN residuals primary."
     },
     "sheets": [
@@ -420,7 +420,7 @@
                       "parameters": {
                         "signalType": "constant",
                         "value": [
-                          6371050,
+                          6373385,
                           0,
                           0
                         ],
@@ -438,9 +438,9 @@
                       "parameters": {
                         "signalType": "constant",
                         "value": [
-                          0,
-                          0,
-                          0
+                          -1.4210854715202004e-14,
+                          51.11612845240077,
+                          405.764849180107
                         ],
                         "dataType": "double[3]"
                       }
@@ -1836,7 +1836,7 @@
             },
             "parameters": {
               "signalType": "constant",
-              "value": 6371000,
+              "value": 6373385,
               "dataType": "double"
             }
           },
@@ -3526,11 +3526,18 @@
         "value": 586593
       },
       {
+        "name": "R_pad_m",
+        "dataType": "double",
+        "defaultValue": "6373385",
+        "signalType": "double",
+        "value": 6373385
+      },
+      {
         "name": "R_earth_m",
         "dataType": "double",
-        "defaultValue": "6371000.0",
+        "defaultValue": "6373385",
         "signalType": "double",
-        "value": 6371000
+        "value": 6373385
       },
       {
         "name": "CdA_m2",

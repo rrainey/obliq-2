@@ -3,8 +3,8 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-12T00:55:09.798Z",
-      "description": "Open-loop χ time-tilt on 6-DoF plant with aero: TN-class S-IB thrust (~7 MN), m0≈586593 kg, full-run logger buffers, χ(t)→Q_cmd→My. Prefer TN residuals over Simulink."
+      "created": "2026-08-12T01:55:12.251Z",
+      "description": "Open-loop χ on 6-DoF in S-frame (LC-34 pad up/downrange, Earth-rate v0, B‖S), TN thrust/mdot, χ→My. TN inertial≈E; h/mass vs Table 5."
     },
     "sheets": [
       {
@@ -420,7 +420,7 @@
                       "parameters": {
                         "signalType": "constant",
                         "value": [
-                          6371050,
+                          6373385,
                           0,
                           0
                         ],
@@ -438,9 +438,9 @@
                       "parameters": {
                         "signalType": "constant",
                         "value": [
-                          0,
-                          0,
-                          0
+                          -1.4210854715202004e-14,
+                          51.11612845240077,
+                          405.764849180107
                         ],
                         "dataType": "double[3]"
                       }
@@ -457,7 +457,7 @@
                         "signalType": "constant",
                         "value": [
                           0,
-                          0.01,
+                          0,
                           0
                         ],
                         "dataType": "double[3]"
@@ -1836,7 +1836,7 @@
             },
             "parameters": {
               "signalType": "constant",
-              "value": 6371000,
+              "value": 6373385,
               "dataType": "double"
             }
           },
@@ -3174,11 +3174,18 @@
         "value": 586593
       },
       {
+        "name": "R_pad_m",
+        "dataType": "double",
+        "defaultValue": "6373385",
+        "signalType": "double",
+        "value": 6373385
+      },
+      {
         "name": "R_earth_m",
         "dataType": "double",
-        "defaultValue": "6371000.0",
+        "defaultValue": "6373385",
         "signalType": "double",
-        "value": 6371000
+        "value": 6373385
       },
       {
         "name": "CdA_m2",

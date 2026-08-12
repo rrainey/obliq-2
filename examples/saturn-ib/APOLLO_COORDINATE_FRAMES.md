@@ -90,7 +90,7 @@ IGM velocity-to-be-gained / time-to-go use V-frame quantities (many terms zero a
 
 Used for gravitational and drag accelerations in the IU flight program.
 
-### E — Ephemeral / geocentric inertial (space-fixed)
+### E — Ephemeral / geocentric inertial (space-fixed) — **TN inertial (assumed)**
 
 | | |
 |--|--|
@@ -100,7 +100,8 @@ Used for gravitational and drag accelerations in the IU flight program.
 | **\(Y_E\)** | RH |
 
 - Identical to **Apollo Standard Coordinate System 4** (geocentric inertial).  
-- Matches the usual **ECI** definition (\(X\) vernal equinox, \(Z\) north).
+- Matches the usual **ECI** definition (\(X\) vernal equinox, \(Z\) north).  
+- **Working assumption:** TN-AP-67-158 space-fixed / inertial trajectory state is in (or equivalent to) **E**.
 
 ### A — Telemetry station (earth-fixed)
 
@@ -172,26 +173,31 @@ Naming: **`M` + from-system + to-system** transforms a vector **from** the secon
 
 ### Implication for Table 2B / late \(\Delta h\)
 
-TN Table 2B \(\chi_c\) (from vertical, negative downrange) lives naturally in the **S-frame pitch plane** (\(X_S\)–\(Z_S\)), not in a random body elev integral.
+- **TN trajectory state** (position, space-fixed velocity, path angle): assume **E**.  
+- **Table 2B \(\chi_c\)** (vertical / downrange): geometric directions that define **S** at GRR; expressed in **E** once site + azimuth + epoch are known.  
+- Pitch/steering still closes in **B** (and platform vs **S**).
 
 9.x currently:
 
-1. Puts “up” along a **demo radial** at \(t=0\) (not full E or S).  
+1. Puts “up” along a **demo radial** at \(t=0\) (not E, not S).  
 2. Commands elev via **body pitch about \(Y_b\)** with elev \(=90+\chi_c\).  
-3. Never builds **`[MBS]`** or pad **S/E** from launch site + azimuth.
+3. Never builds pad **E** ICs, **S** from launch geometry, or **`[MBS]`** / **`[MES]`**.
 
-Until pad **S-frame** (or E→S) ICs and **B↔S** attitude are wired, tight elev tracking can still **mis-aim thrust relative to true downrange / gravity turn** even if body axes are “AIAA-correct.”
+Until **E** (TN inertial state) and **S** (local vertical/downrange for \(\chi\)) are consistent at the pad, tight elev tracking can still **mis-aim thrust** even if body axes are AIAA-correct.
 
 ---
 
-## Recommended next plant step (when authorized)
+## Plant implementation status
 
-1. Confirm TN-AP-67-158 “inertial” ≡ **S** and/or **E** as used above.  
-2. Set pad IC in **S**: \(X_S\) local vertical, \(Z_S\) downrange (azimuth), Earth rate in S or via E.  
-3. Identity B‖S at GRR/liftoff (platform align), then Table 2B pitch as rotation in \(X_S\)–\(Z_S\) about **\(Y_S\)** (≡ \(Y_B\) at align).  
-4. Keep thrust on **\(X_B\)**; use **`[MBS]`** (or quaternion equivalent) for \(\mathbf{r},\mathbf{v}\) in S/E.
+| Step | Status |
+|------|--------|
+| TN inertial ≡ **E** | Working assumption |
+| Pad **S** IC: \(r=[R_L,0,0]\), \(v=\) Earth rate in S, B‖S | **Implemented** (`as205PadFrames.ts` → 9.4/9.5/9.6) |
+| Full E state + epoch / `[MES]` for vector residual vs TN | **Not yet** (altitude/mass still comparable) |
+| Table 2B pitch strictly in \(X_S\)–\(Z_S\) with certified \(M_y\) sign | Partial (elev schedule + body \(Y\); sign/plane still under residual review) |
+| `pad_roll_L` applied to \(q_0\) | **Not yet** |
 
-That reuses this document’s matrices rather than inventing frames.
+Site constants: `AS205_presettings.m` / `AS205_PAD` (LC-34, \(A_z\), \(R_L\)).
 
 ---
 
