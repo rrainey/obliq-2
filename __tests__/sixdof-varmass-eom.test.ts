@@ -10,7 +10,8 @@ import {
   buildSixDofVehicleBurnDemo,
   buildSixDofOpenLoopAscent,
   buildSixDofClosedLoopPitchRateDamp,
-  buildSixDofOpenLoopAscentWithAero
+  buildSixDofOpenLoopAscentWithAero,
+  buildSixDofOpenLoopChiAscent
 } from '../examples/saturn-ib/sixDofVarMassEom'
 import { sliceToModelData } from '../examples/saturn-ib/sliceModels'
 import { propagateSignalTypes } from '@/lib/signalTypePropagation'
@@ -188,6 +189,53 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(result.source).toContain('_step')
   })
 
+  test('9.4 open-loop χ time-tilt on 6-DoF + aero + rate loop', () => {
+    const m = buildSixDofOpenLoopChiAscent()
+    const types = new Set(m.sheets[0].blocks.map(b => b.type))
+    expect(types.has('subsystem')).toBe(true)
+    expect(types.has('lookup_1d')).toBe(true)
+    expect(types.has('rate_limiter')).toBe(true)
+    expect(types.has('unit_delay')).toBe(true)
+    expect(types.has('units_conversion')).toBe(true)
+    expect(types.has('transfer_function')).toBe(true)
+    expect(types.has('atmosphere')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'chi_deg_cmd')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'Q_cmd')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'F_aero')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'M_b_cmd')).toBe(true)
+
+    const eom = m.sheets[0].blocks.find(b => b.name === 'EOM_6DoF_VarMass')!
+    const Fb = m.sheets[0].blocks.find(b => b.name === 'F_b_cmd')!
+    const Mb = m.sheets[0].blocks.find(b => b.name === 'M_b_cmd')!
+    expect(
+      m.sheets[0].connections.some(
+        c => c.sourceBlockId === Fb.id && c.targetBlockId === eom.id
+      )
+    ).toBe(true)
+    expect(
+      m.sheets[0].connections.some(
+        c => c.sourceBlockId === Mb.id && c.targetBlockId === eom.id
+      )
+    ).toBe(true)
+
+    const prop = propagateSignalTypes(
+      m.sheets[0].blocks as any,
+      m.sheets[0].connections as any
+    )
+    const typeErrors = prop.errors.filter(e => e.severity === 'error')
+    expect(typeErrors.map(e => e.message)).toEqual([])
+
+    const gen = new CodeGenerator({
+      modelName: 'sixdof_chi_ascent',
+      integrationAlgorithm: 'rk4'
+    })
+    const result = gen.generate(m.sheets as any, m.parameters || [])
+    expect(result.source).not.toMatch(/Error generating code for/)
+    expect(result.source).toContain('_step')
+    // Parameter macro must not clobber Kq_gain signal
+    expect(result.header).not.toMatch(/#define\s+Kq_gain\b/)
+  })
+
   test('exports JSON fixtures', () => {
     const dir = path.join(__dirname, '../docs/sample-models/saturn')
     fs.mkdirSync(dir, { recursive: true })
@@ -196,7 +244,8 @@ describe('6-DOF variable-mass quaternion EOM', () => {
       buildSixDofVehicleBurnDemo(),
       buildSixDofOpenLoopAscent(),
       buildSixDofClosedLoopPitchRateDamp(),
-      buildSixDofOpenLoopAscentWithAero()
+      buildSixDofOpenLoopAscentWithAero(),
+      buildSixDofOpenLoopChiAscent()
     ]) {
       const data = sliceToModelData(m as any)
       const fp = path.join(dir, `${m.name}.json`)

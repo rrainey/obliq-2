@@ -189,6 +189,38 @@ Reference CSV: `docs/sample-models/saturn/as205-reference/as205_trajectory_refer
 
 Fixture: `docs/sample-models/saturn/saturn-9.3-open-loop-6dof-ascent-aero.json`
 
+## 9.4 Open-loop χ time-tilt on 6-DoF (+ aero)
+
+`buildSixDofOpenLoopChiAscent()` — guidance-shaped plant for better \(h(t)\) vs TN:
+
+| Piece | Role |
+|-------|------|
+| 9.3 plant | Thrust + mdot + \(F_{\mathrm{aero}}\) into EOM |
+| χ LUT + rate limiter | Open-loop pitch program (deg), ≲1 °/s slew (TN criterion) |
+| \(Q_{\mathrm{cmd}}\approx\dot\chi\) | Discrete derivative via unit_delay / \(dt\) |
+| Rate loop | \(Q_{\mathrm{cmd}}-Q\) → TF + gain + limit → \(M_y\) |
+| \(M_b=[0,M_y,0]\) | Body pitch moment into EOM |
+
+χ table is a **simplified** time-tilt (90° → ~28° by staging), not full TN Table 2B polynomials.
+
+### Recommended sim settings
+
+| Setting | Value |
+|---------|-------|
+| Time step | **0.05 s** (matches \(Q_{\mathrm{cmd}}\) derivative \(dt\)) |
+| Duration | **180 s** |
+| Integration | **RK4** |
+
+### What you should see
+
+- **χ_cmd** holds near 90°, then tilts down through boost  
+- **Q** tracks **Q_cmd** (negative during tilt); **My** commands pitch  
+- **Altitude / mass / q̄** still show boost shape (compare to Table 5 carefully)  
+
+**Do not fix to Simulink** if it disagrees with TN-AP-67-158.
+
+Fixture: `docs/sample-models/saturn/saturn-9.4-open-loop-chi-6dof-ascent.json`
+
 ## Validation baseline
 
 Trajectory comparison target: **TN-AP-67-158 (AS-205 revised launch reference)**.  
@@ -198,8 +230,9 @@ See [`AS205_REFERENCE.md`](./AS205_REFERENCE.md). Simulink is secondary and may 
 
 - Principal-axis inertia only; no \(I_{xy}\) etc.
 - No thruster relative-velocity / plume force beyond user `F_b`
-- 9.1 samples atmosphere for plots only; **9.3 adds constant-\(C_D A\) drag** (no CN/Cm/α tables)
-- 9.2 is pitch-rate damping only — not full IGM χ steering
+- 9.1 samples atmosphere for plots only; **9.3/9.4 add constant-\(C_D A\) drag** (no CN/Cm/α tables)
+- 9.2 is pitch-rate damping only; **9.4 tracks \(\dot\chi\)**, not closed-loop attitude error
+- χ program is simplified (not full TN Table 2B)
 - Multi-engine / APS still TBD
 - Quantitative TN residual pass/fail windows not yet declared (CSV digitized for S-IB Table 5)
 - DCM convention assumed body→inertial; verify sign for a specific trajectory frame

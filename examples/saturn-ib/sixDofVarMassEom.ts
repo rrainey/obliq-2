@@ -1599,6 +1599,450 @@ export function buildSixDofOpenLoopAscentWithAero(): SliceModel {
   }
 }
 
+/**
+ * Phase 9.4 — Open-loop χ time-tilt on 6-DoF plant (with aero)
+ *
+ * Composes:
+ *   - 9.3 plant: axial thrust + mdot + F_aero = −q̄·CdA·v̂ into EOM
+ *   - 8.8-style χ(t) pitch program: lookup_1d + rate_limiter (deg)
+ *   - Q_cmd ≈ d(χ_rad)/dt via unit_delay discrete derivative
+ *   - Pitch-rate loop (9.2-style): Q_cmd − Q → TF → gain → My limit
+ *   - M_b = [0, My, 0]
+ *
+ * χ table is a simplified time-tilt (90° vertical → ~28° by staging), not the
+ * full TN-AP-67-158 Table 2B polynomials. Prefer TN for trajectory residuals;
+ * Simulink may disagree.
+ *
+ * Success: χ_cmd tilts over; |Q| tracks Q_cmd then settles; h/mass still climb;
+ * drag peaks near max-q̄. Qualitative shape vs Table 5 only.
+ */
+export function buildSixDofOpenLoopChiAscent(): SliceModel {
+  resetIds()
+  const { eomSubsystem, core, ports } = buildEomSubsystemBlock(720, 300)
+  const dt = 0.05
+
+  // ── Propulsion (same schedule as 9.1/9.3) ──
+  const liftoff = B('source', 'liftoff', 40, 40, {
+    signalType: 'step',
+    stepTime: 1.0,
+    stepValue: 1.0,
+    dataType: 'double'
+  })
+  const edge = B('edge_detect', 'liftoff_edge', 180, 40, {
+    edge: 'rising',
+    threshold: 0.5
+  })
+  const one = B('source', 'one', 40, 120, {
+    signalType: 'constant',
+    value: 1,
+    dataType: 'double'
+  })
+  const tBurn = B('integrator', 't_burn', 180, 120, {
+    showResetInput: true,
+    initialValue: 0,
+    showInitPort: false
+  })
+  const thrustMag = B('lookup_1d', 'ThrustMag_N', 340, 120, {
+    inputValues: [0, 0.5, 2, 10, 50, 100, 130, 145, 150, 160],
+    outputValues: [0, 5e5, 8.5e5, 8.9e5, 8.9e5, 8.9e5, 8.9e5, 6e5, 1e5, 0],
+    extrapolation: 'clamp'
+  })
+  const mdotScale = B('source', 'mdot_scale', 340, 220, {
+    signalType: 'constant',
+    value: 1 / 2550,
+    dataType: 'double'
+  })
+  const mdotCmd = B('matrix_multiply', 'mdot_cmd', 480, 180, {})
+  const zero = B('source', 'zero', 340, 300, {
+    signalType: 'constant',
+    value: 0,
+    dataType: 'double'
+  })
+  const Fthrust = B('mux', 'F_thrust', 480, 120, {
+    rows: 1,
+    cols: 3,
+    baseType: 'double',
+    outputType: 'double[3]',
+    outputShape: 'vector'
+  })
+
+  // ── Atmosphere + q̄ + aero drag (9.3) ──
+  const Re = B('source', 'R_earth', 720, 560, {
+    signalType: 'constant',
+    value: 6371000,
+    dataType: 'double'
+  })
+  const alt = B('sum', 'altitude_m', 880, 520, {
+    signs: '+-',
+    numInputs: 2
+  })
+  const atm = B('atmosphere', 'Atm', 1040, 520, {
+    model: 'coesa1976',
+    extrapolation: 'clamp'
+  })
+  const half = B('source', 'half', 880, 640, {
+    signalType: 'constant',
+    value: 0.5,
+    dataType: 'double'
+  })
+  const Vmag = B('mag', 'V_mag', 880, 420, {})
+  const Vsq = B('multiply', 'V_sq', 1020, 420, { numInputs: 2 })
+  const halfRho = B('multiply', 'half_rho', 1160, 480, { numInputs: 2 })
+  const qbar = B('multiply', 'qbar', 1300, 440, { numInputs: 2 })
+  const CdA = B('source', 'CdA_m2', 880, 340, {
+    signalType: 'constant',
+    value: 17.0,
+    dataType: 'double'
+  })
+  const Dmag = B('multiply', 'D_mag', 1160, 380, { numInputs: 2 })
+  const Vsafe = B('evaluate', 'V_safe', 1020, 340, {
+    numInputs: 1,
+    expression: 'in(0) > 1e-3 ? in(0) : 1e-3'
+  })
+  const demuxV = B('demux', 'demux_vb', 880, 260, {
+    outputCount: 3,
+    inputDimensions: [3]
+  })
+  const vh0 = B('divide', 'vhat_x', 1020, 220, {})
+  const vh1 = B('divide', 'vhat_y', 1020, 260, {})
+  const vh2 = B('divide', 'vhat_z', 1020, 300, {})
+  const vhat = B('mux', 'v_hat', 1160, 260, {
+    rows: 1,
+    cols: 3,
+    baseType: 'double',
+    outputType: 'double[3]',
+    outputShape: 'vector'
+  })
+  const Dvec = B('matrix_multiply', 'D_vec', 1300, 320, {})
+  const Faero = B('uminus', 'F_aero', 1440, 320, {})
+  const Fb = B('sum', 'F_b_cmd', 1580, 200, {
+    signs: '++',
+    numInputs: 2
+  })
+
+  // ── χ time-tilt program (8.8-style, flight time from liftoff) ──
+  // Simplified AS-205-ish tilt: hold vertical, then nose-down to ~28° by staging.
+  // Not full Table 2B polynomials — shape only.
+  const chiLut = B('lookup_1d', 'chi_deg_cmd', 40, 420, {
+    inputValues: [0, 10, 15, 30, 50, 80, 110, 140, 160],
+    outputValues: [90, 90, 85, 75, 60, 45, 35, 30, 28],
+    extrapolation: 'clamp'
+  })
+  // TN criterion: commanded attitude rates ≲ 1 deg/s
+  const chiRateLim = B('rate_limiter', 'chi_rate_lim', 220, 420, {
+    risingSlewLimit: 1.0,
+    fallingSlewLimit: -1.0,
+    initialOutput: 90
+  })
+  const chiToRad = B('units_conversion', 'chi_to_rad', 400, 420, {
+    conversionType: 'deg_to_rad'
+  })
+  // Q_cmd ≈ d(χ)/dt via unit delay (fixed-step discrete derivative)
+  const chiPrev = B('unit_delay', 'chi_rad_prev', 400, 500, {
+    initialValue: Math.PI / 2, // 90 deg
+    sampleInterval: 0
+  })
+  const dChi = B('sum', 'd_chi', 560, 420, {
+    signs: '+-',
+    numInputs: 2
+  })
+  const dtSrc = B('source', 'dt_s', 560, 500, {
+    signalType: 'constant',
+    value: dt,
+    dataType: 'double'
+  })
+  const Qcmd = B('divide', 'Q_cmd', 700, 420, {})
+
+  // ── Pitch-rate loop → My (9.2-style) ──
+  const demuxW = B('demux', 'demux_omega', 900, 120, {
+    outputCount: 3,
+    inputDimensions: [3]
+  })
+  const Qerr = B('sum', 'Q_err', 1040, 140, {
+    signs: '+-',
+    numInputs: 2
+  })
+  const Qfilt = B('transfer_function', 'Q_filter', 1180, 140, {
+    numerator: [1],
+    denominator: [0.1556, 1]
+  })
+  const Kq = B('source', 'Kq_gain', 1180, 60, {
+    signalType: 'constant',
+    value: 8e6,
+    dataType: 'double'
+  })
+  const MyRaw = B('matrix_multiply', 'My_raw', 1320, 140, {})
+  const MyLim = B('limit', 'My_limit', 1460, 140, {
+    lowerLimit: -3e7,
+    upperLimit: 3e7
+  })
+  const Mb = B('mux', 'M_b_cmd', 1600, 140, {
+    rows: 1,
+    cols: 3,
+    baseType: 'double',
+    outputType: 'double[3]',
+    outputShape: 'vector'
+  })
+
+  // ── Ports + visualization ──
+  const outR = B('output_port', 'r_i', 1100, 40, { portName: 'r_i' })
+  const outV = B('output_port', 'v_b', 1260, 40, { portName: 'v_b' })
+  const outW = B('output_port', 'omega_b', 1100, 80, { portName: 'omega_b' })
+  const outQ = B('output_port', 'q', 1260, 80, { portName: 'q' })
+  const outM = B('output_port', 'mass', 1100, 600, { portName: 'mass_kg' })
+  const outRmag = B('output_port', 'r_mag', 1260, 600, { portName: 'r_mag_m' })
+  const outT = B('output_port', 'thrust', 640, 40, { portName: 'thrust_N' })
+  const outAlt = B('output_port', 'h', 1440, 520, { portName: 'altitude_m' })
+  const outQbar = B('output_port', 'qbar_out', 1440, 440, { portName: 'qbar_Pa' })
+  const outChi = B('output_port', 'chi_cmd', 400, 340, { portName: 'chi_cmd_deg' })
+  const outQrate = B('output_port', 'Q_rps', 900, 40, { portName: 'Q_rps' })
+  const outQcmd = B('output_port', 'Q_cmd_out', 700, 340, { portName: 'Q_cmd_rps' })
+  const outMy = B('output_port', 'My', 1600, 60, { portName: 'My_Nm' })
+
+  const dispChi = B('signal_display', 'disp_chi', 1760, 40, {
+    title: 'χ cmd (deg)'
+  })
+  const dispQ = B('signal_display', 'disp_Q', 1760, 120, {
+    title: 'Pitch rate Q (rad/s)'
+  })
+  const dispQcmd = B('signal_display', 'disp_Qcmd', 1760, 200, {
+    title: 'Q_cmd (rad/s)'
+  })
+  const dispH = B('signal_display', 'disp_altitude', 1760, 280, {
+    title: 'Altitude MSL (m)'
+  })
+  const dispM = B('signal_display', 'disp_mass', 1760, 360, {
+    title: 'Mass (kg)'
+  })
+  const dispQbar = B('signal_display', 'disp_qbar', 1760, 440, {
+    title: 'Dynamic pressure q̄ (Pa)'
+  })
+  const dispMy = B('signal_display', 'disp_My', 1760, 520, {
+    title: 'Pitch moment My (N·m)'
+  })
+
+  const logH = B('signal_logger', 'log_altitude', 1920, 120, {})
+  const logM = B('signal_logger', 'log_mass', 1920, 200, {})
+  const logQbar = B('signal_logger', 'log_qbar', 1920, 280, {})
+  const logChi = B('signal_logger', 'log_chi', 1920, 360, {})
+  const logQ = B('signal_logger', 'log_Q', 1920, 440, {})
+
+  const parentBlocks = [
+    liftoff,
+    edge,
+    one,
+    tBurn,
+    thrustMag,
+    mdotScale,
+    mdotCmd,
+    zero,
+    Fthrust,
+    eomSubsystem,
+    Re,
+    alt,
+    atm,
+    half,
+    Vmag,
+    Vsq,
+    halfRho,
+    qbar,
+    CdA,
+    Dmag,
+    Vsafe,
+    demuxV,
+    vh0,
+    vh1,
+    vh2,
+    vhat,
+    Dvec,
+    Faero,
+    Fb,
+    chiLut,
+    chiRateLim,
+    chiToRad,
+    chiPrev,
+    dChi,
+    dtSrc,
+    Qcmd,
+    demuxW,
+    Qerr,
+    Qfilt,
+    Kq,
+    MyRaw,
+    MyLim,
+    Mb,
+    outR,
+    outV,
+    outW,
+    outQ,
+    outM,
+    outRmag,
+    outT,
+    outAlt,
+    outQbar,
+    outChi,
+    outQrate,
+    outQcmd,
+    outMy,
+    dispChi,
+    dispQ,
+    dispQcmd,
+    dispH,
+    dispM,
+    dispQbar,
+    dispMy,
+    logH,
+    logM,
+    logQbar,
+    logChi,
+    logQ
+  ]
+
+  const parentWires: SliceWire[] = [
+    // Propulsion
+    W(liftoff, edge),
+    W(one, tBurn, 0, 0),
+    W(edge, tBurn, 0, -2),
+    W(tBurn, thrustMag),
+    W(thrustMag, outT),
+    W(thrustMag, mdotCmd, 0, 0),
+    W(mdotScale, mdotCmd, 0, 1),
+    W(thrustMag, Fthrust, 0, 0),
+    W(zero, Fthrust, 0, 1),
+    W(zero, Fthrust, 0, 2),
+    // Atmosphere + aero
+    W(eomSubsystem, alt, ports.r_mag, 0),
+    W(Re, alt, 0, 1),
+    W(alt, atm),
+    W(eomSubsystem, Vmag, ports.v_b, 0),
+    W(Vmag, Vsq, 0, 0),
+    W(Vmag, Vsq, 0, 1),
+    W(half, halfRho, 0, 0),
+    W(atm, halfRho, 2, 1),
+    W(halfRho, qbar, 0, 0),
+    W(Vsq, qbar, 0, 1),
+    W(eomSubsystem, demuxV, ports.v_b, 0),
+    W(Vmag, Vsafe),
+    W(demuxV, vh0, 0, 0),
+    W(Vsafe, vh0, 0, 1),
+    W(demuxV, vh1, 1, 0),
+    W(Vsafe, vh1, 0, 1),
+    W(demuxV, vh2, 2, 0),
+    W(Vsafe, vh2, 0, 1),
+    W(vh0, vhat, 0, 0),
+    W(vh1, vhat, 0, 1),
+    W(vh2, vhat, 0, 2),
+    W(qbar, Dmag, 0, 0),
+    W(CdA, Dmag, 0, 1),
+    W(Dmag, Dvec, 0, 0),
+    W(vhat, Dvec, 0, 1),
+    W(Dvec, Faero),
+    W(Fthrust, Fb, 0, 0),
+    W(Faero, Fb, 0, 1),
+    W(Fb, eomSubsystem, 0, ports.F_b),
+    W(mdotCmd, eomSubsystem, 0, ports.mdot),
+    // χ program → Q_cmd
+    W(tBurn, chiLut),
+    W(chiLut, chiRateLim),
+    W(chiRateLim, chiToRad),
+    W(chiToRad, chiPrev),
+    W(chiToRad, dChi, 0, 0),
+    W(chiPrev, dChi, 0, 1),
+    W(dChi, Qcmd, 0, 0),
+    W(dtSrc, Qcmd, 0, 1),
+    // Rate loop
+    W(eomSubsystem, demuxW, ports.omega_b, 0),
+    W(Qcmd, Qerr, 0, 0),
+    W(demuxW, Qerr, 1, 1),
+    W(Qerr, Qfilt),
+    W(Qfilt, MyRaw, 0, 0),
+    W(Kq, MyRaw, 0, 1),
+    W(MyRaw, MyLim),
+    W(zero, Mb, 0, 0),
+    W(MyLim, Mb, 0, 1),
+    W(zero, Mb, 0, 2),
+    W(Mb, eomSubsystem, 0, ports.M_b),
+    // EOM / sensor outs
+    W(eomSubsystem, outR, ports.r_i, 0),
+    W(eomSubsystem, outV, ports.v_b, 0),
+    W(eomSubsystem, outW, ports.omega_b, 0),
+    W(eomSubsystem, outQ, ports.q, 0),
+    W(eomSubsystem, outM, ports.mass, 0),
+    W(eomSubsystem, outRmag, ports.r_mag, 0),
+    W(alt, outAlt),
+    W(qbar, outQbar),
+    W(chiRateLim, outChi),
+    W(demuxW, outQrate, 1, 0),
+    W(Qcmd, outQcmd),
+    W(MyLim, outMy),
+    // Displays
+    W(chiRateLim, dispChi),
+    W(demuxW, dispQ, 1, 0),
+    W(Qcmd, dispQcmd),
+    W(alt, dispH),
+    W(eomSubsystem, dispM, ports.mass, 0),
+    W(qbar, dispQbar),
+    W(MyLim, dispMy),
+    // Loggers
+    W(alt, logH),
+    W(eomSubsystem, logM, ports.mass, 0),
+    W(qbar, logQbar),
+    W(chiRateLim, logChi),
+    W(demuxW, logQ, 1, 0)
+  ]
+
+  return {
+    name: 'saturn-9.4-open-loop-chi-6dof-ascent',
+    description:
+      'Open-loop χ time-tilt on 6-DoF plant with aero: χ(t)→Q_cmd→pitch-rate My + F_aero. Compare h/mass to TN-AP-67-158 (not Simulink).',
+    sheets: [
+      {
+        id: 'main',
+        name: 'OpenLoopChiAscent',
+        blocks: parentBlocks,
+        connections: parentWires,
+        extents: { width: 2100, height: 780 }
+      }
+    ],
+    parameters: [
+      ...(core.parameters || []),
+      {
+        name: 'R_earth_m',
+        dataType: 'double',
+        defaultValue: '6371000.0',
+        signalType: 'double',
+        value: 6371000
+      },
+      {
+        name: 'CdA_m2',
+        dataType: 'double',
+        defaultValue: '17.0',
+        signalType: 'double',
+        value: 17.0
+      },
+      {
+        name: 'pitch_rate_gain',
+        dataType: 'double',
+        defaultValue: '8e6',
+        signalType: 'double',
+        value: 8e6
+      },
+      {
+        name: 'Isp_s',
+        dataType: 'double',
+        defaultValue: '260',
+        signalType: 'double',
+        value: 260
+      }
+    ],
+    globalSettings: {
+      simulationTimeStep: dt,
+      simulationDuration: 180,
+      integrationAlgorithm: 'rk4'
+    }
+  }
+}
+
 /** @deprecated use buildSixDofVehicleBurnDemo */
 export function buildSixDofVarMassSubsystemDemo(): SliceModel {
   return buildSixDofVehicleBurnDemo()

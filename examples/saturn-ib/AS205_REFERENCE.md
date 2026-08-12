@@ -116,6 +116,7 @@ The TN is multi-page with trajectory listings. Recommended process:
 |-------|---------|
 | `saturn-9.1-open-loop-6dof-ascent` | h, mass, q̄, \|r\| vs time (plant, no aero force) |
 | `saturn-9.2-closed-loop-pitch-rate-damp` | rate loop only — **not** TN trajectory match |
-| `saturn-9.3-open-loop-6dof-ascent-aero` | plant + constant-CdA drag; primary residual candidate |
-| `saturn-8.8-chi-time-tilt` | χ program shape vs time (open-loop) |
-| Future 9.4+ | χ program on 6-DoF plant; quantitative residual gates |
+| `saturn-9.3-open-loop-6dof-ascent-aero` | plant + constant-CdA drag (no pitch program) |
+| `saturn-9.4-open-loop-chi-6dof-ascent` | **primary residual candidate**: χ time-tilt + rate loop + aero plant |
+| `saturn-8.8-chi-time-tilt` | χ program shape alone (no plant) |
+| Future 9.5+ | TN Table 2B χ polynomials; attitude-error loop; residual pass/fail gates |

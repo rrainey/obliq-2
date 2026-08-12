@@ -28,6 +28,7 @@ npm test -- --testPathPattern=saturn-ib-slices
 | **9.1** | **open-loop-6dof-ascent** | **Sprint: EOM + burn + altitude/atmosphere/q̄ plots + displays** |
 | **9.2** | **closed-loop-pitch-rate-damp** | **Sprint: Q feedback via TF+limit → My into EOM** |
 | **9.3** | **open-loop-6dof-ascent-aero** | **Sprint: 9.1 + simple aero drag F_aero=−q̄·CdA·v̂ into EOM** |
+| **9.4** | **open-loop-chi-6dof-ascent** | **Sprint: χ time-tilt → Q_cmd → pitch-rate My on 9.3 plant** |
 
 ## Parameters
 
@@ -51,9 +52,10 @@ npm test -- --testPathPattern=sixdof-varmass-eom
 
 ## Not yet modeled (full stack still TBD)
 
-- Full aero tables (CN, Cm, α-dependent moments) — 9.3 is constant-CdA drag only
+- Full aero tables (CN, Cm, α-dependent moments) — 9.3/9.4 use constant-CdA drag only
 - Full inertia tensor (products of inertia) and mass-property LUTs
-- Open-loop χ pitch program into attitude (8.8 exists; not yet on 6-DoF plant)
-- Full IGM χ steering (9.2 is pitch-rate damp only)
+- Full TN Table 2B χ polynomials (9.4 uses a simplified time-tilt table)
+- Closed-loop attitude (χ error) vs rate-only tracking of dχ/dt
+- Full IGM χ steering
 - Multi-engine H-1 cluster + APS
 - Quantitative TN pass/fail windows (reference CSV digitized; residuals still qualitative)
