@@ -12,6 +12,23 @@ Cross-refs in that section:
 
 **Policy for obliq Saturn work:** Prefer this document + TN-AP-67-158 over ad-hoc frames. Simulink site→ECI is secondary unless it matches these definitions.
 
+### TN “inertial” ≈ **E-system** (working assumption)
+
+TN-AP-67-158 tables that speak of **space-fixed / inertial** position, velocity, and path angle almost certainly use (or are equivalent to) the **E-system** (Apollo Std 4 / geocentric inertial: \(X_E\) vernal equinox, \(Z_E\) north).
+
+**Rationale (project decision):** A true inertial frame must be **non-rotating relative to the stars**. Among the IU frames:
+
+| System | Space-fixed? | Axis definition |
+|--------|--------------|-----------------|
+| **E** | Yes | Celestial (equinox / pole) — **canonical inertial** |
+| **S** | Yes (frozen at \(T_{\mathrm{GRR}}\)) | Local vertical + platform azimuth at GRR — **space-fixed but site-defined** |
+| **G** | Yes (at GRR meridian) | Launch meridian at GRR + south pole |
+| **A** | No | Earth-fixed (rotates with Earth) |
+
+So **S is also non-rotating after GRR**, but it is **not** the classical celestial ECI. For TN listing “inertial” state, treat **E** as the TN inertial frame unless the TN states otherwise.
+
+**Table 2B \(\chi_c\)** (“from inertial vertical, negative downrange”) is still a **local geometric** angle: vertical and downrange at the pad. Those directions are **fixed in S at GRR** and are known in **E** via `[MES]` / launch geometry. Steering is applied in **B** (and gimbals vs **S**). Do not confuse “TN state in E” with “pitch program measured in E basis vectors.”
+
 ---
 
 ## Classes of frames
