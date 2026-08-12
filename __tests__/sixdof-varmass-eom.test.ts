@@ -215,8 +215,15 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     const thrustPeak = Math.max(...(thrust.parameters?.outputValues as number[]))
     expect(thrustPeak).toBeGreaterThan(5e6)
     expect((thrust.parameters?.inputValues as number[]).length).toBeGreaterThan(20)
-    const mdot = m.sheets[0].blocks.find(b => b.name === 'mdot_scale')!
-    expect(mdot.parameters?.value).toBeCloseTo(1 / 2740, 8)
+    // mdot from Table 5 mass history (not T/Isp scale)
+    const mdot = m.sheets[0].blocks.find(b => b.name === 'mdot_kgps')!
+    expect(mdot.type).toBe('lookup_1d')
+    const mdotPeak = Math.max(...(mdot.parameters?.outputValues as number[]))
+    // Mid-boost ~2.7 t/s; short IECO intervals can peak higher
+    expect(mdotPeak).toBeGreaterThan(2500)
+    expect(mdotPeak).toBeLessThan(5000)
+    const cda = m.sheets[0].blocks.find(b => b.name === 'CdA_m2')!
+    expect(cda.parameters?.value).toBe(12)
 
     // P0: full-run logger buffers (duration/dt ≈ 3600 → maxSamples ≥ 3600)
     const loggers = m.sheets[0].blocks.filter(b => b.type === 'signal_logger')

@@ -36,7 +36,7 @@ import {
 import {
   table5ThrustTimeBreakpoints,
   table5ThrustN,
-  TN_SIB_MDOT_SCALE
+  table5MdotFromMass
 } from './as205ThrustTable'
 
 /** Local types (avoid circular import with sliceModels) */
@@ -1674,8 +1674,10 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   // Full-run circular buffer: ceil(duration/dt)+margin (default 1000 → only last 50 s)
   const collectorMaxSamples = Math.ceil(duration / dt) + 200 // 3800
 
-  // ── Propulsion — TN Table 5 total thrust + mass-matched mdot scale ──
+  // ── Propulsion — Table 5 thrust for F_b; mdot from Table 5 mass history ──
+  // Independent LUTs isolate force direction (altitude) vs mass residual.
   // See as205ThrustTable.ts (prefer TN over Simulink).
+  const mdotTn = table5MdotFromMass()
   const liftoff = B('source', 'liftoff', 40, 40, {
     signalType: 'step',
     stepTime: 1.0,
@@ -1701,13 +1703,12 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     outputValues: table5ThrustN(),
     extrapolation: 'clamp'
   })
-  // ṁ = T * TN_SIB_MDOT_SCALE (~1/2740) so integrated Δm tracks Table 5
-  const mdotScale = B('source', 'mdot_scale', 340, 220, {
-    signalType: 'constant',
-    value: TN_SIB_MDOT_SCALE,
-    dataType: 'double'
+  // Propellant mdot(t) from finite differences of Table 5 mass (kg/s ≥ 0)
+  const mdotCmd = B('lookup_1d', 'mdot_kgps', 480, 200, {
+    inputValues: mdotTn.t_s,
+    outputValues: mdotTn.mdot_kgps,
+    extrapolation: 'clamp'
   })
-  const mdotCmd = B('matrix_multiply', 'mdot_cmd', 480, 180, {})
   const zero = B('source', 'zero', 340, 300, {
     signalType: 'constant',
     value: 0,
@@ -1744,9 +1745,10 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   const Vsq = B('multiply', 'V_sq', 1020, 420, { numInputs: 2 })
   const halfRho = B('multiply', 'half_rho', 1160, 480, { numInputs: 2 })
   const qbar = B('multiply', 'qbar', 1300, 440, { numInputs: 2 })
+  // Cd ~ 0.35 on A≈34 m² (D=6.6 m) → CdA≈12; 17 was high for late-ascent drag
   const CdA = B('source', 'CdA_m2', 880, 340, {
     signalType: 'constant',
-    value: 17.0,
+    value: 12.0,
     dataType: 'double'
   })
   const Dmag = B('multiply', 'D_mag', 1160, 380, { numInputs: 2 })
@@ -1896,7 +1898,6 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     one,
     tBurn,
     thrustMag,
-    mdotScale,
     mdotCmd,
     zero,
     Fthrust,
@@ -1968,8 +1969,7 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     W(edge, tBurn, 0, -2),
     W(tBurn, thrustMag),
     W(thrustMag, outT),
-    W(thrustMag, mdotCmd, 0, 0),
-    W(mdotScale, mdotCmd, 0, 1),
+    W(tBurn, mdotCmd),
     W(thrustMag, Fthrust, 0, 0),
     W(zero, Fthrust, 0, 1),
     W(zero, Fthrust, 0, 2),
@@ -2079,9 +2079,9 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
       {
         name: 'CdA_m2',
         dataType: 'double',
-        defaultValue: '17.0',
+        defaultValue: '12.0',
         signalType: 'double',
-        value: 17.0
+        value: 12.0
       },
       {
         name: 'pitch_rate_gain',
@@ -2089,14 +2089,6 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
         defaultValue: '8e6',
         signalType: 'double',
         value: 8e6
-      },
-      {
-        name: 'Isp_eff_s',
-        dataType: 'double',
-        // Effective Isp for mdot = T/(Isp*g0) with scale 1/2740
-        defaultValue: '279.3',
-        signalType: 'double',
-        value: 2740 / 9.80665
       },
       {
         name: 'm0_kg',
