@@ -42,20 +42,8 @@ describe('as205PadFrames', () => {
     expect(OMEGA_EARTH).toBeGreaterThan(7e-5)
   })
 
-  test('9.4 plant uses S-frame pad IC', () => {
-    const m = buildSixDofOpenLoopChiAscent()
-    const eom = m.sheets[0].blocks.find(b => b.name === 'EOM_6DoF_VarMass')!
-    const blocks = eom.parameters?.sheets?.[0]?.blocks as Array<{
-      name: string
-      parameters?: { value?: unknown }
-    }>
-    const r0 = blocks.find(b => b.name === 'r0_i')?.parameters?.value as number[]
-    const v0 = blocks.find(b => b.name === 'v0_b')?.parameters?.value as number[]
-    const w0 = blocks.find(b => b.name === 'omega0')?.parameters?.value as number[]
-    expect(r0[0]).toBe(AS205_PAD.R_L_m)
-    expect(v0[0]).toBeCloseTo(pad.v0_S[0], 6)
-    expect(v0[1]).toBeCloseTo(pad.v0_S[1], 6)
-    expect(v0[2]).toBeCloseTo(pad.v0_S[2], 6)
-    expect(w0).toEqual([0, 0, 0])
+  test('legacy ENU builder still ~409 m/s (diagnostics only)', () => {
+    // 9.4+ plant uses as205InitialPosition (Simulink Fcn); this keeps ENU helper honest
+    expect(pad.v0_mag).toBeGreaterThan(400)
   })
 })

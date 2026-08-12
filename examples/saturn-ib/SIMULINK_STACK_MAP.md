@@ -64,7 +64,7 @@ TN-AP-67-158 (working assumption)
 |----------|-------------------|---------------|--------------|
 | P0 | `Custom Variable Mass 6DoF (Quaternion)` | Body-axis EOM, \(q\), \(\mathbf{r}\), \(\mathbf{v}\) | Partial: `sixDofVarMassEom.ts` (body EOM + quat); inertial frame still simplified |
 | P0 | Site / AS-205 constants | `A_z`, \(\phi_L\), \(R_L\), … | `AS205_presettings.m` / `as205PadFrames.ts` |
-| P1 | `Initial Position and Velocity (Eqns 3.4…)` | `R_S_0_m`, `V_S_0_mps` | Partial S pad; not Simulink Fcn chain |
+| P1 | `Initial Position and Velocity (Eqns 3.4…)` | `R_S_0_m`, `V_S_0_mps` | **Ported** (`as205InitialPosition.ts` → 9.4/9.5/9.6 ICs) |
 | P1 | `Body to ECI` / `ECItoBODY` | `BODYtoECI`, `veh_q_ECI` | Not as full ECI world |
 | P1 | `E-Frame to s-Frame (MES)` | DCM E→S | **Not ported** (needed for Space-frame components) |
 | P2 | `BODYtoSM Transform` | \(\Phi,\Theta,\Psi\) body vs S | Not ported |
@@ -114,10 +114,21 @@ CLI: prefer
 ## Recommended translation sequence
 
 1. **Keep residual focus** on \(h\), mass while porting.  
-2. **Port Initial Position (S)** Fcn chain to match Simulink `R_S_0` / `V_S_0` bit-closer (optional cross-check vs `as205PadFrames`).  
+2. ~~**Port Initial Position (S)**~~ — **done** (`as205InitialPosition.ts`, Simulink Fcn formulas).  
 3. **Port MES** with \(\Theta_E\) from LaunchDate (or fixed test epoch).  
 4. **Run 6DoF with ECI state** like Simulink (`r_ECI`, `v` body or ECI, `q_ECI`) and export S via MES for TN Space-frame columns.  
 5. Body→SM / LVDC S-frame nav last among plant items.
+
+### Initial Position formulas (implemented)
+
+```text
+δφ = φ_L − φ_L′
+R_S = R_L · [ cos δφ,  sin δφ · sin A_z,  −sin δφ · cos A_z ]
+V_S = R_L · ω_E · cos φ_L′ · [ 0,  cos A_z,  sin A_z ]
+ω_E = (Simulink mask omega_E_rps) · π  ≈ 7.292e-5 rad/s
+```
+
+Unlike a pure `[R_L,0,0]` placement, \(R_S\) has small transverse components from geodetic vs geocentric latitude (plumbline vs geocentric radius).
 
 ---
 

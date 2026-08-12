@@ -3,7 +3,7 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-12T01:55:12.251Z",
+      "created": "2026-08-12T13:02:11.950Z",
       "description": "9.4 plant + TN-AP-67-158 Table 2B χ_c pitch program (elev=90+χ_c) → Q_cmd → My. Rate loop only; TN primary for residuals."
     },
     "sheets": [
@@ -420,9 +420,9 @@
                       "parameters": {
                         "signalType": "constant",
                         "value": [
-                          6373385,
-                          0,
-                          0
+                          6373359.785390868,
+                          17787.166682017312,
+                          -2240.7340082794813
                         ],
                         "dataType": "double[3]"
                       }
@@ -438,9 +438,9 @@
                       "parameters": {
                         "signalType": "constant",
                         "value": [
-                          -1.4210854715202004e-14,
-                          51.11612845240077,
-                          405.764849180107
+                          0,
+                          51.11612854733461,
+                          405.76484993370104
                         ],
                         "dataType": "double[3]"
                       }

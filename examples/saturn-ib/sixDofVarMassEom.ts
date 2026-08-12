@@ -38,7 +38,8 @@ import {
   table5ThrustN,
   table5MdotFromMass
 } from './as205ThrustTable'
-import { as205DefaultPadStateS } from './as205PadFrames'
+import { as205SimulinkPadStateS } from './as205InitialPosition'
+import { AS205_PAD } from './as205PadFrames'
 
 /** Local types (avoid circular import with sliceModels) */
 export interface SliceBlock {
@@ -1711,13 +1712,13 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   resetIds()
   // TN Table 5 first-motion mass (~586593 kg); m_ref tracks m0 for I ∝ m/m_ref
   const m0Tn = 586593
-  // Pad in S-frame (plumbline space-fixed at GRR): X_S up, Z_S downrange, B‖S
-  const pad = as205DefaultPadStateS()
+  // Pad R_S_0 / V_S_0: Simulink Initial Position (Eqns 3.4.3-4) — see as205InitialPosition.ts
+  const pad = as205SimulinkPadStateS()
   const { eomSubsystem, core, ports } = buildEomSubsystemBlock(720, 300, {
     m0_kg: m0Tn,
     m_ref_kg: m0Tn,
-    r0_i: pad.r0_S,
-    v0_b: pad.v0_S,
+    r0_i: pad.R_S_0_m,
+    v0_b: pad.V_S_0_m,
     omega0: [0, 0, 0],
     q0: [[1], [0], [0], [0]] // B‖S at pad
   })
@@ -1775,10 +1776,10 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   })
 
   // ── Atmosphere + q̄ + aero drag (9.3) ──
-  // Geometric altitude ≈ |r| − R_L (S-frame pad radius from AS-205)
+  // Geometric altitude ≈ |r| − R_L (AS-205 pad radius; |R_S_0|=R_L)
   const Re = B('source', 'R_earth', 720, 560, {
     signalType: 'constant',
-    value: pad.r0_S[0],
+    value: AS205_PAD.R_L_m,
     dataType: 'double'
   })
   const alt = B('sum', 'altitude_m', 880, 520, {
@@ -2125,16 +2126,16 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
       {
         name: 'R_pad_m',
         dataType: 'double',
-        defaultValue: String(pad.r0_S[0]),
+        defaultValue: String(AS205_PAD.R_L_m),
         signalType: 'double',
-        value: pad.r0_S[0]
+        value: AS205_PAD.R_L_m
       },
       {
         name: 'R_earth_m',
         dataType: 'double',
-        defaultValue: String(pad.r0_S[0]),
+        defaultValue: String(AS205_PAD.R_L_m),
         signalType: 'double',
-        value: pad.r0_S[0]
+        value: AS205_PAD.R_L_m
       },
       {
         name: 'CdA_m2',
