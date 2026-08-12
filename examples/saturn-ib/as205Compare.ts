@@ -294,8 +294,8 @@ export function formatCompareReport(
     ``,
     `> Baseline policy: **TN-AP-67-158 is authoritative**; Simulink may disagree.`,
     `> Soft flags are diagnostic only — no numeric pass/fail for 9.x plant yet.`,
-    `> Prefer **h_m** and **mass_kg** first; TN **v** is space-fixed (~409 m/s at liftoff).`,
-    `> See AS205_REFERENCE.md.`
+    `> Prefer **h_m** and **mass_kg** (frame-light). Defer space-fixed V/γ/XYZ until ECI→S matches Simulink.`,
+    `> TN Space frame ≈ EDD S (working assumption). See AS205_REFERENCE.md / SIMULINK_STACK_MAP.md.`
   )
   return lines.join('\n')
 }

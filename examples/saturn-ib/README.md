@@ -41,10 +41,12 @@ Selected AS-205 constants from `saturn-1B/AS205_presettings.m` are attached as m
 **Primary trajectory reference:** Chrysler **TN-AP-67-158** (*AS-205 Revised Launch Vehicle Reference Trajectory*), not the Simulink stack.
 
 - Policy + quantity mapping: [`AS205_REFERENCE.md`](./AS205_REFERENCE.md)
-- **Coordinate frames (Apollo IU §2):** [`APOLLO_COORDINATE_FRAMES.md`](./APOLLO_COORDINATE_FRAMES.md) — S/E/B systems, transforms; source `satinstunitibm_1.pdf` pp. ~29–44
+- **Coordinate frames (Apollo IU §2):** [`APOLLO_COORDINATE_FRAMES.md`](./APOLLO_COORDINATE_FRAMES.md) — S/E/B; TN Space frame ≈ **S** (working assumption)
+- **Simulink translation map:** [`SIMULINK_STACK_MAP.md`](./SIMULINK_STACK_MAP.md) — ECI/Body/SM path vs 9.x gaps
 - CSV layout + compare helpers: [`as205Compare.ts`](./as205Compare.ts), `docs/sample-models/saturn/as205-reference/`
-- Residual CLI: `npm run as205:compare -- --model <logger.csv> [--offset 1]`
-- Simulink (`saturn-1B/*.mdl`) may **deviate** from the TN; prefer the TN when debugging residuals
+- Residual CLI (prefer frame-light fields):  
+  `npm run as205:compare -- --model <logger.csv> --fields h_m,mass_kg`
+- Simulink may **deviate** from TN; prefer TN; do not retune plant to Simulink without a decision
 
 ## 6-DOF variable-mass EOM
 
