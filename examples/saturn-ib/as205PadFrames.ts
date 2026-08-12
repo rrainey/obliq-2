@@ -96,9 +96,10 @@ export function buildAs205PadStateS(
 ): PadStateS {
   const p = { ...AS205_PAD, ...opts }
   const notes: string[] = [
-    'Integration frame: S (plumbline space-fixed at GRR), not demo radial triad',
-    'TN inertial listings assumed E; S↔E is constant after GRR (epoch not applied here)',
-    'B‖S at t=0 (identity quaternion); pad_roll not applied to q0 in v1'
+    'Integration frame: S-like plumbline (space-fixed at GRR); TN Space frame ≈ S (working assumption)',
+    'ECI (E) is Simulink primary inertial; ECI→S fixed after T_GRR — not applied here',
+    'B‖S at t=0 (identity quaternion); pad_roll not applied to q0 in v1',
+    'Prefer TN residual of h, mass, q̄ until full ECI→S / SM path exists'
   ]
 
   const phi = deg2rad(p.phi_L_deg) // geodetic for local up

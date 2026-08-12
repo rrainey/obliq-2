@@ -195,6 +195,7 @@ Fixture: `docs/sample-models/saturn/saturn-9.3-open-loop-6dof-ascent-aero.json`
 
 | Piece | Role |
 |-------|------|
+| **ECI state** | \(r_E\), \(v_b=V_S\), \(q_{bE}=\mathrm{dcm}(\mathrm{MES}^\top)\); `r_S=MES·r_E` loggers |
 | TN-class propulsion | Table 5 thrust LUT for \(F_b\); **mdot(t) from Table 5 mass FD** (not T/Isp); \(m_0\approx 586593\,\mathrm{kg}\) |
 | Aero | \(F_{\mathrm{aero}} = -\bar q\,C_D A\,\hat{\mathbf{v}}_b\), default \(C_D A=12\,\mathrm{m}^2\) |
 | χ LUT + rate limiter | Open-loop pitch program (deg), ≲1 °/s slew (TN criterion) |
@@ -288,23 +289,21 @@ See [`AS205_REFERENCE.md`](./AS205_REFERENCE.md). Simulink is secondary and may 
 
 This is the usual aerospace body frame (later AIAA-style). 9.x was built with that layout in mind.
 
-### ECI / ECF (standard) — **not fully modeled yet**
+### ECI / ECF (standard)
 
 | Frame | Definition (user / standard) |
 |-------|------------------------------|
-| **ECI** | Earth-centered inertial: \(+Z\) along Earth spin (north), \(+X\) toward vernal equinox, \(+Y\) completes RH |
-| **ECF** | Earth-centered Earth-fixed: \(+Z\) spin north, \(+X\) in equatorial plane at 0° longitude (Greenwich), RH |
+| **ECI / E** | Earth-centered inertial: \(+Z\) spin north, \(+X\) vernal equinox, RH — **9.4+ plant \(r_i\)** |
+| **ECF** | Earth-fixed Greenwich; not used in plant dynamics |
 
-User Simulink maps **launch-site ECF → ECI** from launch epoch (astronomy). TN “inertial” is expected to be the same class of frame once confirmed in the document.
+### What 9.4+ plant uses (ECI + MES)
 
-### What 9.4+ plant uses (S-frame pad)
+At \(t=0\) (`as205EciPlant.ts` / Initial Position / MES):
 
-At \(t=0\) (`as205PadFrames.ts`, LC-34 / AS-205):
-
-- Space-fixed integration triad = **S** (plumbline at GRR): \(X_S\) local up, \(Z_S\) downrange (\(A_z\)), \(Y_S\) RH  
-- \(\mathbf{r}_S=[R_L,0,0]\), \(\mathbf{v}_S=\) Earth-rate velocity in S (\(|v|\approx 409\,\mathrm{m/s}\), matches TN first-motion \(V\))  
-- Identity quat ⇒ **B‖S** (thrust along local up at pad)  
-- TN **E** (true equinox inertial) not yet used for state; altitude/mass still comparable
+- Integrate \(\mathbf{r}\) in **E** (classical ECI); body \(\mathbf{v}_b\), \(\boldsymbol{\omega}\); \(q\) body→E  
+- Pad: \(R_S,V_S\) from Simulink Eqns 3.4; \(\mathbf{r}_E=\mathrm{MES}^\top R_S\); \(v_{b0}=V_S\); \(q_0=\mathrm{dcm}(\mathrm{MES}^\top)\) (B‖S)  
+- \(\Theta_E\) from Apollo 7 `LaunchDate` (Simulink practice); TN residual still vs TN-AP-67-158  
+- Export \(\mathbf{r}_S=\mathrm{MES}\,\mathbf{r}_E\) (`log_X_S/Y_S/Z_S`); live \(v_S\) deferred  
 
 ### Pitch sign (for residual / χ work)
 
@@ -316,7 +315,7 @@ Plant elev \(=90+\chi_c\) decreases as \(\chi_c\) decreases. Tip plane is intend
 
 - Principal-axis inertia only; no \(I_{xy}\) etc.
 - No thruster relative-velocity / plume force beyond user `F_b`
-- Full **E** state + epoch / `[MES]` for vector residual vs TN — not yet  
+- Live \(v_S\) not yet on plant sheet (type-prop mat×vec order); post-process offline if needed  
 - `pad_roll_L` not applied to \(q_0\)  
 - Multi-engine / APS still TBD
 - Quantitative TN residual pass/fail windows not yet declared

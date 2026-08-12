@@ -172,16 +172,16 @@ Naming: **`M` + from-system + to-system** transforms a vector **from** the secon
 | Classical ECI | Vernal equinox / north | **E-system** | Simulink primary; not TN Space frame |
 | TN Space frame | Space-fixed state | **S-system** (assumed) | Partial pad S-like IC |
 | ECF-like | Site meridian | **A-system** | **Not used** |
-| Site → E / E→S | Simulink astronomy | **`[MEG]` / `[MES]`** | **Not yet** (fixed after \(T_{\mathrm{GRR}}\)) |
-| Pad IC | ECF→ECI at epoch | S axes from site + azimuth | `as205PadFrames.ts` S-like pad |
+| Site → E / E→S | Simulink astronomy | **`[MEG]` / `[MES]`** | **`[MES]` ported** (`as205Mes.ts`); plant still S-IC |
+| Pad IC | ECF→ECI at epoch | S axes from site + azimuth | Simulink Initial Position + MES helpers |
 
-### Residual policy (until ECI→S exists)
+### Residual policy (until ECI plant + S export)
 
 | Use now | Defer |
 |---------|--------|
 | \(h\), mass, \(q̄\), thrust / \(a_x\) | Space-fixed \(V\), path angle, \(X_S Y_S Z_S\) components |
 
-Continue **Simulink translation** (ECI + Body/SM). Do not treat S-component TN residuals as plant bugs yet.
+`[MES]` library is available for offline E↔S. 9.x still integrates in S-like frame; full vector residuals need ECI 6DoF + MES export.
 
 ---
 
@@ -191,10 +191,11 @@ Continue **Simulink translation** (ECI + Body/SM). Do not treat S-component TN r
 |------|--------|
 | TN Space frame ≡ **S** (EDD plumbline, space-fixed) | **Working assumption** |
 | E = classical ECI / Simulink | Documented |
-| Pad S-like IC + Earth-rate \(v_0\), B‖S | Partial (`as205PadFrames.ts`) |
-| Full Simulink ECI + ECI→S | **Not yet** |
+| Pad S IC (Simulink Eqns 3.4) + Earth-rate \(v_0\), B‖S | **Done** (`as205InitialPosition.ts`) |
+| `[MES]` E→S DCM + \(\Theta_E\) / LaunchDate | **Done** (`as205Mes.ts`) |
+| ECI 6DoF plant + \(r_S=\mathrm{MES}\,r_E\) export | **Done** (9.4+ via `as205EciPlant.ts`) |
 | Residual: \(h\), mass, \(q̄\) | **Focus now** |
-| Residual: Space-frame \(V\), γ, XYZ | **Deferred** |
+| Residual: Space-frame \(V\), γ, XYZ | **Partial** (`log_X/Y/Z_S`); live \(v_S\) deferred |
 | `pad_roll_L` on \(q_0\) | **Not yet** |
 
 Site constants: `AS205_presettings.m` / `AS205_PAD` (LC-34, \(A_z\), \(R_L\)).

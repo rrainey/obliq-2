@@ -62,7 +62,7 @@ describe('as205InitialPosition (Simulink Eqns 3.4.3-4)', () => {
     expect(pad.V_S_0_m[2]).toBeCloseTo(expectV[2], 9)
   })
 
-  test('9.4 plant ICs use Simulink R_S_0 / V_S_0', () => {
+  test('9.4 plant uses ECI pad (v_b0 still V_S; r0 is E not S)', () => {
     const m = buildSixDofOpenLoopChiAscent()
     const eom = m.sheets[0].blocks.find(b => b.name === 'EOM_6DoF_VarMass')!
     const blocks = eom.parameters?.sheets?.[0]?.blocks as Array<{
@@ -71,12 +71,13 @@ describe('as205InitialPosition (Simulink Eqns 3.4.3-4)', () => {
     }>
     const r0 = blocks.find(b => b.name === 'r0_i')?.parameters?.value as number[]
     const v0 = blocks.find(b => b.name === 'v0_b')?.parameters?.value as number[]
-    expect(r0[0]).toBeCloseTo(pad.R_S_0_m[0], 6)
-    expect(r0[1]).toBeCloseTo(pad.R_S_0_m[1], 6)
-    expect(r0[2]).toBeCloseTo(pad.R_S_0_m[2], 6)
+    // Body velocity IC still S components (B‖S)
     expect(v0[0]).toBeCloseTo(pad.V_S_0_m[0], 6)
     expect(v0[1]).toBeCloseTo(pad.V_S_0_m[1], 6)
     expect(v0[2]).toBeCloseTo(pad.V_S_0_m[2], 6)
+    // Position is ECI: same magnitude, not equal to R_S components
+    expect(Math.hypot(...r0)).toBeCloseTo(Math.hypot(...pad.R_S_0_m), 3)
+    expect(Math.abs(r0[0] - pad.R_S_0_m[0])).toBeGreaterThan(1e3)
   })
 
   test('optional pure OMEGA_EARTH path still ~409 m/s', () => {

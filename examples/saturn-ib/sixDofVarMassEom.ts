@@ -27,6 +27,11 @@
  *   - Principal inertia only (diagonal I); off-diagonal products of inertia omitted
  *   - Pitch programs: see as205ChiTable.ts for TN Table 2B χ_c vs plant elev mapping
  *     (no full Apollo platform-frame treatment here)
+ *
+ * AS-205 9.4+ inertial frame:
+ *   - r_i is **E-system** (classical ECI / Simulink veh frame)
+ *   - Pad IC: as205EciPlant (Initial Position S → MESᵀ → r_E; B‖S ⇒ q0 = dcm(MESᵀ))
+ *   - S recovered as r_S = MES · r_E for TN Space-frame columns (loggers)
  */
 
 import {
@@ -38,7 +43,10 @@ import {
   table5ThrustN,
   table5MdotFromMass
 } from './as205ThrustTable'
-import { as205SimulinkPadStateS } from './as205InitialPosition'
+import {
+  as205DefaultPadStateEci,
+  mat3ToSourceValue
+} from './as205EciPlant'
 import { AS205_PAD } from './as205PadFrames'
 
 /** Local types (avoid circular import with sliceModels) */
@@ -555,15 +563,14 @@ export interface EomSubsystemOptions {
   /** Body rate IC [P,Q,R] (rad/s). Default core has small Q≈0.01. */
   omega0?: number[]
   /**
-   * Inertial position IC in the plant space-fixed frame (m).
-   * For AS-205 plant: **S-frame** r0 ≈ [R_L, 0, 0] (pad on +X_S = local up).
+   * Inertial position IC (m). AS-205 9.4+: **E-system** (ECI) pad r_E.
    */
   r0_i?: number[]
   /**
-   * Body velocity IC (m/s). With B‖S at t=0, this is v in S (Earth rate at pad).
+   * Body velocity IC (m/s). AS-205: V_S at pad (B‖S); r integrates in E.
    */
   v0_b?: number[]
-  /** Quaternion IC scalar-first 4×1. Identity = B‖S at pad. */
+  /** Body→inertial quat IC (column). AS-205: dcm_to_quat(MESᵀ). */
   q0?: number[][]
 }
 
@@ -1712,15 +1719,16 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   resetIds()
   // TN Table 5 first-motion mass (~586593 kg); m_ref tracks m0 for I ∝ m/m_ref
   const m0Tn = 586593
-  // Pad R_S_0 / V_S_0: Simulink Initial Position (Eqns 3.4.3-4) — see as205InitialPosition.ts
-  const pad = as205SimulinkPadStateS()
+  // ECI pad: Initial Position S → MESᵀ → r_E; B‖S ⇒ v_b0=V_S, q0=dcm(MESᵀ)
+  // See as205EciPlant.ts / as205Mes.ts (Apollo 7 LaunchDate for Θ_E).
+  const padE = as205DefaultPadStateEci()
   const { eomSubsystem, core, ports } = buildEomSubsystemBlock(720, 300, {
     m0_kg: m0Tn,
     m_ref_kg: m0Tn,
-    r0_i: pad.R_S_0_m,
-    v0_b: pad.V_S_0_m,
+    r0_i: padE.r0_E,
+    v0_b: padE.v0_b,
     omega0: [0, 0, 0],
-    q0: [[1], [0], [0], [0]] // B‖S at pad
+    q0: padE.q0_bE
   })
   const dt = 0.05
   const duration = 180
@@ -1776,7 +1784,7 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   })
 
   // ── Atmosphere + q̄ + aero drag (9.3) ──
-  // Geometric altitude ≈ |r| − R_L (AS-205 pad radius; |R_S_0|=R_L)
+  // Geometric altitude ≈ |r_E| − R_L (AS-205 pad radius; |R_S|=|R_E|=R_L at pad)
   const Re = B('source', 'R_earth', 720, 560, {
     signalType: 'constant',
     value: AS205_PAD.R_L_m,
@@ -1797,6 +1805,21 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   })
   const Vmag = B('mag', 'V_mag', 880, 420, {})
   const Vsq = B('multiply', 'V_sq', 1020, 420, { numInputs: 2 })
+
+  // ── S-frame export via constant [MES]: r_S = MES · r_E ──
+  // MES frozen at GRR (Apollo 7 epoch). For TN Space-frame XYZ residuals later.
+  // Live v_S = MES·C_bE·v_b deferred (type-prop mat×vec enqueue order).
+  const MES = B('source', 'MES_E_to_S', 720, 40, {
+    signalType: 'constant',
+    value: mat3ToSourceValue(padE.MES),
+    dataType: 'double[3][3]'
+  })
+  const r_S = B('matrix_multiply', 'r_S', 900, 40, {})
+  const demux_rS = B('demux', 'demux_r_S', 1040, 20, {
+    outputCount: 3,
+    inputDimensions: [3]
+  })
+
   const halfRho = B('multiply', 'half_rho', 1160, 480, { numInputs: 2 })
   const qbar = B('multiply', 'qbar', 1300, 440, { numInputs: 2 })
   // Cd ~ 0.35 on A≈34 m² (D=6.6 m) → CdA≈12; 17 was high for late-ascent drag
@@ -1909,42 +1932,47 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   const outQrate = B('output_port', 'Q_rps', 900, 40, { portName: 'Q_rps' })
   const outQcmd = B('output_port', 'Q_cmd_out', 700, 340, { portName: 'Q_cmd_rps' })
   const outMy = B('output_port', 'My', 1600, 60, { portName: 'My_Nm' })
+  const outRS = B('output_port', 'r_S_out', 1180, 20, { portName: 'r_S_m' })
 
   const coll = { maxSamples: collectorMaxSamples }
-  const dispChi = B('signal_display', 'disp_chi', 1760, 40, {
+  const dispChi = B('signal_display', 'disp_chi', 1760, 120, {
     title: 'χ cmd (deg)',
     ...coll
   })
-  const dispQ = B('signal_display', 'disp_Q', 1760, 120, {
+  const dispQ = B('signal_display', 'disp_Q', 1760, 200, {
     title: 'Pitch rate Q (rad/s)',
     ...coll
   })
-  const dispQcmd = B('signal_display', 'disp_Qcmd', 1760, 200, {
+  const dispQcmd = B('signal_display', 'disp_Qcmd', 1760, 280, {
     title: 'Q_cmd (rad/s)',
     ...coll
   })
-  const dispH = B('signal_display', 'disp_altitude', 1760, 280, {
+  const dispH = B('signal_display', 'disp_altitude', 1760, 360, {
     title: 'Altitude MSL (m)',
     ...coll
   })
-  const dispM = B('signal_display', 'disp_mass', 1760, 360, {
+  const dispM = B('signal_display', 'disp_mass', 1760, 440, {
     title: 'Mass (kg)',
     ...coll
   })
-  const dispQbar = B('signal_display', 'disp_qbar', 1760, 440, {
+  const dispQbar = B('signal_display', 'disp_qbar', 1760, 520, {
     title: 'Dynamic pressure q̄ (Pa)',
     ...coll
   })
-  const dispMy = B('signal_display', 'disp_My', 1760, 520, {
+  const dispMy = B('signal_display', 'disp_My', 1760, 600, {
     title: 'Pitch moment My (N·m)',
     ...coll
   })
 
-  const logH = B('signal_logger', 'log_altitude', 1920, 120, { ...coll })
-  const logM = B('signal_logger', 'log_mass', 1920, 200, { ...coll })
-  const logQbar = B('signal_logger', 'log_qbar', 1920, 280, { ...coll })
-  const logChi = B('signal_logger', 'log_chi', 1920, 360, { ...coll })
-  const logQ = B('signal_logger', 'log_Q', 1920, 440, { ...coll })
+  const logH = B('signal_logger', 'log_altitude', 1920, 200, { ...coll })
+  const logM = B('signal_logger', 'log_mass', 1920, 280, { ...coll })
+  const logQbar = B('signal_logger', 'log_qbar', 1920, 360, { ...coll })
+  const logChi = B('signal_logger', 'log_chi', 1920, 440, { ...coll })
+  const logQ = B('signal_logger', 'log_Q', 1920, 520, { ...coll })
+  // S-frame position for future TN Space residual (not residual CLI default)
+  const logXS = B('signal_logger', 'log_X_S', 2080, 200, { ...coll })
+  const logYS = B('signal_logger', 'log_Y_S', 2080, 280, { ...coll })
+  const logZS = B('signal_logger', 'log_Z_S', 2080, 360, { ...coll })
 
   const parentBlocks = [
     liftoff,
@@ -1956,6 +1984,9 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     zero,
     Fthrust,
     eomSubsystem,
+    MES,
+    r_S,
+    demux_rS,
     Re,
     alt,
     atm,
@@ -2002,6 +2033,7 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     outQrate,
     outQcmd,
     outMy,
+    outRS,
     dispChi,
     dispQ,
     dispQcmd,
@@ -2013,7 +2045,10 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     logM,
     logQbar,
     logChi,
-    logQ
+    logQ,
+    logXS,
+    logYS,
+    logZS
   ]
 
   const parentWires: SliceWire[] = [
@@ -2092,6 +2127,11 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     W(demuxW, outQrate, 1, 0),
     W(Qcmd, outQcmd),
     W(MyLim, outMy),
+    // S-frame via MES: r_S = MES · r_E (constant MES at GRR)
+    W(MES, r_S, 0, 0),
+    W(eomSubsystem, r_S, ports.r_i, 1),
+    W(r_S, demux_rS),
+    W(r_S, outRS),
     // Displays
     W(chiRateLim, dispChi),
     W(demuxW, dispQ, 1, 0),
@@ -2105,13 +2145,16 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     W(eomSubsystem, logM, ports.mass, 0),
     W(qbar, logQbar),
     W(chiRateLim, logChi),
-    W(demuxW, logQ, 1, 0)
+    W(demuxW, logQ, 1, 0),
+    W(demux_rS, logXS, 0, 0),
+    W(demux_rS, logYS, 1, 0),
+    W(demux_rS, logZS, 2, 0)
   ]
 
   return {
     name: 'saturn-9.4-open-loop-chi-6dof-ascent',
     description:
-      'Open-loop χ on 6-DoF in S-frame (LC-34 pad up/downrange, Earth-rate v0, B‖S), TN thrust/mdot, χ→My. TN inertial≈E; h/mass vs Table 5.',
+      'Open-loop χ on 6-DoF in ECI (E): pad r_E/v_b/q_bE via MES+Initial Position, B‖S, TN thrust/mdot, χ→My; r_S=MES·r_E export. TN residual h/mass primary.',
     sheets: [
       {
         id: 'main',
@@ -2204,7 +2247,7 @@ export function buildSixDofOpenLoopChiAscentTable2B(): SliceModel {
 
   m.name = 'saturn-9.5-open-loop-chi-table2b-ascent'
   m.description =
-    '9.4 plant + TN-AP-67-158 Table 2B χ_c pitch program (elev=90+χ_c) → Q_cmd → My. Rate loop only; TN primary for residuals.'
+    '9.4 ECI 6DoF plant + TN-AP-67-158 Table 2B χ_c pitch program (elev=90+χ_c) → Q_cmd → My. Rate loop only; TN primary for residuals.'
   if (sheet.name) sheet.name = 'OpenLoopChiTable2B'
   return m
 }
@@ -2352,7 +2395,7 @@ export function buildSixDofOpenLoopChiAttitudePd(): SliceModel {
 
   m.name = 'saturn-9.6-chi-table2b-attitude-pd'
   m.description =
-    '9.5 plant + body-pitch attitude PD: θ̂=∫Q, My=Kp(elev_cmd−θ̂)−Kd·Q. Table 2B elev program; no platform frames. TN residuals primary.'
+    '9.5 ECI 6DoF + body-pitch attitude PD: θ̂=∫Q, My=Kp(elev_cmd−θ̂)−Kd·Q. Table 2B elev; MES S export. TN residuals primary.'
   sheet.name = 'ChiAttitudePd'
   m.parameters = [
     ...(m.parameters || []),

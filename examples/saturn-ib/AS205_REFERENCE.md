@@ -8,13 +8,26 @@
 
 This report defines the **launch vehicle reference trajectory** and associated **guidance presettings** for AS-205. **obliq-2 Saturn work uses this document as the golden trajectory baseline**, not the interim Simulink stack.
 
+### TN vs flown Apollo 7 (intentional)
+
+TN-AP-67-158 is a **revised L/V reference trajectory** dated 1967. Those launch parameters **were never actually flown** (Apollo 7 / AS-205 flew a different reference).
+
+| Layer | Source of truth |
+|-------|-----------------|
+| **Trajectory residual (h, mass, q̄, …)** | **TN-AP-67-158** tables — stick with this for now |
+| **Site / guidance presettings** in Simulink & obliq | **TN** (via `AS205_presettings.m` / `AS205_PAD`) |
+| **`LaunchDate` / epoch → GMST / \(\Theta_E\) / `[MES]`** | **Actual Apollo 7 liftoff** (substituted in Simulink; mirrored in `AS205_DEFAULT_LAUNCH_DATE`) |
+
+The **actual Apollo 7 launch reference trajectory** document exists and could be used later for epoch-consistent residual of flown state. **Decision for now:** keep validating plant against **TN-AP-67-158** (same doc used to manually validate the Simulink stack). Epoch only freezes S axes in E; frame-light TN fields (altitude, mass) do not require matching the TN’s never-flown calendar date.
+
 ## Secondary references (use carefully)
 
 | Source | Role |
 |--------|------|
 | TN-AP-67-158 tables | **Primary** — altitude, velocity, γ, mass, etc. vs time |
-| `saturn-1B/AS205_presettings.m` | Constants / ICs for models; may lag or differ from the TN |
-| `saturn-1B/*.mdl` Simulink | Development aid only — **may deviate** from TN-AP-67-158 |
+| `saturn-1B/AS205_presettings.m` | Constants / ICs for models; **TN** site/guidance numbers |
+| `saturn-1B/*.mdl` Simulink | Development aid — TN params **except** LaunchDate = Apollo 7 actual |
+| Apollo 7 flown reference trajectory | Available later; **not** golden residual baseline yet |
 | COESA atmosphere in obliq | Table approximation; not guaranteed identical to 1960s aero models |
 
 When model output disagrees with **both** Simulink and the TN, prefer investigating against the **TN**. When Simulink and the TN disagree, **do not “fix” the obliq model to match Simulink** without an explicit decision and a note in the comparison report.
@@ -116,7 +129,7 @@ Programmatic API: `examples/saturn-ib/as205Compare.ts`
 | After aero tables + mass props + χ program | Quantitative windows vs TN (to be defined). |
 | Full IGM stack | Guidance presettings from TN + trajectory tables. |
 
-**Frame caveat:** TN Table 5 velocity is **space-fixed** (~409 m/s at first motion from Earth rotation). 9.x demos integrate body \(v_b\) from near rest. Compare \(h(t)\) and \(m(t)\) before chasing \(\|v\|\) residuals.
+**Frame policy (current):** Treat TN **Space frame** ≈ EDD **S**. Validate with **\(h\), mass, \(q̄\)** only until ECI→S (or native S outputs from the Simulink translation) exist. Do not treat space-fixed \(V\)/γ/XYZ residuals as plant failures yet.
 
 ## Digitized tables (repo)
 
@@ -167,11 +180,9 @@ The TN is multi-page with trajectory listings. Recommended process:
 | Frame | User / standard | Apollo IU (satinstunitibm §2) | 9.x plant today |
 |-------|-----------------|------------------------------|-----------------|
 | **Body** | AIAA: \(+X\) thrust, \(+Y\) pitch up, \(+Z\) yaw | **B-system** \(X_B\) forward, pitch about \(Y_B\) | \(F_b=[T,0,0]\), \(M_y\), \(Q=\omega_y\) |
-| **TN / ECI inertial** | Vernal equinox / north spin | **E-system** (Apollo Std 4) — **TN inertial (working assumption)** | **Not used** (demo triad only) |
-| **Plumbline / pad nav** | — | **S-system**: \(X_S\) local up at GRR, \(Z_S\) downrange (Apollo Std 13); space-fixed but site-defined | Approximated only via elev schedule |
-| **Earth-fixed** | ECF / site | **A-system** (site meridian) | **Not used** |
-| **Site → E** | Simulink astronomy | `[MEG]`, `[MES]`, etc. | **Not used** |
+| **TN Space frame** | Space-fixed state / path angle | **S (plumbline)** — **working assumption** | Partial pad S-like IC (`as205PadFrames.ts`) |
+| **Classical ECI** | Equinox / north | **E** (Apollo Std 4); Simulink ECI | Not primary for TN Space listings |
+| **Body** | AIAA +X thrust | **B** | \(F_b=[T,0,0]\), \(M_y\) |
+| **ECI → S** | Fixed after \(T_{\mathrm{GRR}}\) | `[MES]` / Simulink ECItoSM | **In plant** (`MES_E_to_S`, `log_X/Y/Z_S`); dynamics in E |
 
-Full write-up: [`APOLLO_COORDINATE_FRAMES.md`](./APOLLO_COORDINATE_FRAMES.md) (from `satinstunitibm_1.pdf` §2).
-
-**TN inertial ≈ E** (project assumption). Table 2B \(\chi_c\) still uses **local vertical + downrange** (S directions at GRR), expressed in E once launch geometry is known. Until pad **E** state + **S** attitude plane + **B↔S** are wired, late \(\Delta h\) after tight elev tracking is likely **geometry**, not mass.
+Full write-up: [`APOLLO_COORDINATE_FRAMES.md`](./APOLLO_COORDINATE_FRAMES.md).

@@ -3,7 +3,7 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-11T23:50:06.455Z",
+      "created": "2026-08-12T13:29:32.858Z",
       "description": "Open-loop 6-DoF ascent with simple aero drag (F_aero = −q̄·CdA·v̂_b) into EOM. Compare h/mass/q̄ to TN-AP-67-158 (not Simulink)."
     },
     "sheets": [

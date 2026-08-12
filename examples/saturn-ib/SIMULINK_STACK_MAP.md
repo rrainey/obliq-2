@@ -45,14 +45,14 @@ TN-AP-67-158 (working assumption)
 
 | Concept | Simulink | EDD | 9.x plant today |
 |---------|----------|-----|-----------------|
-| Primary dynamics inertial | **ECI** (`veh_q_ECI`, Body↔ECI) | **E** | Integrates in **S-like** triad (`as205PadFrames`) |
-| Space / plumbline | `ECItoSM`, `R_S_0`, `V_S_0`, LVDC S-Frame | **S** | Partial pad S IC; not full MES |
-| Body | 6DoF body axes + Body↔ECI | **B** | \(F_b=[T,0,0]\), \(M_y\), \(Q=\omega_y\) |
-| ECI→S | Subsystem **E-Frame to s-Frame (MES)** Eqn 2.3.10; inputs Az, \(\phi_L\), \(\Theta_E\) | `[MES]` | **Not ported** |
+| Primary dynamics inertial | **ECI** (`veh_q_ECI`, Body↔ECI) | **E** | **ECI** (`r_i` in E; 9.4+) |
+| Space / plumbline | `ECItoSM`, `R_S_0`, `V_S_0`, LVDC S-Frame | **S** | Pad IC via Initial Position; export `r_S=MES·r_E` |
+| Body | 6DoF body axes + Body↔ECI | **B** | \(F_b=[T,0,0]\), \(M_y\), \(Q=\omega_y\); \(q_0=\mathrm{dcm}(\mathrm{MES}^\top)\) |
+| ECI→S | Subsystem **E-Frame to s-Frame (MES)** Eqn 2.3.10; inputs Az, \(\phi_L\), \(\Theta_E\) | `[MES]` | **Ported** + constant MES in plant |
 | Body→S | `BODYtoSM` / Euler from EDD 2.3.3 | `[MBS]` | Not ported (elev PD only) |
 | Pad Earth rate | In Initial Position (`omega_E_rps`, note mask stores \(\omega/\pi\)) | — | SI \(\omega\) in `as205PadFrames` |
 | Gravity | Earth Gravity Model (oblate options) | G-system usage in IU | Point-mass \(\mu\) only |
-| Epoch | `LaunchDate` | \(T_{\mathrm{GRR}}\) | **Not used** |
+| Epoch | `LaunchDate` (Apollo 7 actual in your mdl) | \(T_{\mathrm{GRR}}\) | MES library uses `AS205_DEFAULT_LAUNCH_DATE`; plant not ECI yet |
 
 **Important:** 9.x is **not** a 1:1 port of this build-up yet. Same AS-205 site numbers and TN tables ≠ same frame pipeline as Simulink.
 
@@ -62,11 +62,11 @@ TN-AP-67-158 (working assumption)
 
 | Priority | Subsystem / block | Port / signal | obliq status |
 |----------|-------------------|---------------|--------------|
-| P0 | `Custom Variable Mass 6DoF (Quaternion)` | Body-axis EOM, \(q\), \(\mathbf{r}\), \(\mathbf{v}\) | Partial: `sixDofVarMassEom.ts` (body EOM + quat); inertial frame still simplified |
+| P0 | `Custom Variable Mass 6DoF (Quaternion)` | Body-axis EOM, \(q\), \(\mathbf{r}\), \(\mathbf{v}\) | **ECI plant** (9.4+): `r_i` in E, body \(v/\omega\), \(q_{bE}\) |
 | P0 | Site / AS-205 constants | `A_z`, \(\phi_L\), \(R_L\), … | `AS205_presettings.m` / `as205PadFrames.ts` |
 | P1 | `Initial Position and Velocity (Eqns 3.4…)` | `R_S_0_m`, `V_S_0_mps` | **Ported** (`as205InitialPosition.ts` → 9.4/9.5/9.6 ICs) |
 | P1 | `Body to ECI` / `ECItoBODY` | `BODYtoECI`, `veh_q_ECI` | Not as full ECI world |
-| P1 | `E-Frame to s-Frame (MES)` | DCM E→S | **Not ported** (needed for Space-frame components) |
+| P1 | `E-Frame to s-Frame (MES)` | DCM E→S | **Ported** (`as205Mes.ts`); helpers `eciToS` / `sToEci` / pad→E |
 | P2 | `BODYtoSM Transform` | \(\Phi,\Theta,\Psi\) body vs S | Not ported |
 | P2 | `LVDC S-Frame Position & Velocity` | Nav S state | Not ported |
 | P2 | `Earth Gravity Model` | \(g\) | Point mass only |
@@ -74,20 +74,42 @@ TN-AP-67-158 (working assumption)
 
 ---
 
-## MES (E→S) — Simulink structure (for later port)
+## MES (E→S) — ported (`as205Mes.ts`)
 
 Subsystem **E-Frame to s-Frame (MES matrix)** (Eqn **2.3.10**):
 
-- Inputs: **Az**, \(\phi_L\), \(\Theta_E\) (via SinCos of angles).  
-- Annotation maps \(u(1)=\sin A_z\), \(u(2)=\sin\phi_L\), …  
-- Builds 3×3 DCM elements with Fcn blocks, reshape 9×1→3×3.
+- Inputs: **Az**, \(\phi_L\) (geodetic), \(\Theta_E\) (via SinCos).  
+- Annotation: \(u(1)=\sin A_z\), \(u(2)=\sin\phi_L\), \(u(3)=\sin\Theta_E\), \(u(4)=\cos A_z\), \(u(5)=\cos\phi_L\), \(u(6)=\cos\Theta_E\).  
+- Fcn elements → reshape 9×1→3×3 (column-major of \(\{M_{ij}\}\)).  
+- Mask: DCM transforming **E → S** ⇒ \(\mathbf{v}_S = [\mathrm{MES}]\,\mathbf{v}_E\).
 
-After \(T_{\mathrm{GRR}}\), **MES is constant** (epoch only fixes \(\Theta_E\) and thus S axes in E).
+**Epoch chain (also ported):**
+
+```text
+LaunchDate [Y,M,D,h,m,s] ──► Date to JD (Meeus/Vallado)
+  ──► T = (JD − 2451545)/36525
+  ──► GMST sec (IAU poly) → deg = mod(sec,86400)/240
+  ──► Θ_E = λ_L + θ_GMST   (MES Transform Sum2)
+```
+
+After \(T_{\mathrm{GRR}}\), **MES is constant**.
+
+**Epoch policy (matches your Simulink stack):**
+
+| Quantity | Source |
+|----------|--------|
+| Site, \(A_z\), \(\phi_L\), \(R_L\), guidance presettings | **TN-AP-67-158** (`AS205_presettings.m`) |
+| Trajectory residual golden | **TN-AP-67-158** (never-flown revised L/V ref.) |
+| `LaunchDate` → GMST / \(\Theta_E\) / MES | **Apollo 7 actual** liftoff (`AS205_DEFAULT_LAUNCH_DATE`) |
+
+TN parameters were not what Apollo 7 flew; LaunchDate was substituted with flown values so astronomy/MES is realistic. Residual still targets the TN tables used to validate Simulink. Flown Apollo 7 trajectory doc deferred.
 
 **Initial Position** produces **S-frame** pad state:
 
 - `R_S_0_m` from \(R_L\) and site angles  
-- `V_S_0_mps` from Earth rate (mask `omega_E_rps` ≈ \(\omega_E/\pi\) so \(\omega_E=\texttt{omega\_E\_rps}\cdot\pi \approx 7.29\times 10^{-5}\,\mathrm{rad/s}\))
+- `V_S_0_mps` from Earth rate (mask `omega_E_rps` ≈ \(\omega_E/\pi\))
+
+Pad → ECI offline: `padStateSToEci(R_S, V_S, MES)` for the future ECI 6DoF step.
 
 ---
 
@@ -114,10 +136,24 @@ CLI: prefer
 ## Recommended translation sequence
 
 1. **Keep residual focus** on \(h\), mass while porting.  
-2. ~~**Port Initial Position (S)**~~ — **done** (`as205InitialPosition.ts`, Simulink Fcn formulas).  
-3. **Port MES** with \(\Theta_E\) from LaunchDate (or fixed test epoch).  
-4. **Run 6DoF with ECI state** like Simulink (`r_ECI`, `v` body or ECI, `q_ECI`) and export S via MES for TN Space-frame columns.  
-5. Body→SM / LVDC S-frame nav last among plant items.
+2. ~~**Port Initial Position (S)**~~ — **done** (`as205InitialPosition.ts`).  
+3. ~~**Port MES**~~ — **done** (`as205Mes.ts`).  
+4. ~~**ECI 6DoF**~~ — **done** (`as205EciPlant.ts` + 9.4/9.5/9.6): \(r_E\), \(v_b=V_S\), \(q_0=\mathrm{dcm}(\mathrm{MES}^\top)\); loggers `log_X_S/Y_S/Z_S`.  
+5. Body→SM / LVDC S-frame nav; live \(v_S\) export (type-prop mat×vec order).
+
+### MES formulas (implemented)
+
+```text
+M11 = cφ cΘ     M12 = cφ sΘ     M13 = sφ
+M21 = sφ sAz cΘ − cAz sΘ
+M22 = sφ sAz sΘ + cAz cΘ
+M23 = −cφ sAz
+M31 = −sφ cAz cΘ − sAz sΘ
+M32 = −sφ cAz sΘ + sAz cΘ
+M33 = cφ cAz
+Θ_E = λ_L + θ_GMST
+```
+
 
 ### Initial Position formulas (implemented)
 
@@ -138,6 +174,9 @@ Unlike a pure `[R_L,0,0]` placement, \(R_S\) has small transverse components fro
 |------|---------|
 | `saturn-1B/saturn_ib_stack.mdl` | Full Simulink stack |
 | `saturn-1B/AS205_presettings.m` | Site / guidance constants |
-| `as205PadFrames.ts` | Current S-like pad IC (not full MES) |
+| `as205PadFrames.ts` | Site constants + older ECEF-path pad helper |
+| `as205InitialPosition.ts` | Simulink \(R_S_0\), \(V_S_0\) |
+| `as205Mes.ts` | `[MES]` E→S, Date→JD, GMST, \(\Theta_E\) |
+| `as205EciPlant.ts` | Pad \(r_E\), \(v_b\), \(q_{bE}\) for ECI 6DoF |
 | `APOLLO_COORDINATE_FRAMES.md` | EDD S/E/B definitions |
 | `AS205_REFERENCE.md` | TN residual policy |

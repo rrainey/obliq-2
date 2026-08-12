@@ -42,6 +42,8 @@ Selected AS-205 constants from `saturn-1B/AS205_presettings.m` are attached as m
 
 - Policy + quantity mapping: [`AS205_REFERENCE.md`](./AS205_REFERENCE.md)
 - **Coordinate frames (Apollo IU §2):** [`APOLLO_COORDINATE_FRAMES.md`](./APOLLO_COORDINATE_FRAMES.md) — S/E/B; TN Space frame ≈ **S** (working assumption)
+- **Simulink stack map:** [`SIMULINK_STACK_MAP.md`](./SIMULINK_STACK_MAP.md) — Initial Position + `[MES]` + **ECI 6DoF** (9.4+)
+- **`as205Mes.ts` / `as205EciPlant.ts`:** E→S DCM, pad \(r_E\)/\(q_{bE}\)
 - **Simulink translation map:** [`SIMULINK_STACK_MAP.md`](./SIMULINK_STACK_MAP.md) — ECI/Body/SM path vs 9.x gaps
 - CSV layout + compare helpers: [`as205Compare.ts`](./as205Compare.ts), `docs/sample-models/saturn/as205-reference/`
 - Residual CLI (prefer frame-light fields):  
