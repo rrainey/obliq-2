@@ -25,7 +25,14 @@
  *   - Quaternion scalar-first [q0,q1,q2,q3], body rates (P,Q,R) = ω in body axes
  *   - DCM from orientation_conversion quat_to_dcm treated as body→inertial
  *   - Principal inertia only (diagonal I); off-diagonal products of inertia omitted
+ *   - Pitch programs: see as205ChiTable.ts for TN Table 2B χ_c vs plant elev mapping
+ *     (no full Apollo platform-frame treatment here)
  */
+
+import {
+  table2bChiTimeBreakpoints,
+  table2bPlantElevDeg
+} from './as205ChiTable'
 
 /** Local types (avoid circular import with sliceModels) */
 export interface SliceBlock {
@@ -2102,6 +2109,48 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
       integrationAlgorithm: 'rk4'
     }
   }
+}
+
+/**
+ * Phase 9.5 — Same plant as 9.4 with TN-AP-67-158 **Table 2B** pitch command
+ *
+ * χ_c from Table 2B is TN convention (0° = vertical, negative downrange).
+ * Converted for the open-loop rate path as elev = 90 + χ_c (see as205ChiTable.ts).
+ * Still **rate-only** tracking of d(elev)/dt → My — not closed-loop attitude from
+ * quaternion / platform frames (deferred; ask before inventing frame transforms).
+ *
+ * Prefer TN residual vs Table 5; Simulink may disagree.
+ */
+export function buildSixDofOpenLoopChiAscentTable2B(): SliceModel {
+  const m = buildSixDofOpenLoopChiAscent()
+  const sheet = m.sheets[0]
+  const chiLut = sheet.blocks.find(b => b.name === 'chi_deg_cmd')
+  if (!chiLut) {
+    throw new Error('9.5: expected chi_deg_cmd block from 9.4 base')
+  }
+  chiLut.parameters = {
+    ...chiLut.parameters,
+    inputValues: table2bChiTimeBreakpoints(),
+    outputValues: table2bPlantElevDeg(),
+    extrapolation: 'clamp'
+  }
+  // Rate limiter already starts at 90° elev (vertical)
+  const rateLim = sheet.blocks.find(b => b.name === 'chi_rate_lim')
+  if (rateLim) {
+    rateLim.parameters = {
+      ...rateLim.parameters,
+      initialOutput: 90,
+      // Table 2B average ~0.5 °/s; allow ≤1 °/s TN criterion with small margin
+      risingSlewLimit: 1.2,
+      fallingSlewLimit: -1.2
+    }
+  }
+
+  m.name = 'saturn-9.5-open-loop-chi-table2b-ascent'
+  m.description =
+    '9.4 plant + TN-AP-67-158 Table 2B χ_c pitch program (elev=90+χ_c) → Q_cmd → My. Rate loop only; TN primary for residuals.'
+  if (sheet.name) sheet.name = 'OpenLoopChiTable2B'
+  return m
 }
 
 /** @deprecated use buildSixDofVehicleBurnDemo */

@@ -11,8 +11,14 @@ import {
   buildSixDofOpenLoopAscent,
   buildSixDofClosedLoopPitchRateDamp,
   buildSixDofOpenLoopAscentWithAero,
-  buildSixDofOpenLoopChiAscent
+  buildSixDofOpenLoopChiAscent,
+  buildSixDofOpenLoopChiAscentTable2B
 } from '../examples/saturn-ib/sixDofVarMassEom'
+import {
+  TN_TABLE_2B_CHI_C,
+  chiCToPlantElevDeg,
+  table2bPlantElevDeg
+} from '../examples/saturn-ib/as205ChiTable'
 import { sliceToModelData } from '../examples/saturn-ib/sliceModels'
 import { propagateSignalTypes } from '@/lib/signalTypePropagation'
 
@@ -258,6 +264,43 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(result.header).not.toMatch(/#define\s+Kq_gain\b/)
   })
 
+  test('9.5 Table 2B χ program on 9.4 plant', () => {
+    const m = buildSixDofOpenLoopChiAscentTable2B()
+    expect(m.name).toBe('saturn-9.5-open-loop-chi-table2b-ascent')
+    const lut = m.sheets[0].blocks.find(b => b.name === 'chi_deg_cmd')!
+    const times = lut.parameters?.inputValues as number[]
+    const elev = lut.parameters?.outputValues as number[]
+    expect(times[0]).toBe(0)
+    expect(elev[0]).toBe(90) // vertical
+    // Staging / IGM initiation χ_c ≈ −60.83 → elev ≈ 29.17
+    const i138 = times.indexOf(138)
+    expect(i138).toBeGreaterThan(0)
+    expect(elev[i138]).toBeCloseTo(chiCToPlantElevDeg(-60.8349), 3)
+    // More breakpoints than simplified 9.4 table
+    expect(times.length).toBeGreaterThan(40)
+    expect(elev).toEqual(table2bPlantElevDeg())
+
+    const gen = new CodeGenerator({
+      modelName: 'sixdof_chi_table2b',
+      integrationAlgorithm: 'rk4'
+    })
+    const result = gen.generate(m.sheets as any, m.parameters || [])
+    expect(result.source).not.toMatch(/Error generating code for/)
+    expect(result.source).toContain('_step')
+  })
+
+  test('TN Table 2B chi table continuity', () => {
+    expect(TN_TABLE_2B_CHI_C.length).toBeGreaterThan(40)
+    expect(TN_TABLE_2B_CHI_C[0].chi_c_deg).toBe(0)
+    // Monotonic more-negative after hold (pitch over)
+    const afterHold = TN_TABLE_2B_CHI_C.filter(s => s.t_s >= 12 && s.t_s <= 138)
+    for (let i = 1; i < afterHold.length; i++) {
+      expect(afterHold[i].chi_c_deg).toBeLessThanOrEqual(afterHold[i - 1].chi_c_deg + 1e-9)
+    }
+    const last = TN_TABLE_2B_CHI_C.find(s => s.t_s === 138)!
+    expect(last.chi_c_deg).toBeCloseTo(-60.8349, 3)
+  })
+
   test('exports JSON fixtures', () => {
     const dir = path.join(__dirname, '../docs/sample-models/saturn')
     fs.mkdirSync(dir, { recursive: true })
@@ -267,12 +310,18 @@ describe('6-DOF variable-mass quaternion EOM', () => {
       buildSixDofOpenLoopAscent(),
       buildSixDofClosedLoopPitchRateDamp(),
       buildSixDofOpenLoopAscentWithAero(),
-      buildSixDofOpenLoopChiAscent()
+      buildSixDofOpenLoopChiAscent(),
+      buildSixDofOpenLoopChiAscentTable2B()
     ]) {
       const data = sliceToModelData(m as any)
       const fp = path.join(dir, `${m.name}.json`)
       fs.writeFileSync(fp, JSON.stringify({ name: m.name, data }, null, 2))
       expect(fs.existsSync(fp)).toBe(true)
     }
+    // Table 2B reference CSV
+    const { table2bToCsv } = require('../examples/saturn-ib/as205ChiTable')
+    const refDir = path.join(dir, 'as205-reference')
+    fs.mkdirSync(refDir, { recursive: true })
+    fs.writeFileSync(path.join(refDir, 'as205_table2b_chi.csv'), table2bToCsv())
   })
 })

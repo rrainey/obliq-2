@@ -127,6 +127,14 @@ The TN is multi-page with trajectory listings. Recommended process:
 | `saturn-9.1-open-loop-6dof-ascent` | h, mass, q̄, \|r\| vs time (plant, no aero force) |
 | `saturn-9.2-closed-loop-pitch-rate-damp` | rate loop only — **not** TN trajectory match |
 | `saturn-9.3-open-loop-6dof-ascent-aero` | plant + constant-CdA drag (no pitch program) |
-| `saturn-9.4-open-loop-chi-6dof-ascent` | **primary residual candidate**: χ time-tilt + rate loop + aero plant |
+| `saturn-9.4-open-loop-chi-6dof-ascent` | TN-class plant + simplified χ elev program |
+| `saturn-9.5-open-loop-chi-table2b-ascent` | **primary residual candidate**: Table 2B χ_c → elev + rate loop |
+| `as205-reference/as205_table2b_chi.csv` | Digitized Table 2B (χ_c and elev) |
 | `saturn-8.8-chi-time-tilt` | χ program shape alone (no plant) |
-| Future 9.5+ | TN Table 2B χ polynomials; attitude-error loop; residual pass/fail gates |
+| Future 9.6+ | Attitude-error loop (needs explicit frame decision); residual pass/fail gates |
+
+### Table 2B pitch convention (practical)
+
+- TN **χ_c**: deg from **inertial vertical**, **negative downrange** (0 at pad vertical).  
+- Plant elev used for open-loop \(Q_{\mathrm{cmd}}\): **elev = 90 + χ_c**.  
+- Full platform / IGM frame transforms are **not** implemented here.

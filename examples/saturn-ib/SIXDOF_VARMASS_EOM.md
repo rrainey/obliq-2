@@ -235,6 +235,22 @@ Prefer **altitude** and **mass** residuals first. Soft flags in the report are d
 
 Fixture: `docs/sample-models/saturn/saturn-9.4-open-loop-chi-6dof-ascent.json`
 
+## 9.5 TN Table 2B χ program on 9.4 plant
+
+`buildSixDofOpenLoopChiAscentTable2B()` — same plant as 9.4; χ LUT from **TN-AP-67-158 Table 2B**.
+
+| Piece | Role |
+|-------|------|
+| Table 2B χ_c | Digitized every ~2 s (see `as205ChiTable.ts`) |
+| elev = 90 + χ_c | Practical map for rate generation (90° = vertical) |
+| Rate loop | Unchanged: \(Q_{\mathrm{cmd}}=\mathrm{d(elev)}/\mathrm{d}t\) → My |
+
+**Not included:** closed-loop attitude from quaternion, LVDC platform frames, or IGM.  
+Those need an explicit geospatial/frame decision before wiring.
+
+Fixture: `docs/sample-models/saturn/saturn-9.5-open-loop-chi-table2b-ascent.json`  
+Reference CSV: `docs/sample-models/saturn/as205-reference/as205_table2b_chi.csv`
+
 ## Validation baseline
 
 Trajectory comparison target: **TN-AP-67-158 (AS-205 revised launch reference)**.  
