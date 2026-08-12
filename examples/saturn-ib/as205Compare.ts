@@ -41,7 +41,7 @@ export interface FieldResidual {
 
 export interface CompareOptions {
   fields?: ComparableField[]
-  /** Only compare samples with t_s in [tMin, tMax] */
+  /** Only compare samples with t_s in [tMin, tMax] (reference time base) */
   tMin?: number
   tMax?: number
   /**
@@ -49,7 +49,29 @@ export interface CompareOptions {
    * Default 0.5 s.
    */
   timeMatchTol_s?: number
+  /**
+   * Subtract this from model sample times before pairing (s).
+   * Use when sim time ≠ liftoff time (e.g. 9.x liftoff step at t=1 → offset 1).
+   */
+  modelTimeOffset_s?: number
 }
+
+/** Soft residual notes for reports (not pass/fail gates). */
+export interface SoftThreshold {
+  field: ComparableField
+  /** Soft max |Δ| above which report flags "large residual" */
+  maxAbsSoft?: number
+  /** Soft RMS above which report flags "large residual" */
+  rmsSoft?: number
+}
+
+/** Default S-IB qualitative window notes (not acceptance gates). */
+export const SIB_SOFT_THRESHOLDS: SoftThreshold[] = [
+  { field: 'h_m', maxAbsSoft: 5e4, rmsSoft: 2e4 },
+  { field: 'mass_kg', maxAbsSoft: 8e4, rmsSoft: 4e4 },
+  { field: 'qbar_Pa', maxAbsSoft: 2e4, rmsSoft: 1e4 }
+  // v_mps omitted: TN is space-fixed; 9.x body speed not comparable without frame fix
+]
 
 export interface CompareResult {
   referenceName: string
@@ -63,6 +85,11 @@ const DEFAULT_FIELDS: ComparableField[] = ['h_m', 'v_mps', 'mass_kg', 'qbar_Pa',
 
 /**
  * Parse a CSV with header row. Supports comments (#) and optional BOM.
+ *
+ * Accepts either:
+ * - Canonical TN columns: t_s, h_m, v_mps, …
+ * - Obliq multi-logger export: time, log_altitude, log_mass, log_qbar, …
+ * - Single-logger export is not enough alone (only time,value) — use multi export.
  */
 export function loadTrajectoryCsv(
   text: string,
@@ -79,41 +106,40 @@ export function loadTrajectoryCsv(
   }
 
   const header = splitCsvLine(lines[0]).map(h => h.trim())
-  const idx = (col: string) => header.indexOf(col)
-
-  const iT = idx('t_s')
-  if (iT < 0) {
-    throw new Error('Trajectory CSV must include t_s column')
-  }
-
   const samples: TrajectorySample[] = []
+
   for (let r = 1; r < lines.length; r++) {
     const cols = splitCsvLine(lines[r])
-    const t = Number(cols[iT])
-    if (!Number.isFinite(t)) continue
-
-    const sample: TrajectorySample = { t_s: t }
-    const setNum = (key: ComparableField | 'source_note', col: string) => {
-      const j = idx(col)
-      if (j < 0 || j >= cols.length || cols[j] === '') return
-      if (key === 'source_note') {
-        sample.source_note = cols[j]
-        return
-      }
-      const v = Number(cols[j])
-      if (Number.isFinite(v)) (sample as any)[key] = v
+    const row: Record<string, number> = {}
+    for (let c = 0; c < header.length; c++) {
+      if (c >= cols.length || cols[c] === '') continue
+      const v = Number(cols[c])
+      if (Number.isFinite(v)) row[header[c]] = v
     }
-    setNum('h_m', 'h_m')
-    setNum('v_mps', 'v_mps')
-    setNum('gamma_rad', 'gamma_rad')
-    setNum('mass_kg', 'mass_kg')
-    setNum('qbar_Pa', 'qbar_Pa')
-    setNum('source_note', 'source_note')
-    samples.push(sample)
+    const sample = mapLoggerRowToSample(row)
+    if (sample) samples.push(sample)
   }
 
   samples.sort((a, b) => a.t_s - b.t_s)
   return { name, samples }
+}
+
+/**
+ * Shift all sample times by −offset (model sim time → liftoff-relative).
+ * Does not mutate the input series.
+ */
+export function shiftTrajectoryTime(
+  series: TrajectorySeries,
+  offset_s: number
+): TrajectorySeries {
+  if (!offset_s) return series
+  return {
+    ...series,
+    samples: series.samples.map(s => ({ ...s, t_s: s.t_s - offset_s })),
+    notes: [series.notes, `time shifted by −${offset_s} s`]
+      .filter(Boolean)
+      .join('; ')
+  }
 }
 
 /**
@@ -131,12 +157,22 @@ export function compareTrajectories(
   const tol = options.timeMatchTol_s ?? 0.5
   const warnings: string[] = []
 
+  const modelAligned =
+    options.modelTimeOffset_s !== undefined && options.modelTimeOffset_s !== 0
+      ? shiftTrajectoryTime(model, options.modelTimeOffset_s)
+      : model
+
   const refSamples = reference.samples.filter(s => s.t_s >= tMin && s.t_s <= tMax)
   if (refSamples.length === 0) {
     warnings.push('No reference samples in time window')
   }
-  if (model.samples.length === 0) {
+  if (modelAligned.samples.length === 0) {
     warnings.push('Model series is empty')
+  }
+  if (options.modelTimeOffset_s) {
+    warnings.push(
+      `Model times shifted by −${options.modelTimeOffset_s} s (sim → liftoff frame)`
+    )
   }
 
   const residuals: FieldResidual[] = []
@@ -146,7 +182,7 @@ export function compareTrajectories(
     for (const r of refSamples) {
       const rv = r[field]
       if (rv === undefined) continue
-      const m = nearestSample(model.samples, r.t_s, tol)
+      const m = nearestSample(modelAligned.samples, r.t_s, tol)
       if (!m) continue
       const mv = m[field]
       if (mv === undefined) continue
@@ -193,7 +229,10 @@ export function compareTrajectories(
 /**
  * Format a short human-readable report (Markdown table).
  */
-export function formatCompareReport(result: CompareResult): string {
+export function formatCompareReport(
+  result: CompareResult,
+  soft: SoftThreshold[] = SIB_SOFT_THRESHOLDS
+): string {
   const lines: string[] = [
     `# Trajectory comparison`,
     ``,
@@ -208,23 +247,63 @@ export function formatCompareReport(result: CompareResult): string {
   lines.push(
     `## Residuals (model − reference)`,
     ``,
-    `| Field | N | max\\|Δ\\| | RMS | t @ max\\|Δ\\| (s) |`,
-    `|-------|---|--------|-----|----------------|`
+    `| Field | N | max\\|Δ\\| | RMS | t @ max\\|Δ\\| (s) | Soft flag |`,
+    `|-------|---|--------|-----|----------------|-----------|`
   )
+  const softFlags: string[] = []
   for (const r of result.residuals) {
+    const th = soft.find(s => s.field === r.field)
+    let flag = '—'
+    if (r.n > 0 && th) {
+      const large =
+        (th.maxAbsSoft !== undefined && r.maxAbs > th.maxAbsSoft) ||
+        (th.rmsSoft !== undefined && r.rms > th.rmsSoft)
+      if (large) {
+        flag = 'large'
+        softFlags.push(
+          `${r.field}: residual above soft note threshold (not a pass/fail gate)`
+        )
+      } else {
+        flag = 'ok'
+      }
+    }
     if (r.n === 0) {
-      lines.push(`| ${r.field} | 0 | — | — | — |`)
+      lines.push(`| ${r.field} | 0 | — | — | — | — |`)
     } else {
       lines.push(
-        `| ${r.field} | ${r.n} | ${fmt(r.maxAbs)} | ${fmt(r.rms)} | ${r.tAtMaxAbs?.toFixed(2) ?? '—'} |`
+        `| ${r.field} | ${r.n} | ${fmt(r.maxAbs)} | ${fmt(r.rms)} | ${r.tAtMaxAbs?.toFixed(2) ?? '—'} | ${flag} |`
       )
     }
   }
+  if (softFlags.length) {
+    lines.push(``, `## Soft notes`, ...softFlags.map(f => `- ${f}`))
+  }
   lines.push(
     ``,
-    `> Baseline policy: TN-AP-67-158 is authoritative; Simulink may disagree. See AS205_REFERENCE.md.`
+    `> Baseline policy: **TN-AP-67-158 is authoritative**; Simulink may disagree.`,
+    `> Soft flags are diagnostic only — no numeric pass/fail for 9.x plant yet.`,
+    `> Prefer **h_m** and **mass_kg** first; TN **v** is space-fixed (~409 m/s at liftoff).`,
+    `> See AS205_REFERENCE.md.`
   )
   return lines.join('\n')
+}
+
+/**
+ * End-to-end: load reference + model CSV text, compare, format report.
+ */
+export function compareCsvTexts(
+  refText: string,
+  modelText: string,
+  options: CompareOptions & {
+    referenceName?: string
+    modelName?: string
+    soft?: SoftThreshold[]
+  } = {}
+): { result: CompareResult; report: string } {
+  const ref = loadTrajectoryCsv(refText, options.referenceName ?? 'TN-AP-67-158')
+  const model = loadTrajectoryCsv(modelText, options.modelName ?? 'model')
+  const result = compareTrajectories(ref, model, options)
+  return { result, report: formatCompareReport(result, options.soft) }
 }
 
 function fmt(x: number): string {
@@ -274,8 +353,8 @@ function splitCsvLine(line: string): string[] {
 }
 
 /**
- * Map common obliq logger column names → TrajectorySample fields.
- * Extend as logger naming conventions solidify.
+ * Map common obliq logger / TN column names → TrajectorySample fields.
+ * Headers are matched case-sensitively as exported by WasmSimulationEngine.
  */
 export function mapLoggerRowToSample(
   row: Record<string, number>,
@@ -292,10 +371,25 @@ export function mapLoggerRowToSample(
       }
     }
   }
-  pick('h_m', 'h_m', 'altitude_m', 'altitude', 'log_altitude', 'disp_altitude')
-  pick('v_mps', 'v_mps', 'V_mag', 'disp_V', 'speed')
-  pick('mass_kg', 'mass_kg', 'mass', 'disp_mass', 'log_mass')
-  pick('qbar_Pa', 'qbar_Pa', 'qbar', 'disp_qbar', 'log_qbar')
+  pick(
+    'h_m',
+    'h_m',
+    'altitude_m',
+    'altitude',
+    'log_altitude',
+    'disp_altitude'
+  )
+  pick(
+    'v_mps',
+    'v_mps',
+    'V_mag',
+    'log_V',
+    'disp_V',
+    'speed',
+    'V'
+  )
+  pick('mass_kg', 'mass_kg', 'mass', 'log_mass', 'disp_mass')
+  pick('qbar_Pa', 'qbar_Pa', 'qbar', 'log_qbar', 'disp_qbar')
   pick('gamma_rad', 'gamma_rad', 'gamma')
   return sample
 }

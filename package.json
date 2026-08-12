@@ -24,7 +24,8 @@
     "test:wasm:model": "jest __tests__/wasm/model-compilation.test.ts",
     "test:wasm:cache": "jest __tests__/wasm/cache/cacheKey.test.ts",
     "test:wasm:cache:integration": "jest __tests__/wasm/cache/SupabaseCacheManager.integration.test.ts",
-    "wasm:build-docker": "docker build -t obliq-emscripten:latest -f __tests__/wasm/docker/Dockerfile.emscripten __tests__/wasm/docker"
+    "wasm:build-docker": "docker build -t obliq-emscripten:latest -f __tests__/wasm/docker/Dockerfile.emscripten __tests__/wasm/docker",
+    "as205:compare": "npx --yes tsx scripts/compare-as205.ts"
   },
   "dependencies": {
     "@mantine/core": "^8.1.3",

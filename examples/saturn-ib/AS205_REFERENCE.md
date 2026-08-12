@@ -59,21 +59,31 @@ See that folder’s `README.md` and `as205_trajectory_template.csv`.
 
 ## Comparison workflow
 
-1. Run an obliq model (e.g. 9.1) with **Signal Logger** on the comparable channels.  
-2. Export logger CSV from the app.  
-3. Align time axes to **liftoff** (\(t=0\) at first motion / step edge).  
-4. Run the compare utility (see `as205Compare.ts`):
+1. Run **9.4** (or 9.3) with Signal Loggers on altitude, mass, \(q̄\) (and optionally \(V\)).  
+2. In the app, export **all logged data** CSV (multi-column: `time`, `log_altitude`, …).  
+   Single-logger `time,value` files are not enough for multi-field residuals.  
+3. Align sim time to **liftoff**: 9.x models use a liftoff step at \(t\approx 1\,\mathrm{s}\); residual CLI defaults `--offset 1`.  
+4. Run the residual CLI:
 
 ```bash
-# From repo root (after adding a filled reference CSV):
-npx ts-node --compiler-options '{"module":"commonjs"}' -e "
-const { loadTrajectoryCsv, compareTrajectories } = require('./examples/saturn-ib/as205Compare');
-"
+# Dry-run with synthetic logger-shaped CSV (not flight data):
+npm run as205:compare -- \
+  --model docs/sample-models/saturn/as205-reference/example_model_logger_export.csv \
+  --offset 1 --tmin 0 --tmax 150 --tol 2 \
+  --fields h_m,mass_kg,qbar_Pa \
+  --out /tmp/as205-residual.md
+
+# Real 9.4 export:
+npm run as205:compare -- \
+  --model path/to/saturn-9.4_data.csv \
+  --offset 1 --out residual-report.md
 ```
 
-Or use unit tests that load both CSVs when present.
+Programmatic API: `examples/saturn-ib/as205Compare.ts`  
+(`loadTrajectoryCsv`, `compareTrajectories`, `compareCsvTexts`, `formatCompareReport`).
 
-5. Report residuals: max |Δh|, |Δv|, RMS over a stated window (e.g. 0–150 s S-IB).
+5. Interpret residuals: max |Δh|, |Δm|, RMS over a stated window (e.g. 0–150 s S-IB).  
+   Soft flags in the report are **diagnostic only** — not pass/fail gates for 9.x.
 
 ## Acceptance policy (current phase)
 

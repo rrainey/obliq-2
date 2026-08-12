@@ -16,6 +16,21 @@ See [`examples/saturn-ib/AS205_REFERENCE.md`](../../../examples/saturn-ib/AS205_
 | `as205_trajectory_template.csv` | Column contract + header comments |
 | `as205_trajectory_reference.csv` | **TN Table 5 S-IB** (digitized SI; see header comments) |
 | `as205_trajectory_smoke.csv` | Tiny synthetic series for unit tests only (not flight data) |
+| `example_model_logger_export.csv` | Multi-logger column shape for residual CLI dry-run (not flight data) |
+
+## Residual CLI
+
+```bash
+# From repo root — dry-run (synthetic model CSV):
+npm run as205:compare -- \
+  --model docs/sample-models/saturn/as205-reference/example_model_logger_export.csv \
+  --offset 1 --fields h_m,mass_kg,qbar_Pa --out /tmp/as205-residual.md
+
+# After running 9.4 in the app and exporting all logger data:
+npm run as205:compare -- --model ~/Downloads/saturn-9.4_data.csv --offset 1
+```
+
+Default `--offset 1` assumes 9.x liftoff step at \(t=1\,\mathrm{s}\). TN `t_s=0` is first motion.
 
 ## Current digitization status
 

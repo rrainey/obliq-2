@@ -8,7 +8,9 @@ import {
   loadTrajectoryCsv,
   compareTrajectories,
   formatCompareReport,
-  mapLoggerRowToSample
+  mapLoggerRowToSample,
+  shiftTrajectoryTime,
+  compareCsvTexts
 } from '../examples/saturn-ib/as205Compare'
 
 const REF_DIR = path.join(__dirname, '../docs/sample-models/saturn/as205-reference')
@@ -117,5 +119,78 @@ describe('AS-205 trajectory compare utilities', () => {
       if (r.n === 0) continue
       expect(r.maxAbs).toBeLessThan(1e-9)
     }
+  })
+
+  test('loads multi-logger export shape (time + log_*)', () => {
+    const p = path.join(REF_DIR, 'example_model_logger_export.csv')
+    const text = fs.readFileSync(p, 'utf8')
+    const series = loadTrajectoryCsv(text, 'example-logger')
+    expect(series.samples.length).toBeGreaterThan(10)
+    expect(series.samples[0].t_s).toBe(0)
+    expect(series.samples.some(s => s.h_m !== undefined)).toBe(true)
+    expect(series.samples.some(s => s.mass_kg !== undefined)).toBe(true)
+    expect(series.samples.some(s => s.qbar_Pa !== undefined)).toBe(true)
+  })
+
+  test('modelTimeOffset_s shifts model into liftoff frame', () => {
+    const text = fs.readFileSync(smokePath, 'utf8')
+    const ref = loadTrajectoryCsv(text, 'ref')
+    // model times are all +1 s vs ref
+    const model = {
+      name: 'model+1s',
+      samples: ref.samples.map(s => ({ ...s, t_s: s.t_s + 1 }))
+    }
+    const bad = compareTrajectories(ref, model, {
+      fields: ['h_m'],
+      timeMatchTol_s: 0.1
+    })
+    // With tight tol, few or no pairs without offset
+    const good = compareTrajectories(ref, model, {
+      fields: ['h_m'],
+      timeMatchTol_s: 0.1,
+      modelTimeOffset_s: 1
+    })
+    expect(good.paired).toBeGreaterThan(0)
+    const h = good.residuals.find(r => r.field === 'h_m')!
+    expect(h.maxAbs).toBeLessThan(1e-9)
+    // sanity: offset path used
+    expect(good.warnings.some(w => w.includes('shifted'))).toBe(true)
+    expect(bad.paired).toBeLessThanOrEqual(good.paired)
+  })
+
+  test('shiftTrajectoryTime does not mutate original', () => {
+    const text = fs.readFileSync(smokePath, 'utf8')
+    const series = loadTrajectoryCsv(text, 's')
+    const t0 = series.samples[0].t_s
+    const shifted = shiftTrajectoryTime(series, 1)
+    expect(series.samples[0].t_s).toBe(t0)
+    expect(shifted.samples[0].t_s).toBe(t0 - 1)
+  })
+
+  test('compareCsvTexts produces residual report vs TN reference', () => {
+    const refText = fs.readFileSync(
+      path.join(REF_DIR, 'as205_trajectory_reference.csv'),
+      'utf8'
+    )
+    const modelText = fs.readFileSync(
+      path.join(REF_DIR, 'example_model_logger_export.csv'),
+      'utf8'
+    )
+    const { result, report } = compareCsvTexts(refText, modelText, {
+      fields: ['h_m', 'mass_kg', 'qbar_Pa'],
+      tMin: 0,
+      tMax: 150,
+      timeMatchTol_s: 2,
+      modelTimeOffset_s: 1,
+      modelName: 'example_logger'
+    })
+    expect(result.paired).toBeGreaterThan(5)
+    expect(report).toContain('Trajectory comparison')
+    expect(report).toContain('h_m')
+    expect(report).toContain('mass_kg')
+    // Synthetic example is intentionally not a tight match
+    const h = result.residuals.find(r => r.field === 'h_m')!
+    expect(h.n).toBeGreaterThan(0)
+    expect(Number.isFinite(h.rms)).toBe(true)
   })
 })

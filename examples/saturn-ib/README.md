@@ -40,6 +40,7 @@ Selected AS-205 constants from `saturn-1B/AS205_presettings.m` are attached as m
 
 - Policy + quantity mapping: [`AS205_REFERENCE.md`](./AS205_REFERENCE.md)
 - CSV layout + compare helpers: [`as205Compare.ts`](./as205Compare.ts), `docs/sample-models/saturn/as205-reference/`
+- Residual CLI: `npm run as205:compare -- --model <logger.csv> [--offset 1]`
 - Simulink (`saturn-1B/*.mdl`) may **deviate** from the TN; prefer the TN when debugging residuals
 
 ## 6-DOF variable-mass EOM

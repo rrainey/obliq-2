@@ -219,6 +219,17 @@ Fixture: `docs/sample-models/saturn/saturn-9.3-open-loop-6dof-ascent-aero.json`
 
 **Do not fix to Simulink** if it disagrees with TN-AP-67-158.
 
+### Residual report (after a run)
+
+1. Export **all** logger data CSV from the app (columns like `time,log_altitude,log_mass,log_qbar`).  
+2. From repo root:
+
+```bash
+npm run as205:compare -- --model path/to/export.csv --offset 1 --out residual-report.md
+```
+
+Prefer **altitude** and **mass** residuals first. Soft flags in the report are diagnostic only.
+
 Fixture: `docs/sample-models/saturn/saturn-9.4-open-loop-chi-6dof-ascent.json`
 
 ## Validation baseline
