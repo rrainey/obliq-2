@@ -94,7 +94,7 @@ IGM velocity-to-be-gained / time-to-go use V-frame quantities (many terms zero a
 
 Used for gravitational and drag accelerations in the IU flight program.
 
-### E — Ephemeral / geocentric inertial (space-fixed) — **TN inertial (assumed)**
+### E — Ephemeral / geocentric inertial (space-fixed) — **classical ECI / Simulink world**
 
 | | |
 |--|--|
@@ -104,8 +104,8 @@ Used for gravitational and drag accelerations in the IU flight program.
 | **\(Y_E\)** | RH |
 
 - Identical to **Apollo Standard Coordinate System 4** (geocentric inertial).  
-- Matches the usual **ECI** definition (\(X\) vernal equinox, \(Z\) north).  
-- **Working assumption:** TN-AP-67-158 space-fixed / inertial trajectory state is in (or equivalent to) **E**.
+- Matches usual **ECI** and Simulink body/ECI quaternion pipeline.  
+- **Not** the current working identity for TN “Space frame” (that is **S**; see above).
 
 ### A — Telemetry station (earth-fixed)
 
@@ -169,25 +169,19 @@ Naming: **`M` + from-system + to-system** transforms a vector **from** the secon
 |---------|-----------------|--------|-----------------|
 | Body \(+X\) thrust | AIAA forward | **\(X_B\)** toward spacecraft | \(\mathbf{F}_b=[T,0,0]\) |
 | Pitch axis | \(+Y\), +pitch up | **\(Y_B\)**, pitch about \(Y_B\) | \(M_y\), \(Q=\omega_y\) |
-| True ECI | Vernal equinox / north | **E-system** | **Not used** |
-| ECF-like | Greenwich / site meridian | **A-system** (site meridian) | **Not used** |
-| Nav “inertial vertical + downrange” | — | **S-system** (\(X_S\) up, \(Z_S\) downrange) | Approximated only as elev schedule |
-| Site → inertial | Simulink astronomy | **`[MEG]` / `[MES]`** + site angles | **Not used** |
-| Pad IC | ECF→ECI at epoch | S/E related by launch geometry | Demo: \(\mathbf{r}\parallel +X_i\), identity quat |
+| Classical ECI | Vernal equinox / north | **E-system** | Simulink primary; not TN Space frame |
+| TN Space frame | Space-fixed state | **S-system** (assumed) | Partial pad S-like IC |
+| ECF-like | Site meridian | **A-system** | **Not used** |
+| Site → E / E→S | Simulink astronomy | **`[MEG]` / `[MES]`** | **Not yet** (fixed after \(T_{\mathrm{GRR}}\)) |
+| Pad IC | ECF→ECI at epoch | S axes from site + azimuth | `as205PadFrames.ts` S-like pad |
 
-### Implication for Table 2B / late \(\Delta h\)
+### Residual policy (until ECI→S exists)
 
-- **TN trajectory state** (position, space-fixed velocity, path angle): assume **E**.  
-- **Table 2B \(\chi_c\)** (vertical / downrange): geometric directions that define **S** at GRR; expressed in **E** once site + azimuth + epoch are known.  
-- Pitch/steering still closes in **B** (and platform vs **S**).
+| Use now | Defer |
+|---------|--------|
+| \(h\), mass, \(q̄\), thrust / \(a_x\) | Space-fixed \(V\), path angle, \(X_S Y_S Z_S\) components |
 
-9.x currently:
-
-1. Puts “up” along a **demo radial** at \(t=0\) (not E, not S).  
-2. Commands elev via **body pitch about \(Y_b\)** with elev \(=90+\chi_c\).  
-3. Never builds pad **E** ICs, **S** from launch geometry, or **`[MBS]`** / **`[MES]`**.
-
-Until **E** (TN inertial state) and **S** (local vertical/downrange for \(\chi\)) are consistent at the pad, tight elev tracking can still **mis-aim thrust** even if body axes are AIAA-correct.
+Continue **Simulink translation** (ECI + Body/SM). Do not treat S-component TN residuals as plant bugs yet.
 
 ---
 
@@ -195,11 +189,13 @@ Until **E** (TN inertial state) and **S** (local vertical/downrange for \(\chi\)
 
 | Step | Status |
 |------|--------|
-| TN inertial ≡ **E** | Working assumption |
-| Pad **S** IC: \(r=[R_L,0,0]\), \(v=\) Earth rate in S, B‖S | **Implemented** (`as205PadFrames.ts` → 9.4/9.5/9.6) |
-| Full E state + epoch / `[MES]` for vector residual vs TN | **Not yet** (altitude/mass still comparable) |
-| Table 2B pitch strictly in \(X_S\)–\(Z_S\) with certified \(M_y\) sign | Partial (elev schedule + body \(Y\); sign/plane still under residual review) |
-| `pad_roll_L` applied to \(q_0\) | **Not yet** |
+| TN Space frame ≡ **S** (EDD plumbline, space-fixed) | **Working assumption** |
+| E = classical ECI / Simulink | Documented |
+| Pad S-like IC + Earth-rate \(v_0\), B‖S | Partial (`as205PadFrames.ts`) |
+| Full Simulink ECI + ECI→S | **Not yet** |
+| Residual: \(h\), mass, \(q̄\) | **Focus now** |
+| Residual: Space-frame \(V\), γ, XYZ | **Deferred** |
+| `pad_roll_L` on \(q_0\) | **Not yet** |
 
 Site constants: `AS205_presettings.m` / `AS205_PAD` (LC-34, \(A_z\), \(R_L\)).
 
