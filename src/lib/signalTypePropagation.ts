@@ -682,11 +682,25 @@ export function propagateSignalTypes(
                 parsedType
               })
               
-              // Add target block to processing queue
+              // Wait for all inputs (e.g. mat×vec needs DCM and vector) before enqueue
               const targetBlock = blockMap.get(wire.targetBlockId)
               if (targetBlock && !processedBlocks.has(wire.targetBlockId)) {
-                processingQueue.push(wire.targetBlockId)
-                processedBlocks.add(wire.targetBlockId)
+                const targetInputs = getBlockInputTypes(
+                  targetBlock,
+                  wiresByTarget,
+                  blockOutputTypes
+                )
+                const expectedInputs = getBlockInputPortCount(targetBlock)
+                if (
+                  canEnqueueForTypePropagation(
+                    targetBlock,
+                    targetInputs.length,
+                    expectedInputs
+                  )
+                ) {
+                  processingQueue.push(wire.targetBlockId)
+                  processedBlocks.add(wire.targetBlockId)
+                }
               }
             } catch (error) {
               errors.push({
@@ -750,11 +764,25 @@ export function propagateSignalTypes(
               parsedType
             })
 
-            // Add target block to processing queue
+            // Same wait-for-inputs rule as general path (e.g. C_bE · v_b)
             const targetBlock = blockMap.get(wire.targetBlockId)
             if (targetBlock && !processedBlocks.has(wire.targetBlockId)) {
-              processingQueue.push(wire.targetBlockId)
-              processedBlocks.add(wire.targetBlockId)
+              const targetInputs = getBlockInputTypes(
+                targetBlock,
+                wiresByTarget,
+                blockOutputTypes
+              )
+              const expectedInputs = getBlockInputPortCount(targetBlock)
+              if (
+                canEnqueueForTypePropagation(
+                  targetBlock,
+                  targetInputs.length,
+                  expectedInputs
+                )
+              ) {
+                processingQueue.push(wire.targetBlockId)
+                processedBlocks.add(wire.targetBlockId)
+              }
             }
           } catch (error) {
             errors.push({
@@ -1652,11 +1680,25 @@ function propagateSignalTypesWithPreset(
                 parsedType
               })
 
-              // Add target block to processing queue
+              // Wait for all inputs before enqueue (same rule as single-sheet path)
               const targetBlock = blockMap.get(wire.targetBlockId)
               if (targetBlock && !processedBlocks.has(wire.targetBlockId)) {
-                processingQueue.push(wire.targetBlockId)
-                processedBlocks.add(wire.targetBlockId)
+                const targetInputs = getBlockInputTypes(
+                  targetBlock,
+                  wiresByTarget,
+                  blockOutputTypes
+                )
+                const expectedInputs = getBlockInputPortCount(targetBlock)
+                if (
+                  canEnqueueForTypePropagation(
+                    targetBlock,
+                    targetInputs.length,
+                    expectedInputs
+                  )
+                ) {
+                  processingQueue.push(wire.targetBlockId)
+                  processedBlocks.add(wire.targetBlockId)
+                }
               }
             } catch (error) {
               errors.push({
