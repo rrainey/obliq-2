@@ -10,8 +10,9 @@
  *     [--fields h_m,mass_kg,qbar_Pa] \
  *     [--out residual-report.md]
  *
- * Policy: TN is primary; Simulink may disagree. Prefer h_m and mass_kg first
- * (TN velocity is space-fixed; 9.x body |v| is not the same frame).
+ * Policy: TN is primary; Simulink may disagree. Prefer h_m and mass_kg
+ * (frame-light). Defer space-fixed V/γ/XYZ until ECI→S exists.
+ * TN Space frame ≈ EDD S (working assumption).
  */
 
 import * as fs from 'fs'
