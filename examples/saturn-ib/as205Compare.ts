@@ -73,6 +73,18 @@ export const SIB_SOFT_THRESHOLDS: SoftThreshold[] = [
   // v_mps omitted: TN is space-fixed; 9.x body speed not comparable without frame fix
 ]
 
+/** Standard S-IB residual time windows (liftoff frame). */
+export const SIB_RESIDUAL_WINDOWS: Array<{
+  name: string
+  tMin: number
+  tMax: number
+}> = [
+  { name: 'early boost 0–50 s', tMin: 0, tMax: 50 },
+  { name: 'max-q region 50–100 s', tMin: 50, tMax: 100 },
+  { name: 'late S-IB 100–150 s', tMin: 100, tMax: 150 },
+  { name: 'full S-IB 0–150 s', tMin: 0, tMax: 150 }
+]
+
 export interface CompareResult {
   referenceName: string
   modelName: string
@@ -298,12 +310,62 @@ export function compareCsvTexts(
     referenceName?: string
     modelName?: string
     soft?: SoftThreshold[]
+    /** If true (default), append S-IB phase windows after the primary table. */
+    includePhaseWindows?: boolean
   } = {}
 ): { result: CompareResult; report: string } {
   const ref = loadTrajectoryCsv(refText, options.referenceName ?? 'TN-AP-67-158')
   const model = loadTrajectoryCsv(modelText, options.modelName ?? 'model')
   const result = compareTrajectories(ref, model, options)
-  return { result, report: formatCompareReport(result, options.soft) }
+  let report = formatCompareReport(result, options.soft)
+
+  if (options.includePhaseWindows !== false) {
+    report += formatPhaseWindowReports(ref, model, options)
+  }
+
+  return { result, report }
+}
+
+/**
+ * Append residual tables for standard S-IB phases (diagnostic).
+ */
+export function formatPhaseWindowReports(
+  reference: TrajectorySeries,
+  model: TrajectorySeries,
+  options: CompareOptions & { soft?: SoftThreshold[] } = {}
+): string {
+  const fields = options.fields ?? ['h_m', 'mass_kg']
+  const lines: string[] = [
+    ``,
+    `## Phase windows (diagnostic)`,
+    ``,
+    `Same pairing rules; soft flags omitted. Prefer early-boost health before chasing late Δh.`,
+    ``
+  ]
+  for (const w of SIB_RESIDUAL_WINDOWS) {
+    const r = compareTrajectories(reference, model, {
+      ...options,
+      fields: fields as ComparableField[],
+      tMin: w.tMin,
+      tMax: w.tMax
+    })
+    lines.push(`### ${w.name}`, ``)
+    lines.push(
+      `| Field | N | max\\|Δ\\| | RMS | t @ max\\|Δ\\| (s) |`,
+      `|-------|---|--------|-----|----------------|`
+    )
+    for (const fr of r.residuals) {
+      if (fr.n === 0) {
+        lines.push(`| ${fr.field} | 0 | — | — | — |`)
+      } else {
+        lines.push(
+          `| ${fr.field} | ${fr.n} | ${fmt(fr.maxAbs)} | ${fmt(fr.rms)} | ${fr.tAtMaxAbs?.toFixed(2) ?? '—'} |`
+        )
+      }
+    }
+    lines.push(``)
+  }
+  return lines.join('\n')
 }
 
 function fmt(x: number): string {

@@ -95,7 +95,10 @@ function main() {
 
   const refText = fs.readFileSync(refPath, 'utf8')
   const modelText = fs.readFileSync(modelPath!, 'utf8')
-  const { result, report } = compareCsvTexts(refText, modelText, options)
+  const { result, report } = compareCsvTexts(refText, modelText, {
+    ...options,
+    includePhaseWindows: true
+  })
 
   console.log(report)
   console.log('')

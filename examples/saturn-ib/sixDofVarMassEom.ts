@@ -33,6 +33,11 @@ import {
   table2bChiTimeBreakpoints,
   table2bPlantElevDeg
 } from './as205ChiTable'
+import {
+  table5ThrustTimeBreakpoints,
+  table5ThrustN,
+  TN_SIB_MDOT_SCALE
+} from './as205ThrustTable'
 
 /** Local types (avoid circular import with sliceModels) */
 export interface SliceBlock {
@@ -1669,8 +1674,8 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   // Full-run circular buffer: ceil(duration/dt)+margin (default 1000 → only last 50 s)
   const collectorMaxSamples = Math.ceil(duration / dt) + 200 // 3800
 
-  // ── Propulsion — TN Table 5–class S-IB thrust (N) vs burn time (s) ──
-  // Digitized order-of-magnitude from TN-AP-67-158 Table 5 (not Simulink).
+  // ── Propulsion — TN Table 5 total thrust + mass-matched mdot scale ──
+  // See as205ThrustTable.ts (prefer TN over Simulink).
   const liftoff = B('source', 'liftoff', 40, 40, {
     signalType: 'step',
     stepTime: 1.0,
@@ -1692,17 +1697,14 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     showInitPort: false
   })
   const thrustMag = B('lookup_1d', 'ThrustMag_N', 340, 120, {
-    // Burn-time breakpoints (s from liftoff); values ≈ TN Table 5 TOTAL thrust (N)
-    inputValues: [0, 0.5, 2, 10, 40, 78, 100, 130, 142.88, 145.88, 147.5, 160],
-    outputValues: [
-      0, 6.0e6, 6.9e6, 7.1e6, 7.4e6, 7.86e6, 7.98e6, 7.95e6, 7.8e6, 3.83e6, 1.2e4, 0
-    ],
+    inputValues: table5ThrustTimeBreakpoints(),
+    outputValues: table5ThrustN(),
     extrapolation: 'clamp'
   })
-  // ṁ = T / (Isp * g0); Isp ~ 260 s → scale 1/2550 (matches ~2.7 t/s at 7 MN)
+  // ṁ = T * TN_SIB_MDOT_SCALE (~1/2740) so integrated Δm tracks Table 5
   const mdotScale = B('source', 'mdot_scale', 340, 220, {
     signalType: 'constant',
-    value: 1 / 2550,
+    value: TN_SIB_MDOT_SCALE,
     dataType: 'double'
   })
   const mdotCmd = B('matrix_multiply', 'mdot_cmd', 480, 180, {})
@@ -2089,11 +2091,12 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
         value: 8e6
       },
       {
-        name: 'Isp_s',
+        name: 'Isp_eff_s',
         dataType: 'double',
-        defaultValue: '260',
+        // Effective Isp for mdot = T/(Isp*g0) with scale 1/2740
+        defaultValue: '279.3',
         signalType: 'double',
-        value: 260
+        value: 2740 / 9.80665
       },
       {
         name: 'm0_kg',

@@ -195,7 +195,7 @@ Fixture: `docs/sample-models/saturn/saturn-9.3-open-loop-6dof-ascent-aero.json`
 
 | Piece | Role |
 |-------|------|
-| TN-class propulsion | Axial thrust ~**7 MN** (Table 5 order), \(\dot m \approx T/2550\), \(m_0\approx 586593\,\mathrm{kg}\) |
+| TN-class propulsion | Table 5 thrust LUT (`as205ThrustTable.ts`), \(\dot m = T/2740\) (mass-matched), \(m_0\approx 586593\,\mathrm{kg}\) |
 | Aero | \(F_{\mathrm{aero}} = -\bar q\,C_D A\,\hat{\mathbf{v}}_b\) |
 | χ LUT + rate limiter | Open-loop pitch program (deg), ≲1 °/s slew (TN criterion) |
 | \(Q_{\mathrm{cmd}}\approx\dot\chi\) | Discrete derivative via unit_delay / \(dt\) |

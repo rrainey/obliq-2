@@ -182,12 +182,15 @@ describe('AS-205 trajectory compare utilities', () => {
       tMax: 150,
       timeMatchTol_s: 2,
       modelTimeOffset_s: 1,
-      modelName: 'example_logger'
+      modelName: 'example_logger',
+      includePhaseWindows: true
     })
     expect(result.paired).toBeGreaterThan(5)
     expect(report).toContain('Trajectory comparison')
     expect(report).toContain('h_m')
     expect(report).toContain('mass_kg')
+    expect(report).toContain('Phase windows')
+    expect(report).toContain('early boost')
     // Synthetic example is intentionally not a tight match
     const h = result.residuals.find(r => r.field === 'h_m')!
     expect(h.n).toBeGreaterThan(0)

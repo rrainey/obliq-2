@@ -210,10 +210,13 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(m.sheets[0].blocks.some(b => b.name === 'F_aero')).toBe(true)
     expect(m.sheets[0].blocks.some(b => b.name === 'M_b_cmd')).toBe(true)
 
-    // P0: TN-class thrust (~7 MN), not demo 0.9 MN table
+    // TN Table 5 thrust schedule (~7–8 MN class)
     const thrust = m.sheets[0].blocks.find(b => b.name === 'ThrustMag_N')!
     const thrustPeak = Math.max(...(thrust.parameters?.outputValues as number[]))
     expect(thrustPeak).toBeGreaterThan(5e6)
+    expect((thrust.parameters?.inputValues as number[]).length).toBeGreaterThan(20)
+    const mdot = m.sheets[0].blocks.find(b => b.name === 'mdot_scale')!
+    expect(mdot.parameters?.value).toBeCloseTo(1 / 2740, 8)
 
     // P0: full-run logger buffers (duration/dt ≈ 3600 → maxSamples ≥ 3600)
     const loggers = m.sheets[0].blocks.filter(b => b.type === 'signal_logger')
