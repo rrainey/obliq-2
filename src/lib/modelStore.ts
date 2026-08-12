@@ -1398,7 +1398,9 @@ export const useModelStore = create<ModelStore>()(
     clearGlobalSimulationResults: () => {
       set({
         globalSimulationResults: null,
-        simulationResults: null
+        currentSheetSimulationResults: null,
+        simulationResults: null,
+        simulationEngine: null
       })
     },
     
@@ -1406,7 +1408,8 @@ export const useModelStore = create<ModelStore>()(
       set({
         globalSimulationResults: null,
         currentSheetSimulationResults: null,
-        simulationResults: null
+        simulationResults: null,
+        simulationEngine: null
       })
     },
     

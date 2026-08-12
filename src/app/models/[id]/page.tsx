@@ -10,6 +10,10 @@ import { getWasmPreference, createWorkerSimulation, isWorkerSimulationAvailable,
 import { WasmSimulationEngine } from '@/lib/simulation/WasmSimulationEngine'
 import type { SimulationWorkerManager } from '@/lib/simulation/SimulationWorkerManager'
 import { convertWasmToUIFormat, WasmDataCollector } from '@/lib/simulation/WasmResultConverter'
+import {
+  exportSimulationResultsAsCSV,
+  exportGlobalSimulationResultsAsCSV
+} from '@/lib/simulation/exportSimulationCsv'
 import SaveAsDialog from '@/components/SaveAsDialog'
 import AutoSaveRecoveryDialog from '@/components/AutoSaveRecoveryDialog'
 import AutoSaveStatusIndicator from '@/components/AutoSaveStatusIndicator'
@@ -1258,29 +1262,37 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleExportCSV = () => {
-    if (!simulationEngine) {
-      notifications.show({
-        title: 'Export failed',
-        message: 'No simulation data to export',
-        color: 'red',
-        icon: <IconAlertCircle size={20} />
-      })
-      return
-    }
-
+    // Post-run export must use stored SimulationResults — the WASM engine is
+    // destroyed after the run and is never kept in the store.
     try {
-      const csvContent = simulationEngine.exportAllLoggedDataAsCSV()
+      let csvContent: string | null = null
+
+      if (globalSimulationResults && globalSimulationResults.size > 0) {
+        csvContent = exportGlobalSimulationResultsAsCSV(
+          globalSimulationResults,
+          sheets.map(s => ({ id: s.id, name: s.name, blocks: s.blocks })),
+          { includeLoggers: true, includeDisplays: true }
+        )
+      } else if (currentSheetSimulationResults) {
+        csvContent = exportSimulationResultsAsCSV(
+          currentSheetSimulationResults,
+          blocks,
+          { includeLoggers: true, includeDisplays: true }
+        )
+      }
+
       if (!csvContent) {
         notifications.show({
           title: 'Export failed',
-          message: 'No logger blocks found or no data to export',
+          message:
+            'No simulation data to export. Run a simulation first (results panel must show logger data).',
           color: 'red',
           icon: <IconAlertCircle size={20} />
         })
         return
       }
 
-      const blob = new Blob([csvContent], { type: 'text/csv' })
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
@@ -1289,6 +1301,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
+
+      notifications.show({
+        title: 'CSV exported',
+        message: 'Logger/display time series saved. Use npm run as205:compare for TN residuals.',
+        color: 'green',
+        icon: <IconCircleCheck size={20} />,
+        autoClose: 4000
+      })
     } catch (error) {
       console.error('Export error:', error)
       notifications.show({
