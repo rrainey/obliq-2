@@ -533,8 +533,19 @@ export function buildSixDofVariableMassEom(): SliceModel {
   }
 }
 
+export interface EomSubsystemOptions {
+  /** Initial mass IC (kg). Default from core EOM (590000). TN Table 5 first-motion ≈ 586593. */
+  m0_kg?: number
+  /** Reference mass for I ∝ m/m_ref. Defaults to m0_kg when set. */
+  m_ref_kg?: number
+}
+
 /** EOM as flattenable subsystem (shared by burn demos). */
-function buildEomSubsystemBlock(x = 520, y = 220): {
+function buildEomSubsystemBlock(
+  x = 520,
+  y = 220,
+  options: EomSubsystemOptions = {}
+): {
   eomSubsystem: SliceBlock
   core: SliceModel
   /** Port indices on EOM subsystem */
@@ -559,6 +570,9 @@ function buildEomSubsystemBlock(x = 520, y = 220): {
     mdot_prop: { portName: 'mdot_prop', dataType: 'double' }
   }
 
+  const m0 = options.m0_kg
+  const mRef = options.m_ref_kg ?? options.m0_kg
+
   const subBlocks = coreSheet.blocks.map(b => {
     if (renamePort[b.name]) {
       const p = renamePort[b.name]
@@ -573,8 +587,24 @@ function buildEomSubsystemBlock(x = 520, y = 220): {
         }
       }
     }
+    // Optional mass IC / reference overrides (TN alignment)
+    if (m0 !== undefined && b.name === 'm0') {
+      return { ...b, parameters: { ...b.parameters, value: m0 } }
+    }
+    if (mRef !== undefined && b.name === 'm_ref') {
+      return { ...b, parameters: { ...b.parameters, value: mRef } }
+    }
     return { ...b }
   })
+
+  if (m0 !== undefined || mRef !== undefined) {
+    core.parameters = (core.parameters || []).map(p => {
+      if (p.name === 'm_ref_kg' && mRef !== undefined) {
+        return { ...p, defaultValue: String(mRef), value: mRef }
+      }
+      return p
+    })
+  }
 
   const outputPortNames = ['r_i', 'v_b', 'omega_b', 'q', 'mass', 'r_mag']
   const inputPortNames = ['F_b', 'M_b', 'mdot_prop']
@@ -1609,19 +1639,31 @@ export function buildSixDofOpenLoopAscentWithAero(): SliceModel {
  *   - Pitch-rate loop (9.2-style): Q_cmd − Q → TF → gain → My limit
  *   - M_b = [0, My, 0]
  *
- * χ table is a simplified time-tilt (90° vertical → ~28° by staging), not the
- * full TN-AP-67-158 Table 2B polynomials. Prefer TN for trajectory residuals;
- * Simulink may disagree.
+ * Propulsion is order-of-magnitude TN Table 5 (S-IB ~7 MN class, m0 ≈ 586593 kg),
+ * not the old 0.9 MN demo table. χ table is still a simplified time-tilt (not full
+ * Table 2B polynomials). Prefer TN for trajectory residuals; Simulink may disagree.
  *
- * Success: χ_cmd tilts over; |Q| tracks Q_cmd then settles; h/mass still climb;
- * drag peaks near max-q̄. Qualitative shape vs Table 5 only.
+ * Loggers/displays use maxSamples ≥ duration/dt so CSV export covers the full run
+ * (default 1000 samples only kept the last ~50 s at dt=0.05).
+ *
+ * Success: χ_cmd tilts over; |Q| tracks Q_cmd; h climbs (positive MSL); mass drops
+ * toward staging-class values; q̄ peaks mid-boost. Residual vs Table 5 still qualitative.
  */
 export function buildSixDofOpenLoopChiAscent(): SliceModel {
   resetIds()
-  const { eomSubsystem, core, ports } = buildEomSubsystemBlock(720, 300)
+  // TN Table 5 first-motion mass (~586593 kg); m_ref tracks m0 for I ∝ m/m_ref
+  const m0Tn = 586593
+  const { eomSubsystem, core, ports } = buildEomSubsystemBlock(720, 300, {
+    m0_kg: m0Tn,
+    m_ref_kg: m0Tn
+  })
   const dt = 0.05
+  const duration = 180
+  // Full-run circular buffer: ceil(duration/dt)+margin (default 1000 → only last 50 s)
+  const collectorMaxSamples = Math.ceil(duration / dt) + 200 // 3800
 
-  // ── Propulsion (same schedule as 9.1/9.3) ──
+  // ── Propulsion — TN Table 5–class S-IB thrust (N) vs burn time (s) ──
+  // Digitized order-of-magnitude from TN-AP-67-158 Table 5 (not Simulink).
   const liftoff = B('source', 'liftoff', 40, 40, {
     signalType: 'step',
     stepTime: 1.0,
@@ -1643,10 +1685,14 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     showInitPort: false
   })
   const thrustMag = B('lookup_1d', 'ThrustMag_N', 340, 120, {
-    inputValues: [0, 0.5, 2, 10, 50, 100, 130, 145, 150, 160],
-    outputValues: [0, 5e5, 8.5e5, 8.9e5, 8.9e5, 8.9e5, 8.9e5, 6e5, 1e5, 0],
+    // Burn-time breakpoints (s from liftoff); values ≈ TN Table 5 TOTAL thrust (N)
+    inputValues: [0, 0.5, 2, 10, 40, 78, 100, 130, 142.88, 145.88, 147.5, 160],
+    outputValues: [
+      0, 6.0e6, 6.9e6, 7.1e6, 7.4e6, 7.86e6, 7.98e6, 7.95e6, 7.8e6, 3.83e6, 1.2e4, 0
+    ],
     extrapolation: 'clamp'
   })
+  // ṁ = T / (Isp * g0); Isp ~ 260 s → scale 1/2550 (matches ~2.7 t/s at 7 MN)
   const mdotScale = B('source', 'mdot_scale', 340, 220, {
     signalType: 'constant',
     value: 1 / 2550,
@@ -1799,33 +1845,41 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   const outQcmd = B('output_port', 'Q_cmd_out', 700, 340, { portName: 'Q_cmd_rps' })
   const outMy = B('output_port', 'My', 1600, 60, { portName: 'My_Nm' })
 
+  const coll = { maxSamples: collectorMaxSamples }
   const dispChi = B('signal_display', 'disp_chi', 1760, 40, {
-    title: 'χ cmd (deg)'
+    title: 'χ cmd (deg)',
+    ...coll
   })
   const dispQ = B('signal_display', 'disp_Q', 1760, 120, {
-    title: 'Pitch rate Q (rad/s)'
+    title: 'Pitch rate Q (rad/s)',
+    ...coll
   })
   const dispQcmd = B('signal_display', 'disp_Qcmd', 1760, 200, {
-    title: 'Q_cmd (rad/s)'
+    title: 'Q_cmd (rad/s)',
+    ...coll
   })
   const dispH = B('signal_display', 'disp_altitude', 1760, 280, {
-    title: 'Altitude MSL (m)'
+    title: 'Altitude MSL (m)',
+    ...coll
   })
   const dispM = B('signal_display', 'disp_mass', 1760, 360, {
-    title: 'Mass (kg)'
+    title: 'Mass (kg)',
+    ...coll
   })
   const dispQbar = B('signal_display', 'disp_qbar', 1760, 440, {
-    title: 'Dynamic pressure q̄ (Pa)'
+    title: 'Dynamic pressure q̄ (Pa)',
+    ...coll
   })
   const dispMy = B('signal_display', 'disp_My', 1760, 520, {
-    title: 'Pitch moment My (N·m)'
+    title: 'Pitch moment My (N·m)',
+    ...coll
   })
 
-  const logH = B('signal_logger', 'log_altitude', 1920, 120, {})
-  const logM = B('signal_logger', 'log_mass', 1920, 200, {})
-  const logQbar = B('signal_logger', 'log_qbar', 1920, 280, {})
-  const logChi = B('signal_logger', 'log_chi', 1920, 360, {})
-  const logQ = B('signal_logger', 'log_Q', 1920, 440, {})
+  const logH = B('signal_logger', 'log_altitude', 1920, 120, { ...coll })
+  const logM = B('signal_logger', 'log_mass', 1920, 200, { ...coll })
+  const logQbar = B('signal_logger', 'log_qbar', 1920, 280, { ...coll })
+  const logChi = B('signal_logger', 'log_chi', 1920, 360, { ...coll })
+  const logQ = B('signal_logger', 'log_Q', 1920, 440, { ...coll })
 
   const parentBlocks = [
     liftoff,
@@ -1994,7 +2048,7 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   return {
     name: 'saturn-9.4-open-loop-chi-6dof-ascent',
     description:
-      'Open-loop χ time-tilt on 6-DoF plant with aero: χ(t)→Q_cmd→pitch-rate My + F_aero. Compare h/mass to TN-AP-67-158 (not Simulink).',
+      'Open-loop χ time-tilt on 6-DoF plant with aero: TN-class S-IB thrust (~7 MN), m0≈586593 kg, full-run logger buffers, χ(t)→Q_cmd→My. Prefer TN residuals over Simulink.',
     sheets: [
       {
         id: 'main',
@@ -2033,11 +2087,18 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
         defaultValue: '260',
         signalType: 'double',
         value: 260
+      },
+      {
+        name: 'm0_kg',
+        dataType: 'double',
+        defaultValue: String(m0Tn),
+        signalType: 'double',
+        value: m0Tn
       }
     ],
     globalSettings: {
       simulationTimeStep: dt,
-      simulationDuration: 180,
+      simulationDuration: duration,
       integrationAlgorithm: 'rk4'
     }
   }

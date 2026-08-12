@@ -204,7 +204,27 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(m.sheets[0].blocks.some(b => b.name === 'F_aero')).toBe(true)
     expect(m.sheets[0].blocks.some(b => b.name === 'M_b_cmd')).toBe(true)
 
+    // P0: TN-class thrust (~7 MN), not demo 0.9 MN table
+    const thrust = m.sheets[0].blocks.find(b => b.name === 'ThrustMag_N')!
+    const thrustPeak = Math.max(...(thrust.parameters?.outputValues as number[]))
+    expect(thrustPeak).toBeGreaterThan(5e6)
+
+    // P0: full-run logger buffers (duration/dt ≈ 3600 → maxSamples ≥ 3600)
+    const loggers = m.sheets[0].blocks.filter(b => b.type === 'signal_logger')
+    expect(loggers.length).toBeGreaterThanOrEqual(3)
+    for (const log of loggers) {
+      expect(log.parameters?.maxSamples).toBeGreaterThanOrEqual(3600)
+    }
+
+    // EOM mass IC aligned with TN first-motion mass
     const eom = m.sheets[0].blocks.find(b => b.name === 'EOM_6DoF_VarMass')!
+    const eomBlocks = eom.parameters?.sheets?.[0]?.blocks as Array<{
+      name: string
+      parameters?: { value?: number }
+    }>
+    const m0 = eomBlocks.find(b => b.name === 'm0')
+    expect(m0?.parameters?.value).toBe(586593)
+
     const Fb = m.sheets[0].blocks.find(b => b.name === 'F_b_cmd')!
     const Mb = m.sheets[0].blocks.find(b => b.name === 'M_b_cmd')!
     expect(
@@ -232,6 +252,8 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     const result = gen.generate(m.sheets as any, m.parameters || [])
     expect(result.source).not.toMatch(/Error generating code for/)
     expect(result.source).toContain('_step')
+    // Logger buffer size embedded in init
+    expect(result.source).toMatch(/max_samples\s*=\s*38\d{2}/)
     // Parameter macro must not clobber Kq_gain signal
     expect(result.header).not.toMatch(/#define\s+Kq_gain\b/)
   })

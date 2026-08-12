@@ -195,11 +195,12 @@ Fixture: `docs/sample-models/saturn/saturn-9.3-open-loop-6dof-ascent-aero.json`
 
 | Piece | Role |
 |-------|------|
-| 9.3 plant | Thrust + mdot + \(F_{\mathrm{aero}}\) into EOM |
+| TN-class propulsion | Axial thrust ~**7 MN** (Table 5 order), \(\dot m \approx T/2550\), \(m_0\approx 586593\,\mathrm{kg}\) |
+| Aero | \(F_{\mathrm{aero}} = -\bar q\,C_D A\,\hat{\mathbf{v}}_b\) |
 | χ LUT + rate limiter | Open-loop pitch program (deg), ≲1 °/s slew (TN criterion) |
 | \(Q_{\mathrm{cmd}}\approx\dot\chi\) | Discrete derivative via unit_delay / \(dt\) |
 | Rate loop | \(Q_{\mathrm{cmd}}-Q\) → TF + gain + limit → \(M_y\) |
-| \(M_b=[0,M_y,0]\) | Body pitch moment into EOM |
+| Collectors | `maxSamples ≥ duration/dt` so CSV covers **full** run (not last 50 s only) |
 
 χ table is a **simplified** time-tilt (90° → ~28° by staging), not full TN Table 2B polynomials.
 
@@ -215,7 +216,9 @@ Fixture: `docs/sample-models/saturn/saturn-9.3-open-loop-6dof-ascent-aero.json`
 
 - **χ_cmd** holds near 90°, then tilts down through boost  
 - **Q** tracks **Q_cmd** (negative during tilt); **My** commands pitch  
-- **Altitude / mass / q̄** still show boost shape (compare to Table 5 carefully)  
+- **Altitude positive and climbing** during boost (not negative MSL)  
+- **Mass** drops by hundreds of tonnes toward staging-class values  
+- **CSV export** spans from ~liftoff through end of run (thousands of rows)  
 
 **Do not fix to Simulink** if it disagrees with TN-AP-67-158.
 
