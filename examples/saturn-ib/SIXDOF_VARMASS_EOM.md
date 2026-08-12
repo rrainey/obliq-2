@@ -251,6 +251,26 @@ Those need an explicit geospatial/frame decision before wiring.
 Fixture: `docs/sample-models/saturn/saturn-9.5-open-loop-chi-table2b-ascent.json`  
 Reference CSV: `docs/sample-models/saturn/as205-reference/as205_table2b_chi.csv`
 
+## 9.6 Table 2B elev + body-pitch attitude PD
+
+`buildSixDofOpenLoopChiAttitudePd()` — same TN plant as 9.5; control upgrades from rate-only to:
+
+\[
+\hat\theta = \int Q\,\mathrm{d}t,\quad \hat\theta(0)=\pi/2,\quad
+M_y = K_p(\mathrm{elev_{cmd}}-\hat\theta) - K_d Q
+\]
+
+| Piece | Role |
+|-------|------|
+| elev_cmd | Table 2B via elev=90+χ_c (rate-limited) |
+| θ̂ | Integrate body pitch rate Q (not platform Euler) |
+| PD | Attitude error + rate damping → My |
+
+**Intent:** mass already tracks TN; late \(\Delta h\) may improve if elev follows Table 2B more tightly.  
+**Not** a substitute for LVDC/platform attitude — ask before adding frame transforms.
+
+Fixture: `docs/sample-models/saturn/saturn-9.6-chi-table2b-attitude-pd.json`
+
 ## Validation baseline
 
 Trajectory comparison target: **TN-AP-67-158 (AS-205 revised launch reference)**.  

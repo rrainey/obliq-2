@@ -30,6 +30,7 @@ npm test -- --testPathPattern=saturn-ib-slices
 | **9.3** | **open-loop-6dof-ascent-aero** | **Sprint: 9.1 + simple aero drag F_aero=−q̄·CdA·v̂ into EOM** |
 | **9.4** | **open-loop-chi-6dof-ascent** | **Sprint: simplified χ time-tilt → Q_cmd → My on TN-class plant** |
 | **9.5** | **open-loop-chi-table2b-ascent** | **Sprint: TN Table 2B χ_c (elev=90+χ_c) on 9.4 plant** |
+| **9.6** | **chi-table2b-attitude-pd** | **Sprint: Table 2B elev + body-pitch PD (θ̂=∫Q); mass-LUT plant** |
 
 ## Parameters
 
@@ -56,8 +57,8 @@ npm test -- --testPathPattern=sixdof-varmass-eom
 
 - Full aero tables (CN, Cm, α-dependent moments) — 9.3/9.4 use constant-CdA drag only
 - Full inertia tensor (products of inertia) and mass-property LUTs
-- Closed-loop attitude (χ error vs quaternion/platform) — 9.5 is still rate-only d(elev)/dt
-- Full Apollo geospatial / IGM platform frames (Table 2B χ_c mapped only as elev=90+χ_c)
+- Platform / IGM / quaternion-Euler attitude (9.6 is body-pitch only: θ̂=∫Q)
+- Full Apollo geospatial frames
 - Full IGM χ steering
 - Multi-engine H-1 cluster + APS
 - Quantitative TN pass/fail windows (reference CSV digitized; residuals still qualitative)

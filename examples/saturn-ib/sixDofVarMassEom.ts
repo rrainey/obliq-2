@@ -550,6 +550,8 @@ export interface EomSubsystemOptions {
   m0_kg?: number
   /** Reference mass for I ∝ m/m_ref. Defaults to m0_kg when set. */
   m_ref_kg?: number
+  /** Body rate IC [P,Q,R] (rad/s). Default core has small Q≈0.01. */
+  omega0?: number[]
 }
 
 /** EOM as flattenable subsystem (shared by burn demos). */
@@ -584,6 +586,7 @@ function buildEomSubsystemBlock(
 
   const m0 = options.m0_kg
   const mRef = options.m_ref_kg ?? options.m0_kg
+  const omega0 = options.omega0
 
   const subBlocks = coreSheet.blocks.map(b => {
     if (renamePort[b.name]) {
@@ -605,6 +608,12 @@ function buildEomSubsystemBlock(
     }
     if (mRef !== undefined && b.name === 'm_ref') {
       return { ...b, parameters: { ...b.parameters, value: mRef } }
+    }
+    if (omega0 !== undefined && b.name === 'omega0') {
+      return {
+        ...b,
+        parameters: { ...b.parameters, value: omega0, dataType: 'double[3]' }
+      }
     }
     return { ...b }
   })
@@ -2145,6 +2154,171 @@ export function buildSixDofOpenLoopChiAscentTable2B(): SliceModel {
   m.description =
     '9.4 plant + TN-AP-67-158 Table 2B χ_c pitch program (elev=90+χ_c) → Q_cmd → My. Rate loop only; TN primary for residuals.'
   if (sheet.name) sheet.name = 'OpenLoopChiTable2B'
+  return m
+}
+
+/**
+ * Phase 9.6 — Table 2B elev program with **body-pitch attitude PD**
+ *
+ * Latest residuals: mass tracks TN well (~3 t RMS); late altitude still short.
+ * Rate-only control (9.5) may lag the elev program. 9.6 closes a simple loop in
+ * **body pitch only** (no platform / IGM frames):
+ *
+ *   θ̂ = ∫ Q dt ,  θ̂(0) = π/2  (elev rad, 90° vertical)
+ *   e = elev_cmd_rad − θ̂
+ *   My = Kp·e − Kd·Q   (limited)
+ *
+ * elev_cmd still from Table 2B via elev = 90 + χ_c. Prefer TN for residuals.
+ */
+export function buildSixDofOpenLoopChiAttitudePd(): SliceModel {
+  // Re-build Table 2B plant then rewire moment command to attitude PD.
+  // omega0 = 0 so θ̂ starts clean at vertical.
+  const m = buildSixDofOpenLoopChiAscentTable2B()
+  // Patch EOM omega IC inside subsystem
+  const eom = m.sheets[0].blocks.find(b => b.name === 'EOM_6DoF_VarMass')!
+  const eomBlocks = eom.parameters?.sheets?.[0]?.blocks as SliceBlock[] | undefined
+  if (eomBlocks) {
+    const w0 = eomBlocks.find(b => b.name === 'omega0')
+    if (w0) {
+      w0.parameters = {
+        ...w0.parameters,
+        value: [0, 0, 0],
+        dataType: 'double[3]'
+      }
+    }
+  }
+
+  const sheet = m.sheets[0]
+  const demuxW = sheet.blocks.find(b => b.name === 'demux_omega')!
+  const chiToRad = sheet.blocks.find(b => b.name === 'chi_to_rad')!
+  const myLim = sheet.blocks.find(b => b.name === 'My_limit')!
+  const myRaw = sheet.blocks.find(b => b.name === 'My_raw')!
+  const zero = sheet.blocks.find(b => b.name === 'zero')!
+
+  // Drop rate-only gain path into My_limit (keep Q_cmd displays intact)
+  sheet.connections = sheet.connections.filter(c => {
+    if (c.targetBlockId === myRaw.id) return false
+    if (c.sourceBlockId === myRaw.id && c.targetBlockId === myLim.id) return false
+    return true
+  })
+
+  // Continue ID sequence from 9.4/9.5 build (no resetIds)
+  const theta0 = B('source', 'theta0_rad', 900, 520, {
+    signalType: 'constant',
+    value: Math.PI / 2,
+    dataType: 'double'
+  })
+  const theta = B('integrator', 'theta_elev_rad', 1040, 480, {
+    showInitPort: true,
+    initialValue: 0,
+    showEnableInput: false,
+    showResetInput: false
+  })
+  const attErr = B('sum', 'att_err_rad', 1180, 420, {
+    signs: '+-',
+    numInputs: 2
+  })
+  const Kp = B('source', 'Kp_att', 1180, 340, {
+    signalType: 'constant',
+    value: 2.5e7,
+    dataType: 'double'
+  })
+  const MyAtt = B('matrix_multiply', 'My_att', 1320, 400, {})
+  const Kd = B('source', 'Kd_rate', 1180, 520, {
+    signalType: 'constant',
+    value: 8e6,
+    dataType: 'double'
+  })
+  const negQ = B('uminus', 'neg_Q', 1040, 560, {})
+  const MyDamp = B('matrix_multiply', 'My_damp', 1320, 520, {})
+  const MyPd = B('sum', 'My_pd', 1460, 460, {
+    signs: '++',
+    numInputs: 2
+  })
+  // Raise moment limit slightly for attitude catch-up
+  myLim.parameters = {
+    ...myLim.parameters,
+    lowerLimit: -5e7,
+    upperLimit: 5e7
+  }
+
+  const coll = {
+    maxSamples:
+      (sheet.blocks.find(b => b.name === 'log_altitude')?.parameters
+        ?.maxSamples as number) || 3800
+  }
+  const dispTheta = B('signal_display', 'disp_theta', 1760, 600, {
+    title: 'θ̂ elev (rad)',
+    ...coll
+  })
+  const logTheta = B('signal_logger', 'log_theta', 1920, 520, { ...coll })
+  const outTheta = B('output_port', 'theta_out', 1600, 520, {
+    portName: 'theta_elev_rad'
+  })
+
+  sheet.blocks.push(
+    theta0,
+    theta,
+    attErr,
+    Kp,
+    MyAtt,
+    Kd,
+    negQ,
+    MyDamp,
+    MyPd,
+    dispTheta,
+    logTheta,
+    outTheta
+  )
+
+  sheet.connections.push(
+    // θ̂ = ∫ Q , IC = π/2
+    W(demuxW, theta, 1, 0),
+    W(theta0, theta, 0, 1),
+    // e = elev_cmd_rad − θ̂
+    W(chiToRad, attErr, 0, 0),
+    W(theta, attErr, 0, 1),
+    // My_att = Kp * e
+    W(attErr, MyAtt, 0, 0),
+    W(Kp, MyAtt, 0, 1),
+    // My_damp = Kd * (−Q)
+    W(demuxW, negQ, 1, 0),
+    W(negQ, MyDamp, 0, 0),
+    W(Kd, MyDamp, 0, 1),
+    // My = My_att + My_damp → limit
+    W(MyAtt, MyPd, 0, 0),
+    W(MyDamp, MyPd, 0, 1),
+    W(MyPd, myLim),
+    // viz
+    W(theta, dispTheta),
+    W(theta, logTheta),
+    W(theta, outTheta)
+  )
+
+  // Mb still driven by MyLim → already wired
+  void zero
+
+  m.name = 'saturn-9.6-chi-table2b-attitude-pd'
+  m.description =
+    '9.5 plant + body-pitch attitude PD: θ̂=∫Q, My=Kp(elev_cmd−θ̂)−Kd·Q. Table 2B elev program; no platform frames. TN residuals primary.'
+  sheet.name = 'ChiAttitudePd'
+  m.parameters = [
+    ...(m.parameters || []),
+    {
+      name: 'Kp_att',
+      dataType: 'double',
+      defaultValue: '2.5e7',
+      signalType: 'double',
+      value: 2.5e7
+    },
+    {
+      name: 'Kd_rate',
+      dataType: 'double',
+      defaultValue: '8e6',
+      signalType: 'double',
+      value: 8e6
+    }
+  ]
   return m
 }
 

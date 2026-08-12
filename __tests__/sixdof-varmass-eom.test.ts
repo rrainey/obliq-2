@@ -12,7 +12,8 @@ import {
   buildSixDofClosedLoopPitchRateDamp,
   buildSixDofOpenLoopAscentWithAero,
   buildSixDofOpenLoopChiAscent,
-  buildSixDofOpenLoopChiAscentTable2B
+  buildSixDofOpenLoopChiAscentTable2B,
+  buildSixDofOpenLoopChiAttitudePd
 } from '../examples/saturn-ib/sixDofVarMassEom'
 import {
   TN_TABLE_2B_CHI_C,
@@ -299,6 +300,48 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(result.source).toContain('_step')
   })
 
+  test('9.6 Table 2B + body-pitch attitude PD', () => {
+    const m = buildSixDofOpenLoopChiAttitudePd()
+    expect(m.name).toBe('saturn-9.6-chi-table2b-attitude-pd')
+    const sheet = m.sheets[0]
+    expect(sheet.blocks.some(b => b.name === 'theta_elev_rad')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'My_pd')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'Kp_att')).toBe(true)
+
+    const myLim = sheet.blocks.find(b => b.name === 'My_limit')!
+    const myPd = sheet.blocks.find(b => b.name === 'My_pd')!
+    const myRaw = sheet.blocks.find(b => b.name === 'My_raw')!
+    // Attitude path feeds the limit; rate-only My_raw does not
+    expect(
+      sheet.connections.some(
+        c => c.sourceBlockId === myPd.id && c.targetBlockId === myLim.id
+      )
+    ).toBe(true)
+    expect(
+      sheet.connections.some(
+        c => c.sourceBlockId === myRaw.id && c.targetBlockId === myLim.id
+      )
+    ).toBe(false)
+
+    // EOM omega IC zeroed
+    const eom = sheet.blocks.find(b => b.name === 'EOM_6DoF_VarMass')!
+    const eomBlocks = eom.parameters?.sheets?.[0]?.blocks as Array<{
+      name: string
+      parameters?: { value?: number[] }
+    }>
+    expect(eomBlocks.find(b => b.name === 'omega0')?.parameters?.value).toEqual([
+      0, 0, 0
+    ])
+
+    const gen = new CodeGenerator({
+      modelName: 'sixdof_chi_att_pd',
+      integrationAlgorithm: 'rk4'
+    })
+    const result = gen.generate(m.sheets as any, m.parameters || [])
+    expect(result.source).not.toMatch(/Error generating code for/)
+    expect(result.source).toContain('_step')
+  })
+
   test('TN Table 2B chi table continuity', () => {
     expect(TN_TABLE_2B_CHI_C.length).toBeGreaterThan(40)
     expect(TN_TABLE_2B_CHI_C[0].chi_c_deg).toBe(0)
@@ -321,7 +364,8 @@ describe('6-DOF variable-mass quaternion EOM', () => {
       buildSixDofClosedLoopPitchRateDamp(),
       buildSixDofOpenLoopAscentWithAero(),
       buildSixDofOpenLoopChiAscent(),
-      buildSixDofOpenLoopChiAscentTable2B()
+      buildSixDofOpenLoopChiAscentTable2B(),
+      buildSixDofOpenLoopChiAttitudePd()
     ]) {
       const data = sliceToModelData(m as any)
       const fp = path.join(dir, `${m.name}.json`)

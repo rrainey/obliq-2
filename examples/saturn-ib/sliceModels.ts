@@ -748,7 +748,8 @@ export function allSaturnSlices(): SliceModel[] {
     buildSixDofClosedLoopPitchRateDamp,
     buildSixDofOpenLoopAscentWithAero,
     buildSixDofOpenLoopChiAscent,
-    buildSixDofOpenLoopChiAscentTable2B
+    buildSixDofOpenLoopChiAscentTable2B,
+    buildSixDofOpenLoopChiAttitudePd
   } = require('./sixDofVarMassEom') as typeof import('./sixDofVarMassEom')
   return [
     buildGravityBallistics(),
@@ -760,6 +761,7 @@ export function allSaturnSlices(): SliceModel[] {
     buildSixDofOpenLoopAscentWithAero(),
     buildSixDofOpenLoopChiAscent(),
     buildSixDofOpenLoopChiAscentTable2B(),
+    buildSixDofOpenLoopChiAttitudePd(),
     buildEngineThrustTimer(),
     buildAtmosphereDynamicPressure(),
     buildStageEnableFreeze(),

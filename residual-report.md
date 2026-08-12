@@ -1,25 +1,28 @@
-# Residual notes
+# Residual notes (TN-AP-67-158 primary)
 
-## Last user 9.5 export (pre mass-LUT)
+## 9.5 after mass-LUT + CdA=12 (user export)
+
+| Field | N | max\|Δ\| | RMS |
+|-------|---|----------|-----|
+| h_m | 35 | 2.70e4 | 1.15e4 |
+| mass_kg | 35 | 5.5e3 | 2.87e3 |
+
+### Phase windows
 
 | Window | Δh RMS | Δm RMS |
 |--------|--------|--------|
-| 0–50 s | ~200 m | ~2 t |
-| 50–100 s | ~1.3 km | ~10 t |
-| 100–150 s | ~17 km | ~28 t |
+| 0–50 s | ~103 m | ~2.8 t |
+| 50–100 s | ~1.1 km | ~2.9 t |
+| 100–150 s | ~18 km | ~2.9 t |
 
-Mass over-burned vs TN by ~34 t at staging.
+**Mass is fixed** (burned ~403 t ≈ TN). Late altitude still short (~34 km vs TN ~61 km at staging).
 
-## Plant update (re-import 9.4/9.5)
+## 9.6 (next to try)
 
-1. **mdot(t)** from Table 5 mass finite differences (not T/Isp)
-2. **CdA = 12 m²** (was 17) for less late-ascent drag
-3. Thrust still Table 5 total LUT for \(F_b\)
+Body-pitch attitude PD so elev tracks Table 2B more tightly than rate-only 9.5:
 
-```bash
-npm run as205:compare -- \
-  --model ~/Downloads/saturn-9.5-open-loop-chi-table2b-ascent_data.csv \
-  --offset 1 --fields h_m,mass_kg --out residual-report.md
-```
+- Import `saturn-9.6-chi-table2b-attitude-pd.json`
+- Watch `disp_theta` / `log_theta` follow `disp_chi` (elev cmd)
+- Residual as usual on h_m, mass_kg
 
-Expect mass residual near zero if burn timer aligns; late Δh may still need pitch/force direction work (no full frames yet).
+No platform frames — θ̂ = ∫Q only.
