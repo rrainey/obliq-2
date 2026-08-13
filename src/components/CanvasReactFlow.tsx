@@ -39,6 +39,8 @@ import { useModelStore } from '@/lib/modelStore'
 import { validateWireConnection, TypeCompatibilityError } from '@/lib/typeCompatibilityValidator'
 import BlockContextMenu from './BlockContextMenu'
 import WireContextMenu from './WireContextMenu'
+import PaneContextMenu from './PaneContextMenu'
+import { computeAutoLayout } from '@/lib/layout/autoLayout'
 
 interface CanvasReactFlowProps {
   blocks?: BlockData[]
@@ -81,6 +83,14 @@ type ContextMenu = {
 // Wire context menu state type
 type WireContextMenu = {
   wireId: string
+  top?: number
+  left?: number
+  right?: number
+  bottom?: number
+}
+
+// Pane (empty canvas) context menu state type
+type PaneContextMenuState = {
   top?: number
   left?: number
   right?: number
@@ -132,11 +142,18 @@ function CanvasReactFlowInner({
   // Get all sheets from model store for multi-sheet type propagation
   const modelSheets = useModelStore(state => state.sheets)
 
+  // Resize mode state (which block, if any, is showing corner resize handles)
+  const resizingBlockId = useModelStore(state => state.resizingBlockId)
+  const setResizingBlockId = useModelStore(state => state.setResizingBlockId)
+
   // Context menu state - following ReactFlow pattern
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
 
   // Wire context menu state
   const [wireContextMenu, setWireContextMenu] = useState<WireContextMenu | null>(null)
+
+  // Pane context menu state (empty canvas right-click)
+  const [paneContextMenu, setPaneContextMenu] = useState<PaneContextMenuState | null>(null)
 
   // Highlighted net state - tracks which source port's connections are highlighted
   const [highlightedNet, setHighlightedNet] = useState<HighlightedNet>(null)
@@ -510,11 +527,12 @@ const handleEdgesChange = useCallback((changes: any[]) => {
   const onNodeContextMenu = useCallback(
     (event: React.MouseEvent, node: Node) => {
       event.preventDefault()
-      
+
       if (!reactFlowWrapper.current) return
-      
+
       const pane = reactFlowWrapper.current.getBoundingClientRect()
-      
+
+      setPaneContextMenu(null)
       setContextMenu({
         nodeId: node.id,
         top: event.clientY - pane.top,
@@ -522,6 +540,22 @@ const handleEdgesChange = useCallback((changes: any[]) => {
       })
     },
     [setContextMenu]
+  )
+
+  // Handle pane (empty canvas) context menu
+  const onPaneContextMenu = useCallback(
+    (event: React.MouseEvent | MouseEvent) => {
+      event.preventDefault()
+      if (!reactFlowWrapper.current) return
+      const pane = reactFlowWrapper.current.getBoundingClientRect()
+      setContextMenu(null)
+      setWireContextMenu(null)
+      setPaneContextMenu({
+        top: event.clientY - pane.top,
+        left: event.clientX - pane.left,
+      })
+    },
+    []
   )
 
   // Handle edge/wire context menu
@@ -535,6 +569,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
 
       // Close any open block context menu
       setContextMenu(null)
+      setPaneContextMenu(null)
 
       setWireContextMenu({
         wireId: edge.id,
@@ -572,10 +607,23 @@ const handleEdgesChange = useCallback((changes: any[]) => {
     }
   }, [onWireRoutingChange])
 
+  // Auto-layout: reorganize blocks on the current sheet.
+  const handleReorganize = useCallback(() => {
+    const moves = computeAutoLayout(blocks, wires)
+    if (moves.length === 0) return
+    if (onBlocksMove) {
+      onBlocksMove(moves)
+    } else if (onBlockMove) {
+      for (const m of moves) onBlockMove(m.id, m.position)
+    }
+  }, [blocks, wires, onBlocksMove, onBlockMove])
+
   // Close context menu when clicking on the pane - Feature 4: Clear all selection
   const onPaneClick = useCallback(() => {
     setContextMenu(null)
     setWireContextMenu(null)
+    setPaneContextMenu(null)
+    setResizingBlockId(null)
     // Feature 4: Use clearSelection if available, otherwise fall back to individual clears
     if (onClearSelection) {
       onClearSelection()
@@ -589,7 +637,19 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         onWireSelect(null)
       }
     }
-  }, [onBlockSelect, onBlocksSelect, onWireSelect, onClearSelection])
+  }, [onBlockSelect, onBlocksSelect, onWireSelect, onClearSelection, setResizingBlockId])
+
+  // Exit resize mode on Escape
+  useEffect(() => {
+    if (!resizingBlockId) return
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setResizingBlockId(null)
+      }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [resizingBlockId, setResizingBlockId])
 
   // Handle node drag
   const onNodeDrag: NodeDragHandler = useCallback((event, node) => {
@@ -783,6 +843,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
         onEdgeContextMenu={onEdgeContextMenu}
+        onPaneContextMenu={onPaneContextMenu}
         onDragOver={onDragOver}
         onDrop={onDropHandler}
         onPaneClick={onPaneClick}
@@ -847,7 +908,9 @@ const handleEdgesChange = useCallback((changes: any[]) => {
 
         {/* Instructions Panel */}
         <Panel position="bottom-left" className="bg-blue-500 dark:bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
-          Drag blocks from library • Alt+Drag to select • Shift+Click to add • Ctrl+A select all • Delete removes selection
+          {resizingBlockId
+            ? 'Resize mode: drag any corner handle • Esc or click canvas to exit'
+            : 'Drag blocks from library • Alt+Drag to select • Shift+Click to add • Ctrl+A select all • Delete removes selection'}
         </Panel>
       </ReactFlow>
 
@@ -879,6 +942,10 @@ const handleEdgesChange = useCallback((changes: any[]) => {
                 error: null
               })
             }
+            setContextMenu(null)
+          }}
+          onResizeClick={(blockId) => {
+            setResizingBlockId(blockId)
             setContextMenu(null)
           }}
           onSheetNavigate={(sheetId) => {
@@ -923,6 +990,21 @@ const handleEdgesChange = useCallback((changes: any[]) => {
               onWireDelete(wireId)
             }
             setWireContextMenu(null)
+          }}
+        />
+      )}
+
+      {/* Pane (empty canvas) context menu */}
+      {paneContextMenu && (
+        <PaneContextMenu
+          top={paneContextMenu.top}
+          left={paneContextMenu.left}
+          right={paneContextMenu.right}
+          bottom={paneContextMenu.bottom}
+          onClose={() => setPaneContextMenu(null)}
+          onReorganize={() => {
+            handleReorganize()
+            setPaneContextMenu(null)
           }}
         />
       )}

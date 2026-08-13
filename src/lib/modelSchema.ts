@@ -52,7 +52,10 @@ const SubsystemParametersSchema = z.object({
   showEnableInput: z.boolean().optional().default(false),
   codeGenStrategy: CodeGenStrategySchema.optional().default('flatten'),
   // Subsystem-level parameters (only used for segregated subsystems)
-  parameters: z.array(ModelParameterSchema).optional().default([])
+  parameters: z.array(ModelParameterSchema).optional().default([]),
+  // Optional visual size overrides for the block on the diagram
+  width: z.number().positive('Subsystem width must be positive').optional(),
+  height: z.number().positive('Subsystem height must be positive').optional()
 })
 
 // Block parameters schema with type validation for specific block types

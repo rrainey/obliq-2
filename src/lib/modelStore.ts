@@ -47,6 +47,7 @@ export interface ModelState {
   selectedWireId: string | null
   selectedWireIds: string[]       // Feature 4: Connections between selected blocks
   configBlock: BlockData | null
+  resizingBlockId: string | null  // Block currently in interactive resize mode
 
   // Feature 5: Clipboard state
   clipboardData: ClipboardData | null
@@ -114,6 +115,7 @@ export interface ModelActions {
   setSelectedBlockId: (blockId: string | null) => void
   setSelectedWireId: (wireId: string | null) => void
   setConfigBlock: (block: BlockData | null) => void
+  setResizingBlockId: (blockId: string | null) => void
 
   // Feature 4: Multi-selection actions
   setSelectedBlocks: (blockIds: string[]) => void
@@ -253,6 +255,7 @@ export const useModelStore = create<ModelStore>()(
     selectedWireId: null,
     selectedWireIds: [],       // Feature 4: Connections between selected blocks
     configBlock: null,
+    resizingBlockId: null,
     clipboardData: null,       // Feature 5: Clipboard state
     simulationResults: null,
     isSimulating: false,
@@ -943,6 +946,7 @@ export const useModelStore = create<ModelStore>()(
     }),
     setSelectedWireId: (selectedWireId) => set({ selectedWireId }),
     setConfigBlock: (configBlock) => set({ configBlock }),
+    setResizingBlockId: (resizingBlockId) => set({ resizingBlockId }),
 
     // Feature 4: Multi-selection actions
     setSelectedBlocks: (blockIds: string[]) => {

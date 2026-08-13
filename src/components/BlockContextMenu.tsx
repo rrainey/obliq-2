@@ -5,6 +5,7 @@
 import { useEffect, useRef } from 'react'
 import { BlockData } from './BlockNode'
 import { Sheet } from '@/lib/modelStore'
+import { isResizable } from '@/lib/blocks/resizableBlocks'
 
 interface BlockContextMenuProps {
   nodeId: string
@@ -17,6 +18,7 @@ interface BlockContextMenuProps {
   onClose: () => void
   onPropertiesClick: (blockId: string) => void
   onRenameClick?: (blockId: string) => void
+  onResizeClick?: (blockId: string) => void
   onSheetNavigate: (sheetId: string) => void
 }
 
@@ -31,6 +33,7 @@ export default function BlockContextMenu({
   onClose,
   onPropertiesClick,
   onRenameClick,
+  onResizeClick,
   onSheetNavigate,
   ...props
 }: BlockContextMenuProps) {
@@ -89,6 +92,16 @@ export default function BlockContextMenu({
           onClick={() => onRenameClick(block.id)}
         >
           Rename...
+        </button>
+      )}
+
+      {/* Resize menu item — only for block types that support visual resize */}
+      {onResizeClick && isResizable(block.type) && (
+        <button
+          className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+          onClick={() => onResizeClick(block.id)}
+        >
+          Resize...
         </button>
       )}
 

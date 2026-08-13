@@ -2,13 +2,15 @@
 
 'use client'
 
-import { memo, CSSProperties, useEffect, useState } from 'react'
-import { Handle, Position, NodeProps } from 'reactflow'
+import { memo, CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
+import { Handle, Position, NodeProps, useStore } from 'reactflow'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
 import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, IconCube, IconClockCog, IconX } from '@tabler/icons-react'
 import { useComputedColorScheme } from '@mantine/core'
 import CommentNode from './CommentNode'
+import { useModelStore } from '@/lib/modelStore'
+import { isResizable, RESIZE_MIN_WIDTH, RESIZE_SNAP } from '@/lib/blocks/resizableBlocks'
 
 export interface BlockData {
   id: string
@@ -854,6 +856,114 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
         : Math.max(MIN_HEIGHT, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
   const [updateTrigger, setUpdateTrigger] = useState(0);
 
+  // --- Resize mode wiring ---------------------------------------------------
+  const resizingBlockId = useModelStore(state => state.resizingBlockId)
+  const updateBlock = useModelStore(state => state.updateBlock)
+  const zoom = useStore(state => state.transform[2])
+  // Subscribe to this block's canonical position from the store so drag start
+  // reads the current x/y rather than a stale snapshot.
+  const blockPosition = useModelStore(state =>
+    state.blocks.find(b => b.id === data.id)?.position
+  )
+  const isResizing = isResizable(data.type) && resizingBlockId === data.id
+
+  // Minimums enforced during resize
+  const minResizeWidth = Math.max(RESIZE_MIN_WIDTH, 40)
+  const minResizeHeight = Math.max(
+    MIN_HEIGHT,
+    Math.max(inputCount, outputCount) * PORT_SPACING + 20
+  )
+
+  type Corner = 'nw' | 'ne' | 'sw' | 'se'
+  const dragRef = useRef<{
+    corner: Corner
+    startX: number
+    startY: number
+    startW: number
+    startH: number
+    startPosX: number
+    startPosY: number
+    zoom: number
+  } | null>(null)
+
+  const snap = (v: number) => Math.round(v / RESIZE_SNAP) * RESIZE_SNAP
+
+  const handleResizeMouseDown = useCallback(
+    (corner: Corner) => (e: React.MouseEvent) => {
+      if (e.button !== 0) return
+      e.preventDefault()
+      e.stopPropagation()
+      dragRef.current = {
+        corner,
+        startX: e.clientX,
+        startY: e.clientY,
+        startW: blockWidth,
+        startH: minHeight,
+        startPosX: blockPosition?.x ?? 0,
+        startPosY: blockPosition?.y ?? 0,
+        zoom: zoom || 1,
+      }
+
+      const onMove = (ev: MouseEvent) => {
+        const s = dragRef.current
+        if (!s) return
+        const dx = (ev.clientX - s.startX) / s.zoom
+        const dy = (ev.clientY - s.startY) / s.zoom
+
+        let newW = s.startW
+        let newH = s.startH
+        let newX = s.startPosX
+        let newY = s.startPosY
+
+        // East/west
+        if (s.corner === 'se' || s.corner === 'ne') {
+          newW = Math.max(minResizeWidth, s.startW + dx)
+        } else {
+          // west corners: shrinking moves the origin right
+          const cappedDx = Math.min(dx, s.startW - minResizeWidth)
+          newW = s.startW - cappedDx
+          newX = s.startPosX + cappedDx
+        }
+
+        // North/south
+        if (s.corner === 'se' || s.corner === 'sw') {
+          newH = Math.max(minResizeHeight, s.startH + dy)
+        } else {
+          // north corners: shrinking moves the origin down
+          const cappedDy = Math.min(dy, s.startH - minResizeHeight)
+          newH = s.startH - cappedDy
+          newY = s.startPosY + cappedDy
+        }
+
+        // Snap to grid
+        newW = Math.max(minResizeWidth, snap(newW))
+        newH = Math.max(minResizeHeight, snap(newH))
+        newX = snap(newX)
+        newY = snap(newY)
+
+        updateBlock(data.id, {
+          position: { x: newX, y: newY },
+          parameters: {
+            ...(data.parameters || {}),
+            width: newW,
+            height: newH,
+          },
+        })
+      }
+
+      const onUp = () => {
+        dragRef.current = null
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', onUp)
+      }
+
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', onUp)
+    },
+    [blockWidth, minHeight, blockPosition, zoom, updateBlock, data.id, data.parameters, minResizeWidth, minResizeHeight]
+  )
+  // --- end resize wiring ----------------------------------------------------
+
   // Get sum block signs
   const getSumSigns = () => {
     if (data.type === 'sum' && data.parameters?.signs) {
@@ -1332,6 +1442,45 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             }}
           />
         ))}
+
+        {/* Corner resize handles - only when this block is in resize mode */}
+        {isResizing && (() => {
+          const HANDLE = 10
+          const off = -HANDLE / 2
+          const common: CSSProperties = {
+            position: 'absolute',
+            width: HANDLE,
+            height: HANDLE,
+            backgroundColor: '#3b82f6',
+            border: '1.5px solid #ffffff',
+            borderRadius: 2,
+            zIndex: 20,
+          }
+          return (
+            <>
+              <div
+                className="nodrag"
+                style={{ ...common, top: off, left: off, cursor: 'nwse-resize' }}
+                onMouseDown={handleResizeMouseDown('nw')}
+              />
+              <div
+                className="nodrag"
+                style={{ ...common, top: off, right: off, cursor: 'nesw-resize' }}
+                onMouseDown={handleResizeMouseDown('ne')}
+              />
+              <div
+                className="nodrag"
+                style={{ ...common, bottom: off, left: off, cursor: 'nesw-resize' }}
+                onMouseDown={handleResizeMouseDown('sw')}
+              />
+              <div
+                className="nodrag"
+                style={{ ...common, bottom: off, right: off, cursor: 'nwse-resize' }}
+                onMouseDown={handleResizeMouseDown('se')}
+              />
+            </>
+          )
+        })()}
       </>
     )
   }
