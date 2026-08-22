@@ -113,11 +113,11 @@ AS-205 constants from \`saturn-1B/AS205_presettings.m\` are included on relevant
     expect(m.sheets[0].blocks.some(b => b.type === 'lookup_1d')).toBe(true)
   })
 
-  test('8.4 atmosphere density is port 2', () => {
+  test('8.4 atmosphere density is port 3 (COESA: T,a,P,rho)', () => {
     const m = buildAtmosphereDynamicPressure()
     const densWires = m.sheets[0].connections.filter(
       c =>
-        c.sourcePortIndex === 2 &&
+        c.sourcePortIndex === 3 &&
         m.sheets[0].blocks.find(b => b.id === c.sourceBlockId)?.type === 'atmosphere'
     )
     expect(densWires.length).toBeGreaterThanOrEqual(1)

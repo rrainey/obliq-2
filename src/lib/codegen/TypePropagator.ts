@@ -116,7 +116,17 @@ export class TypePropagator {
               // downgrade matrix/vector → plain double.
               const prevDim = prev.includes('[')
               const nextDim = next.includes('[')
-              if (prevDim && !nextDim) {
+              // Guard: mux-concat feedback must not explode array sizes across passes
+              const prevSize = prev.match(/\[(\d+)\]/)
+              const nextSize = next.match(/\[(\d+)\]/)
+              if (
+                prevSize &&
+                nextSize &&
+                Number(nextSize[1]) > Number(prevSize[1]) &&
+                Number(nextSize[1]) > 64
+              ) {
+                // keep smaller stable size
+              } else if (prevDim && !nextDim) {
                 // keep dimensional
               } else {
                 this.blockOutputTypes.set(block.originalId, next)
@@ -166,8 +176,12 @@ export class TypePropagator {
 
     for (const connection of connections) {
       const sourceType = this.blockOutputTypes.get(connection.sourceBlockId)
-      if (sourceType) {
-        types[connection.targetPortIndex] = sourceType
+      if (!sourceType) continue
+      const port = connection.targetPortIndex
+      const prev = types[port]
+      // Multiple wires on one port (MDL branches / bad merges): prefer dimensional
+      if (!prev || (!prev.includes('[') && sourceType.includes('['))) {
+        types[port] = sourceType
       }
     }
 

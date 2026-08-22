@@ -6,7 +6,7 @@ import { IBlockModule, BlockModuleUtils } from './BlockModule'
 import { SignalValue } from '@/lib/modelSchema'
 
 export class IfBlockModule implements IBlockModule {
-  generateComputation(block: BlockData, inputs: string[]): string {
+  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     
     let code = `    // If block: ${block.name}\n`
@@ -20,40 +20,58 @@ export class IfBlockModule implements IBlockModule {
     const control = inputs[1]
     const input2 = inputs[2]
     
-    // Get the output type to handle vectors/matrices properly
-    const outputType = this.getOutputType(block, [])
+    // Prefer a dimensional data-path type (ports 0 or 2); control is often bool/scalar
+    const types = inputTypes || []
+    const dataType =
+      (types[0] && types[0].includes('[') && types[0]) ||
+      (types[2] && types[2].includes('[') && types[2]) ||
+      types[0] ||
+      types[2] ||
+      'double'
+    const outputType = dataType
     const typeInfo = BlockModuleUtils.parseType(outputType)
     
     code += `    // If control is true/nonzero, output = input2, else output = input1\n`
     
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-      // Matrix conditional copy
+      const matAcc = (expr: string, typ: string) => {
+        if (!expr || expr === '0.0' || /^[-+]?[0-9]/.test(expr)) return '0.0'
+        if (typ.includes('[')) return `${expr}[i][j]`
+        return `(${expr})`
+      }
+      const t0 = types[0] || ''
+      const t2 = types[2] || ''
       code += `    if (${control}) {\n`
-      code += `        // Copy input2 to output\n`
       code += `        for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `            for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
-      code += `                ${outputName}[i][j] = ${input2}[i][j];\n`
+      code += `                ${outputName}[i][j] = ${matAcc(input2, t2)};\n`
       code += `            }\n`
       code += `        }\n`
       code += `    } else {\n`
-      code += `        // Copy input1 to output\n`
       code += `        for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `            for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
-      code += `                ${outputName}[i][j] = ${input1}[i][j];\n`
+      code += `                ${outputName}[i][j] = ${matAcc(input1, t0)};\n`
       code += `            }\n`
       code += `        }\n`
       code += `    }\n`
     } else if (typeInfo.isArray && typeInfo.arraySize) {
-      // Vector conditional copy
+      // Vector conditional copy (broadcast scalar arms like Ground / 0.0)
+      const t0 = types[0] || ''
+      const t2 = types[2] || ''
+      const acc = (expr: string, typ: string) => {
+        if (!expr || expr === '0.0' || /^[-+]?[0-9]/.test(expr)) return '(0.0)'
+        if (typ.includes('[')) return `${expr}[i]`
+        return `(${expr})`
+      }
       code += `    if (${control}) {\n`
       code += `        // Copy input2 to output\n`
       code += `        for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-      code += `            ${outputName}[i] = ${input2}[i];\n`
+      code += `            ${outputName}[i] = ${acc(input2, t2)};\n`
       code += `        }\n`
       code += `    } else {\n`
       code += `        // Copy input1 to output\n`
       code += `        for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-      code += `            ${outputName}[i] = ${input1}[i];\n`
+      code += `            ${outputName}[i] = ${acc(input1, t0)};\n`
       code += `        }\n`
       code += `    }\n`
     } else {
@@ -65,11 +83,14 @@ export class IfBlockModule implements IBlockModule {
   }
 
   getOutputType(block: BlockData, inputTypes: string[]): string {
-    // Output type matches input1 and input2 types (which must be identical)
-    if (inputTypes.length > 0) {
-      return inputTypes[0] // Return type of first input
-    }
-    return 'double' // Default
+    // Prefer dimensional data path (false/true inputs); control is often scalar
+    const a = inputTypes[0]
+    const b = inputTypes[2]
+    if (a && a.includes('[')) return a
+    if (b && b.includes('[')) return b
+    if (a) return a
+    if (b) return b
+    return 'double'
   }
 
   generateStructMember(block: BlockData, outputType: string): string | null {

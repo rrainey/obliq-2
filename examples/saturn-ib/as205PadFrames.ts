@@ -25,7 +25,7 @@ export const AS205_PAD = {
   R_L_m: 6373385.0,
   /**
    * Vehicle roll at launch (Position I), deg east of true north.
-   * Not applied to q0 in v1 (B‖S); reserved for fin/IU alignment.
+   * Applied to q0/v_b0 via LIO = computeMes(pad_roll,…) (RTW LVInert Az=100).
    */
   pad_roll_L_deg: 100.0
 } as const
@@ -98,7 +98,7 @@ export function buildAs205PadStateS(
   const notes: string[] = [
     'Integration frame: S-like plumbline (space-fixed at GRR); TN Space frame ≈ S (working assumption)',
     'ECI (E) is Simulink primary inertial; ECI→S fixed after T_GRR — not applied here',
-    'B‖S at t=0 (identity quaternion); pad_roll not applied to q0 in v1',
+    'Pad body = Position I (Az=pad_roll); S uses A_z — see as205EciPlant LIO',
     'Prefer TN residual of h, mass, q̄ until full ECI→S / SM path exists'
   ]
 

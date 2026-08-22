@@ -69,8 +69,9 @@ export interface SoftThreshold {
 export const SIB_SOFT_THRESHOLDS: SoftThreshold[] = [
   { field: 'h_m', maxAbsSoft: 5e4, rmsSoft: 2e4 },
   { field: 'mass_kg', maxAbsSoft: 8e4, rmsSoft: 4e4 },
-  { field: 'qbar_Pa', maxAbsSoft: 2e4, rmsSoft: 1e4 }
-  // v_mps omitted: TN is space-fixed; 9.x body speed not comparable without frame fix
+  { field: 'qbar_Pa', maxAbsSoft: 2e4, rmsSoft: 1e4 },
+  // Prefer log_V_S (MES space-fixed |V|) over body speed when mapped
+  { field: 'v_mps', maxAbsSoft: 5e2, rmsSoft: 2e2 }
 ]
 
 /** Standard S-IB residual time windows (liftoff frame). */
@@ -422,7 +423,11 @@ export function mapLoggerRowToSample(
   row: Record<string, number>,
   timeKey = 'time'
 ): TrajectorySample | null {
-  const t = row[timeKey] ?? row['t'] ?? row['t_s']
+  const t =
+    row[timeKey] ??
+    row['t'] ??
+    row['t_s'] ??
+    row['elapsed_sim_sec'] /* batch_sim */
   if (!Number.isFinite(t)) return null
   const sample: TrajectorySample = { t_s: t }
   const pick = (field: ComparableField, ...keys: string[]) => {
@@ -439,19 +444,53 @@ export function mapLoggerRowToSample(
     'altitude_m',
     'altitude',
     'log_altitude',
-    'disp_altitude'
+    'disp_altitude',
+    's1_h_m' /* batch_sim OUT11 */
   )
   pick(
     'v_mps',
     'v_mps',
+    // Prefer space-fixed |V_S| (MES export) over body speed when present
+    'log_V_S',
+    'V_S_mag',
+    'disp_V_S',
+    's1_Vb_mps', /* Obliq companion packs |V_S| into OUT11 Vb_mps */
     'V_mag',
     'log_V',
     'disp_V',
     'speed',
     'V'
   )
-  pick('mass_kg', 'mass_kg', 'mass', 'log_mass', 'disp_mass')
-  pick('qbar_Pa', 'qbar_Pa', 'qbar', 'log_qbar', 'disp_qbar')
+  // batch_sim: |Ve| from OUT11 Ve_* (Obliq: S-frame v_S components)
+  if (sample.v_mps === undefined) {
+    const vx = row['s1_Ve_x_mps']
+    const vy = row['s1_Ve_y_mps']
+    const vz = row['s1_Ve_z_mps']
+    if (
+      Number.isFinite(vx) &&
+      Number.isFinite(vy) &&
+      Number.isFinite(vz)
+    ) {
+      sample.v_mps = Math.hypot(vx, vy, vz)
+    }
+  }
+  pick(
+    'mass_kg',
+    'mass_kg',
+    'mass',
+    'log_mass',
+    'disp_mass',
+    // Obliq SaturnIBPlantObliq packs mass into OUT11[24] (Compare_c3 slot)
+    's1_compare_c3'
+  )
+  pick(
+    'qbar_Pa',
+    'qbar_Pa',
+    'qbar',
+    'log_qbar',
+    'disp_qbar',
+    's1_qbar_Pa'
+  )
   pick('gamma_rad', 'gamma_rad', 'gamma')
   return sample
 }

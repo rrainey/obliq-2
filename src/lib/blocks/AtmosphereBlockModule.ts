@@ -2,12 +2,12 @@
 //
 // Atmosphere model (v1): table-based COESA 1976 profile.
 //
-// Ports:
+// Ports (match MathWorks / aerolib COESA Atmosphere Model order):
 //   in  [0] altitude_m (geometric altitude above MSL, meters)
 //   out [0] temperature_K
-//   out [1] pressure_Pa
-//   out [2] density_kgpm3
-//   out [3] speed_of_sound_mps
+//   out [1] speed_of_sound_mps
+//   out [2] pressure_Pa
+//   out [3] density_kgpm3
 //
 // Parameters:
 //   model: 'coesa1976' | 'table'  (default coesa1976)
@@ -19,7 +19,12 @@ import { BlockData } from '@/components/BlockNode'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 import { COESA_1976_TABLE } from '@/lib/atmosphere/coesa1976Tables'
 
-const OUT_SUFFIXES = ['temperature_K', 'pressure_Pa', 'density_kgpm3', 'speed_of_sound_mps'] as const
+const OUT_SUFFIXES = [
+  'temperature_K',
+  'speed_of_sound_mps',
+  'pressure_Pa',
+  'density_kgpm3'
+] as const
 
 export class AtmosphereBlockModule implements IBlockModule {
   private getTable(block: BlockData) {
@@ -54,10 +59,10 @@ export class AtmosphereBlockModule implements IBlockModule {
     let code = `    // Atmosphere block: ${block.name} (COESA table, n=${n})\n`
 
     if (inputs.length === 0 || n < 2) {
-      code += `    ${outs[0]} = 288.15;\n`
-      code += `    ${outs[1]} = 101325.0;\n`
-      code += `    ${outs[2]} = 1.225;\n`
-      code += `    ${outs[3]} = 340.29;\n`
+      code += `    ${outs[0]} = 288.15;\n` // T
+      code += `    ${outs[1]} = 340.29;\n` // a
+      code += `    ${outs[2]} = 101325.0;\n` // P
+      code += `    ${outs[3]} = 1.225;\n` // rho
       return code
     }
 
@@ -68,11 +73,12 @@ export class AtmosphereBlockModule implements IBlockModule {
     code += `        double ${prefix}_h_in = ${hIn};\n`
     code += `        const double ${prefix}_h[${n}] = {${table.altitude_m.slice(0, n).join(', ')}};\n`
 
+    // Order matches OUT_SUFFIXES / Simulink COESA: T, a, P, rho
     const series = [
       { key: 'T', arr: table.temperature_K, out: outs[0] },
-      { key: 'P', arr: table.pressure_Pa, out: outs[1] },
-      { key: 'rho', arr: table.density_kgpm3, out: outs[2] },
-      { key: 'a', arr: table.speed_of_sound_mps, out: outs[3] }
+      { key: 'a', arr: table.speed_of_sound_mps, out: outs[1] },
+      { key: 'P', arr: table.pressure_Pa, out: outs[2] },
+      { key: 'rho', arr: table.density_kgpm3, out: outs[3] }
     ]
 
     // Shared altitude breakpoints; per-quantity y tables

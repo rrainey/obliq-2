@@ -288,47 +288,54 @@ export class BlockModuleUtils {
     outputName: string,
     inputs: string[],
     operation: string,
-    typeInfo: ReturnType<typeof BlockModuleUtils.parseType>
+    typeInfo: ReturnType<typeof BlockModuleUtils.parseType>,
+    inputTypes?: string[]
   ): string {
     let code = ''
-    
+    const access = (inp: string, typ: string | undefined, idx: string) => {
+      if (typ && typ.includes('[')) {
+        if (typ.includes('][')) return `${inp}${idx}` // [i][j] already in idx
+        return `${inp}${idx}`
+      }
+      return `(${inp})` // broadcast scalar
+    }
+
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-      // Matrix operation
       code += `    // Matrix element-wise ${operation}\n`
       code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
       code += `            ${outputName}[i][j] = `
-      
+
       for (let k = 0; k < inputs.length; k++) {
         if (k > 0) code += ` ${operation} `
-        code += `${inputs[k]}[i][j]`
+        const t = inputTypes?.[k]
+        code += access(inputs[k], t, '[i][j]')
       }
-      
+
       code += `;\n        }\n    }\n`
     } else if (typeInfo.isArray && typeInfo.arraySize) {
-      // Vector operation
       code += `    // Vector element-wise ${operation}\n`
       code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
       code += `        ${outputName}[i] = `
-      
-      for (let i = 0; i < inputs.length; i++) {
-        if (i > 0) code += ` ${operation} `
-        code += `${inputs[i]}[i]`
+
+      for (let k = 0; k < inputs.length; k++) {
+        if (k > 0) code += ` ${operation} `
+        const t = inputTypes?.[k]
+        code += access(inputs[k], t, '[i]')
       }
-      
+
       code += `;\n    }\n`
     } else {
-      // Scalar operation
       code += `    ${outputName} = `
-      
+
       for (let i = 0; i < inputs.length; i++) {
         if (i > 0) code += ` ${operation} `
         code += inputs[i]
       }
-      
+
       code += `;\n`
     }
-    
+
     return code
   }
 }

@@ -1,56 +1,66 @@
 # Residual report — 9.6 vs TN-AP-67-158
 
 - **Export:** `saturn-9.6-chi-table2b-attitude-pd_data.csv`
-- **Compare:** `npm run as205:compare -- --model … --fields h_m,mass_kg`
-- **Offset:** −1 s (sim → liftoff frame)
-- **Plant IC:** Simulink Initial Position Eqns 3.4.3–4 (`as205InitialPosition.ts`) — \(R_S\) with \(\delta\phi\) offset, \(|V_S|\approx 408.97\,\mathrm{m/s}\)
+- **Plant:** ECI 6DoF + H-1 TVC + aero **F** (air-rel) + **M_aero zeroed** + Body→S elev PD → β_P
+- **Compare:** `--fields h_m,mass_kg,v_mps`
+- **Offset:** −1 s
 
-## Full S-IB (0–150 s) — post–Initial Position reimport
+## Full S-IB (0–150 s) — engines + M_aero off
 
 | Field | N | max\|Δ\| | RMS | t @ max\|Δ\| | Soft |
 |-------|---|----------|-----|--------------|------|
-| h_m | 35 | **2.112e4** | **8527** | 147.26 s | ok |
+| h_m | 35 | 3.76e4 | **1.90e4** | 145.88 s | ok |
 | mass_kg | 35 | 5506 | 2870 | 140.90 s | ok |
+| v_mps | 35 | 1003 | **550** | 142.88 s | **large** |
 
-### vs prior pads
+### vs prior 9.6 stages
 
-| Metric | Zero \(v_0\) pad | S-frame + Earth rate | **Simulink Initial Position** (now) |
-|--------|------------------|----------------------|-------------------------------------|
-| h RMS (0–150 s) | ~21 km | ~8.55 km | **~8.53 km** (unchanged) |
-| h max\|Δ\| @ late | ~47 km | ~21 km | **~21 km** |
-| mass RMS | ~2.9 t | ~2.9 t | **~2.9 t** |
+| Metric | Body→S elev PD (free My) | **+ H-1 TVC, M_aero=0** |
+|--------|--------------------------|-------------------------|
+| h RMS | **4.0 km** | **19.0 km** (worse) |
+| V RMS | **118 m/s** | **550 m/s** (large) |
+| mass RMS | 2.87 t | **2.87 t** (identical) |
+| blow-up | ~54 s tumble (pre-TVC) | **none** — full run |
 
-Transverse \(R_S\) from \(\phi_L-\phi_L'\) does **not** change frame-light residuals (altitude uses \(|r|-R_L\); pad energy already matched).
+## Phase windows (engines + M_aero off)
 
-## Phase windows
+| Window | Δh RMS | ΔV RMS |
+|--------|--------|--------|
+| early 0–50 s | 0.77 km | **24 m/s** |
+| max-q 50–100 s | 8.2 km | 272 m/s |
+| late 100–150 s | 29.3 km | 843 m/s |
 
-| Window | Δh RMS | Δm RMS | Notes |
-|--------|--------|--------|-------|
-| early 0–50 s | **0.67 km** | ~2.8 t | Healthy; slight high mid-window |
-| max-q 50–100 s | ~4.7 km | ~2.9 t | Model climbs **above** TN |
-| late 100–150 s | ~12.8 km | ~2.9 t | Model **short** of TN by staging |
+## Flight-file notes (same CSV)
 
-## Spot checks (from prior true-9.6 export; elev tracking still good)
+| t (s) | h (m) | V_S (m/s) | elev° | χ_cmd° | β_P° | BodyToSM Ψ° |
+|------:|------:|----------:|------:|-------:|-----:|------------:|
+| 0 | 0 | 409 | 90 | 90 | 0 | 0 |
+| 50 | 2352 | 438 | 76.9 | 76.7 | ≈0 | −13 |
+| 100 | 8328 | 606 | 47.0 | 46.9 | ≈0 | −43 |
+| 145 | 22411 | 1296 | 29.1 | 29.2 | ≈0 | −61 |
 
-| t (s) | h model | h TN (approx) | Notes |
-|------:|--------:|--------------:|-------|
-| 50 | ~5.7 km | ~4.3 km | High |
-| 100 | ~28 km | ~23 km | High |
-| 147 | ~40 km | ~61 km | Low at staging |
+- Elev tracks Table 2B almost perfectly with **β_P ≈ 0** (PD quiet: e≈0 after rate damp).
+- BodyToSM **yaw Ψ → −60°**; Euler pitch Θ only ~7° — not a clean pitch-plane program.
+- q̄ high late (low altitude / long dwell in dense air) → drag spiral.
 
 ## Interpretation
 
-1. **Initial Position port is correct and inert for \(h\)/mass** — same energy pad as previous Earth-rate IC; \(\delta\phi\) transverse \(R_S\) is second-order for altitude.
-2. **Mass plant remains good** (~2.9 t RMS; ~403 t burned ≈ TN class).
-3. **Shape issue unchanged:** steep early climb vs TN through max-q, then underperforms after ~120 s.
-4. Remaining gap is **not** pad \(R_S/V_S\) formulas — next leverage is **frame/dynamics pipeline** (MES + ECI 6DoF like Simulink) and/or guidance/aero plane, not more pad tuning.
+1. **M_aero zero + H-1 TVC stopped the tumble** — full 0–150 s residual is valid (no NaN blow-up).
+2. **Energy/altitude collapsed vs free-My elev-PD baseline.** Early V is fine; after ~50 s the vehicle under-climbs and under-speeds badly (max-q and late windows).
+3. **Mass residual unchanged** — propulsion mass schedule still right; problem is force/attitude direction, not mdot.
+4. **Elev-following with ~0 gimbal is a red flag:** geometric elev can fall as the stack **yaws out of plane**, so the elev PD stays quiet while the pitch plane is not actually steered by TVC. Free My used to force pure-pitch My; equal-gimbal H-1 needs β_P (and real M_aero / aero F signs) to do the same job.
+5. Zeroing M_aero was a useful stability test, **not** a residual improvement. Next isolation: zero **F_aero** too, and/or command open-loop β_P from the χ program (rate→gimbal) without elev feedback, then re-enable M_aero with engines.
 
-## Recommended next (translation sequence)
+## Port status
 
-1. ~~Residual focus on \(h\), mass~~  
-2. ~~Port Initial Position (S)~~  
-3. ~~**Port MES**~~ — **done** (`as205Mes.ts`)  
-4. ~~**ECI 6DoF**~~ — **done** (`as205EciPlant.ts` + 9.4–9.6); reimport before residual  
-5. Body→SM / LVDC S-frame nav; live \(v_S\) export
+| Item | Status |
+|------|--------|
+| I.P. + MES + ECI + live \(v_S\) | Done |
+| Body→S elev PD + BodyToSM logs | Done |
+| Variable-mass \(\dot{I}\omega\) | Done |
+| H-1 cluster TVC (β→F,M) | **Done** — control → gimbals, no free My |
+| Aero F (CA/CN/CP, air-rel) | On |
+| Aero M (r×F) | **DIAGNOSTIC OFF** (`M_aero_off`) |
+| Full \(I\) / mass-sched CG; oblate \(g\); FCC/IGM | Later |
 
-Policy: **TN-AP-67-158 is authoritative** for trajectory residual (same doc used to validate Simulink). Simulink uses TN site/guidance with **Apollo 7 actual LaunchDate** for MES/Θ_E only — intentional; see `AS205_REFERENCE.md`.
+Policy: **TN residual** while incomplete; **Simulink** for structural completeness. No gain-tuning as transform work.

@@ -8,6 +8,7 @@ import {
   SIMULINK_OMEGA_E_RPS_OVER_PI
 } from '../examples/saturn-ib/as205InitialPosition'
 import { AS205_PAD, OMEGA_EARTH } from '../examples/saturn-ib/as205PadFrames'
+import { as205DefaultPadStateEci } from '../examples/saturn-ib/as205EciPlant'
 import { buildSixDofOpenLoopChiAscent } from '../examples/saturn-ib/sixDofVarMassEom'
 
 describe('as205InitialPosition (Simulink Eqns 3.4.3-4)', () => {
@@ -62,7 +63,8 @@ describe('as205InitialPosition (Simulink Eqns 3.4.3-4)', () => {
     expect(pad.V_S_0_m[2]).toBeCloseTo(expectV[2], 9)
   })
 
-  test('9.4 plant uses ECI pad (v_b0 still V_S; r0 is E not S)', () => {
+  test('9.4 plant uses ECI pad (v_b0 from LIO Position I; r0 is E)', () => {
+    const padE = as205DefaultPadStateEci()
     const m = buildSixDofOpenLoopChiAscent()
     const eom = m.sheets[0].blocks.find(b => b.name === 'EOM_6DoF_VarMass')!
     const blocks = eom.parameters?.sheets?.[0]?.blocks as Array<{
@@ -71,10 +73,11 @@ describe('as205InitialPosition (Simulink Eqns 3.4.3-4)', () => {
     }>
     const r0 = blocks.find(b => b.name === 'r0_i')?.parameters?.value as number[]
     const v0 = blocks.find(b => b.name === 'v0_b')?.parameters?.value as number[]
-    // Body velocity IC still S components (B‖S)
-    expect(v0[0]).toBeCloseTo(pad.V_S_0_m[0], 6)
-    expect(v0[1]).toBeCloseTo(pad.V_S_0_m[1], 6)
-    expect(v0[2]).toBeCloseTo(pad.V_S_0_m[2], 6)
+    expect(v0[0]).toBeCloseTo(padE.v0_b[0], 6)
+    expect(v0[1]).toBeCloseTo(padE.v0_b[1], 6)
+    expect(v0[2]).toBeCloseTo(padE.v0_b[2], 6)
+    // v_b ≠ V_S (Position I ≠ S)
+    expect(Math.abs(v0[1] - pad.V_S_0_m[1])).toBeGreaterThan(1)
     // Position is ECI: same magnitude, not equal to R_S components
     expect(Math.hypot(...r0)).toBeCloseTo(Math.hypot(...pad.R_S_0_m), 3)
     expect(Math.abs(r0[0] - pad.R_S_0_m[0])).toBeGreaterThan(1e3)

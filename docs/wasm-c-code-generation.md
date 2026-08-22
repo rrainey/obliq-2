@@ -78,7 +78,7 @@ This file is **identical** for both Wasm and embedded:
 // Configuration
 #define MODEL_NAME "Vehicle"
 #define MODEL_DT 0.01
-#define MAX_SCOPE_SAMPLES 1000
+#define MAX_SCOPE_SAMPLES 4000
 
 // Input structure (auto-generated from input ports)
 typedef struct {
@@ -99,7 +99,7 @@ typedef struct {
     // Transfer function states (one per TF block)
     double tf_engine_states[2];     // EngineModel transfer function
     double tf_suspension_states[4]; // SuspensionModel transfer function
-    
+
     // Enable states for subsystems
     bool subsystem_controller_enabled;
 } vehicle_states_t;
@@ -129,7 +129,7 @@ typedef struct {
 typedef struct {
     double time;
     double dt;
-    
+
     vehicle_inputs_t inputs;
     vehicle_outputs_t outputs;
     vehicle_states_t states;
@@ -168,10 +168,10 @@ This is the main simulation logic, **identical for both targets**:
 void vehicle_init_states(vehicle_states_t* states) {
     // Zero all states
     memset(states, 0, sizeof(vehicle_states_t));
-    
+
     // Set non-zero initial conditions if specified
     // (auto-generated from block parameters)
-    
+
     // All subsystems enabled by default
     states->subsystem_controller_enabled = true;
 }
@@ -184,21 +184,21 @@ void vehicle_evaluate_algebraic(
     vehicle_outputs_t* outputs
 ) {
     // Block execution in topological order
-    
+
     // Sum1: engine_torque = throttle + brake_force
     signals->engine_torque = inputs->throttle - inputs->brake * 0.8;
-    
+
     // TransferFunction1: engine dynamics (using current state)
     // Output = C * x + D * u  (state-space representation)
-    signals->engine_output = states->tf_engine_states[0] * 1.0 + 
+    signals->engine_output = states->tf_engine_states[0] * 1.0 +
                             signals->engine_torque * 0.5;
-    
+
     // Multiply2: wheel_force = engine_output * gear_ratio
     const double gear_ratio = 3.5; // Parameter from block
     signals->wheel_force = signals->engine_output * gear_ratio;
-    
+
     // ... more block computations
-    
+
     // Final outputs
     outputs->vehicle_speed = signals->vehicle_speed_final;
     outputs->engine_rpm = signals->engine_output * 1000.0;
@@ -214,15 +214,15 @@ void vehicle_compute_derivatives(
 ) {
     // Transfer function state derivatives
     // dx/dt = A*x + B*u
-    
+
     // Engine transfer function: (s + 2) / (s^2 + 3s + 1)
     // State-space: A = [[0, 1], [-1, -3]], B = [[0], [1]], C = [2, 1], D = 0
     const double* x = states->tf_engine_states;
     const double u = signals->engine_torque;
-    
+
     derivatives->tf_engine_states[0] = x[1];
     derivatives->tf_engine_states[1] = -1.0 * x[0] - 3.0 * x[1] + 1.0 * u;
-    
+
     // ... more state derivatives
 }
 
@@ -235,53 +235,53 @@ void vehicle_integrate_states(
     if (!model->states.subsystem_controller_enabled) {
         return; // Skip integration for disabled subsystem
     }
-    
+
     vehicle_states_t k1, k2, k3, k4;
     vehicle_states_t temp_states;
     vehicle_signals_t temp_signals;
     vehicle_outputs_t temp_outputs;
-    
+
     // k1 = f(t, y)
-    vehicle_compute_derivatives(&model->inputs, &model->states, 
+    vehicle_compute_derivatives(&model->inputs, &model->states,
                                &model->signals, &k1);
-    
+
     // k2 = f(t + dt/2, y + k1*dt/2)
     // temp_states = states + k1 * (dt/2)
     for (int i = 0; i < sizeof(vehicle_states_t)/sizeof(double); i++) {
-        ((double*)&temp_states)[i] = ((double*)&model->states)[i] + 
+        ((double*)&temp_states)[i] = ((double*)&model->states)[i] +
                                     ((double*)&k1)[i] * dt * 0.5;
     }
-    vehicle_evaluate_algebraic(&model->inputs, &temp_states, 
+    vehicle_evaluate_algebraic(&model->inputs, &temp_states,
                               &temp_signals, &temp_outputs);
-    vehicle_compute_derivatives(&model->inputs, &temp_states, 
+    vehicle_compute_derivatives(&model->inputs, &temp_states,
                                &temp_signals, &k2);
-    
+
     // k3 = f(t + dt/2, y + k2*dt/2)
     for (int i = 0; i < sizeof(vehicle_states_t)/sizeof(double); i++) {
-        ((double*)&temp_states)[i] = ((double*)&model->states)[i] + 
+        ((double*)&temp_states)[i] = ((double*)&model->states)[i] +
                                     ((double*)&k2)[i] * dt * 0.5;
     }
-    vehicle_evaluate_algebraic(&model->inputs, &temp_states, 
+    vehicle_evaluate_algebraic(&model->inputs, &temp_states,
                               &temp_signals, &temp_outputs);
-    vehicle_compute_derivatives(&model->inputs, &temp_states, 
+    vehicle_compute_derivatives(&model->inputs, &temp_states,
                                &temp_signals, &k3);
-    
+
     // k4 = f(t + dt, y + k3*dt)
     for (int i = 0; i < sizeof(vehicle_states_t)/sizeof(double); i++) {
-        ((double*)&temp_states)[i] = ((double*)&model->states)[i] + 
+        ((double*)&temp_states)[i] = ((double*)&model->states)[i] +
                                     ((double*)&k3)[i] * dt;
     }
-    vehicle_evaluate_algebraic(&model->inputs, &temp_states, 
+    vehicle_evaluate_algebraic(&model->inputs, &temp_states,
                               &temp_signals, &temp_outputs);
-    vehicle_compute_derivatives(&model->inputs, &temp_states, 
+    vehicle_compute_derivatives(&model->inputs, &temp_states,
                                &temp_signals, &k4);
-    
+
     // y_new = y + (dt/6) * (k1 + 2*k2 + 2*k3 + k4)
     for (int i = 0; i < sizeof(vehicle_states_t)/sizeof(double); i++) {
         ((double*)&model->states)[i] += (dt / 6.0) * (
-            ((double*)&k1)[i] + 
-            2.0 * ((double*)&k2)[i] + 
-            2.0 * ((double*)&k3)[i] + 
+            ((double*)&k1)[i] +
+            2.0 * ((double*)&k2)[i] +
+            2.0 * ((double*)&k3)[i] +
             ((double*)&k4)[i]
         );
     }
@@ -290,18 +290,18 @@ void vehicle_integrate_states(
 // Main step function
 void vehicle_step(vehicle_model_t* model) {
     // 1. Evaluate algebraic relationships
-    vehicle_evaluate_algebraic(&model->inputs, &model->states, 
+    vehicle_evaluate_algebraic(&model->inputs, &model->states,
                               &model->signals, &model->outputs);
-    
+
     // 2. Integrate states
     vehicle_integrate_states(model, model->dt);
-    
+
     // 3. Update time
     model->time += model->dt;
-    
+
     // 4. Log scope data
     if (model->scope_data.speed_logger.count < model->scope_data.speed_logger.capacity) {
-        model->scope_data.speed_logger.buffer[model->scope_data.speed_logger.count++] = 
+        model->scope_data.speed_logger.buffer[model->scope_data.speed_logger.count++] =
             model->outputs.vehicle_speed;
     }
     // ... log other signals
@@ -328,28 +328,28 @@ EMSCRIPTEN_KEEPALIVE
 void* vehicle_model_init(double dt) {
     vehicle_model_t* model = (vehicle_model_t*)malloc(sizeof(vehicle_model_t));
     if (!model) return NULL;
-    
+
     // Initialize fields
     model->time = 0.0;
     model->dt = dt;
-    
+
     // Initialize states
     vehicle_init_states(&model->states);
-    
+
     // Allocate scope buffers
     model->scope_data.speed_logger.capacity = MAX_SCOPE_SAMPLES;
     model->scope_data.speed_logger.count = 0;
-    model->scope_data.speed_logger.buffer = 
+    model->scope_data.speed_logger.buffer =
         (double*)malloc(MAX_SCOPE_SAMPLES * sizeof(double));
-    
+
     model->scope_data.rpm_logger.capacity = MAX_SCOPE_SAMPLES;
     model->scope_data.rpm_logger.count = 0;
-    model->scope_data.rpm_logger.buffer = 
+    model->scope_data.rpm_logger.buffer =
         (double*)malloc(MAX_SCOPE_SAMPLES * sizeof(double));
-    
+
     // Zero inputs
     memset(&model->inputs, 0, sizeof(vehicle_inputs_t));
-    
+
     return model;
 }
 
@@ -358,7 +358,7 @@ EMSCRIPTEN_KEEPALIVE
 void vehicle_model_set_input(void* handle, int index, double value) {
     vehicle_model_t* model = (vehicle_model_t*)handle;
     if (!model) return;
-    
+
     // Auto-generated from input port order
     switch(index) {
         case 0: model->inputs.throttle = value; break;
@@ -373,7 +373,7 @@ EMSCRIPTEN_KEEPALIVE
 double vehicle_model_get_output(void* handle, int index) {
     vehicle_model_t* model = (vehicle_model_t*)handle;
     if (!model) return 0.0;
-    
+
     // Auto-generated from output port order
     switch(index) {
         case 0: return model->outputs.vehicle_speed;
@@ -388,7 +388,7 @@ EMSCRIPTEN_KEEPALIVE
 void vehicle_model_set_inputs(void* handle, const double* inputs, int count) {
     vehicle_model_t* model = (vehicle_model_t*)handle;
     if (!model || !inputs) return;
-    
+
     if (count > 0) model->inputs.throttle = inputs[0];
     if (count > 1) model->inputs.brake = inputs[1];
     if (count > 2) model->inputs.steering_angle = inputs[2];
@@ -399,7 +399,7 @@ EMSCRIPTEN_KEEPALIVE
 void vehicle_model_get_outputs(void* handle, double* outputs, int count) {
     vehicle_model_t* model = (vehicle_model_t*)handle;
     if (!model || !outputs) return;
-    
+
     if (count > 0) outputs[0] = model->outputs.vehicle_speed;
     if (count > 1) outputs[1] = model->outputs.engine_rpm;
     if (count > 2) outputs[2] = model->outputs.wheel_angle;
@@ -413,7 +413,7 @@ double* vehicle_model_get_scope_data(void* handle, int logger_index, int* length
         if (length) *length = 0;
         return NULL;
     }
-    
+
     // Auto-generated from Signal Logger blocks
     switch(logger_index) {
         case 0: // speed_logger
@@ -433,7 +433,7 @@ EMSCRIPTEN_KEEPALIVE
 void vehicle_model_clear_scope_data(void* handle) {
     vehicle_model_t* model = (vehicle_model_t*)handle;
     if (!model) return;
-    
+
     model->scope_data.speed_logger.count = 0;
     model->scope_data.rpm_logger.count = 0;
 }
@@ -443,7 +443,7 @@ EMSCRIPTEN_KEEPALIVE
 void vehicle_model_step(void* handle) {
     vehicle_model_t* model = (vehicle_model_t*)handle;
     if (!model) return;
-    
+
     vehicle_step(model);
 }
 
@@ -459,11 +459,11 @@ EMSCRIPTEN_KEEPALIVE
 void vehicle_model_destroy(void* handle) {
     vehicle_model_t* model = (vehicle_model_t*)handle;
     if (!model) return;
-    
+
     // Free scope buffers
     free(model->scope_data.speed_logger.buffer);
     free(model->scope_data.rpm_logger.buffer);
-    
+
     // Free model
     free(model);
 }
@@ -555,10 +555,10 @@ export function createVehicleModelModule(): Promise<VehicleModelModule>
 // lib/codegen/WasmCodeGenerator.ts
 
 export class WasmCodeGenerator extends BaseCodeGenerator {
-  
+
   generateWasmInterface(): string {
     const modelName = this.sanitizeName(this.model.name)
-    
+
     return `
 // Wasm interface for ${this.model.name}
 // Auto-generated - do not edit
@@ -586,47 +586,47 @@ ${this.generateStepFunction()}
 ${this.generateDestroyFunction()}
 `
   }
-  
+
   private generateInitFunction(): string {
     const modelName = this.sanitizeName(this.model.name)
-    const inputInit = this.getInputPortNames().map(name => 
+    const inputInit = this.getInputPortNames().map(name =>
       `model->inputs.${name} = 0.0;`
     ).join('\n    ')
-    
+
     return `
 EMSCRIPTEN_KEEPALIVE
 void* ${modelName}_model_init(double dt) {
     ${modelName}_model_t* model = (${modelName}_model_t*)malloc(sizeof(${modelName}_model_t));
     if (!model) return NULL;
-    
+
     model->time = 0.0;
     model->dt = dt;
-    
+
     ${modelName}_init_states(&model->states);
-    
+
     ${this.generateScopeBufferAllocation()}
-    
+
     ${inputInit}
-    
+
     return model;
 }
 `
   }
-  
+
   private generateSetInputFunctions(): string {
     const modelName = this.sanitizeName(this.model.name)
     const inputPorts = this.getInputPorts()
-    
-    const switchCases = inputPorts.map((port, index) => 
+
+    const switchCases = inputPorts.map((port, index) =>
       `case ${index}: model->inputs.${port.name} = value; break;`
     ).join('\n        ')
-    
+
     return `
 EMSCRIPTEN_KEEPALIVE
 void ${modelName}_model_set_input(void* handle, int index, double value) {
     ${modelName}_model_t* model = (${modelName}_model_t*)handle;
     if (!model) return;
-    
+
     switch(index) {
         ${switchCases}
         default: break;
@@ -637,14 +637,14 @@ EMSCRIPTEN_KEEPALIVE
 void ${modelName}_model_set_inputs(void* handle, const double* inputs, int count) {
     ${modelName}_model_t* model = (${modelName}_model_t*)handle;
     if (!model || !inputs) return;
-    
-    ${inputPorts.map((port, i) => 
+
+    ${inputPorts.map((port, i) =>
       `if (count > ${i}) model->inputs.${port.name} = inputs[${i}];`
     ).join('\n    ')}
 }
 `
   }
-  
+
   // ... similar methods for outputs, scope data, etc.
 }
 ```
@@ -730,7 +730,7 @@ describe('WasmCodeGenerator', () => {
     const model = createTestModel()
     const generator = new WasmCodeGenerator(model)
     const code = generator.generateWasmInterface()
-    
+
     expect(code).toContain('EMSCRIPTEN_KEEPALIVE')
     expect(code).toContain('model_init')
     expect(code).toMatch(/void\* \w+_model_init\(double dt\)/)
@@ -744,16 +744,16 @@ describe('Wasm Compilation', () => {
   it('should compile without errors', async () => {
     const model = createTestModel()
     const { sourceCode, headerCode, wasmInterface } = generateCCode(model)
-    
+
     // Write to temp directory
     const tempDir = await createTempDir()
     await writeFile(`${tempDir}/model.h`, headerCode)
     await writeFile(`${tempDir}/model.c`, sourceCode)
     await writeFile(`${tempDir}/wasm.c`, wasmInterface)
-    
+
     // Compile
     const result = await exec(`emcc ${tempDir}/model.c ${tempDir}/wasm.c -o ${tempDir}/model.js ...`)
-    
+
     expect(result.exitCode).toBe(0)
     expect(result.stderr).toBe('')
   })
@@ -766,15 +766,15 @@ describe('Wasm Runtime', () => {
   it('should execute simulation correctly', async () => {
     const wasmModule = await loadCompiledWasm('test_model')
     const handle = wasmModule._model_init(0.01)
-    
+
     wasmModule._model_set_input(handle, 0, 5.0)  // throttle
     wasmModule._model_step(handle)
-    
+
     const speed = wasmModule._model_get_output(handle, 0)
-    
+
     expect(speed).toBeGreaterThan(0)
     expect(speed).toBeLessThan(100)
-    
+
     wasmModule._model_destroy(handle)
   })
 })

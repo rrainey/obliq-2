@@ -48,6 +48,7 @@ import { SubsystemBlockModule } from './SubsystemBlockModule'
 import { SignalDisplayBlockModule } from './SignalDisplayBlockModule'
 import { SignalLoggerBlockModule } from './SignalLoggerBlockModule'
 import { NoConnectionBlockModule } from './NoConnectionBlockModule'
+import { InertiaDiagPackBlockModule } from './InertiaDiagPackBlockModule'
 
 /**
  * Factory for creating block-specific code generators
@@ -221,6 +222,9 @@ export class BlockModuleFactory {
       case 'atmosphere':
         return new AtmosphereBlockModule()
 
+      case 'inertia_diag_pack':
+        return new InertiaDiagPackBlockModule()
+
       default:
         return null
     }
@@ -262,6 +266,7 @@ export class BlockModuleFactory {
       'signal_display',
       'signal_logger',
       'no_connection',
+      'inertia_diag_pack',
       'if',
       'condition',
       'abs',

@@ -77,6 +77,20 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(w).toBeDefined()
   })
 
+  test('variable-mass rotational EOM includes İω term (Simulink Custom Variable Mass)', () => {
+    // M_net = M − ω×Iω − İω
+    expect(sheet.blocks.some(b => b.name === 'Idot_omega')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'mdot_over_mref')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'neg_Idot_w')).toBe(true)
+    const mNet = sheet.blocks.find(b => b.name === 'M_net')!
+    const negIdot = sheet.blocks.find(b => b.name === 'neg_Idot_w')!
+    expect(
+      sheet.connections.some(
+        c => c.sourceBlockId === negIdot.id && c.targetBlockId === mNet.id
+      )
+    ).toBe(true)
+  })
+
   test('codegen succeeds', () => {
     const gen = new CodeGenerator({
       modelName: 'sixdof_varmass_quat',
@@ -196,7 +210,7 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(result.source).toContain('_step')
   })
 
-  test('9.4 open-loop χ time-tilt on 6-DoF + aero + rate loop', () => {
+  test('9.4 open-loop χ time-tilt on 6-DoF + aero + H-1 TVC + rate→β_P', () => {
     const m = buildSixDofOpenLoopChiAscent()
     const types = new Set(m.sheets[0].blocks.map(b => b.type))
     expect(types.has('subsystem')).toBe(true)
@@ -210,6 +224,14 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(m.sheets[0].blocks.some(b => b.name === 'Q_cmd')).toBe(true)
     expect(m.sheets[0].blocks.some(b => b.name === 'F_aero')).toBe(true)
     expect(m.sheets[0].blocks.some(b => b.name === 'M_b_cmd')).toBe(true)
+    // H-1 engine cluster + gimbal TVC (no free My)
+    expect(m.sheets[0].blocks.some(b => b.name === 'F_engines_N')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'M_engines_Nm')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'beta_P_lim')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'beta_Y_lim')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'My_eng')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'My_raw')).toBe(false)
+    expect(m.sheets[0].blocks.some(b => b.name === 'M_b_ctrl')).toBe(false)
 
     // TN Table 5 thrust schedule (~7–8 MN class)
     const thrust = m.sheets[0].blocks.find(b => b.name === 'ThrustMag_N')!
@@ -223,8 +245,25 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     // Mid-boost ~2.7 t/s; short IECO intervals can peak higher
     expect(mdotPeak).toBeGreaterThan(2500)
     expect(mdotPeak).toBeLessThan(5000)
-    const cda = m.sheets[0].blocks.find(b => b.name === 'CdA_m2')!
-    expect(cda.parameters?.value).toBe(12)
+    // Simulink-style aero tables (not constant CdA)
+    expect(m.sheets[0].blocks.some(b => b.name === 'CA_T')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'CN_alpha')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'M_aero')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'F_aero')).toBe(true)
+    // RTW fidelity: signed α_deg → CN; M_aero live into M_b; CG(mass) LUT
+    expect(m.sheets[0].blocks.some(b => b.name === 'alpha_deg')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'alpha_abs_deg')).toBe(false)
+    expect(m.sheets[0].blocks.some(b => b.name === 'M_aero_off')).toBe(false)
+    const Maero = m.sheets[0].blocks.find(b => b.name === 'M_aero')!
+    const Mb = m.sheets[0].blocks.find(b => b.name === 'M_b_cmd')!
+    expect(
+      m.sheets[0].connections.some(
+        c => c.sourceBlockId === Maero.id && c.targetBlockId === Mb.id
+      )
+    ).toBe(true)
+    const cgx = m.sheets[0].blocks.find(b => b.name === 'CG_x_m')!
+    expect(cgx.type).toBe('lookup_1d')
+    expect((cgx.parameters?.inputValues as number[])?.at(-1)).toBe(582491)
 
     // P0: full-run logger buffers (duration/dt ≈ 3600 → maxSamples ≥ 3600)
     const loggers = m.sheets[0].blocks.filter(b => b.type === 'signal_logger')
@@ -243,7 +282,6 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(m0?.parameters?.value).toBe(586593)
 
     const Fb = m.sheets[0].blocks.find(b => b.name === 'F_b_cmd')!
-    const Mb = m.sheets[0].blocks.find(b => b.name === 'M_b_cmd')!
     expect(
       m.sheets[0].connections.some(
         c => c.sourceBlockId === Fb.id && c.targetBlockId === eom.id
@@ -300,18 +338,28 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     expect(result.source).toContain('_step')
   })
 
-  test('9.6 Table 2B + body-pitch attitude PD', () => {
+  test('9.6 Table 2B + Body→S elev PD → H-1 β_P gimbal', () => {
     const m = buildSixDofOpenLoopChiAttitudePd()
     expect(m.name).toBe('saturn-9.6-chi-table2b-attitude-pd')
     const sheet = m.sheets[0]
-    expect(sheet.blocks.some(b => b.name === 'theta_elev_rad')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'C_bS')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'elev_meas_rad')).toBe(true)
     expect(sheet.blocks.some(b => b.name === 'My_pd')).toBe(true)
     expect(sheet.blocks.some(b => b.name === 'Kp_att')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'F_engines_N')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'beta_Y_from_rate')).toBe(true)
+    // No free moment actuator / integrator elev estimate
+    expect(sheet.blocks.some(b => b.name === 'theta_elev_rad')).toBe(false)
+    expect(sheet.blocks.some(b => b.name === 'My_raw')).toBe(false)
+    expect(sheet.blocks.some(b => b.name === 'M_b_ctrl')).toBe(false)
 
     const myLim = sheet.blocks.find(b => b.name === 'My_limit')!
     const myPd = sheet.blocks.find(b => b.name === 'My_pd')!
-    const myRaw = sheet.blocks.find(b => b.name === 'My_raw')!
-    // Attitude path feeds the limit; rate-only My_raw does not
+    const betaPFromRate = sheet.blocks.find(b => b.name === 'beta_P_from_rate')!
+    const betaYLim = sheet.blocks.find(b => b.name === 'beta_Y_lim')!
+    const betaYFromRate = sheet.blocks.find(b => b.name === 'beta_Y_from_rate')!
+    const elev = sheet.blocks.find(b => b.name === 'elev_meas_rad')!
+    // Attitude PD feeds β_P limit; rate-only path does not
     expect(
       sheet.connections.some(
         c => c.sourceBlockId === myPd.id && c.targetBlockId === myLim.id
@@ -319,9 +367,25 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     ).toBe(true)
     expect(
       sheet.connections.some(
-        c => c.sourceBlockId === myRaw.id && c.targetBlockId === myLim.id
+        c =>
+          c.sourceBlockId === betaPFromRate.id && c.targetBlockId === myLim.id
       )
     ).toBe(false)
+    // Yaw rate → β_Y
+    expect(
+      sheet.connections.some(
+        c =>
+          c.sourceBlockId === betaYFromRate.id &&
+          c.targetBlockId === betaYLim.id
+      )
+    ).toBe(true)
+    // Gimbal limit is ±8°, not free My MN·m range
+    expect(myLim.parameters?.lowerLimit).toBe(-8)
+    expect(myLim.parameters?.upperLimit).toBe(8)
+    // elev_meas drives att_err
+    expect(
+      sheet.connections.some(c => c.sourceBlockId === elev.id)
+    ).toBe(true)
 
     // EOM omega IC zeroed
     const eom = sheet.blocks.find(b => b.name === 'EOM_6DoF_VarMass')!
@@ -333,6 +397,13 @@ describe('6-DOF variable-mass quaternion EOM', () => {
       0, 0, 0
     ])
 
+    const prop = propagateSignalTypes(
+      sheet.blocks as any,
+      sheet.connections as any
+    )
+    const typeErrors = prop.errors.filter(e => e.severity === 'error')
+    expect(typeErrors.map(e => e.message)).toEqual([])
+
     const gen = new CodeGenerator({
       modelName: 'sixdof_chi_att_pd',
       integrationAlgorithm: 'rk4'
@@ -340,6 +411,7 @@ describe('6-DOF variable-mass quaternion EOM', () => {
     const result = gen.generate(m.sheets as any, m.parameters || [])
     expect(result.source).not.toMatch(/Error generating code for/)
     expect(result.source).toContain('_step')
+    expect(result.source).toMatch(/asin/)
   })
 
   test('TN Table 2B chi table continuity', () => {

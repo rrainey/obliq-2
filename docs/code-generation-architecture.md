@@ -1,6 +1,10 @@
 
 # Code Generation Architecture
 
+## Known defects
+
+- **[Double-nested subsystem vector type loss](./codegen-double-nest-vector-types.md)** — **Fixed** (recursive port remap). Was: depth ≥ 2 wires stopped at dissolved child subsystem → `matrix_multiply` typed as scalar.
+
 ## Overview
 
 The obliq-2 code generation system uses a two-layer architecture that separates algebraic computations from time-based integration. This design pattern, common in professional simulation tools like Simulink and Modelica, provides better modularity, testability, and support for advanced integration methods.

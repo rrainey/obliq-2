@@ -239,13 +239,13 @@ export function buildAtmosphereDynamicPressure(): SliceModel {
   const blocks = [alt, V, atm, half, Vsq, halfRho, qbar, outRho, outT, outQ, outA]
   const connections = [
     wire(alt, atm),
-    wire(atm, outT, 0, 0), // temperature
-    wire(atm, outRho, 2, 0), // density port 2
-    wire(atm, outA, 3, 0), // speed of sound
+    wire(atm, outT, 0, 0), // temperature (COESA port 0)
+    wire(atm, outA, 1, 0), // speed of sound (COESA port 1)
+    wire(atm, outRho, 3, 0), // density (COESA port 3)
     wire(V, Vsq, 0, 0),
     wire(V, Vsq, 0, 1),
     wire(half, halfRho, 0, 0),
-    wire(atm, halfRho, 2, 1), // rho
+    wire(atm, halfRho, 3, 1), // rho
     wire(halfRho, qbar, 0, 0),
     wire(Vsq, qbar, 0, 1),
     wire(qbar, outQ)
@@ -719,7 +719,7 @@ export function buildOpenLoopAscent1D(): SliceModel {
     wire(rInt, outR),
     wire(vInt, outV),
     wire(alt, outAlt),
-    wire(atm, outRho, 2, 0),
+    wire(atm, outRho, 3, 0),
     wire(aTot, outA)
   ]
 

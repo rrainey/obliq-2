@@ -573,12 +573,15 @@ export function validateBlockParameters(
           errors.push('condition must be a string');
         } else {
           // Validate condition format
-          const operatorMatch = parameters.condition.match(/^\s*(>|<|>=|<=|==|!=)\s*(.+)$/)
+          // Longer operators MUST come first — otherwise `>=` matches as `>` + `= value`
+          const operatorMatch = parameters.condition.match(/^\s*(>=|<=|==|!=|>|<)\s*(.+)$/)
           if (!operatorMatch) {
             errors.push('condition must be in format: operator value (e.g., "> 10.0")');
           } else {
             const value = operatorMatch[2].trim();
-            const valuePattern = /^-?\d+(\.\d+)?([eE][+-]?\d+)?[fFlL]?$/;
+            // Numeric literal, M_PI, or model parameter / #define identifier
+            const valuePattern =
+              /^(?:-?\d+(\.\d+)?([eE][+-]?\d+)?[fFlL]?|M_PI|\(-M_PI\)|-?M_PI|[A-Za-z_][A-Za-z0-9_]*)$/;
             if (!valuePattern.test(value)) {
               errors.push('condition value must be a valid numeric constant');
             } else {

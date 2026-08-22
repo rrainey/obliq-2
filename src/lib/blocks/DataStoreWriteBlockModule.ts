@@ -22,10 +22,24 @@ export class DataStoreWriteBlockModule implements IBlockModule {
     }
 
     const inputExpr = inputs[0]
-    const inputType = inputTypes?.[0] || block.parameters?.dataType || 'double'
+    const inputType = inputTypes?.[0] || 'double'
+    const storeType = block.parameters?.dataType || 'double'
     const typeInfo = BlockModuleUtils.parseType(inputType)
+    const storeInfo = BlockModuleUtils.parseType(storeType)
+    const storeIsScalar =
+      !storeType.includes('[') ||
+      (!storeInfo.isArray && !storeInfo.isMatrix)
 
-    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+    if (storeIsScalar) {
+      // Scalar store: collapse vector/matrix writes to first element
+      if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+        code += `    model->data_stores.${store} = ${inputExpr}[0][0];\n`
+      } else if (typeInfo.isArray && typeInfo.arraySize) {
+        code += `    model->data_stores.${store} = ${inputExpr}[0];\n`
+      } else {
+        code += `    model->data_stores.${store} = ${inputExpr};\n`
+      }
+    } else if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
       code += `            model->data_stores.${store}[i][j] = ${inputExpr}[i][j];\n`

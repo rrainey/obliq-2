@@ -85,6 +85,15 @@ describe('AS-205 trajectory compare utilities', () => {
     expect(s?.qbar_Pa).toBe(3000)
   })
 
+  test('mapLoggerRowToSample prefers log_V_S (space-fixed) over body V_mag', () => {
+    const s = mapLoggerRowToSample({
+      time: 1,
+      log_V_S: 409.5,
+      V_mag: 100
+    })
+    expect(s?.v_mps).toBe(409.5)
+  })
+
   test('TN-AP-67-158 reference CSV loads with S-IB coverage', () => {
     const realPath = path.join(REF_DIR, 'as205_trajectory_reference.csv')
     expect(fs.existsSync(realPath)).toBe(true)
@@ -195,5 +204,22 @@ describe('AS-205 trajectory compare utilities', () => {
     const h = result.residuals.find(r => r.field === 'h_m')!
     expect(h.n).toBeGreaterThan(0)
     expect(Number.isFinite(h.rms)).toBe(true)
+  })
+
+  test('batch_sim CSV columns map to trajectory samples', () => {
+    // Obliq companion packs |V_S| into s1_Vb_mps (preferred over |Ve|)
+    const text = [
+      'elapsed_sim_sec,s1_h_m,s1_Ve_x_mps,s1_Ve_y_mps,s1_Ve_z_mps,s1_Vb_mps,s1_compare_c3',
+      '2.0,0,100,200,300,409,586593',
+      '12.0,1000,110,210,310,420,560000'
+    ].join('\n')
+    const series = loadTrajectoryCsv(text, 'batch_sim')
+    expect(series.samples).toHaveLength(2)
+    expect(series.samples[0].t_s).toBe(2)
+    expect(series.samples[0].h_m).toBe(0)
+    expect(series.samples[0].mass_kg).toBe(586593)
+    expect(series.samples[0].v_mps).toBe(409)
+    expect(series.samples[1].h_m).toBe(1000)
+    expect(series.samples[1].v_mps).toBe(420)
   })
 })

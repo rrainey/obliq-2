@@ -196,19 +196,18 @@ export function as205MesFromLaunchDate(date: LaunchDate): MesResult {
 }
 
 /**
- * Default LaunchDate for MES / Θ_E — matches Simulink stack practice.
+ * Default LaunchDate for MES / Θ_E — matches RTW / batch-sim stack practice.
  *
- * TN-AP-67-158 supplies site, azimuth, guidance, and the **golden residual
- * trajectory**, but those TN launch parameters were never flown. The Simulink
- * model uses TN numbers for everything except epoch: LaunchDate is the
- * **actual Apollo 7 liftoff** (~1968-10-11 15:02:45 UTC). That is intentional:
- * epoch only freezes S in E (GMST / Θ_E); TN tables remain the residual target.
+ * RTW `SaturnIBStack` / `SaturnStartupHelper` / `AS-205-reference.json` use
+ * **1968-10-11 14:57:45** (not 15:02:45). Comments in the C++ host show
+ * 15:02:45 (approx Apollo 7 liftoff) was tried and replaced with 14:57:45
+ * (GRR / stack epoch −5 min). Obliq must bake the **same** epoch or MES / Xe_0
+ * / q0 disagree with RTW before liftoff.
  *
- * A separate Apollo 7 flown reference trajectory may be used later; until then
- * stick with TN-AP-67-158 for validation (same as manual Simulink checks).
+ * TN-AP-67-158 remains the residual trajectory target; epoch only freezes S in E.
  */
 export const AS205_DEFAULT_LAUNCH_DATE: LaunchDate = [
-  1968, 10, 11, 15, 2, 45
+  1968, 10, 11, 14, 57, 45
 ]
 
 /** AS-205 MES at default launch epoch (for offline transforms / future ECI plant). */

@@ -77,7 +77,11 @@ export class EnableEvaluator {
     sourceBlock: typeof this.model.blocks[0],
     portIndex: number
   ): string {
-    const safeName = CCodeBuilder.sanitizeIdentifier(sourceBlock.block.name)
+    // Use flattenedName — nested leaf names like "Stage_Sep_3" collide / miss
+    // the scoped signal field (e.g. Saturn_…_Stage_Sep_3).
+    const safeName = CCodeBuilder.sanitizeIdentifier(
+      sourceBlock.flattenedName || sourceBlock.block.name
+    )
     
     // Determine where the signal value comes from
     switch (sourceBlock.block.type) {

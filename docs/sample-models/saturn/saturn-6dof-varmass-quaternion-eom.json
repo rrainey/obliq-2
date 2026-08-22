@@ -3,8 +3,8 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-12T13:29:32.856Z",
-      "description": "6-DOF variable-mass EOM with unit-quaternion renormalization, principal inertia ∝ mass, point-mass gravity, body forces/moments"
+      "created": "2026-08-22T02:45:40.185Z",
+      "description": "6-DOF variable-mass EOM; g_in_vdot; Idot_omega; ve=C_bi*vb"
     },
     "sheets": [
       {
@@ -566,7 +566,17 @@
             "parameters": {}
           },
           {
-            "id": "divide_96",
+            "id": "matrix_multiply_96",
+            "name": "m_g_b",
+            "type": "matrix_multiply",
+            "position": {
+              "x": 500,
+              "y": 360
+            },
+            "parameters": {}
+          },
+          {
+            "id": "divide_99",
             "name": "F_over_m",
             "type": "divide",
             "position": {
@@ -576,7 +586,7 @@
             "parameters": {}
           },
           {
-            "id": "cross_99",
+            "id": "cross_102",
             "name": "w_x_v",
             "type": "cross",
             "position": {
@@ -586,7 +596,7 @@
             "parameters": {}
           },
           {
-            "id": "uminus_102",
+            "id": "uminus_105",
             "name": "neg_wxv",
             "type": "uminus",
             "position": {
@@ -596,7 +606,7 @@
             "parameters": {}
           },
           {
-            "id": "sum_104",
+            "id": "sum_107",
             "name": "vdot_tmp",
             "type": "sum",
             "position": {
@@ -609,7 +619,7 @@
             }
           },
           {
-            "id": "sum_107",
+            "id": "sum_110",
             "name": "v_dot",
             "type": "sum",
             "position": {
@@ -622,7 +632,7 @@
             }
           },
           {
-            "id": "matrix_multiply_111",
+            "id": "matrix_multiply_114",
             "name": "r_dot",
             "type": "matrix_multiply",
             "position": {
@@ -632,7 +642,7 @@
             "parameters": {}
           },
           {
-            "id": "matrix_multiply_115",
+            "id": "matrix_multiply_118",
             "name": "Iw_x",
             "type": "matrix_multiply",
             "position": {
@@ -642,7 +652,7 @@
             "parameters": {}
           },
           {
-            "id": "matrix_multiply_116",
+            "id": "matrix_multiply_119",
             "name": "Iw_y",
             "type": "matrix_multiply",
             "position": {
@@ -652,7 +662,7 @@
             "parameters": {}
           },
           {
-            "id": "matrix_multiply_117",
+            "id": "matrix_multiply_120",
             "name": "Iw_z",
             "type": "matrix_multiply",
             "position": {
@@ -662,7 +672,7 @@
             "parameters": {}
           },
           {
-            "id": "mux_124",
+            "id": "mux_127",
             "name": "I_omega",
             "type": "mux",
             "position": {
@@ -678,7 +688,7 @@
             }
           },
           {
-            "id": "cross_128",
+            "id": "cross_131",
             "name": "w_x_Iw",
             "type": "cross",
             "position": {
@@ -688,7 +698,7 @@
             "parameters": {}
           },
           {
-            "id": "uminus_131",
+            "id": "uminus_134",
             "name": "neg_wIw",
             "type": "uminus",
             "position": {
@@ -698,8 +708,104 @@
             "parameters": {}
           },
           {
-            "id": "sum_133",
-            "name": "M_net",
+            "id": "divide_136",
+            "name": "mdot_over_mref",
+            "type": "divide",
+            "position": {
+              "x": 300,
+              "y": 800
+            },
+            "parameters": {}
+          },
+          {
+            "id": "matrix_multiply_139",
+            "name": "Idot_xx",
+            "type": "matrix_multiply",
+            "position": {
+              "x": 480,
+              "y": 800
+            },
+            "parameters": {}
+          },
+          {
+            "id": "matrix_multiply_140",
+            "name": "Idot_yy",
+            "type": "matrix_multiply",
+            "position": {
+              "x": 480,
+              "y": 840
+            },
+            "parameters": {}
+          },
+          {
+            "id": "matrix_multiply_141",
+            "name": "Idot_zz",
+            "type": "matrix_multiply",
+            "position": {
+              "x": 480,
+              "y": 880
+            },
+            "parameters": {}
+          },
+          {
+            "id": "matrix_multiply_148",
+            "name": "Idot_w_x",
+            "type": "matrix_multiply",
+            "position": {
+              "x": 640,
+              "y": 800
+            },
+            "parameters": {}
+          },
+          {
+            "id": "matrix_multiply_149",
+            "name": "Idot_w_y",
+            "type": "matrix_multiply",
+            "position": {
+              "x": 640,
+              "y": 840
+            },
+            "parameters": {}
+          },
+          {
+            "id": "matrix_multiply_150",
+            "name": "Idot_w_z",
+            "type": "matrix_multiply",
+            "position": {
+              "x": 640,
+              "y": 880
+            },
+            "parameters": {}
+          },
+          {
+            "id": "mux_157",
+            "name": "Idot_omega",
+            "type": "mux",
+            "position": {
+              "x": 780,
+              "y": 820
+            },
+            "parameters": {
+              "outputShape": "vector",
+              "rows": 1,
+              "cols": 3,
+              "baseType": "double",
+              "outputType": "double[3]"
+            }
+          },
+          {
+            "id": "uminus_161",
+            "name": "neg_Idot_w",
+            "type": "uminus",
+            "position": {
+              "x": 900,
+              "y": 820
+            },
+            "parameters": {}
+          },
+          {
+            "id": "sum_163",
+            "name": "M_tmp",
             "type": "sum",
             "position": {
               "x": 700,
@@ -711,11 +817,24 @@
             }
           },
           {
-            "id": "demux_136",
+            "id": "sum_166",
+            "name": "M_net",
+            "type": "sum",
+            "position": {
+              "x": 820,
+              "y": 360
+            },
+            "parameters": {
+              "signs": "++",
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "demux_169",
             "name": "demux_Mnet",
             "type": "demux",
             "position": {
-              "x": 820,
+              "x": 940,
               "y": 360
             },
             "parameters": {
@@ -726,41 +845,41 @@
             }
           },
           {
-            "id": "divide_138",
+            "id": "divide_171",
             "name": "wd_x",
             "type": "divide",
             "position": {
-              "x": 960,
+              "x": 1080,
               "y": 300
             },
             "parameters": {}
           },
           {
-            "id": "divide_139",
+            "id": "divide_172",
             "name": "wd_y",
             "type": "divide",
             "position": {
-              "x": 960,
+              "x": 1080,
               "y": 340
             },
             "parameters": {}
           },
           {
-            "id": "divide_140",
+            "id": "divide_173",
             "name": "wd_z",
             "type": "divide",
             "position": {
-              "x": 960,
+              "x": 1080,
               "y": 380
             },
             "parameters": {}
           },
           {
-            "id": "mux_147",
+            "id": "mux_180",
             "name": "omega_dot",
             "type": "mux",
             "position": {
-              "x": 1080,
+              "x": 1200,
               "y": 320
             },
             "parameters": {
@@ -772,11 +891,11 @@
             }
           },
           {
-            "id": "output_port_152",
+            "id": "output_port_185",
             "name": "r_i_out",
             "type": "output_port",
             "position": {
-              "x": 1200,
+              "x": 1360,
               "y": 600
             },
             "parameters": {
@@ -784,11 +903,11 @@
             }
           },
           {
-            "id": "output_port_153",
+            "id": "output_port_186",
             "name": "v_b_out",
             "type": "output_port",
             "position": {
-              "x": 1200,
+              "x": 1360,
               "y": 400
             },
             "parameters": {
@@ -796,11 +915,11 @@
             }
           },
           {
-            "id": "output_port_154",
+            "id": "output_port_187",
             "name": "omega_out",
             "type": "output_port",
             "position": {
-              "x": 1200,
+              "x": 1360,
               "y": 200
             },
             "parameters": {
@@ -808,11 +927,11 @@
             }
           },
           {
-            "id": "output_port_155",
+            "id": "output_port_188",
             "name": "q_out",
             "type": "output_port",
             "position": {
-              "x": 1200,
+              "x": 1360,
               "y": 40
             },
             "parameters": {
@@ -820,11 +939,11 @@
             }
           },
           {
-            "id": "output_port_156",
+            "id": "output_port_189",
             "name": "mass_out",
             "type": "output_port",
             "position": {
-              "x": 1200,
+              "x": 1360,
               "y": 920
             },
             "parameters": {
@@ -832,11 +951,11 @@
             }
           },
           {
-            "id": "output_port_157",
+            "id": "output_port_190",
             "name": "rmag_out",
             "type": "output_port",
             "position": {
-              "x": 1200,
+              "x": 1360,
               "y": 660
             },
             "parameters": {
@@ -1218,310 +1337,464 @@
           },
           {
             "id": "w_97",
-            "sourceBlockId": "source_6",
+            "sourceBlockId": "integrator_18",
             "sourcePortIndex": 0,
-            "targetBlockId": "divide_96",
+            "targetBlockId": "matrix_multiply_96",
             "targetPortIndex": 0
           },
           {
             "id": "w_98",
-            "sourceBlockId": "integrator_18",
+            "sourceBlockId": "matrix_multiply_93",
             "sourcePortIndex": 0,
-            "targetBlockId": "divide_96",
+            "targetBlockId": "matrix_multiply_96",
             "targetPortIndex": 1
           },
           {
             "id": "w_100",
-            "sourceBlockId": "integrator_16",
+            "sourceBlockId": "source_6",
             "sourcePortIndex": 0,
-            "targetBlockId": "cross_99",
+            "targetBlockId": "divide_99",
             "targetPortIndex": 0
           },
           {
             "id": "w_101",
-            "sourceBlockId": "integrator_15",
+            "sourceBlockId": "integrator_18",
             "sourcePortIndex": 0,
-            "targetBlockId": "cross_99",
+            "targetBlockId": "divide_99",
             "targetPortIndex": 1
           },
           {
             "id": "w_103",
-            "sourceBlockId": "cross_99",
+            "sourceBlockId": "integrator_16",
             "sourcePortIndex": 0,
-            "targetBlockId": "uminus_102",
+            "targetBlockId": "cross_102",
             "targetPortIndex": 0
           },
           {
-            "id": "w_105",
-            "sourceBlockId": "divide_96",
+            "id": "w_104",
+            "sourceBlockId": "integrator_15",
             "sourcePortIndex": 0,
-            "targetBlockId": "sum_104",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_106",
-            "sourceBlockId": "uminus_102",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sum_104",
+            "targetBlockId": "cross_102",
             "targetPortIndex": 1
           },
           {
+            "id": "w_106",
+            "sourceBlockId": "cross_102",
+            "sourcePortIndex": 0,
+            "targetBlockId": "uminus_105",
+            "targetPortIndex": 0
+          },
+          {
             "id": "w_108",
-            "sourceBlockId": "sum_104",
+            "sourceBlockId": "divide_99",
             "sourcePortIndex": 0,
             "targetBlockId": "sum_107",
             "targetPortIndex": 0
           },
           {
             "id": "w_109",
-            "sourceBlockId": "matrix_multiply_93",
+            "sourceBlockId": "uminus_105",
             "sourcePortIndex": 0,
             "targetBlockId": "sum_107",
             "targetPortIndex": 1
           },
           {
-            "id": "w_110",
+            "id": "w_111",
             "sourceBlockId": "sum_107",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_110",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_112",
+            "sourceBlockId": "matrix_multiply_93",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_110",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_113",
+            "sourceBlockId": "sum_110",
             "sourcePortIndex": 0,
             "targetBlockId": "integrator_15",
             "targetPortIndex": 0
           },
           {
-            "id": "w_112",
+            "id": "w_115",
             "sourceBlockId": "orientation_conversion_73",
             "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_111",
+            "targetBlockId": "matrix_multiply_114",
             "targetPortIndex": 0
           },
           {
-            "id": "w_113",
+            "id": "w_116",
             "sourceBlockId": "integrator_15",
             "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_111",
+            "targetBlockId": "matrix_multiply_114",
             "targetPortIndex": 1
           },
           {
-            "id": "w_114",
-            "sourceBlockId": "matrix_multiply_111",
+            "id": "w_117",
+            "sourceBlockId": "matrix_multiply_114",
             "sourcePortIndex": 0,
             "targetBlockId": "integrator_14",
             "targetPortIndex": 0
           },
           {
-            "id": "w_118",
+            "id": "w_121",
             "sourceBlockId": "matrix_multiply_30",
             "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_115",
+            "targetBlockId": "matrix_multiply_118",
             "targetPortIndex": 0
-          },
-          {
-            "id": "w_119",
-            "sourceBlockId": "demux_39",
-            "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_115",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_120",
-            "sourceBlockId": "matrix_multiply_31",
-            "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_116",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_121",
-            "sourceBlockId": "demux_39",
-            "sourcePortIndex": 1,
-            "targetBlockId": "matrix_multiply_116",
-            "targetPortIndex": 1
           },
           {
             "id": "w_122",
-            "sourceBlockId": "matrix_multiply_32",
+            "sourceBlockId": "demux_39",
             "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_117",
-            "targetPortIndex": 0
+            "targetBlockId": "matrix_multiply_118",
+            "targetPortIndex": 1
           },
           {
             "id": "w_123",
+            "sourceBlockId": "matrix_multiply_31",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_119",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_124",
             "sourceBlockId": "demux_39",
-            "sourcePortIndex": 2,
-            "targetBlockId": "matrix_multiply_117",
+            "sourcePortIndex": 1,
+            "targetBlockId": "matrix_multiply_119",
             "targetPortIndex": 1
           },
           {
             "id": "w_125",
-            "sourceBlockId": "matrix_multiply_115",
+            "sourceBlockId": "matrix_multiply_32",
             "sourcePortIndex": 0,
-            "targetBlockId": "mux_124",
+            "targetBlockId": "matrix_multiply_120",
             "targetPortIndex": 0
           },
           {
             "id": "w_126",
-            "sourceBlockId": "matrix_multiply_116",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_124",
+            "sourceBlockId": "demux_39",
+            "sourcePortIndex": 2,
+            "targetBlockId": "matrix_multiply_120",
             "targetPortIndex": 1
           },
           {
-            "id": "w_127",
-            "sourceBlockId": "matrix_multiply_117",
+            "id": "w_128",
+            "sourceBlockId": "matrix_multiply_118",
             "sourcePortIndex": 0,
-            "targetBlockId": "mux_124",
-            "targetPortIndex": 2
+            "targetBlockId": "mux_127",
+            "targetPortIndex": 0
           },
           {
             "id": "w_129",
-            "sourceBlockId": "integrator_16",
+            "sourceBlockId": "matrix_multiply_119",
             "sourcePortIndex": 0,
-            "targetBlockId": "cross_128",
-            "targetPortIndex": 0
+            "targetBlockId": "mux_127",
+            "targetPortIndex": 1
           },
           {
             "id": "w_130",
-            "sourceBlockId": "mux_124",
+            "sourceBlockId": "matrix_multiply_120",
             "sourcePortIndex": 0,
-            "targetBlockId": "cross_128",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_132",
-            "sourceBlockId": "cross_128",
-            "sourcePortIndex": 0,
-            "targetBlockId": "uminus_131",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_134",
-            "sourceBlockId": "source_7",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sum_133",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_135",
-            "sourceBlockId": "uminus_131",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sum_133",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_137",
-            "sourceBlockId": "sum_133",
-            "sourcePortIndex": 0,
-            "targetBlockId": "demux_136",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_141",
-            "sourceBlockId": "demux_136",
-            "sourcePortIndex": 0,
-            "targetBlockId": "divide_138",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_142",
-            "sourceBlockId": "matrix_multiply_30",
-            "sourcePortIndex": 0,
-            "targetBlockId": "divide_138",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_143",
-            "sourceBlockId": "demux_136",
-            "sourcePortIndex": 1,
-            "targetBlockId": "divide_139",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_144",
-            "sourceBlockId": "matrix_multiply_31",
-            "sourcePortIndex": 0,
-            "targetBlockId": "divide_139",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_145",
-            "sourceBlockId": "demux_136",
-            "sourcePortIndex": 2,
-            "targetBlockId": "divide_140",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_146",
-            "sourceBlockId": "matrix_multiply_32",
-            "sourcePortIndex": 0,
-            "targetBlockId": "divide_140",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_148",
-            "sourceBlockId": "divide_138",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_147",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_149",
-            "sourceBlockId": "divide_139",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_147",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_150",
-            "sourceBlockId": "divide_140",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_147",
+            "targetBlockId": "mux_127",
             "targetPortIndex": 2
           },
           {
+            "id": "w_132",
+            "sourceBlockId": "integrator_16",
+            "sourcePortIndex": 0,
+            "targetBlockId": "cross_131",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_133",
+            "sourceBlockId": "mux_127",
+            "sourcePortIndex": 0,
+            "targetBlockId": "cross_131",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_135",
+            "sourceBlockId": "cross_131",
+            "sourcePortIndex": 0,
+            "targetBlockId": "uminus_134",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_137",
+            "sourceBlockId": "uminus_24",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_136",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_138",
+            "sourceBlockId": "source_2",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_136",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_142",
+            "sourceBlockId": "source_3",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_139",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_143",
+            "sourceBlockId": "divide_136",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_139",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_144",
+            "sourceBlockId": "source_4",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_140",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_145",
+            "sourceBlockId": "divide_136",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_140",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_146",
+            "sourceBlockId": "source_5",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_141",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_147",
+            "sourceBlockId": "divide_136",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_141",
+            "targetPortIndex": 1
+          },
+          {
             "id": "w_151",
-            "sourceBlockId": "mux_147",
+            "sourceBlockId": "matrix_multiply_139",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_148",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_152",
+            "sourceBlockId": "demux_39",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_148",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_153",
+            "sourceBlockId": "matrix_multiply_140",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_149",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_154",
+            "sourceBlockId": "demux_39",
+            "sourcePortIndex": 1,
+            "targetBlockId": "matrix_multiply_149",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_155",
+            "sourceBlockId": "matrix_multiply_141",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_150",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_156",
+            "sourceBlockId": "demux_39",
+            "sourcePortIndex": 2,
+            "targetBlockId": "matrix_multiply_150",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_158",
+            "sourceBlockId": "matrix_multiply_148",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_157",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_159",
+            "sourceBlockId": "matrix_multiply_149",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_157",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_160",
+            "sourceBlockId": "matrix_multiply_150",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_157",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_162",
+            "sourceBlockId": "mux_157",
+            "sourcePortIndex": 0,
+            "targetBlockId": "uminus_161",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_164",
+            "sourceBlockId": "source_7",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_163",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_165",
+            "sourceBlockId": "uminus_134",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_163",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_167",
+            "sourceBlockId": "sum_163",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_166",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_168",
+            "sourceBlockId": "uminus_161",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_166",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_170",
+            "sourceBlockId": "sum_166",
+            "sourcePortIndex": 0,
+            "targetBlockId": "demux_169",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_174",
+            "sourceBlockId": "demux_169",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_171",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_175",
+            "sourceBlockId": "matrix_multiply_30",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_171",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_176",
+            "sourceBlockId": "demux_169",
+            "sourcePortIndex": 1,
+            "targetBlockId": "divide_172",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_177",
+            "sourceBlockId": "matrix_multiply_31",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_172",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_178",
+            "sourceBlockId": "demux_169",
+            "sourcePortIndex": 2,
+            "targetBlockId": "divide_173",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_179",
+            "sourceBlockId": "matrix_multiply_32",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_173",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_181",
+            "sourceBlockId": "divide_171",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_180",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_182",
+            "sourceBlockId": "divide_172",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_180",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_183",
+            "sourceBlockId": "divide_173",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_180",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_184",
+            "sourceBlockId": "mux_180",
             "sourcePortIndex": 0,
             "targetBlockId": "integrator_16",
             "targetPortIndex": 0
           },
           {
-            "id": "w_158",
+            "id": "w_191",
             "sourceBlockId": "integrator_14",
             "sourcePortIndex": 0,
-            "targetBlockId": "output_port_152",
+            "targetBlockId": "output_port_185",
             "targetPortIndex": 0
           },
           {
-            "id": "w_159",
+            "id": "w_192",
             "sourceBlockId": "integrator_15",
             "sourcePortIndex": 0,
-            "targetBlockId": "output_port_153",
+            "targetBlockId": "output_port_186",
             "targetPortIndex": 0
           },
           {
-            "id": "w_160",
+            "id": "w_193",
             "sourceBlockId": "integrator_16",
             "sourcePortIndex": 0,
-            "targetBlockId": "output_port_154",
+            "targetBlockId": "output_port_187",
             "targetPortIndex": 0
           },
           {
-            "id": "w_161",
+            "id": "w_194",
             "sourceBlockId": "mux_62",
             "sourcePortIndex": 0,
-            "targetBlockId": "output_port_155",
+            "targetBlockId": "output_port_188",
             "targetPortIndex": 0
           },
           {
-            "id": "w_162",
+            "id": "w_195",
             "sourceBlockId": "integrator_18",
             "sourcePortIndex": 0,
-            "targetBlockId": "output_port_156",
+            "targetBlockId": "output_port_189",
             "targetPortIndex": 0
           },
           {
-            "id": "w_163",
+            "id": "w_196",
             "sourceBlockId": "mag_77",
             "sourcePortIndex": 0,
-            "targetBlockId": "output_port_157",
+            "targetBlockId": "output_port_190",
             "targetPortIndex": 0
           }
         ],

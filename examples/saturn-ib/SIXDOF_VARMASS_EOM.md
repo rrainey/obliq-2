@@ -1,24 +1,39 @@
 # 6-DOF Variable-Mass Quaternion EOM
 
-Source: [`sixDofVarMassEom.ts`](./sixDofVarMassEom.ts)  
+Source: [`sixDofVarMassEom.ts`](./sixDofVarMassEom.ts) (Obliq sheet builder)  
+Pure RHS oracle: [`sixDofVarMassEomRhs.ts`](./sixDofVarMassEomRhs.ts) — unit tests in `__tests__/sixdof-varmass-eom-rhs.test.ts`  
+MDL C vs oracle residual: [`EOM_MDL_VS_RHS.md`](./EOM_MDL_VS_RHS.md) (`npm run eom:mdl-vs-rhs`)  
 Fixture: `docs/sample-models/saturn/saturn-6dof-varmass-quaternion-eom.json`
 
 ## Equations
 
 ### Translation (body frame)
 
+**Legacy (demos):**
+
 \[
 \dot{\mathbf{v}}_b = \frac{\mathbf{F}_b}{m} - \boldsymbol{\omega}\times\mathbf{v}_b + \mathbf{g}_b
 \]
 
-### Rotation (principal axes)
+**MDL adapter (`EOM_MDL_ADAPTER.forcePathGravity`):** \(F_{\mathrm{aug}}=F_b+m g_b\), then
+
+\[
+\dot{\mathbf{v}}_b = \frac{F_{\mathrm{aug}}}{m} - \boldsymbol{\omega}\times\mathbf{v}_b
+\]
+
+**Ve / \(\dot r\)** with `veViaTranspose` (mdlWire quat): \(\dot r = C_{ib} v_b\) where \(C_{bi}=\mathrm{quat\_to\_dcm}(q)\), \(C_{ib}=C_{bi}^{\mathsf T}\).
+
+### Rotation (variable mass, principal axes)
+
+Matches Aerospace Blockset **Custom Variable Mass 6DoF** body-axis form:
 
 \[
 \mathbf{I}(m) = \mathbf{I}_{\mathrm{ref}}\frac{m}{m_{\mathrm{ref}}},\quad
-\dot{\boldsymbol{\omega}} = \mathbf{I}^{-1}\bigl(\mathbf{M}_b - \boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})\bigr)
+\dot{\mathbf{I}} = \mathbf{I}_{\mathrm{ref}}\frac{\dot m}{m_{\mathrm{ref}}},\quad
+\dot{\boldsymbol{\omega}} = \mathbf{I}^{-1}\bigl(\mathbf{M}_b - \boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega}) - \dot{\mathbf{I}}\,\boldsymbol{\omega}\bigr)
 \]
 
-Diagonal \(\mathbf{I}=\mathrm{diag}(I_{xx},I_{yy},I_{zz})\) only (no products of inertia).
+with \(\dot m = -\dot m_{\mathrm{prop}}\). Diagonal \(\mathbf{I}\) only for now (no products of inertia / full \(I^{-1}\)).
 
 ### Attitude
 
@@ -303,7 +318,7 @@ At \(t=0\) (`as205EciPlant.ts` / Initial Position / MES):
 - Integrate \(\mathbf{r}\) in **E** (classical ECI); body \(\mathbf{v}_b\), \(\boldsymbol{\omega}\); \(q\) body→E  
 - Pad: \(R_S,V_S\) from Simulink Eqns 3.4; \(\mathbf{r}_E=\mathrm{MES}^\top R_S\); \(v_{b0}=V_S\); \(q_0=\mathrm{dcm}(\mathrm{MES}^\top)\) (B‖S)  
 - \(\Theta_E\) from Apollo 7 `LaunchDate` (Simulink practice); TN residual still vs TN-AP-67-158  
-- Export \(\mathbf{r}_S=\mathrm{MES}\,\mathbf{r}_E\) (`log_X_S/Y_S/Z_S`); live \(v_S\) deferred  
+- Export \(\mathbf{r}_S=\mathrm{MES}\,\mathbf{r}_E\), \(\mathbf{v}_S=\mathrm{MES}\,C_{bE}\mathbf{v}_b\) (`log_X/Y/Z_S`, `log_V_S`, `log_VX/Y/Z_S`)  
 
 ### Pitch sign (for residual / χ work)
 
@@ -311,14 +326,19 @@ User: **positive pitch = pitch up**.
 TN Table 2B: \(\chi_c\) more **negative** as vehicle pitches **downrange**.  
 Plant elev \(=90+\chi_c\) decreases as \(\chi_c\) decreases. Tip plane is intended \(X_S\)–\(Z_S\) (body \(Y\)).
 
-## Limitations (v1)
+## Limitations / vs full `saturn_ib_stack`
 
-- Principal-axis inertia only; no \(I_{xy}\) etc.
-- No thruster relative-velocity / plume force beyond user `F_b`
-- Live \(v_S\) not yet on plant sheet (type-prop mat×vec order); post-process offline if needed  
-- `pad_roll_L` not applied to \(q_0\)  
-- Multi-engine / APS still TBD
-- Quantitative TN residual pass/fail windows not yet declared
+| Item | Status |
+|------|--------|
+| Body \(F,M\), \(v,\omega\), \(q\), \(r_i\), ṁ | **In** |
+| \(\dot{\mathbf{I}}\boldsymbol{\omega}\) in \(\dot\omega\) | **In** (principal \(I\propto m\)) |
+| Full 3×3 \(I\) + products + \(I^{-1}\) | **Not yet** |
+| External mass/\(I\) ports (Simulink Custom feed) | Mass integrated inside |
+| Oblate gravity | Point mass only |
+| BODYtoSM full Euler | Elev-only on 9.6; full SM next |
+| FCC/IGM as in stack | LUT + PD only |
+
+**TN residual** while incomplete diagnoses **missing stack**, not gain error. Prefer porting BodyToSM / gravity / guidance over retuning PD to Table 5.
 
 ## Run codegen test
 

@@ -3,7 +3,7 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-11T23:34:31.028Z",
+      "created": "2026-08-22T02:45:40.189Z",
       "description": "1D open-loop ascent: liftoff edge → thrust table, gravity, atmosphere density (order-of-magnitude stack)"
     },
     "sheets": [
@@ -523,7 +523,7 @@
           {
             "id": "wire_50",
             "sourceBlockId": "atmosphere_19",
-            "sourcePortIndex": 2,
+            "sourcePortIndex": 3,
             "targetBlockId": "output_port_24",
             "targetPortIndex": 0
           },

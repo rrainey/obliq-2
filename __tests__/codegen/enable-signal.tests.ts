@@ -167,9 +167,9 @@ describe('Enable Signal Functionality', () => {
       const tfBlock = result.model.blocks.find(b => b.block.type === 'transfer_function')
       expect(tfBlock?.enableScope).toBe('sub')
 
-      // Check subsystem enable info
+      // Check subsystem enable info (IDs prefixed to avoid collisions with parent sheet)
       const enableInfo = result.model.subsystemEnableInfo[0]
-      expect(enableInfo.controlledBlockIds).toContain('tf')
+      expect(enableInfo.controlledBlockIds).toContain('sub__tf')
     })
 
     test('should handle nested enable scopes', () => {
@@ -292,8 +292,11 @@ describe('Enable Signal Functionality', () => {
       const cScale = result.model.blocks.find(b => b.flattenedName === 'ParentSub_ChildSub_CScale')
       const gcScale = result.model.blocks.find(b => b.flattenedName === 'ParentSub_ChildSub_GrandchildSub_GCScale')
 
-      expect(cScale?.enableScope).toBe('child_sub')
-      expect(gcScale?.enableScope).toBe('grandchild_sub')
+      // Enable scopes use unique scoped subsystem IDs (parentPrefix__childId)
+      expect(cScale?.enableScope).toBe('parent_sub__child_sub')
+      expect(gcScale?.enableScope).toBe(
+        'parent_sub__child_sub__grandchild_sub'
+      )
     })
 
     test('should inherit enable scope when subsystem has no enable input', () => {

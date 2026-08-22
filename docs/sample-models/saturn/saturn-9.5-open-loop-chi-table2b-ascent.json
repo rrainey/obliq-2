@@ -3,8 +3,8 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-12T13:29:32.858Z",
-      "description": "9.4 ECI 6DoF plant + TN-AP-67-158 Table 2B χ_c pitch program (elev=90+χ_c) → Q_cmd → My. Rate loop only; TN primary for residuals."
+      "created": "2026-08-22T02:45:40.187Z",
+      "description": "9.4 ECI 6DoF + H-1 TVC + TN Table 2B χ→β_P + air-rel F&M (RTW CG/CN). Rate loop only; TN primary for residuals."
     },
     "sheets": [
       {
@@ -12,7 +12,7 @@
         "name": "OpenLoopChiTable2B",
         "blocks": [
           {
-            "id": "source_164",
+            "id": "source_197",
             "name": "liftoff",
             "type": "source",
             "position": {
@@ -27,7 +27,7 @@
             }
           },
           {
-            "id": "edge_detect_165",
+            "id": "edge_detect_198",
             "name": "liftoff_edge",
             "type": "edge_detect",
             "position": {
@@ -40,7 +40,7 @@
             }
           },
           {
-            "id": "source_166",
+            "id": "source_199",
             "name": "one",
             "type": "source",
             "position": {
@@ -54,7 +54,7 @@
             }
           },
           {
-            "id": "integrator_167",
+            "id": "integrator_200",
             "name": "t_burn",
             "type": "integrator",
             "position": {
@@ -68,7 +68,7 @@
             }
           },
           {
-            "id": "lookup_1d_168",
+            "id": "lookup_1d_201",
             "name": "ThrustMag_N",
             "type": "lookup_1d",
             "position": {
@@ -164,7 +164,7 @@
             }
           },
           {
-            "id": "lookup_1d_169",
+            "id": "lookup_1d_202",
             "name": "mdot_kgps",
             "type": "lookup_1d",
             "position": {
@@ -254,7 +254,7 @@
             }
           },
           {
-            "id": "source_170",
+            "id": "source_203",
             "name": "zero",
             "type": "source",
             "position": {
@@ -268,12 +268,282 @@
             }
           },
           {
-            "id": "mux_171",
-            "name": "F_thrust",
-            "type": "mux",
+            "id": "lookup_1d_204",
+            "name": "CG_x_m",
+            "type": "lookup_1d",
             "position": {
               "x": 480,
-              "y": 120
+              "y": 60
+            },
+            "parameters": {
+              "inputValues": [
+                179218,
+                179225,
+                180020,
+                182752,
+                185149,
+                196236,
+                210314,
+                224456,
+                238644,
+                252875,
+                267134,
+                281431,
+                295745,
+                310078,
+                324423,
+                338778,
+                353202,
+                367663,
+                382121,
+                396580,
+                411038,
+                425426,
+                439815,
+                454204,
+                468588,
+                482967,
+                497330,
+                511673,
+                525995,
+                540243,
+                554412,
+                568480,
+                582491
+              ],
+              "outputValues": [
+                25.144,
+                25.144,
+                25.0557,
+                24.7247,
+                24.4584,
+                23.3056,
+                22.0548,
+                20.999,
+                20.0932,
+                19.3229,
+                18.6591,
+                18.0941,
+                17.6068,
+                17.1932,
+                16.8385,
+                16.5392,
+                16.2823,
+                16.0685,
+                15.8906,
+                15.7477,
+                15.6373,
+                15.5551,
+                15.4957,
+                15.4585,
+                15.4409,
+                15.4422,
+                15.4591,
+                15.4918,
+                15.5375,
+                15.5959,
+                15.6648,
+                15.7444,
+                15.8332
+              ],
+              "extrapolation": "clamp"
+            }
+          },
+          {
+            "id": "source_205",
+            "name": "beta_P_deg",
+            "type": "source",
+            "position": {
+              "x": 480,
+              "y": 100
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 0,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "source_206",
+            "name": "beta_Y_deg",
+            "type": "source",
+            "position": {
+              "x": 480,
+              "y": 140
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 0,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "limit_207",
+            "name": "beta_P_lim",
+            "type": "limit",
+            "position": {
+              "x": 620,
+              "y": 100
+            },
+            "parameters": {
+              "lowerLimit": -8,
+              "upperLimit": 8
+            }
+          },
+          {
+            "id": "limit_208",
+            "name": "beta_Y_lim",
+            "type": "limit",
+            "position": {
+              "x": 620,
+              "y": 140
+            },
+            "parameters": {
+              "lowerLimit": -8,
+              "upperLimit": 8
+            }
+          },
+          {
+            "id": "evaluate_209",
+            "name": "T_half",
+            "type": "evaluate",
+            "position": {
+              "x": 620,
+              "y": 60
+            },
+            "parameters": {
+              "numInputs": 1,
+              "expression": "0.5*in(0)"
+            }
+          },
+          {
+            "id": "evaluate_210",
+            "name": "beta_P_rad",
+            "type": "evaluate",
+            "position": {
+              "x": 780,
+              "y": 100
+            },
+            "parameters": {
+              "numInputs": 1,
+              "expression": "in(0)*3.141592653589793/180.0"
+            }
+          },
+          {
+            "id": "evaluate_211",
+            "name": "beta_Y_rad",
+            "type": "evaluate",
+            "position": {
+              "x": 780,
+              "y": 140
+            },
+            "parameters": {
+              "numInputs": 1,
+              "expression": "in(0)*3.141592653589793/180.0"
+            }
+          },
+          {
+            "id": "evaluate_212",
+            "name": "Fx_eng",
+            "type": "evaluate",
+            "position": {
+              "x": 940,
+              "y": 60
+            },
+            "parameters": {
+              "numInputs": 3,
+              "expression": "in(0)*(cos(in(1))*cos(in(2))+1.0)"
+            }
+          },
+          {
+            "id": "evaluate_213",
+            "name": "Fy_eng",
+            "type": "evaluate",
+            "position": {
+              "x": 940,
+              "y": 100
+            },
+            "parameters": {
+              "numInputs": 2,
+              "expression": "in(0)*sin(in(1))"
+            }
+          },
+          {
+            "id": "evaluate_214",
+            "name": "Fz_eng",
+            "type": "evaluate",
+            "position": {
+              "x": 940,
+              "y": 140
+            },
+            "parameters": {
+              "numInputs": 3,
+              "expression": "in(0)*sin(in(1))*cos(in(2))"
+            }
+          },
+          {
+            "id": "mux_215",
+            "name": "F_engines_N",
+            "type": "mux",
+            "position": {
+              "x": 1100,
+              "y": 80
+            },
+            "parameters": {
+              "rows": 1,
+              "cols": 3,
+              "baseType": "double",
+              "outputType": "double[3]",
+              "outputShape": "vector"
+            }
+          },
+          {
+            "id": "source_216",
+            "name": "Mx_eng",
+            "type": "source",
+            "position": {
+              "x": 940,
+              "y": 180
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": 0,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "evaluate_217",
+            "name": "My_eng",
+            "type": "evaluate",
+            "position": {
+              "x": 940,
+              "y": 220
+            },
+            "parameters": {
+              "numInputs": 4,
+              "expression": "in(0)*in(1)*sin(in(2))*cos(in(3))"
+            }
+          },
+          {
+            "id": "evaluate_218",
+            "name": "Mz_eng",
+            "type": "evaluate",
+            "position": {
+              "x": 940,
+              "y": 260
+            },
+            "parameters": {
+              "numInputs": 3,
+              "expression": "-in(0)*in(1)*sin(in(2))"
+            }
+          },
+          {
+            "id": "mux_219",
+            "name": "M_engines_Nm",
+            "type": "mux",
+            "position": {
+              "x": 1100,
+              "y": 200
             },
             "parameters": {
               "rows": 1,
@@ -420,8 +690,8 @@
                       "parameters": {
                         "signalType": "constant",
                         "value": [
-                          -5427053.429234192,
-                          1414699.7270146743,
+                          -5394808.863631367,
+                          1533075.8514380297,
                           3027499.3173982706
                         ],
                         "dataType": "double[3]"
@@ -439,8 +709,8 @@
                         "signalType": "constant",
                         "value": [
                           0,
-                          51.11612854733461,
-                          405.76484993370104
+                          -71.01721603371683,
+                          402.75864617188165
                         ],
                         "dataType": "double[3]"
                       }
@@ -476,16 +746,16 @@
                         "dataType": "double[4][1]",
                         "value": [
                           [
-                            0.2540435801309204
+                            0.27287034849886166
                           ],
                           [
-                            -0.10173951197486365
+                            -0.05437478346082792
                           ],
                           [
-                            0.6593483051137462
+                            0.7571855727520941
                           ],
                           [
-                            -0.7002647668139612
+                            -0.5909781419390916
                           ]
                         ]
                       }
@@ -844,7 +1114,17 @@
                       "parameters": {}
                     },
                     {
-                      "id": "divide_96",
+                      "id": "matrix_multiply_96",
+                      "name": "m_g_b",
+                      "type": "matrix_multiply",
+                      "position": {
+                        "x": 500,
+                        "y": 360
+                      },
+                      "parameters": {}
+                    },
+                    {
+                      "id": "divide_99",
                       "name": "F_over_m",
                       "type": "divide",
                       "position": {
@@ -854,7 +1134,7 @@
                       "parameters": {}
                     },
                     {
-                      "id": "cross_99",
+                      "id": "cross_102",
                       "name": "w_x_v",
                       "type": "cross",
                       "position": {
@@ -864,7 +1144,7 @@
                       "parameters": {}
                     },
                     {
-                      "id": "uminus_102",
+                      "id": "uminus_105",
                       "name": "neg_wxv",
                       "type": "uminus",
                       "position": {
@@ -874,7 +1154,7 @@
                       "parameters": {}
                     },
                     {
-                      "id": "sum_104",
+                      "id": "sum_107",
                       "name": "vdot_tmp",
                       "type": "sum",
                       "position": {
@@ -887,7 +1167,7 @@
                       }
                     },
                     {
-                      "id": "sum_107",
+                      "id": "sum_110",
                       "name": "v_dot",
                       "type": "sum",
                       "position": {
@@ -900,7 +1180,7 @@
                       }
                     },
                     {
-                      "id": "matrix_multiply_111",
+                      "id": "matrix_multiply_114",
                       "name": "r_dot",
                       "type": "matrix_multiply",
                       "position": {
@@ -910,7 +1190,7 @@
                       "parameters": {}
                     },
                     {
-                      "id": "matrix_multiply_115",
+                      "id": "matrix_multiply_118",
                       "name": "Iw_x",
                       "type": "matrix_multiply",
                       "position": {
@@ -920,7 +1200,7 @@
                       "parameters": {}
                     },
                     {
-                      "id": "matrix_multiply_116",
+                      "id": "matrix_multiply_119",
                       "name": "Iw_y",
                       "type": "matrix_multiply",
                       "position": {
@@ -930,7 +1210,7 @@
                       "parameters": {}
                     },
                     {
-                      "id": "matrix_multiply_117",
+                      "id": "matrix_multiply_120",
                       "name": "Iw_z",
                       "type": "matrix_multiply",
                       "position": {
@@ -940,7 +1220,7 @@
                       "parameters": {}
                     },
                     {
-                      "id": "mux_124",
+                      "id": "mux_127",
                       "name": "I_omega",
                       "type": "mux",
                       "position": {
@@ -956,7 +1236,7 @@
                       }
                     },
                     {
-                      "id": "cross_128",
+                      "id": "cross_131",
                       "name": "w_x_Iw",
                       "type": "cross",
                       "position": {
@@ -966,7 +1246,7 @@
                       "parameters": {}
                     },
                     {
-                      "id": "uminus_131",
+                      "id": "uminus_134",
                       "name": "neg_wIw",
                       "type": "uminus",
                       "position": {
@@ -976,8 +1256,104 @@
                       "parameters": {}
                     },
                     {
-                      "id": "sum_133",
-                      "name": "M_net",
+                      "id": "divide_136",
+                      "name": "mdot_over_mref",
+                      "type": "divide",
+                      "position": {
+                        "x": 300,
+                        "y": 800
+                      },
+                      "parameters": {}
+                    },
+                    {
+                      "id": "matrix_multiply_139",
+                      "name": "Idot_xx",
+                      "type": "matrix_multiply",
+                      "position": {
+                        "x": 480,
+                        "y": 800
+                      },
+                      "parameters": {}
+                    },
+                    {
+                      "id": "matrix_multiply_140",
+                      "name": "Idot_yy",
+                      "type": "matrix_multiply",
+                      "position": {
+                        "x": 480,
+                        "y": 840
+                      },
+                      "parameters": {}
+                    },
+                    {
+                      "id": "matrix_multiply_141",
+                      "name": "Idot_zz",
+                      "type": "matrix_multiply",
+                      "position": {
+                        "x": 480,
+                        "y": 880
+                      },
+                      "parameters": {}
+                    },
+                    {
+                      "id": "matrix_multiply_148",
+                      "name": "Idot_w_x",
+                      "type": "matrix_multiply",
+                      "position": {
+                        "x": 640,
+                        "y": 800
+                      },
+                      "parameters": {}
+                    },
+                    {
+                      "id": "matrix_multiply_149",
+                      "name": "Idot_w_y",
+                      "type": "matrix_multiply",
+                      "position": {
+                        "x": 640,
+                        "y": 840
+                      },
+                      "parameters": {}
+                    },
+                    {
+                      "id": "matrix_multiply_150",
+                      "name": "Idot_w_z",
+                      "type": "matrix_multiply",
+                      "position": {
+                        "x": 640,
+                        "y": 880
+                      },
+                      "parameters": {}
+                    },
+                    {
+                      "id": "mux_157",
+                      "name": "Idot_omega",
+                      "type": "mux",
+                      "position": {
+                        "x": 780,
+                        "y": 820
+                      },
+                      "parameters": {
+                        "outputShape": "vector",
+                        "rows": 1,
+                        "cols": 3,
+                        "baseType": "double",
+                        "outputType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "uminus_161",
+                      "name": "neg_Idot_w",
+                      "type": "uminus",
+                      "position": {
+                        "x": 900,
+                        "y": 820
+                      },
+                      "parameters": {}
+                    },
+                    {
+                      "id": "sum_163",
+                      "name": "M_tmp",
                       "type": "sum",
                       "position": {
                         "x": 700,
@@ -989,11 +1365,24 @@
                       }
                     },
                     {
-                      "id": "demux_136",
+                      "id": "sum_166",
+                      "name": "M_net",
+                      "type": "sum",
+                      "position": {
+                        "x": 820,
+                        "y": 360
+                      },
+                      "parameters": {
+                        "signs": "++",
+                        "numInputs": 2
+                      }
+                    },
+                    {
+                      "id": "demux_169",
                       "name": "demux_Mnet",
                       "type": "demux",
                       "position": {
-                        "x": 820,
+                        "x": 940,
                         "y": 360
                       },
                       "parameters": {
@@ -1004,41 +1393,41 @@
                       }
                     },
                     {
-                      "id": "divide_138",
+                      "id": "divide_171",
                       "name": "wd_x",
                       "type": "divide",
                       "position": {
-                        "x": 960,
+                        "x": 1080,
                         "y": 300
                       },
                       "parameters": {}
                     },
                     {
-                      "id": "divide_139",
+                      "id": "divide_172",
                       "name": "wd_y",
                       "type": "divide",
                       "position": {
-                        "x": 960,
+                        "x": 1080,
                         "y": 340
                       },
                       "parameters": {}
                     },
                     {
-                      "id": "divide_140",
+                      "id": "divide_173",
                       "name": "wd_z",
                       "type": "divide",
                       "position": {
-                        "x": 960,
+                        "x": 1080,
                         "y": 380
                       },
                       "parameters": {}
                     },
                     {
-                      "id": "mux_147",
+                      "id": "mux_180",
                       "name": "omega_dot",
                       "type": "mux",
                       "position": {
-                        "x": 1080,
+                        "x": 1200,
                         "y": 320
                       },
                       "parameters": {
@@ -1050,11 +1439,11 @@
                       }
                     },
                     {
-                      "id": "output_port_152",
+                      "id": "output_port_185",
                       "name": "r_i_out",
                       "type": "output_port",
                       "position": {
-                        "x": 1200,
+                        "x": 1360,
                         "y": 600
                       },
                       "parameters": {
@@ -1062,11 +1451,11 @@
                       }
                     },
                     {
-                      "id": "output_port_153",
+                      "id": "output_port_186",
                       "name": "v_b_out",
                       "type": "output_port",
                       "position": {
-                        "x": 1200,
+                        "x": 1360,
                         "y": 400
                       },
                       "parameters": {
@@ -1074,11 +1463,11 @@
                       }
                     },
                     {
-                      "id": "output_port_154",
+                      "id": "output_port_187",
                       "name": "omega_out",
                       "type": "output_port",
                       "position": {
-                        "x": 1200,
+                        "x": 1360,
                         "y": 200
                       },
                       "parameters": {
@@ -1086,11 +1475,11 @@
                       }
                     },
                     {
-                      "id": "output_port_155",
+                      "id": "output_port_188",
                       "name": "q_out",
                       "type": "output_port",
                       "position": {
-                        "x": 1200,
+                        "x": 1360,
                         "y": 40
                       },
                       "parameters": {
@@ -1098,11 +1487,11 @@
                       }
                     },
                     {
-                      "id": "output_port_156",
+                      "id": "output_port_189",
                       "name": "mass_out",
                       "type": "output_port",
                       "position": {
-                        "x": 1200,
+                        "x": 1360,
                         "y": 920
                       },
                       "parameters": {
@@ -1110,11 +1499,11 @@
                       }
                     },
                     {
-                      "id": "output_port_157",
+                      "id": "output_port_190",
                       "name": "rmag_out",
                       "type": "output_port",
                       "position": {
-                        "x": 1200,
+                        "x": 1360,
                         "y": 660
                       },
                       "parameters": {
@@ -1496,310 +1885,464 @@
                     },
                     {
                       "id": "w_97",
-                      "sourceBlockId": "source_6",
+                      "sourceBlockId": "integrator_18",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "divide_96",
+                      "targetBlockId": "matrix_multiply_96",
                       "targetPortIndex": 0
                     },
                     {
                       "id": "w_98",
-                      "sourceBlockId": "integrator_18",
+                      "sourceBlockId": "matrix_multiply_93",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "divide_96",
+                      "targetBlockId": "matrix_multiply_96",
                       "targetPortIndex": 1
                     },
                     {
                       "id": "w_100",
-                      "sourceBlockId": "integrator_16",
+                      "sourceBlockId": "source_6",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "cross_99",
+                      "targetBlockId": "divide_99",
                       "targetPortIndex": 0
                     },
                     {
                       "id": "w_101",
-                      "sourceBlockId": "integrator_15",
+                      "sourceBlockId": "integrator_18",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "cross_99",
+                      "targetBlockId": "divide_99",
                       "targetPortIndex": 1
                     },
                     {
                       "id": "w_103",
-                      "sourceBlockId": "cross_99",
+                      "sourceBlockId": "integrator_16",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "uminus_102",
+                      "targetBlockId": "cross_102",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_105",
-                      "sourceBlockId": "divide_96",
+                      "id": "w_104",
+                      "sourceBlockId": "integrator_15",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "sum_104",
-                      "targetPortIndex": 0
-                    },
-                    {
-                      "id": "w_106",
-                      "sourceBlockId": "uminus_102",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "sum_104",
+                      "targetBlockId": "cross_102",
                       "targetPortIndex": 1
                     },
                     {
+                      "id": "w_106",
+                      "sourceBlockId": "cross_102",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "uminus_105",
+                      "targetPortIndex": 0
+                    },
+                    {
                       "id": "w_108",
-                      "sourceBlockId": "sum_104",
+                      "sourceBlockId": "divide_99",
                       "sourcePortIndex": 0,
                       "targetBlockId": "sum_107",
                       "targetPortIndex": 0
                     },
                     {
                       "id": "w_109",
-                      "sourceBlockId": "matrix_multiply_93",
+                      "sourceBlockId": "uminus_105",
                       "sourcePortIndex": 0,
                       "targetBlockId": "sum_107",
                       "targetPortIndex": 1
                     },
                     {
-                      "id": "w_110",
+                      "id": "w_111",
                       "sourceBlockId": "sum_107",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sum_110",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_112",
+                      "sourceBlockId": "matrix_multiply_93",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sum_110",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_113",
+                      "sourceBlockId": "sum_110",
                       "sourcePortIndex": 0,
                       "targetBlockId": "integrator_15",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_112",
+                      "id": "w_115",
                       "sourceBlockId": "orientation_conversion_73",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "matrix_multiply_111",
+                      "targetBlockId": "matrix_multiply_114",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_113",
+                      "id": "w_116",
                       "sourceBlockId": "integrator_15",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "matrix_multiply_111",
+                      "targetBlockId": "matrix_multiply_114",
                       "targetPortIndex": 1
                     },
                     {
-                      "id": "w_114",
-                      "sourceBlockId": "matrix_multiply_111",
+                      "id": "w_117",
+                      "sourceBlockId": "matrix_multiply_114",
                       "sourcePortIndex": 0,
                       "targetBlockId": "integrator_14",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_118",
+                      "id": "w_121",
                       "sourceBlockId": "matrix_multiply_30",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "matrix_multiply_115",
+                      "targetBlockId": "matrix_multiply_118",
                       "targetPortIndex": 0
-                    },
-                    {
-                      "id": "w_119",
-                      "sourceBlockId": "demux_39",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "matrix_multiply_115",
-                      "targetPortIndex": 1
-                    },
-                    {
-                      "id": "w_120",
-                      "sourceBlockId": "matrix_multiply_31",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "matrix_multiply_116",
-                      "targetPortIndex": 0
-                    },
-                    {
-                      "id": "w_121",
-                      "sourceBlockId": "demux_39",
-                      "sourcePortIndex": 1,
-                      "targetBlockId": "matrix_multiply_116",
-                      "targetPortIndex": 1
                     },
                     {
                       "id": "w_122",
-                      "sourceBlockId": "matrix_multiply_32",
+                      "sourceBlockId": "demux_39",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "matrix_multiply_117",
-                      "targetPortIndex": 0
+                      "targetBlockId": "matrix_multiply_118",
+                      "targetPortIndex": 1
                     },
                     {
                       "id": "w_123",
+                      "sourceBlockId": "matrix_multiply_31",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "matrix_multiply_119",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_124",
                       "sourceBlockId": "demux_39",
-                      "sourcePortIndex": 2,
-                      "targetBlockId": "matrix_multiply_117",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "matrix_multiply_119",
                       "targetPortIndex": 1
                     },
                     {
                       "id": "w_125",
-                      "sourceBlockId": "matrix_multiply_115",
+                      "sourceBlockId": "matrix_multiply_32",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "mux_124",
+                      "targetBlockId": "matrix_multiply_120",
                       "targetPortIndex": 0
                     },
                     {
                       "id": "w_126",
-                      "sourceBlockId": "matrix_multiply_116",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "mux_124",
+                      "sourceBlockId": "demux_39",
+                      "sourcePortIndex": 2,
+                      "targetBlockId": "matrix_multiply_120",
                       "targetPortIndex": 1
                     },
                     {
-                      "id": "w_127",
-                      "sourceBlockId": "matrix_multiply_117",
+                      "id": "w_128",
+                      "sourceBlockId": "matrix_multiply_118",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "mux_124",
-                      "targetPortIndex": 2
+                      "targetBlockId": "mux_127",
+                      "targetPortIndex": 0
                     },
                     {
                       "id": "w_129",
-                      "sourceBlockId": "integrator_16",
+                      "sourceBlockId": "matrix_multiply_119",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "cross_128",
-                      "targetPortIndex": 0
+                      "targetBlockId": "mux_127",
+                      "targetPortIndex": 1
                     },
                     {
                       "id": "w_130",
-                      "sourceBlockId": "mux_124",
+                      "sourceBlockId": "matrix_multiply_120",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "cross_128",
-                      "targetPortIndex": 1
-                    },
-                    {
-                      "id": "w_132",
-                      "sourceBlockId": "cross_128",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "uminus_131",
-                      "targetPortIndex": 0
-                    },
-                    {
-                      "id": "w_134",
-                      "sourceBlockId": "source_7",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "sum_133",
-                      "targetPortIndex": 0
-                    },
-                    {
-                      "id": "w_135",
-                      "sourceBlockId": "uminus_131",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "sum_133",
-                      "targetPortIndex": 1
-                    },
-                    {
-                      "id": "w_137",
-                      "sourceBlockId": "sum_133",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "demux_136",
-                      "targetPortIndex": 0
-                    },
-                    {
-                      "id": "w_141",
-                      "sourceBlockId": "demux_136",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "divide_138",
-                      "targetPortIndex": 0
-                    },
-                    {
-                      "id": "w_142",
-                      "sourceBlockId": "matrix_multiply_30",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "divide_138",
-                      "targetPortIndex": 1
-                    },
-                    {
-                      "id": "w_143",
-                      "sourceBlockId": "demux_136",
-                      "sourcePortIndex": 1,
-                      "targetBlockId": "divide_139",
-                      "targetPortIndex": 0
-                    },
-                    {
-                      "id": "w_144",
-                      "sourceBlockId": "matrix_multiply_31",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "divide_139",
-                      "targetPortIndex": 1
-                    },
-                    {
-                      "id": "w_145",
-                      "sourceBlockId": "demux_136",
-                      "sourcePortIndex": 2,
-                      "targetBlockId": "divide_140",
-                      "targetPortIndex": 0
-                    },
-                    {
-                      "id": "w_146",
-                      "sourceBlockId": "matrix_multiply_32",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "divide_140",
-                      "targetPortIndex": 1
-                    },
-                    {
-                      "id": "w_148",
-                      "sourceBlockId": "divide_138",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "mux_147",
-                      "targetPortIndex": 0
-                    },
-                    {
-                      "id": "w_149",
-                      "sourceBlockId": "divide_139",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "mux_147",
-                      "targetPortIndex": 1
-                    },
-                    {
-                      "id": "w_150",
-                      "sourceBlockId": "divide_140",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "mux_147",
+                      "targetBlockId": "mux_127",
                       "targetPortIndex": 2
                     },
                     {
+                      "id": "w_132",
+                      "sourceBlockId": "integrator_16",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "cross_131",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_133",
+                      "sourceBlockId": "mux_127",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "cross_131",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_135",
+                      "sourceBlockId": "cross_131",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "uminus_134",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_137",
+                      "sourceBlockId": "uminus_24",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "divide_136",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_138",
+                      "sourceBlockId": "source_2",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "divide_136",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_142",
+                      "sourceBlockId": "source_3",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "matrix_multiply_139",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_143",
+                      "sourceBlockId": "divide_136",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "matrix_multiply_139",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_144",
+                      "sourceBlockId": "source_4",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "matrix_multiply_140",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_145",
+                      "sourceBlockId": "divide_136",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "matrix_multiply_140",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_146",
+                      "sourceBlockId": "source_5",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "matrix_multiply_141",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_147",
+                      "sourceBlockId": "divide_136",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "matrix_multiply_141",
+                      "targetPortIndex": 1
+                    },
+                    {
                       "id": "w_151",
-                      "sourceBlockId": "mux_147",
+                      "sourceBlockId": "matrix_multiply_139",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "matrix_multiply_148",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_152",
+                      "sourceBlockId": "demux_39",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "matrix_multiply_148",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_153",
+                      "sourceBlockId": "matrix_multiply_140",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "matrix_multiply_149",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_154",
+                      "sourceBlockId": "demux_39",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "matrix_multiply_149",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_155",
+                      "sourceBlockId": "matrix_multiply_141",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "matrix_multiply_150",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_156",
+                      "sourceBlockId": "demux_39",
+                      "sourcePortIndex": 2,
+                      "targetBlockId": "matrix_multiply_150",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_158",
+                      "sourceBlockId": "matrix_multiply_148",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "mux_157",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_159",
+                      "sourceBlockId": "matrix_multiply_149",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "mux_157",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_160",
+                      "sourceBlockId": "matrix_multiply_150",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "mux_157",
+                      "targetPortIndex": 2
+                    },
+                    {
+                      "id": "w_162",
+                      "sourceBlockId": "mux_157",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "uminus_161",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_164",
+                      "sourceBlockId": "source_7",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sum_163",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_165",
+                      "sourceBlockId": "uminus_134",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sum_163",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_167",
+                      "sourceBlockId": "sum_163",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sum_166",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_168",
+                      "sourceBlockId": "uminus_161",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sum_166",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_170",
+                      "sourceBlockId": "sum_166",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "demux_169",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_174",
+                      "sourceBlockId": "demux_169",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "divide_171",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_175",
+                      "sourceBlockId": "matrix_multiply_30",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "divide_171",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_176",
+                      "sourceBlockId": "demux_169",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "divide_172",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_177",
+                      "sourceBlockId": "matrix_multiply_31",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "divide_172",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_178",
+                      "sourceBlockId": "demux_169",
+                      "sourcePortIndex": 2,
+                      "targetBlockId": "divide_173",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_179",
+                      "sourceBlockId": "matrix_multiply_32",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "divide_173",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_181",
+                      "sourceBlockId": "divide_171",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "mux_180",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_182",
+                      "sourceBlockId": "divide_172",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "mux_180",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_183",
+                      "sourceBlockId": "divide_173",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "mux_180",
+                      "targetPortIndex": 2
+                    },
+                    {
+                      "id": "w_184",
+                      "sourceBlockId": "mux_180",
                       "sourcePortIndex": 0,
                       "targetBlockId": "integrator_16",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_158",
+                      "id": "w_191",
                       "sourceBlockId": "integrator_14",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "output_port_152",
+                      "targetBlockId": "output_port_185",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_159",
+                      "id": "w_192",
                       "sourceBlockId": "integrator_15",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "output_port_153",
+                      "targetBlockId": "output_port_186",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_160",
+                      "id": "w_193",
                       "sourceBlockId": "integrator_16",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "output_port_154",
+                      "targetBlockId": "output_port_187",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_161",
+                      "id": "w_194",
                       "sourceBlockId": "mux_62",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "output_port_155",
+                      "targetBlockId": "output_port_188",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_162",
+                      "id": "w_195",
                       "sourceBlockId": "integrator_18",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "output_port_156",
+                      "targetBlockId": "output_port_189",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_163",
+                      "id": "w_196",
                       "sourceBlockId": "mag_77",
                       "sourcePortIndex": 0,
-                      "targetBlockId": "output_port_157",
+                      "targetBlockId": "output_port_190",
                       "targetPortIndex": 0
                     }
                   ],
@@ -1827,7 +2370,7 @@
             }
           },
           {
-            "id": "source_178",
+            "id": "source_224",
             "name": "MES_E_to_S",
             "type": "source",
             "position": {
@@ -1838,18 +2381,18 @@
               "signalType": "constant",
               "value": [
                 [
-                  -0.8502218621947624,
-                  0.22163198723447358,
+                  -0.8451703116673956,
+                  0.2401772199761431,
                   0.47749559922638923
                 ],
                 [
-                  -0.48995908636937774,
-                  -0.0014433438757898293,
+                  -0.4898734226481929,
+                  0.009274661201578313,
                   -0.8717442345335821
                 ],
                 [
-                  -0.1925172167110128,
-                  -0.9751293139850502,
+                  -0.21380171668857603,
+                  -0.970684749887484,
                   0.1098177684934937
                 ]
               ],
@@ -1857,7 +2400,7 @@
             }
           },
           {
-            "id": "matrix_multiply_179",
+            "id": "matrix_multiply_225",
             "name": "r_S",
             "type": "matrix_multiply",
             "position": {
@@ -1867,7 +2410,7 @@
             "parameters": {}
           },
           {
-            "id": "demux_180",
+            "id": "demux_226",
             "name": "demux_r_S",
             "type": "demux",
             "position": {
@@ -1882,7 +2425,125 @@
             }
           },
           {
-            "id": "source_172",
+            "id": "orientation_conversion_227",
+            "name": "C_bE_live",
+            "type": "orientation_conversion",
+            "position": {
+              "x": 1480,
+              "y": 40
+            },
+            "parameters": {
+              "conversionType": "quat_to_dcm"
+            }
+          },
+          {
+            "id": "matrix_multiply_228",
+            "name": "v_E",
+            "type": "matrix_multiply",
+            "position": {
+              "x": 1620,
+              "y": 40
+            },
+            "parameters": {}
+          },
+          {
+            "id": "matrix_multiply_229",
+            "name": "v_S",
+            "type": "matrix_multiply",
+            "position": {
+              "x": 1760,
+              "y": 40
+            },
+            "parameters": {}
+          },
+          {
+            "id": "mag_230",
+            "name": "V_S_mag",
+            "type": "mag",
+            "position": {
+              "x": 1900,
+              "y": 40
+            },
+            "parameters": {}
+          },
+          {
+            "id": "demux_231",
+            "name": "demux_v_S",
+            "type": "demux",
+            "position": {
+              "x": 1900,
+              "y": 100
+            },
+            "parameters": {
+              "outputCount": 3,
+              "inputDimensions": [
+                3
+              ]
+            }
+          },
+          {
+            "id": "source_232",
+            "name": "omega_E_eci",
+            "type": "source",
+            "position": {
+              "x": 720,
+              "y": 360
+            },
+            "parameters": {
+              "signalType": "constant",
+              "value": [
+                0,
+                0,
+                0.00007292115
+              ],
+              "dataType": "double[3]"
+            }
+          },
+          {
+            "id": "cross_233",
+            "name": "v_earth_rot",
+            "type": "cross",
+            "position": {
+              "x": 900,
+              "y": 360
+            },
+            "parameters": {}
+          },
+          {
+            "id": "sum_234",
+            "name": "v_air_E",
+            "type": "sum",
+            "position": {
+              "x": 1040,
+              "y": 360
+            },
+            "parameters": {
+              "signs": "+-",
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "transpose_235",
+            "name": "C_ib_aero",
+            "type": "transpose",
+            "position": {
+              "x": 1480,
+              "y": 100
+            },
+            "parameters": {}
+          },
+          {
+            "id": "matrix_multiply_236",
+            "name": "v_air_b",
+            "type": "matrix_multiply",
+            "position": {
+              "x": 1620,
+              "y": 100
+            },
+            "parameters": {}
+          },
+          {
+            "id": "source_220",
             "name": "R_earth",
             "type": "source",
             "position": {
@@ -1896,7 +2557,7 @@
             }
           },
           {
-            "id": "sum_173",
+            "id": "sum_221",
             "name": "altitude_m",
             "type": "sum",
             "position": {
@@ -1909,7 +2570,7 @@
             }
           },
           {
-            "id": "atmosphere_174",
+            "id": "atmosphere_222",
             "name": "Atm",
             "type": "atmosphere",
             "position": {
@@ -1922,7 +2583,7 @@
             }
           },
           {
-            "id": "source_175",
+            "id": "source_223",
             "name": "half",
             "type": "source",
             "position": {
@@ -1936,8 +2597,8 @@
             }
           },
           {
-            "id": "mag_176",
-            "name": "V_mag",
+            "id": "mag_237",
+            "name": "V_air_mag",
             "type": "mag",
             "position": {
               "x": 880,
@@ -1946,8 +2607,8 @@
             "parameters": {}
           },
           {
-            "id": "multiply_177",
-            "name": "V_sq",
+            "id": "multiply_238",
+            "name": "V_air_sq",
             "type": "multiply",
             "position": {
               "x": 1020,
@@ -1958,7 +2619,7 @@
             }
           },
           {
-            "id": "multiply_181",
+            "id": "multiply_239",
             "name": "half_rho",
             "type": "multiply",
             "position": {
@@ -1970,7 +2631,7 @@
             }
           },
           {
-            "id": "multiply_182",
+            "id": "multiply_240",
             "name": "qbar",
             "type": "multiply",
             "position": {
@@ -1982,47 +2643,202 @@
             }
           },
           {
-            "id": "source_183",
-            "name": "CdA_m2",
+            "id": "source_241",
+            "name": "S_ref_m2",
             "type": "source",
             "position": {
-              "x": 880,
-              "y": 340
+              "x": 720,
+              "y": 640
             },
             "parameters": {
               "signalType": "constant",
-              "value": 12,
+              "value": 34.25,
               "dataType": "double"
             }
           },
           {
-            "id": "multiply_184",
-            "name": "D_mag",
-            "type": "multiply",
+            "id": "lookup_1d_242",
+            "name": "CG_y_m",
+            "type": "lookup_1d",
             "position": {
-              "x": 1160,
-              "y": 380
+              "x": 720,
+              "y": 700
             },
             "parameters": {
-              "numInputs": 2
+              "inputValues": [
+                179218,
+                179225,
+                180020,
+                182752,
+                185149,
+                196236,
+                210314,
+                224456,
+                238644,
+                252875,
+                267134,
+                281431,
+                295745,
+                310078,
+                324423,
+                338778,
+                353202,
+                367663,
+                382121,
+                396580,
+                411038,
+                425426,
+                439815,
+                454204,
+                468588,
+                482967,
+                497330,
+                511673,
+                525995,
+                540243,
+                554412,
+                568480,
+                582491
+              ],
+              "outputValues": [
+                0.0021,
+                0.0021,
+                0.0206,
+                0.0203,
+                0.0201,
+                0.0191,
+                0.0178,
+                0.0165,
+                0.0155,
+                0.0147,
+                0.014,
+                0.0132,
+                0.0124,
+                0.0121,
+                0.0114,
+                0.0109,
+                0.0104,
+                0.01,
+                0.0097,
+                0.0094,
+                0.0091,
+                0.0086,
+                0.0084,
+                0.0081,
+                0.0079,
+                0.0076,
+                0.0074,
+                0.0072,
+                0.0071,
+                0.0069,
+                0.0066,
+                0.0065,
+                0.0064
+              ],
+              "extrapolation": "clamp"
             }
           },
           {
-            "id": "evaluate_185",
-            "name": "V_safe",
-            "type": "evaluate",
+            "id": "lookup_1d_243",
+            "name": "CG_z_m",
+            "type": "lookup_1d",
             "position": {
-              "x": 1020,
-              "y": 340
+              "x": 720,
+              "y": 760
             },
             "parameters": {
-              "numInputs": 1,
-              "expression": "in(0) > 1e-3 ? in(0) : 1e-3"
+              "inputValues": [
+                179218,
+                179225,
+                180020,
+                182752,
+                185149,
+                196236,
+                210314,
+                224456,
+                238644,
+                252875,
+                267134,
+                281431,
+                295745,
+                310078,
+                324423,
+                338778,
+                353202,
+                367663,
+                382121,
+                396580,
+                411038,
+                425426,
+                439815,
+                454204,
+                468588,
+                482967,
+                497330,
+                511673,
+                525995,
+                540243,
+                554412,
+                568480,
+                582491
+              ],
+              "outputValues": [
+                -0.0079,
+                -0.0079,
+                -0.0079,
+                -0.0076,
+                -0.0076,
+                -0.007,
+                -0.0066,
+                -0.0062,
+                -0.0058,
+                -0.0055,
+                -0.0051,
+                -0.005,
+                -0.0046,
+                -0.0044,
+                -0.0043,
+                -0.0041,
+                -0.0038,
+                -0.0037,
+                -0.0036,
+                -0.0034,
+                -0.0033,
+                -0.0032,
+                -0.003,
+                -0.0028,
+                -0.0028,
+                -0.0028,
+                -0.0028,
+                -0.0025,
+                -0.0025,
+                -0.0025,
+                -0.0025,
+                -0.0023,
+                -0.0023
+              ],
+              "extrapolation": "clamp"
             }
           },
           {
-            "id": "demux_186",
-            "name": "demux_vb",
+            "id": "mux_244",
+            "name": "CG_m",
+            "type": "mux",
+            "position": {
+              "x": 880,
+              "y": 700
+            },
+            "parameters": {
+              "rows": 1,
+              "cols": 3,
+              "baseType": "double",
+              "outputType": "double[3]",
+              "outputShape": "vector"
+            }
+          },
+          {
+            "id": "demux_245",
+            "name": "demux_v_air_b",
             "type": "demux",
             "position": {
               "x": 880,
@@ -2036,42 +2852,418 @@
             }
           },
           {
-            "id": "divide_187",
-            "name": "vhat_x",
-            "type": "divide",
+            "id": "evaluate_246",
+            "name": "V_air_safe",
+            "type": "evaluate",
+            "position": {
+              "x": 1020,
+              "y": 340
+            },
+            "parameters": {
+              "numInputs": 1,
+              "expression": "in(0) > 1e-3 ? in(0) : 1e-3"
+            }
+          },
+          {
+            "id": "evaluate_247",
+            "name": "alpha_rad",
+            "type": "evaluate",
             "position": {
               "x": 1020,
               "y": 220
             },
+            "parameters": {
+              "numInputs": 2,
+              "expression": "atan2(in(1), in(0) == 0.0 && in(1) == 0.0 ? 1e-9 : in(0))"
+            }
+          },
+          {
+            "id": "evaluate_248",
+            "name": "beta_rad",
+            "type": "evaluate",
+            "position": {
+              "x": 1020,
+              "y": 280
+            },
+            "parameters": {
+              "numInputs": 2,
+              "expression": "asin(in(0)/in(1) > 1.0 ? 1.0 : (in(0)/in(1) < -1.0 ? -1.0 : in(0)/in(1)))"
+            }
+          },
+          {
+            "id": "evaluate_249",
+            "name": "alpha_deg",
+            "type": "evaluate",
+            "position": {
+              "x": 1180,
+              "y": 220
+            },
+            "parameters": {
+              "numInputs": 1,
+              "expression": "in(0)*180.0/3.141592653589793"
+            }
+          },
+          {
+            "id": "evaluate_250",
+            "name": "beta_deg",
+            "type": "evaluate",
+            "position": {
+              "x": 1180,
+              "y": 280
+            },
+            "parameters": {
+              "numInputs": 1,
+              "expression": "in(0)*180.0/3.141592653589793"
+            }
+          },
+          {
+            "id": "divide_251",
+            "name": "Mach",
+            "type": "divide",
+            "position": {
+              "x": 1040,
+              "y": 600
+            },
             "parameters": {}
           },
           {
-            "id": "divide_188",
-            "name": "vhat_y",
-            "type": "divide",
+            "id": "lookup_1d_252",
+            "name": "CA_T",
+            "type": "lookup_1d",
             "position": {
-              "x": 1020,
+              "x": 1180,
+              "y": 600
+            },
+            "parameters": {
+              "inputValues": [
+                0,
+                0.5,
+                0.75,
+                1,
+                1.25,
+                1.5,
+                6
+              ],
+              "outputValues": [
+                1.2,
+                0.84,
+                0.74,
+                0.96,
+                1.02,
+                0.95,
+                0.48
+              ],
+              "extrapolation": "clamp"
+            }
+          },
+          {
+            "id": "lookup_2d_253",
+            "name": "CN_alpha",
+            "type": "lookup_2d",
+            "position": {
+              "x": 1340,
+              "y": 200
+            },
+            "parameters": {
+              "input1Values": [
+                0,
+                0.2,
+                0.4,
+                1,
+                2,
+                3,
+                4.8
+              ],
+              "input2Values": [
+                0,
+                2,
+                4,
+                6,
+                8,
+                10,
+                12,
+                14,
+                15
+              ],
+              "outputTable": [
+                [
+                  0,
+                  0.22,
+                  0.44,
+                  0.68,
+                  0.9,
+                  1.15,
+                  1.38,
+                  1.62,
+                  1.75
+                ],
+                [
+                  0,
+                  0.22,
+                  0.44,
+                  0.68,
+                  0.9,
+                  1.15,
+                  1.38,
+                  1.62,
+                  1.75
+                ],
+                [
+                  0,
+                  0.22,
+                  0.45,
+                  0.69,
+                  0.92,
+                  1.17,
+                  1.41,
+                  1.68,
+                  1.8
+                ],
+                [
+                  0,
+                  0.28,
+                  0.52,
+                  0.8,
+                  1.1,
+                  1.35,
+                  1.65,
+                  1.9,
+                  2.05
+                ],
+                [
+                  0,
+                  0.18,
+                  0.35,
+                  0.55,
+                  0.8,
+                  1.1,
+                  1.42,
+                  1.84,
+                  2.08
+                ],
+                [
+                  0,
+                  0.14,
+                  0.3,
+                  0.52,
+                  0.8,
+                  1.18,
+                  1.5,
+                  1.9,
+                  2.15
+                ],
+                [
+                  0,
+                  0.08,
+                  0.21,
+                  0.4,
+                  0.6,
+                  0.9,
+                  1.18,
+                  1.5,
+                  1.7
+                ]
+              ],
+              "extrapolation": "clamp"
+            }
+          },
+          {
+            "id": "lookup_2d_254",
+            "name": "CN_beta",
+            "type": "lookup_2d",
+            "position": {
+              "x": 1340,
+              "y": 280
+            },
+            "parameters": {
+              "input1Values": [
+                0,
+                0.2,
+                0.4,
+                1,
+                2,
+                3,
+                4.8
+              ],
+              "input2Values": [
+                0,
+                2,
+                4,
+                6,
+                8,
+                10,
+                12,
+                14,
+                15
+              ],
+              "outputTable": [
+                [
+                  0,
+                  0.22,
+                  0.44,
+                  0.68,
+                  0.9,
+                  1.15,
+                  1.38,
+                  1.62,
+                  1.75
+                ],
+                [
+                  0,
+                  0.22,
+                  0.44,
+                  0.68,
+                  0.9,
+                  1.15,
+                  1.38,
+                  1.62,
+                  1.75
+                ],
+                [
+                  0,
+                  0.22,
+                  0.45,
+                  0.69,
+                  0.92,
+                  1.17,
+                  1.41,
+                  1.68,
+                  1.8
+                ],
+                [
+                  0,
+                  0.28,
+                  0.52,
+                  0.8,
+                  1.1,
+                  1.35,
+                  1.65,
+                  1.9,
+                  2.05
+                ],
+                [
+                  0,
+                  0.18,
+                  0.35,
+                  0.55,
+                  0.8,
+                  1.1,
+                  1.42,
+                  1.84,
+                  2.08
+                ],
+                [
+                  0,
+                  0.14,
+                  0.3,
+                  0.52,
+                  0.8,
+                  1.18,
+                  1.5,
+                  1.9,
+                  2.15
+                ],
+                [
+                  0,
+                  0.08,
+                  0.21,
+                  0.4,
+                  0.6,
+                  0.9,
+                  1.18,
+                  1.5,
+                  1.7
+                ]
+              ],
+              "extrapolation": "clamp"
+            }
+          },
+          {
+            "id": "lookup_1d_255",
+            "name": "CP_m",
+            "type": "lookup_1d",
+            "position": {
+              "x": 1180,
+              "y": 680
+            },
+            "parameters": {
+              "inputValues": [
+                0,
+                0.51,
+                1.2,
+                1.54,
+                2.14,
+                6.28
+              ],
+              "outputValues": [
+                17.95,
+                17.9109,
+                18.2259,
+                20.2936,
+                25.3718,
+                35.6068
+              ],
+              "extrapolation": "clamp"
+            }
+          },
+          {
+            "id": "multiply_256",
+            "name": "qbar_S",
+            "type": "multiply",
+            "position": {
+              "x": 1440,
+              "y": 440
+            },
+            "parameters": {
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "evaluate_257",
+            "name": "F_aero_x",
+            "type": "evaluate",
+            "position": {
+              "x": 1580,
+              "y": 200
+            },
+            "parameters": {
+              "numInputs": 2,
+              "expression": "-in(0)*in(1)"
+            }
+          },
+          {
+            "id": "evaluate_258",
+            "name": "F_aero_y",
+            "type": "evaluate",
+            "position": {
+              "x": 1580,
               "y": 260
             },
-            "parameters": {}
+            "parameters": {
+              "numInputs": 2,
+              "expression": "-in(0)*in(1)"
+            }
           },
           {
-            "id": "divide_189",
-            "name": "vhat_z",
-            "type": "divide",
+            "id": "evaluate_259",
+            "name": "F_aero_z",
+            "type": "evaluate",
             "position": {
-              "x": 1020,
-              "y": 300
+              "x": 1580,
+              "y": 320
             },
-            "parameters": {}
+            "parameters": {
+              "numInputs": 2,
+              "expression": "-in(0)*in(1)"
+            }
           },
           {
-            "id": "mux_190",
-            "name": "v_hat",
+            "id": "mux_260",
+            "name": "F_aero",
             "type": "mux",
             "position": {
-              "x": 1160,
-              "y": 260
+              "x": 1720,
+              "y": 240
             },
             "parameters": {
               "rows": 1,
@@ -2082,32 +3274,12 @@
             }
           },
           {
-            "id": "matrix_multiply_191",
-            "name": "D_vec",
-            "type": "matrix_multiply",
-            "position": {
-              "x": 1300,
-              "y": 320
-            },
-            "parameters": {}
-          },
-          {
-            "id": "uminus_192",
-            "name": "F_aero",
-            "type": "uminus",
-            "position": {
-              "x": 1440,
-              "y": 320
-            },
-            "parameters": {}
-          },
-          {
-            "id": "sum_193",
+            "id": "sum_261",
             "name": "F_b_cmd",
             "type": "sum",
             "position": {
-              "x": 1580,
-              "y": 200
+              "x": 1860,
+              "y": 160
             },
             "parameters": {
               "signs": "++",
@@ -2115,7 +3287,94 @@
             }
           },
           {
-            "id": "lookup_1d_194",
+            "id": "demux_262",
+            "name": "demux_CG",
+            "type": "demux",
+            "position": {
+              "x": 1340,
+              "y": 700
+            },
+            "parameters": {
+              "outputCount": 3,
+              "inputDimensions": [
+                3
+              ]
+            }
+          },
+          {
+            "id": "sum_263",
+            "name": "r_arm_x",
+            "type": "sum",
+            "position": {
+              "x": 1500,
+              "y": 640
+            },
+            "parameters": {
+              "signs": "+-",
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "uminus_264",
+            "name": "r_arm_y",
+            "type": "uminus",
+            "position": {
+              "x": 1500,
+              "y": 700
+            },
+            "parameters": {}
+          },
+          {
+            "id": "uminus_265",
+            "name": "r_arm_z",
+            "type": "uminus",
+            "position": {
+              "x": 1500,
+              "y": 760
+            },
+            "parameters": {}
+          },
+          {
+            "id": "mux_266",
+            "name": "r_arm",
+            "type": "mux",
+            "position": {
+              "x": 1640,
+              "y": 680
+            },
+            "parameters": {
+              "rows": 1,
+              "cols": 3,
+              "baseType": "double",
+              "outputType": "double[3]",
+              "outputShape": "vector"
+            }
+          },
+          {
+            "id": "cross_267",
+            "name": "M_aero",
+            "type": "cross",
+            "position": {
+              "x": 1780,
+              "y": 640
+            },
+            "parameters": {}
+          },
+          {
+            "id": "sum_268",
+            "name": "M_b_cmd",
+            "type": "sum",
+            "position": {
+              "x": 1860,
+              "y": 220
+            },
+            "parameters": {
+              "signs": "++",
+              "numInputs": 2
+            }
+          },
+          {
+            "id": "lookup_1d_269",
             "name": "chi_deg_cmd",
             "type": "lookup_1d",
             "position": {
@@ -2267,7 +3526,7 @@
             }
           },
           {
-            "id": "rate_limiter_195",
+            "id": "rate_limiter_270",
             "name": "chi_rate_lim",
             "type": "rate_limiter",
             "position": {
@@ -2281,7 +3540,7 @@
             }
           },
           {
-            "id": "units_conversion_196",
+            "id": "units_conversion_271",
             "name": "chi_to_rad",
             "type": "units_conversion",
             "position": {
@@ -2293,7 +3552,7 @@
             }
           },
           {
-            "id": "unit_delay_197",
+            "id": "unit_delay_272",
             "name": "chi_rad_prev",
             "type": "unit_delay",
             "position": {
@@ -2306,7 +3565,7 @@
             }
           },
           {
-            "id": "sum_198",
+            "id": "sum_273",
             "name": "d_chi",
             "type": "sum",
             "position": {
@@ -2319,7 +3578,7 @@
             }
           },
           {
-            "id": "source_199",
+            "id": "source_274",
             "name": "dt_s",
             "type": "source",
             "position": {
@@ -2333,7 +3592,7 @@
             }
           },
           {
-            "id": "divide_200",
+            "id": "divide_275",
             "name": "Q_cmd",
             "type": "divide",
             "position": {
@@ -2343,7 +3602,7 @@
             "parameters": {}
           },
           {
-            "id": "demux_201",
+            "id": "demux_276",
             "name": "demux_omega",
             "type": "demux",
             "position": {
@@ -2358,7 +3617,7 @@
             }
           },
           {
-            "id": "sum_202",
+            "id": "sum_277",
             "name": "Q_err",
             "type": "sum",
             "position": {
@@ -2371,7 +3630,7 @@
             }
           },
           {
-            "id": "transfer_function_203",
+            "id": "transfer_function_278",
             "name": "Q_filter",
             "type": "transfer_function",
             "position": {
@@ -2389,8 +3648,8 @@
             }
           },
           {
-            "id": "source_204",
-            "name": "Kq_gain",
+            "id": "source_279",
+            "name": "K_beta_rate",
             "type": "source",
             "position": {
               "x": 1180,
@@ -2398,13 +3657,13 @@
             },
             "parameters": {
               "signalType": "constant",
-              "value": 8000000,
+              "value": 40,
               "dataType": "double"
             }
           },
           {
-            "id": "matrix_multiply_205",
-            "name": "My_raw",
+            "id": "matrix_multiply_280",
+            "name": "beta_P_from_rate",
             "type": "matrix_multiply",
             "position": {
               "x": 1320,
@@ -2413,7 +3672,7 @@
             "parameters": {}
           },
           {
-            "id": "limit_206",
+            "id": "limit_281",
             "name": "My_limit",
             "type": "limit",
             "position": {
@@ -2421,28 +3680,12 @@
               "y": 140
             },
             "parameters": {
-              "lowerLimit": -30000000,
-              "upperLimit": 30000000
+              "lowerLimit": -8,
+              "upperLimit": 8
             }
           },
           {
-            "id": "mux_207",
-            "name": "M_b_cmd",
-            "type": "mux",
-            "position": {
-              "x": 1600,
-              "y": 140
-            },
-            "parameters": {
-              "rows": 1,
-              "cols": 3,
-              "baseType": "double",
-              "outputType": "double[3]",
-              "outputShape": "vector"
-            }
-          },
-          {
-            "id": "output_port_208",
+            "id": "output_port_282",
             "name": "r_i",
             "type": "output_port",
             "position": {
@@ -2454,7 +3697,7 @@
             }
           },
           {
-            "id": "output_port_209",
+            "id": "output_port_283",
             "name": "v_b",
             "type": "output_port",
             "position": {
@@ -2466,7 +3709,7 @@
             }
           },
           {
-            "id": "output_port_210",
+            "id": "output_port_284",
             "name": "omega_b",
             "type": "output_port",
             "position": {
@@ -2478,7 +3721,7 @@
             }
           },
           {
-            "id": "output_port_211",
+            "id": "output_port_285",
             "name": "q",
             "type": "output_port",
             "position": {
@@ -2490,7 +3733,7 @@
             }
           },
           {
-            "id": "output_port_212",
+            "id": "output_port_286",
             "name": "mass",
             "type": "output_port",
             "position": {
@@ -2502,7 +3745,7 @@
             }
           },
           {
-            "id": "output_port_213",
+            "id": "output_port_287",
             "name": "r_mag",
             "type": "output_port",
             "position": {
@@ -2514,7 +3757,7 @@
             }
           },
           {
-            "id": "output_port_214",
+            "id": "output_port_288",
             "name": "thrust",
             "type": "output_port",
             "position": {
@@ -2526,7 +3769,7 @@
             }
           },
           {
-            "id": "output_port_215",
+            "id": "output_port_289",
             "name": "h",
             "type": "output_port",
             "position": {
@@ -2538,7 +3781,7 @@
             }
           },
           {
-            "id": "output_port_216",
+            "id": "output_port_290",
             "name": "qbar_out",
             "type": "output_port",
             "position": {
@@ -2550,7 +3793,7 @@
             }
           },
           {
-            "id": "output_port_217",
+            "id": "output_port_291",
             "name": "chi_cmd",
             "type": "output_port",
             "position": {
@@ -2562,7 +3805,7 @@
             }
           },
           {
-            "id": "output_port_218",
+            "id": "output_port_292",
             "name": "Q_rps",
             "type": "output_port",
             "position": {
@@ -2574,7 +3817,7 @@
             }
           },
           {
-            "id": "output_port_219",
+            "id": "output_port_293",
             "name": "Q_cmd_out",
             "type": "output_port",
             "position": {
@@ -2586,7 +3829,7 @@
             }
           },
           {
-            "id": "output_port_220",
+            "id": "output_port_294",
             "name": "My",
             "type": "output_port",
             "position": {
@@ -2594,11 +3837,35 @@
               "y": 60
             },
             "parameters": {
-              "portName": "My_Nm"
+              "portName": "beta_P_cmd_deg"
             }
           },
           {
-            "id": "output_port_221",
+            "id": "output_port_295",
+            "name": "beta_Y_out",
+            "type": "output_port",
+            "position": {
+              "x": 1600,
+              "y": 100
+            },
+            "parameters": {
+              "portName": "beta_Y_cmd_deg"
+            }
+          },
+          {
+            "id": "output_port_296",
+            "name": "My_eng_out",
+            "type": "output_port",
+            "position": {
+              "x": 1600,
+              "y": 140
+            },
+            "parameters": {
+              "portName": "My_engines_Nm"
+            }
+          },
+          {
+            "id": "output_port_297",
             "name": "r_S_out",
             "type": "output_port",
             "position": {
@@ -2610,12 +3877,36 @@
             }
           },
           {
-            "id": "signal_display_222",
+            "id": "output_port_298",
+            "name": "v_S_out",
+            "type": "output_port",
+            "position": {
+              "x": 2040,
+              "y": 40
+            },
+            "parameters": {
+              "portName": "v_S_mps"
+            }
+          },
+          {
+            "id": "output_port_299",
+            "name": "V_S_mag_out",
+            "type": "output_port",
+            "position": {
+              "x": 2040,
+              "y": 80
+            },
+            "parameters": {
+              "portName": "V_S_mag_mps"
+            }
+          },
+          {
+            "id": "signal_display_300",
             "name": "disp_chi",
             "type": "signal_display",
             "position": {
               "x": 1760,
-              "y": 120
+              "y": 160
             },
             "parameters": {
               "title": "χ cmd (deg)",
@@ -2623,12 +3914,12 @@
             }
           },
           {
-            "id": "signal_display_223",
+            "id": "signal_display_301",
             "name": "disp_Q",
             "type": "signal_display",
             "position": {
               "x": 1760,
-              "y": 200
+              "y": 240
             },
             "parameters": {
               "title": "Pitch rate Q (rad/s)",
@@ -2636,12 +3927,12 @@
             }
           },
           {
-            "id": "signal_display_224",
+            "id": "signal_display_302",
             "name": "disp_Qcmd",
             "type": "signal_display",
             "position": {
               "x": 1760,
-              "y": 280
+              "y": 320
             },
             "parameters": {
               "title": "Q_cmd (rad/s)",
@@ -2649,12 +3940,12 @@
             }
           },
           {
-            "id": "signal_display_225",
+            "id": "signal_display_303",
             "name": "disp_altitude",
             "type": "signal_display",
             "position": {
               "x": 1760,
-              "y": 360
+              "y": 400
             },
             "parameters": {
               "title": "Altitude MSL (m)",
@@ -2662,12 +3953,12 @@
             }
           },
           {
-            "id": "signal_display_226",
+            "id": "signal_display_304",
             "name": "disp_mass",
             "type": "signal_display",
             "position": {
               "x": 1760,
-              "y": 440
+              "y": 480
             },
             "parameters": {
               "title": "Mass (kg)",
@@ -2675,12 +3966,12 @@
             }
           },
           {
-            "id": "signal_display_227",
+            "id": "signal_display_305",
             "name": "disp_qbar",
             "type": "signal_display",
             "position": {
               "x": 1760,
-              "y": 520
+              "y": 560
             },
             "parameters": {
               "title": "Dynamic pressure q̄ (Pa)",
@@ -2688,109 +3979,183 @@
             }
           },
           {
-            "id": "signal_display_228",
+            "id": "signal_display_306",
             "name": "disp_My",
             "type": "signal_display",
             "position": {
               "x": 1760,
-              "y": 600
+              "y": 640
             },
             "parameters": {
-              "title": "Pitch moment My (N·m)",
+              "title": "Pitch gimbal β_P (deg)",
               "maxSamples": 3800
             }
           },
           {
-            "id": "signal_logger_229",
+            "id": "signal_display_307",
+            "name": "disp_beta_Y",
+            "type": "signal_display",
+            "position": {
+              "x": 1760,
+              "y": 720
+            },
+            "parameters": {
+              "title": "Yaw gimbal β_Y (deg)",
+              "maxSamples": 3800
+            }
+          },
+          {
+            "id": "signal_display_308",
+            "name": "disp_V_S",
+            "type": "signal_display",
+            "position": {
+              "x": 2040,
+              "y": 160
+            },
+            "parameters": {
+              "title": "Space-frame |V_S| (m/s)",
+              "maxSamples": 3800
+            }
+          },
+          {
+            "id": "signal_logger_309",
             "name": "log_altitude",
             "type": "signal_logger",
             "position": {
               "x": 1920,
-              "y": 200
+              "y": 240
             },
             "parameters": {
               "maxSamples": 3800
             }
           },
           {
-            "id": "signal_logger_230",
+            "id": "signal_logger_310",
             "name": "log_mass",
             "type": "signal_logger",
             "position": {
               "x": 1920,
-              "y": 280
+              "y": 320
             },
             "parameters": {
               "maxSamples": 3800
             }
           },
           {
-            "id": "signal_logger_231",
+            "id": "signal_logger_311",
             "name": "log_qbar",
             "type": "signal_logger",
             "position": {
               "x": 1920,
-              "y": 360
+              "y": 400
             },
             "parameters": {
               "maxSamples": 3800
             }
           },
           {
-            "id": "signal_logger_232",
+            "id": "signal_logger_312",
             "name": "log_chi",
             "type": "signal_logger",
             "position": {
               "x": 1920,
-              "y": 440
+              "y": 480
             },
             "parameters": {
               "maxSamples": 3800
             }
           },
           {
-            "id": "signal_logger_233",
+            "id": "signal_logger_313",
             "name": "log_Q",
             "type": "signal_logger",
             "position": {
               "x": 1920,
-              "y": 520
+              "y": 560
             },
             "parameters": {
               "maxSamples": 3800
             }
           },
           {
-            "id": "signal_logger_234",
+            "id": "signal_logger_314",
             "name": "log_X_S",
             "type": "signal_logger",
             "position": {
               "x": 2080,
-              "y": 200
+              "y": 240
             },
             "parameters": {
               "maxSamples": 3800
             }
           },
           {
-            "id": "signal_logger_235",
+            "id": "signal_logger_315",
             "name": "log_Y_S",
             "type": "signal_logger",
             "position": {
               "x": 2080,
-              "y": 280
+              "y": 320
             },
             "parameters": {
               "maxSamples": 3800
             }
           },
           {
-            "id": "signal_logger_236",
+            "id": "signal_logger_316",
             "name": "log_Z_S",
             "type": "signal_logger",
             "position": {
               "x": 2080,
-              "y": 360
+              "y": 400
+            },
+            "parameters": {
+              "maxSamples": 3800
+            }
+          },
+          {
+            "id": "signal_logger_317",
+            "name": "log_V_S",
+            "type": "signal_logger",
+            "position": {
+              "x": 2080,
+              "y": 480
+            },
+            "parameters": {
+              "maxSamples": 3800
+            }
+          },
+          {
+            "id": "signal_logger_318",
+            "name": "log_VX_S",
+            "type": "signal_logger",
+            "position": {
+              "x": 2080,
+              "y": 560
+            },
+            "parameters": {
+              "maxSamples": 3800
+            }
+          },
+          {
+            "id": "signal_logger_319",
+            "name": "log_VY_S",
+            "type": "signal_logger",
+            "position": {
+              "x": 2080,
+              "y": 640
+            },
+            "parameters": {
+              "maxSamples": 3800
+            }
+          },
+          {
+            "id": "signal_logger_320",
+            "name": "log_VZ_S",
+            "type": "signal_logger",
+            "position": {
+              "x": 2080,
+              "y": 720
             },
             "parameters": {
               "maxSamples": 3800
@@ -2799,632 +4164,1143 @@
         ],
         "connections": [
           {
-            "id": "w_237",
-            "sourceBlockId": "source_164",
-            "sourcePortIndex": 0,
-            "targetBlockId": "edge_detect_165",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_238",
-            "sourceBlockId": "source_166",
-            "sourcePortIndex": 0,
-            "targetBlockId": "integrator_167",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_239",
-            "sourceBlockId": "edge_detect_165",
-            "sourcePortIndex": 0,
-            "targetBlockId": "integrator_167",
-            "targetPortIndex": -2
-          },
-          {
-            "id": "w_240",
-            "sourceBlockId": "integrator_167",
-            "sourcePortIndex": 0,
-            "targetBlockId": "lookup_1d_168",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_241",
-            "sourceBlockId": "lookup_1d_168",
-            "sourcePortIndex": 0,
-            "targetBlockId": "output_port_214",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_242",
-            "sourceBlockId": "integrator_167",
-            "sourcePortIndex": 0,
-            "targetBlockId": "lookup_1d_169",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_243",
-            "sourceBlockId": "lookup_1d_168",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_171",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_244",
-            "sourceBlockId": "source_170",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_171",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_245",
-            "sourceBlockId": "source_170",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_171",
-            "targetPortIndex": 2
-          },
-          {
-            "id": "w_246",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 5,
-            "targetBlockId": "sum_173",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_247",
-            "sourceBlockId": "source_172",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sum_173",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_248",
-            "sourceBlockId": "sum_173",
-            "sourcePortIndex": 0,
-            "targetBlockId": "atmosphere_174",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_249",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 1,
-            "targetBlockId": "mag_176",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_250",
-            "sourceBlockId": "mag_176",
-            "sourcePortIndex": 0,
-            "targetBlockId": "multiply_177",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_251",
-            "sourceBlockId": "mag_176",
-            "sourcePortIndex": 0,
-            "targetBlockId": "multiply_177",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_252",
-            "sourceBlockId": "source_175",
-            "sourcePortIndex": 0,
-            "targetBlockId": "multiply_181",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_253",
-            "sourceBlockId": "atmosphere_174",
-            "sourcePortIndex": 2,
-            "targetBlockId": "multiply_181",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_254",
-            "sourceBlockId": "multiply_181",
-            "sourcePortIndex": 0,
-            "targetBlockId": "multiply_182",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_255",
-            "sourceBlockId": "multiply_177",
-            "sourcePortIndex": 0,
-            "targetBlockId": "multiply_182",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_256",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 1,
-            "targetBlockId": "demux_186",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_257",
-            "sourceBlockId": "mag_176",
-            "sourcePortIndex": 0,
-            "targetBlockId": "evaluate_185",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_258",
-            "sourceBlockId": "demux_186",
-            "sourcePortIndex": 0,
-            "targetBlockId": "divide_187",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_259",
-            "sourceBlockId": "evaluate_185",
-            "sourcePortIndex": 0,
-            "targetBlockId": "divide_187",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_260",
-            "sourceBlockId": "demux_186",
-            "sourcePortIndex": 1,
-            "targetBlockId": "divide_188",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_261",
-            "sourceBlockId": "evaluate_185",
-            "sourcePortIndex": 0,
-            "targetBlockId": "divide_188",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_262",
-            "sourceBlockId": "demux_186",
-            "sourcePortIndex": 2,
-            "targetBlockId": "divide_189",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_263",
-            "sourceBlockId": "evaluate_185",
-            "sourcePortIndex": 0,
-            "targetBlockId": "divide_189",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_264",
-            "sourceBlockId": "divide_187",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_190",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_265",
-            "sourceBlockId": "divide_188",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_190",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_266",
-            "sourceBlockId": "divide_189",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_190",
-            "targetPortIndex": 2
-          },
-          {
-            "id": "w_267",
-            "sourceBlockId": "multiply_182",
-            "sourcePortIndex": 0,
-            "targetBlockId": "multiply_184",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_268",
-            "sourceBlockId": "source_183",
-            "sourcePortIndex": 0,
-            "targetBlockId": "multiply_184",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_269",
-            "sourceBlockId": "multiply_184",
-            "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_191",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_270",
-            "sourceBlockId": "mux_190",
-            "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_191",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_271",
-            "sourceBlockId": "matrix_multiply_191",
-            "sourcePortIndex": 0,
-            "targetBlockId": "uminus_192",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_272",
-            "sourceBlockId": "mux_171",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sum_193",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_273",
-            "sourceBlockId": "uminus_192",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sum_193",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_274",
-            "sourceBlockId": "sum_193",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sub_eom",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_275",
-            "sourceBlockId": "lookup_1d_169",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sub_eom",
-            "targetPortIndex": 2
-          },
-          {
-            "id": "w_276",
-            "sourceBlockId": "integrator_167",
-            "sourcePortIndex": 0,
-            "targetBlockId": "lookup_1d_194",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_277",
-            "sourceBlockId": "lookup_1d_194",
-            "sourcePortIndex": 0,
-            "targetBlockId": "rate_limiter_195",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_278",
-            "sourceBlockId": "rate_limiter_195",
-            "sourcePortIndex": 0,
-            "targetBlockId": "units_conversion_196",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_279",
-            "sourceBlockId": "units_conversion_196",
-            "sourcePortIndex": 0,
-            "targetBlockId": "unit_delay_197",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_280",
-            "sourceBlockId": "units_conversion_196",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sum_198",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_281",
-            "sourceBlockId": "unit_delay_197",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sum_198",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_282",
-            "sourceBlockId": "sum_198",
-            "sourcePortIndex": 0,
-            "targetBlockId": "divide_200",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_283",
-            "sourceBlockId": "source_199",
-            "sourcePortIndex": 0,
-            "targetBlockId": "divide_200",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_284",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 2,
-            "targetBlockId": "demux_201",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_285",
-            "sourceBlockId": "divide_200",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sum_202",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_286",
-            "sourceBlockId": "demux_201",
-            "sourcePortIndex": 1,
-            "targetBlockId": "sum_202",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_287",
-            "sourceBlockId": "sum_202",
-            "sourcePortIndex": 0,
-            "targetBlockId": "transfer_function_203",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_288",
-            "sourceBlockId": "transfer_function_203",
-            "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_205",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_289",
-            "sourceBlockId": "source_204",
-            "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_205",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_290",
-            "sourceBlockId": "matrix_multiply_205",
-            "sourcePortIndex": 0,
-            "targetBlockId": "limit_206",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_291",
-            "sourceBlockId": "source_170",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_207",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_292",
-            "sourceBlockId": "limit_206",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_207",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_293",
-            "sourceBlockId": "source_170",
-            "sourcePortIndex": 0,
-            "targetBlockId": "mux_207",
-            "targetPortIndex": 2
-          },
-          {
-            "id": "w_294",
-            "sourceBlockId": "mux_207",
-            "sourcePortIndex": 0,
-            "targetBlockId": "sub_eom",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_295",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 0,
-            "targetBlockId": "output_port_208",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_296",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 1,
-            "targetBlockId": "output_port_209",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_297",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 2,
-            "targetBlockId": "output_port_210",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_298",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 3,
-            "targetBlockId": "output_port_211",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_299",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 4,
-            "targetBlockId": "output_port_212",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_300",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 5,
-            "targetBlockId": "output_port_213",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_301",
-            "sourceBlockId": "sum_173",
-            "sourcePortIndex": 0,
-            "targetBlockId": "output_port_215",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_302",
-            "sourceBlockId": "multiply_182",
-            "sourcePortIndex": 0,
-            "targetBlockId": "output_port_216",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_303",
-            "sourceBlockId": "rate_limiter_195",
-            "sourcePortIndex": 0,
-            "targetBlockId": "output_port_217",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_304",
-            "sourceBlockId": "demux_201",
-            "sourcePortIndex": 1,
-            "targetBlockId": "output_port_218",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_305",
-            "sourceBlockId": "divide_200",
-            "sourcePortIndex": 0,
-            "targetBlockId": "output_port_219",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_306",
-            "sourceBlockId": "limit_206",
-            "sourcePortIndex": 0,
-            "targetBlockId": "output_port_220",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_307",
-            "sourceBlockId": "source_178",
-            "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_179",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_308",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 0,
-            "targetBlockId": "matrix_multiply_179",
-            "targetPortIndex": 1
-          },
-          {
-            "id": "w_309",
-            "sourceBlockId": "matrix_multiply_179",
-            "sourcePortIndex": 0,
-            "targetBlockId": "demux_180",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_310",
-            "sourceBlockId": "matrix_multiply_179",
-            "sourcePortIndex": 0,
-            "targetBlockId": "output_port_221",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_311",
-            "sourceBlockId": "rate_limiter_195",
-            "sourcePortIndex": 0,
-            "targetBlockId": "signal_display_222",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_312",
-            "sourceBlockId": "demux_201",
-            "sourcePortIndex": 1,
-            "targetBlockId": "signal_display_223",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_313",
-            "sourceBlockId": "divide_200",
-            "sourcePortIndex": 0,
-            "targetBlockId": "signal_display_224",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_314",
-            "sourceBlockId": "sum_173",
-            "sourcePortIndex": 0,
-            "targetBlockId": "signal_display_225",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_315",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 4,
-            "targetBlockId": "signal_display_226",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_316",
-            "sourceBlockId": "multiply_182",
-            "sourcePortIndex": 0,
-            "targetBlockId": "signal_display_227",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_317",
-            "sourceBlockId": "limit_206",
-            "sourcePortIndex": 0,
-            "targetBlockId": "signal_display_228",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_318",
-            "sourceBlockId": "sum_173",
-            "sourcePortIndex": 0,
-            "targetBlockId": "signal_logger_229",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_319",
-            "sourceBlockId": "sub_eom",
-            "sourcePortIndex": 4,
-            "targetBlockId": "signal_logger_230",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_320",
-            "sourceBlockId": "multiply_182",
-            "sourcePortIndex": 0,
-            "targetBlockId": "signal_logger_231",
-            "targetPortIndex": 0
-          },
-          {
             "id": "w_321",
-            "sourceBlockId": "rate_limiter_195",
+            "sourceBlockId": "source_197",
             "sourcePortIndex": 0,
-            "targetBlockId": "signal_logger_232",
+            "targetBlockId": "edge_detect_198",
             "targetPortIndex": 0
           },
           {
             "id": "w_322",
-            "sourceBlockId": "demux_201",
-            "sourcePortIndex": 1,
-            "targetBlockId": "signal_logger_233",
+            "sourceBlockId": "source_199",
+            "sourcePortIndex": 0,
+            "targetBlockId": "integrator_200",
             "targetPortIndex": 0
           },
           {
             "id": "w_323",
-            "sourceBlockId": "demux_180",
+            "sourceBlockId": "edge_detect_198",
             "sourcePortIndex": 0,
-            "targetBlockId": "signal_logger_234",
-            "targetPortIndex": 0
+            "targetBlockId": "integrator_200",
+            "targetPortIndex": -2
           },
           {
             "id": "w_324",
-            "sourceBlockId": "demux_180",
-            "sourcePortIndex": 1,
-            "targetBlockId": "signal_logger_235",
+            "sourceBlockId": "integrator_200",
+            "sourcePortIndex": 0,
+            "targetBlockId": "lookup_1d_201",
             "targetPortIndex": 0
           },
           {
             "id": "w_325",
-            "sourceBlockId": "demux_180",
+            "sourceBlockId": "lookup_1d_201",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_288",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_326",
+            "sourceBlockId": "integrator_200",
+            "sourcePortIndex": 0,
+            "targetBlockId": "lookup_1d_202",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_327",
+            "sourceBlockId": "lookup_1d_201",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_209",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_328",
+            "sourceBlockId": "matrix_multiply_280",
+            "sourcePortIndex": 0,
+            "targetBlockId": "limit_281",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_329",
+            "sourceBlockId": "limit_281",
+            "sourcePortIndex": 0,
+            "targetBlockId": "limit_207",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_330",
+            "sourceBlockId": "source_206",
+            "sourcePortIndex": 0,
+            "targetBlockId": "limit_208",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_331",
+            "sourceBlockId": "limit_207",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_210",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_332",
+            "sourceBlockId": "limit_208",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_211",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_333",
+            "sourceBlockId": "evaluate_209",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_212",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_334",
+            "sourceBlockId": "evaluate_210",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_212",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_335",
+            "sourceBlockId": "evaluate_211",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_212",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_336",
+            "sourceBlockId": "evaluate_209",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_213",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_337",
+            "sourceBlockId": "evaluate_211",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_213",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_338",
+            "sourceBlockId": "evaluate_209",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_214",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_339",
+            "sourceBlockId": "evaluate_210",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_214",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_340",
+            "sourceBlockId": "evaluate_211",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_214",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_341",
+            "sourceBlockId": "evaluate_212",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_215",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_342",
+            "sourceBlockId": "evaluate_213",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_215",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_343",
+            "sourceBlockId": "evaluate_214",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_215",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_344",
+            "sourceBlockId": "evaluate_209",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_217",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_345",
+            "sourceBlockId": "lookup_1d_204",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_217",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_346",
+            "sourceBlockId": "evaluate_210",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_217",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_347",
+            "sourceBlockId": "evaluate_211",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_217",
+            "targetPortIndex": 3
+          },
+          {
+            "id": "w_348",
+            "sourceBlockId": "evaluate_209",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_218",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_349",
+            "sourceBlockId": "lookup_1d_204",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_218",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_350",
+            "sourceBlockId": "evaluate_211",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_218",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_351",
+            "sourceBlockId": "source_216",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_219",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_352",
+            "sourceBlockId": "evaluate_217",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_219",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_353",
+            "sourceBlockId": "evaluate_218",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_219",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_354",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 5,
+            "targetBlockId": "sum_221",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_355",
+            "sourceBlockId": "source_220",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_221",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_356",
+            "sourceBlockId": "sum_221",
+            "sourcePortIndex": 0,
+            "targetBlockId": "atmosphere_222",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_357",
+            "sourceBlockId": "source_232",
+            "sourcePortIndex": 0,
+            "targetBlockId": "cross_233",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_358",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 0,
+            "targetBlockId": "cross_233",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_359",
+            "sourceBlockId": "matrix_multiply_228",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_234",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_360",
+            "sourceBlockId": "cross_233",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_234",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_361",
+            "sourceBlockId": "orientation_conversion_227",
+            "sourcePortIndex": 0,
+            "targetBlockId": "transpose_235",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_362",
+            "sourceBlockId": "transpose_235",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_236",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_363",
+            "sourceBlockId": "sum_234",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_236",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_364",
+            "sourceBlockId": "matrix_multiply_236",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mag_237",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_365",
+            "sourceBlockId": "mag_237",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_238",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_366",
+            "sourceBlockId": "mag_237",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_238",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_367",
+            "sourceBlockId": "source_223",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_239",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_368",
+            "sourceBlockId": "atmosphere_222",
+            "sourcePortIndex": 3,
+            "targetBlockId": "multiply_239",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_369",
+            "sourceBlockId": "multiply_239",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_240",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_370",
+            "sourceBlockId": "multiply_238",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_240",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_371",
+            "sourceBlockId": "matrix_multiply_236",
+            "sourcePortIndex": 0,
+            "targetBlockId": "demux_245",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_372",
+            "sourceBlockId": "mag_237",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_246",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_373",
+            "sourceBlockId": "demux_245",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_247",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_374",
+            "sourceBlockId": "demux_245",
             "sourcePortIndex": 2,
-            "targetBlockId": "signal_logger_236",
+            "targetBlockId": "evaluate_247",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_375",
+            "sourceBlockId": "demux_245",
+            "sourcePortIndex": 1,
+            "targetBlockId": "evaluate_248",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_376",
+            "sourceBlockId": "evaluate_246",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_248",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_377",
+            "sourceBlockId": "evaluate_247",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_249",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_378",
+            "sourceBlockId": "evaluate_248",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_250",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_379",
+            "sourceBlockId": "mag_237",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_251",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_380",
+            "sourceBlockId": "atmosphere_222",
+            "sourcePortIndex": 1,
+            "targetBlockId": "divide_251",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_381",
+            "sourceBlockId": "divide_251",
+            "sourcePortIndex": 0,
+            "targetBlockId": "lookup_1d_252",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_382",
+            "sourceBlockId": "divide_251",
+            "sourcePortIndex": 0,
+            "targetBlockId": "lookup_2d_253",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_383",
+            "sourceBlockId": "evaluate_249",
+            "sourcePortIndex": 0,
+            "targetBlockId": "lookup_2d_253",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_384",
+            "sourceBlockId": "divide_251",
+            "sourcePortIndex": 0,
+            "targetBlockId": "lookup_2d_254",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_385",
+            "sourceBlockId": "evaluate_250",
+            "sourcePortIndex": 0,
+            "targetBlockId": "lookup_2d_254",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_386",
+            "sourceBlockId": "divide_251",
+            "sourcePortIndex": 0,
+            "targetBlockId": "lookup_1d_255",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_387",
+            "sourceBlockId": "multiply_240",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_256",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_388",
+            "sourceBlockId": "source_241",
+            "sourcePortIndex": 0,
+            "targetBlockId": "multiply_256",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_389",
+            "sourceBlockId": "lookup_1d_252",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_257",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_390",
+            "sourceBlockId": "multiply_256",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_257",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_391",
+            "sourceBlockId": "lookup_2d_254",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_258",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_392",
+            "sourceBlockId": "multiply_256",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_258",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_393",
+            "sourceBlockId": "lookup_2d_253",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_259",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_394",
+            "sourceBlockId": "multiply_256",
+            "sourcePortIndex": 0,
+            "targetBlockId": "evaluate_259",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_395",
+            "sourceBlockId": "evaluate_257",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_260",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_396",
+            "sourceBlockId": "evaluate_258",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_260",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_397",
+            "sourceBlockId": "evaluate_259",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_260",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_398",
+            "sourceBlockId": "mux_215",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_261",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_399",
+            "sourceBlockId": "mux_260",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_261",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_400",
+            "sourceBlockId": "sum_261",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sub_eom",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_401",
+            "sourceBlockId": "lookup_1d_202",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sub_eom",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_402",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 4,
+            "targetBlockId": "lookup_1d_204",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_403",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 4,
+            "targetBlockId": "lookup_1d_242",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_404",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 4,
+            "targetBlockId": "lookup_1d_243",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_405",
+            "sourceBlockId": "lookup_1d_204",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_244",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_406",
+            "sourceBlockId": "lookup_1d_242",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_244",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_407",
+            "sourceBlockId": "lookup_1d_243",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_244",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_408",
+            "sourceBlockId": "mux_244",
+            "sourcePortIndex": 0,
+            "targetBlockId": "demux_262",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_409",
+            "sourceBlockId": "lookup_1d_255",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_263",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_410",
+            "sourceBlockId": "demux_262",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_263",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_411",
+            "sourceBlockId": "demux_262",
+            "sourcePortIndex": 1,
+            "targetBlockId": "uminus_264",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_412",
+            "sourceBlockId": "demux_262",
+            "sourcePortIndex": 2,
+            "targetBlockId": "uminus_265",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_413",
+            "sourceBlockId": "sum_263",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_266",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_414",
+            "sourceBlockId": "uminus_264",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_266",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_415",
+            "sourceBlockId": "uminus_265",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mux_266",
+            "targetPortIndex": 2
+          },
+          {
+            "id": "w_416",
+            "sourceBlockId": "mux_266",
+            "sourcePortIndex": 0,
+            "targetBlockId": "cross_267",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_417",
+            "sourceBlockId": "mux_260",
+            "sourcePortIndex": 0,
+            "targetBlockId": "cross_267",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_418",
+            "sourceBlockId": "mux_219",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_268",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_419",
+            "sourceBlockId": "cross_267",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_268",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_420",
+            "sourceBlockId": "sum_268",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sub_eom",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_421",
+            "sourceBlockId": "integrator_200",
+            "sourcePortIndex": 0,
+            "targetBlockId": "lookup_1d_269",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_422",
+            "sourceBlockId": "lookup_1d_269",
+            "sourcePortIndex": 0,
+            "targetBlockId": "rate_limiter_270",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_423",
+            "sourceBlockId": "rate_limiter_270",
+            "sourcePortIndex": 0,
+            "targetBlockId": "units_conversion_271",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_424",
+            "sourceBlockId": "units_conversion_271",
+            "sourcePortIndex": 0,
+            "targetBlockId": "unit_delay_272",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_425",
+            "sourceBlockId": "units_conversion_271",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_273",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_426",
+            "sourceBlockId": "unit_delay_272",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_273",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_427",
+            "sourceBlockId": "sum_273",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_275",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_428",
+            "sourceBlockId": "source_274",
+            "sourcePortIndex": 0,
+            "targetBlockId": "divide_275",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_429",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 2,
+            "targetBlockId": "demux_276",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_430",
+            "sourceBlockId": "divide_275",
+            "sourcePortIndex": 0,
+            "targetBlockId": "sum_277",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_431",
+            "sourceBlockId": "demux_276",
+            "sourcePortIndex": 1,
+            "targetBlockId": "sum_277",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_432",
+            "sourceBlockId": "sum_277",
+            "sourcePortIndex": 0,
+            "targetBlockId": "transfer_function_278",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_433",
+            "sourceBlockId": "transfer_function_278",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_280",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_434",
+            "sourceBlockId": "source_279",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_280",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_435",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_282",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_436",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 1,
+            "targetBlockId": "output_port_283",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_437",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 2,
+            "targetBlockId": "output_port_284",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_438",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 3,
+            "targetBlockId": "output_port_285",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_439",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 4,
+            "targetBlockId": "output_port_286",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_440",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 5,
+            "targetBlockId": "output_port_287",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_441",
+            "sourceBlockId": "sum_221",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_289",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_442",
+            "sourceBlockId": "multiply_240",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_290",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_443",
+            "sourceBlockId": "rate_limiter_270",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_291",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_444",
+            "sourceBlockId": "demux_276",
+            "sourcePortIndex": 1,
+            "targetBlockId": "output_port_292",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_445",
+            "sourceBlockId": "divide_275",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_293",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_446",
+            "sourceBlockId": "limit_281",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_294",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_447",
+            "sourceBlockId": "limit_208",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_295",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_448",
+            "sourceBlockId": "evaluate_217",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_296",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_449",
+            "sourceBlockId": "source_224",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_225",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_450",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_225",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_451",
+            "sourceBlockId": "matrix_multiply_225",
+            "sourcePortIndex": 0,
+            "targetBlockId": "demux_226",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_452",
+            "sourceBlockId": "matrix_multiply_225",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_297",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_453",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 3,
+            "targetBlockId": "orientation_conversion_227",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_454",
+            "sourceBlockId": "orientation_conversion_227",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_228",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_455",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 1,
+            "targetBlockId": "matrix_multiply_228",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_456",
+            "sourceBlockId": "source_224",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_229",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_457",
+            "sourceBlockId": "matrix_multiply_228",
+            "sourcePortIndex": 0,
+            "targetBlockId": "matrix_multiply_229",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_458",
+            "sourceBlockId": "matrix_multiply_229",
+            "sourcePortIndex": 0,
+            "targetBlockId": "mag_230",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_459",
+            "sourceBlockId": "matrix_multiply_229",
+            "sourcePortIndex": 0,
+            "targetBlockId": "demux_231",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_460",
+            "sourceBlockId": "matrix_multiply_229",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_298",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_461",
+            "sourceBlockId": "mag_230",
+            "sourcePortIndex": 0,
+            "targetBlockId": "output_port_299",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_462",
+            "sourceBlockId": "rate_limiter_270",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_display_300",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_463",
+            "sourceBlockId": "demux_276",
+            "sourcePortIndex": 1,
+            "targetBlockId": "signal_display_301",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_464",
+            "sourceBlockId": "divide_275",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_display_302",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_465",
+            "sourceBlockId": "sum_221",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_display_303",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_466",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 4,
+            "targetBlockId": "signal_display_304",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_467",
+            "sourceBlockId": "multiply_240",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_display_305",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_468",
+            "sourceBlockId": "limit_281",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_display_306",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_469",
+            "sourceBlockId": "limit_208",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_display_307",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_470",
+            "sourceBlockId": "mag_230",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_display_308",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_471",
+            "sourceBlockId": "sum_221",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_logger_309",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_472",
+            "sourceBlockId": "sub_eom",
+            "sourcePortIndex": 4,
+            "targetBlockId": "signal_logger_310",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_473",
+            "sourceBlockId": "multiply_240",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_logger_311",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_474",
+            "sourceBlockId": "rate_limiter_270",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_logger_312",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_475",
+            "sourceBlockId": "demux_276",
+            "sourcePortIndex": 1,
+            "targetBlockId": "signal_logger_313",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_476",
+            "sourceBlockId": "demux_226",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_logger_314",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_477",
+            "sourceBlockId": "demux_226",
+            "sourcePortIndex": 1,
+            "targetBlockId": "signal_logger_315",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_478",
+            "sourceBlockId": "demux_226",
+            "sourcePortIndex": 2,
+            "targetBlockId": "signal_logger_316",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_479",
+            "sourceBlockId": "mag_230",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_logger_317",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_480",
+            "sourceBlockId": "demux_231",
+            "sourcePortIndex": 0,
+            "targetBlockId": "signal_logger_318",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_481",
+            "sourceBlockId": "demux_231",
+            "sourcePortIndex": 1,
+            "targetBlockId": "signal_logger_319",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_482",
+            "sourceBlockId": "demux_231",
+            "sourcePortIndex": 2,
+            "targetBlockId": "signal_logger_320",
             "targetPortIndex": 0
           }
         ],
         "extents": {
-          "width": 2100,
-          "height": 780
+          "width": 2200,
+          "height": 820
         }
       }
     ],
@@ -3467,9 +5343,9 @@
       {
         "name": "pitch_rate_gain",
         "dataType": "double",
-        "defaultValue": "8e6",
+        "defaultValue": "40",
         "signalType": "double",
-        "value": 8000000
+        "value": 40
       },
       {
         "name": "m0_kg",

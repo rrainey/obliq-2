@@ -86,10 +86,10 @@ describe('arithmetic blocks', () => {
     expect(result.blockOutputTypes.get('sum1:0')).toBe('float')
   })
 
-  test('should detect type mismatch in sum block', () => {
+  test('should detect incompatible vector size mismatch in sum block', () => {
     const blocks: BlockData[] = [
-      createBlock('source1', 'source', { dataType: 'float' }),
-      createBlock('source2', 'source', { dataType: 'double' }),
+      createBlock('source1', 'source', { dataType: 'double[3]' }),
+      createBlock('source2', 'source', { dataType: 'double[4]' }),
       createBlock('sum1', 'sum')
     ]
     const wires: WireData[] = [
@@ -98,10 +98,8 @@ describe('arithmetic blocks', () => {
     ]
 
     const result = propagateSignalTypes(blocks, wires)
-    
+
     expect(result.errors.length).toBeGreaterThan(0)
-    // The actual error message is about not being able to determine output type
-    // when inputs don't match
     expect(result.errors[0].message).toContain('Cannot determine output type')
     expect(result.errors[0].blockId).toBe('sum1')
   })
@@ -123,7 +121,7 @@ describe('arithmetic blocks', () => {
     expect(result.blockOutputTypes.get('sum1:0')).toBe('float[3]')
   })
 
-  test('should reject scalar + vector', () => {
+  test('should broadcast scalar + vector (Simulink-style)', () => {
     const blocks: BlockData[] = [
       createBlock('source1', 'source', { dataType: 'float' }),
       createBlock('source2', 'source', { dataType: 'float[3]' }),
@@ -135,11 +133,52 @@ describe('arithmetic blocks', () => {
     ]
 
     const result = propagateSignalTypes(blocks, wires)
-    
-    expect(result.errors.length).toBeGreaterThan(0)
-    // Error will be about unable to determine output type due to incompatible inputs
-    expect(result.errors[0].message).toContain('Cannot determine output type')
-    expect(result.errors[0].blockId).toBe('sum1')
+
+    expect(result.errors).toHaveLength(0)
+    expect(result.blockOutputTypes.get('sum1:0')).toBe('float[3]')
+  })
+
+  test('sum of elements: single vector input → scalar base type', () => {
+    const blocks: BlockData[] = [
+      createBlock('source1', 'source', { dataType: 'double[3]' }),
+      createBlock('sum1', 'sum', { signs: '+', numInputs: 1 })
+    ]
+    const wires: WireData[] = [createWire('wire1', 'source1', 'sum1', 0, 0)]
+
+    const result = propagateSignalTypes(blocks, wires)
+
+    expect(result.errors).toHaveLength(0)
+    expect(result.blockOutputTypes.get('sum1:0')).toBe('double')
+  })
+
+  test('sum of elements: single matrix input → scalar base type', () => {
+    const blocks: BlockData[] = [
+      createBlock('source1', 'source', { dataType: 'double[3][3]' }),
+      createBlock('sum1', 'sum', { signs: '+', numInputs: 1 })
+    ]
+    const wires: WireData[] = [createWire('wire1', 'source1', 'sum1', 0, 0)]
+
+    const result = propagateSignalTypes(blocks, wires)
+
+    expect(result.errors).toHaveLength(0)
+    expect(result.blockOutputTypes.get('sum1:0')).toBe('double')
+  })
+
+  test('element-wise: two double[3] inputs → double[3] output', () => {
+    const blocks: BlockData[] = [
+      createBlock('source1', 'source', { dataType: 'double[3]' }),
+      createBlock('source2', 'source', { dataType: 'double[3]' }),
+      createBlock('sum1', 'sum', { signs: '+-', numInputs: 2 })
+    ]
+    const wires: WireData[] = [
+      createWire('wire1', 'source1', 'sum1', 0, 0),
+      createWire('wire2', 'source2', 'sum1', 0, 1)
+    ]
+
+    const result = propagateSignalTypes(blocks, wires)
+
+    expect(result.errors).toHaveLength(0)
+    expect(result.blockOutputTypes.get('sum1:0')).toBe('double[3]')
   })
 })
 

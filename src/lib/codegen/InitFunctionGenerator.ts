@@ -70,13 +70,49 @@ export class InitFunctionGenerator {
     // This is important for integrator init ports that read from source signals
     code += this.generateConstantInit()
 
-    // Initialize block-specific states (e.g., integrators)
-    // Must come after constant init so init port signals are available
+    // Evaluate feedthrough (IC Product, DCM→quat, etc.) before reading x(0) ports.
+    // Prototype is in the header; definition is emitted later in the .c file.
+    code += `    /* Seed algebraic signals so external IC ports are non-zero */\n`
+    code += `    ${this.modelName}_evaluate_algebraic(model);\n\n`
+
+    // Initialize block-specific states (e.g., integrators from x(0))
     code += this.generateBlockSpecificInit()
+
+    // Refresh integrator output signals from the seeded states
+    code += `    /* Sync signals from seeded integrator states */\n`
+    code += `    ${this.modelName}_evaluate_algebraic(model);\n\n`
 
     // Initialize data collection buffers
     code += this.generateDataCollectionInit()
 
+    code += '}\n\n'
+
+    // Standalone reseed for hosts that apply inputs after init()
+    code += this.generateReseedIntegratorIcsFunction()
+
+    return code
+  }
+
+  /**
+   * Public helper: re-copy showInitPort / parameter ICs after inputs change.
+   * Call: apply inputs → evaluate_algebraic → reseed_integrator_ics → evaluate_algebraic
+   */
+  private generateReseedIntegratorIcsFunction(): string {
+    let body = this.generateBlockSpecificInit()
+    if (!body.trim()) {
+      body =
+        '    /* No integrator external ICs in this model */\n'
+    }
+    let code = CCodeBuilder.generateCommentBlock([
+      'Re-apply integrator initial conditions from x(0) / parameters',
+      'Use after evaluate_algebraic once inputs/constants are live'
+    ])
+    code += CCodeBuilder.generateFunctionHeader(
+      'void',
+      `${this.modelName}_reseed_integrator_ics`,
+      [`${this.modelName}_t* model`]
+    )
+    code += body
     code += '}\n'
     return code
   }
@@ -128,8 +164,15 @@ export class InitFunctionGenerator {
       const safe = CCodeBuilder.sanitizeIdentifier(store.name)
       // Scalar or C99 compound literal assignment
       if (init.startsWith('{')) {
+        // dataType may be "double[3]" — C needs "double name[3] = {...}" not "double[3] name"
+        const dt = (store.dataType || 'double').trim()
+        const m = dt.match(/^([A-Za-z_]\w*)\s*((?:\[[^\]]+\])+)$/)
         code += `    {\n`
-        code += `        ${store.dataType || 'double'} ${safe}_init = ${init};\n`
+        if (m) {
+          code += `        ${m[1]} ${safe}_init${m[2]} = ${init};\n`
+        } else {
+          code += `        ${dt} ${safe}_init = ${init};\n`
+        }
         code += `        memcpy(&model->data_stores.${safe}, &${safe}_init, sizeof(model->data_stores.${safe}));\n`
         code += `    }\n`
       } else {

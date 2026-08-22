@@ -469,6 +469,13 @@ export class HeaderGenerator {
       ],
       'Evaluate algebraic relationships (pure function, no state changes)'
     ) + '\n'
+
+    prototypes += CCodeBuilder.generateFunctionPrototype(
+      'void',
+      `${this.modelName}_reseed_integrator_ics`,
+      [`${this.modelName}_t* model`],
+      'Re-apply integrator ICs from x(0) after algebraic IC signals are live'
+    ) + '\n'
     
     // Step function
     prototypes += CCodeBuilder.generateFunctionPrototype(

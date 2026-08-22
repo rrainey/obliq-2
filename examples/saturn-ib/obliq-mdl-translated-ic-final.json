@@ -1,0 +1,22 @@
+{
+  "elapsed_sim_sec": 0,
+  "s2_Xe_x_m": 919743.38081005542,
+  "s2_Xe_y_m": -5532430.4512707209,
+  "s2_Xe_z_m": 3027472.3011105121,
+  "s2_Ve_x_mps": 403.4311908016798,
+  "s2_Ve_y_mps": 67.068745033557207,
+  "s2_Ve_z_mps": -1.4210854715202004e-14,
+  "s2_h_m": 2327.4761840729043,
+  "veh_q_ECI_q0": -0.35325845104277809,
+  "veh_q_ECI_q1": 0.66877072687719485,
+  "veh_q_ECI_q2": -0.35921069518108328,
+  "veh_q_ECI_q3": 0.54673746726059336,
+  "BodyToSM_Phi_deg": 0,
+  "BodyToSM_Theta_deg": 0,
+  "BodyToSM_Psi_deg": 0,
+  "bLiftoff": true,
+  "bStageSep": false,
+  "bIECO": false,
+  "bOECO": false,
+  "bS_IVB_EngineStart": false
+}

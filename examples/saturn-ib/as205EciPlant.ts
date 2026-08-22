@@ -5,7 +5,9 @@
  *   1. Initial Position → R_S_0, V_S_0  (as205InitialPosition)
  *   2. [MES] E→S from Az, φ_L, Θ_E      (as205Mes; Θ_E from Apollo 7 LaunchDate)
  *   3. r_E = MESᵀ · R_S ,  v_E = MESᵀ · V_S
- *   4. At pad B ‖ S ⇒ C_b→E = MESᵀ ,  v_b0 = V_S  (same components)
+ *   4. Pad body = Position I (RTW LVInert Az=100°), not B‖S (Az=A_z).
+ *      LIO = computeMes(pad_roll_L, φ_L, Θ_E)  (same Fcn chain as MES, Az=100)
+ *      C_b→E = LIOᵀ ,  v_b0 = LIO · v_E
  *   5. q0 = dcm_to_quat(C_b→E)  (Shepperd; matches OrientationConversionBlockModule)
  *
  * Plant EOM integrates r_i in **E**, body v/ω, quaternion body→E.
@@ -19,7 +21,9 @@ import {
   as205DefaultMes,
   as205Mes,
   as205MesFromLaunchDate,
+  computeMes,
   eciToS,
+  mat3Mul,
   mat3MulVec,
   mat3OrthonormalityError,
   mat3Transpose,
@@ -33,7 +37,7 @@ import {
   as205SimulinkPadStateS,
   type InitialPositionS
 } from './as205InitialPosition'
-import type { Vec3 } from './as205PadFrames'
+import { AS205_PAD, type Vec3 } from './as205PadFrames'
 
 /** Column quaternion [[q0],[q1],[q2],[q3]] scalar-first (plant IC format). */
 export type QuatCol = [[number], [number], [number], [number]]
@@ -42,7 +46,7 @@ export interface PadStateEci {
   /** Inertial position in E (m) — plant r0_i */
   r0_E: Vec3
   /**
-   * Body velocity IC (m/s). At pad B‖S so equals V_S components.
+   * Body velocity IC (m/s). Position I (Az=pad_roll), not B‖S.
    * Plant integrates v_b; ṙ_E = C_bE · v_b.
    */
   v0_b: Vec3
@@ -50,10 +54,12 @@ export interface PadStateEci {
   v0_E: Vec3
   /** Body → E quaternion IC (scalar-first column) */
   q0_bE: QuatCol
-  /** C_b→E = MESᵀ (body→ECI DCM) */
+  /** C_b→E = LIOᵀ (body→ECI; LIO uses Az=pad_roll_L) */
   C_bE: Mat3
-  /** [MES] E→S used for this pad */
+  /** [MES] E→S used for this pad (Az=A_z) */
   MES: Mat3
+  /** [LIO] E→body at pad (Az=pad_roll_L), RTW LVInert */
+  LIO: Mat3
   Theta_E_deg: number
   /** Source S pad */
   padS: InitialPositionS
@@ -144,6 +150,11 @@ export function buildAs205PadStateEci(opts?: {
   launchDate?: LaunchDate
   Theta_E_deg?: number
   padS?: InitialPositionS
+  /**
+   * If true, match RTW IC wiring: q = dcmToQuat(LIO) and reconstruct
+   * v_E via Transpose(quat_to_dcm(q))·v_b. Default false = legacy LIOᵀ.
+   */
+  mdlWireAsIs?: boolean
 }): PadStateEci {
   const padS = opts?.padS ?? as205SimulinkPadStateS()
   let mes: MesResult
@@ -157,18 +168,41 @@ export function buildAs205PadStateEci(opts?: {
     mes = as205DefaultMes()
   }
 
-  // C_b→E = MESᵀ  (body ‖ S at pad)
-  const C_bE = mat3Transpose(mes.MES)
-  const q = dcmToQuat(C_bE)
+  // RTW `<S5>/Position 1 Azimuth` = 100° → LVInert LIO (E→body), not MES Az=A_z.
+  const lio = computeMes(
+    AS205_PAD.pad_roll_L_deg,
+    AS205_PAD.phi_L_deg,
+    mes.Theta_E_deg
+  )
+  const LIO = lio.MES // same Fcn chain as MES; Az = pad_roll
+  const C_bE = mat3Transpose(LIO)
+  /**
+   * Attitude IC convention (see DCM_QUAT_EOM_AUDIT.md):
+   * - legacy / default: dcmToQuat(LIOᵀ)=dcmToQuat(C_bE); Ve = C_bE·Vb
+   * - mdlWireAsIs: dcmToQuat(LIO) as RTW DCM2Quat; Ve = Transpose(ASB(q))·Vb
+   */
+  const mdlWire = opts?.mdlWireAsIs === true
+  const qRaw = mdlWire ? dcmToQuat(LIO) : dcmToQuat(C_bE)
+  // RTW does not force q0≥0; for mdlWire keep raw sign. Legacy path keeps dcmToQuat flip.
+  const q = qRaw
   const { r_E, v_E } = padStateSToEci(padS.R_S_0_m, padS.V_S_0_m, mes.MES)
+  // v_b = C_Eb · v_E = LIO · v_E  (body = Position I, not S)
+  const v0_b = mat3MulVec(LIO, v_E)
 
-  // Sanity: C_bE · V_S should equal v_E
-  const v_check = mat3MulVec(C_bE, padS.V_S_0_m)
+  const C_from_q = quatToDcm(q)
+  // Legacy check: C_bE·vb ≈ v_E. MDL-wire: Transpose(C_from_q)·vb ≈ v_E.
+  const v_check = mdlWire
+    ? mat3MulVec(mat3Transpose(C_from_q), v0_b)
+    : mat3MulVec(C_bE, v0_b)
   const notes = [
-    'ECI plant pad: r_E = MESᵀ R_S, v_b0 = V_S, q0 = dcm_to_quat(MESᵀ)',
+    mdlWire
+      ? 'ECI pad (MDL wire-as-is): q0=dcmToQuat(LIO); Ve↔Transpose(ASB(q))·Vb'
+      : 'ECI plant pad: r_E = MESᵀ R_S; q0=dcmToQuat(LIOᵀ); Ve=C_bE·Vb (legacy)',
     `Θ_E=${mes.Theta_E_deg.toFixed(6)}°, |r_E|=${Math.hypot(...r_E).toFixed(3)} m`,
-    `|v_E|=${Math.hypot(...v_E).toFixed(3)} m/s, |v_b0|=${padS.V_S_0_mag.toFixed(3)} m/s`,
+    `|v_E|=${Math.hypot(...v_E).toFixed(3)} m/s, |v_b0|=${Math.hypot(...v0_b).toFixed(3)} m/s`,
+    `pad_roll=${AS205_PAD.pad_roll_L_deg}°, A_z=${AS205_PAD.A_z_deg}° (Δ=${(AS205_PAD.pad_roll_L_deg - AS205_PAD.A_z_deg).toFixed(2)}°)`,
     `‖MES‖ ortho err=${mat3OrthonormalityError(mes.MES).toExponential(2)}`,
+    `‖LIO‖ ortho err=${mat3OrthonormalityError(LIO).toExponential(2)}`,
     ...mes.notes,
     ...padS.notes
   ]
@@ -178,25 +212,31 @@ export function buildAs205PadStateEci(opts?: {
     v_check[2] - v_E[2]
   )
   if (dv > 1e-6) {
-    notes.push(`WARNING: C_bE·V_S vs MESᵀ·V_S residual ${dv} m/s`)
+    notes.push(`WARNING: Ve reconstruct residual ${dv} m/s`)
   }
 
   return {
     r0_E: r_E,
-    v0_b: [...padS.V_S_0_m] as Vec3,
+    v0_b,
     v0_E: v_E,
     q0_bE: quatToColumn(q),
     C_bE,
     MES: mes.MES,
+    LIO,
     Theta_E_deg: mes.Theta_E_deg,
     padS,
     notes
   }
 }
 
-/** Default AS-205 LC-34 ECI pad for 9.4+ plants. */
+/** Default AS-205 LC-34 ECI pad for 9.4+ plants (legacy LIOᵀ quat). */
 export function as205DefaultPadStateEci(): PadStateEci {
   return buildAs205PadStateEci()
+}
+
+/** MDL wire-as-is IC: DCM2Quat(LIO); use with Ve = Transpose(quat_to_dcm(q))·Vb. */
+export function as205MdlWirePadStateEci(): PadStateEci {
+  return buildAs205PadStateEci({ mdlWireAsIs: true })
 }
 
 /** Flatten Mat3 to nested array for Source block double[3][3]. */
@@ -206,6 +246,22 @@ export function mat3ToSourceValue(m: Mat3): number[][] {
     [m[1][0], m[1][1], m[1][2]],
     [m[2][0], m[2][1], m[2][2]]
   ]
+}
+
+/**
+ * Elevation from horizontal (rad) of body +X in S-frame.
+ * C_bS = MES · C_bE (body→S); elev = asin((C_bS e1) · X_S) = asin(C_bS[0][0]).
+ * Vertical B‖S → π/2; tips downrange toward Z_S → decreases (plant elev convention).
+ */
+export function elevRadFromCbS(C_bS: Mat3): number {
+  const up = Math.max(-1, Math.min(1, C_bS[0][0]))
+  return Math.asin(up)
+}
+
+/** elev from MES and body→E DCM (same as plant chain). */
+export function elevRadFromMesAndCbE(MES: Mat3, C_bE: Mat3): number {
+  const C_bS = mat3Mul(MES, C_bE)
+  return elevRadFromCbS(C_bS)
 }
 
 // Re-export common transforms for plant wiring docs

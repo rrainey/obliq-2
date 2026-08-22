@@ -56,7 +56,8 @@ interface CanvasReactFlowProps {
   onBlockSelect?: (id: string | null) => void
   onBlocksSelect?: (ids: string[]) => void  // Feature 4: Multi-selection callback
   onBlockDoubleClick?: (id: string) => void
-  onBlockDelete?: (id: string) => void
+  /** Delete one or more blocks (e.g. Delete key on a multi-selection). */
+  onBlockDelete?: (ids: string[]) => void
   onWireCreate?: (sourcePort: PortInfo, targetPort: PortInfo) => void
   onWireSelect?: (wireId: string | null) => void
   onWireDelete?: (wireId: string) => void
@@ -801,7 +802,8 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         const selectedEdges = edges.filter((e: Edge) => e.selected)
 
         if (selectedNodes.length > 0 && onBlockDelete) {
-          selectedNodes.forEach((node: Node) => onBlockDelete(node.id))
+          // One batch call so the host can show a single confirmation dialog
+          onBlockDelete(selectedNodes.map((node: Node) => node.id))
         }
 
         if (selectedEdges.length > 0 && onWireDelete) {

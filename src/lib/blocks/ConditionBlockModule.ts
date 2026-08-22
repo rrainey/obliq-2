@@ -20,8 +20,9 @@ export class ConditionBlockModule implements IBlockModule {
     const condition = block.parameters?.condition || '> 0'
     
     // Validate condition format
-    const validOperators = ['>', '<', '>=', '<=', '==', '!=']
-    const operatorMatch = condition.match(/^\s*(>|<|>=|<=|==|!=)\s*(.+)$/)
+    const validOperators = ['>=', '<=', '==', '!=', '>', '<']
+    // Longer operators MUST come first — otherwise `>=` matches as `>` + `= value`
+    const operatorMatch = condition.match(/^\s*(>=|<=|==|!=|>|<)\s*(.+)$/)
     
     if (!operatorMatch) {
       code += `    // Error: Invalid condition format: ${condition}\n`

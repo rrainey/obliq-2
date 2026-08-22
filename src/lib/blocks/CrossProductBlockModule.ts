@@ -5,11 +5,15 @@ import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class CrossProductBlockModule implements IBlockModule {
-  generateComputation(block: BlockData, inputs: string[]): string {
+  generateComputation(
+    block: BlockData,
+    inputs: string[],
+    inputTypes?: string[]
+  ): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
-    
+
     let code = `    // Cross product block: ${block.name}\n`
-    
+
     if (inputs.length < 2) {
       code += `    // Error: Cross product requires 2 inputs\n`
       code += `    ${outputName}[0] = 0.0;\n`
@@ -17,14 +21,18 @@ export class CrossProductBlockModule implements IBlockModule {
       code += `    ${outputName}[2] = 0.0;\n`
       return code
     }
-    
-    // Note: Cross product is only defined for 3D vectors
-    // For now, we assume the inputs are 3D vectors - type checking ensures this
-    code += `    // Cross product: a × b = [a1*b2 - a2*b1, a2*b0 - a0*b2, a0*b1 - a1*b0]\n`
-    code += `    ${outputName}[0] = ${inputs[0]}[1] * ${inputs[1]}[2] - ${inputs[0]}[2] * ${inputs[1]}[1];\n`
-    code += `    ${outputName}[1] = ${inputs[0]}[2] * ${inputs[1]}[0] - ${inputs[0]}[0] * ${inputs[1]}[2];\n`
-    code += `    ${outputName}[2] = ${inputs[0]}[0] * ${inputs[1]}[1] - ${inputs[0]}[1] * ${inputs[1]}[0];\n`
-    
+
+    // Scalar inputs (e.g. Ground → 0) broadcast across components
+    const acc = (inp: string, typ: string | undefined, i: number) =>
+      typ && typ.includes('[') ? `${inp}[${i}]` : `(${inp})`
+    const a = (i: number) => acc(inputs[0], inputTypes?.[0], i)
+    const b = (i: number) => acc(inputs[1], inputTypes?.[1], i)
+
+    code += `    // Cross product: a × b\n`
+    code += `    ${outputName}[0] = ${a(1)} * ${b(2)} - ${a(2)} * ${b(1)};\n`
+    code += `    ${outputName}[1] = ${a(2)} * ${b(0)} - ${a(0)} * ${b(2)};\n`
+    code += `    ${outputName}[2] = ${a(0)} * ${b(1)} - ${a(1)} * ${b(0)};\n`
+
     return code
   }
 

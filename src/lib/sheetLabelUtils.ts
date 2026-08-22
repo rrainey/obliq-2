@@ -2,6 +2,8 @@
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 
+// WireData used by collectSheetsRecursive
+
 /**
  * Collects all signal names currently in use within a sheet/subsystem
  * This includes both explicitly named signals (from wires/connections) and 
@@ -116,11 +118,58 @@ export interface SheetLabelValidationIssue {
   message: string
 }
 
+/**
+ * Walk blocks including nested subsystem sheets (parameters.sheets).
+ * Matches ModelFlattener’s ability to see global Goto sinks under IU, etc.
+ */
+export function collectBlocksRecursive(blocks: BlockData[]): BlockData[] {
+  const out: BlockData[] = []
+  const visit = (list: BlockData[]) => {
+    for (const b of list) {
+      out.push(b)
+      if (b.type === 'subsystem' && Array.isArray(b.parameters?.sheets)) {
+        for (const sh of b.parameters.sheets) {
+          if (Array.isArray(sh?.blocks)) visit(sh.blocks)
+        }
+      }
+    }
+  }
+  visit(blocks)
+  return out
+}
+
+/** Collect {blocks, connections} for every nested sheet under the given roots. */
+export function collectSheetsRecursive(
+  sheets: Array<{ blocks: BlockData[]; connections: WireData[] }>
+): Array<{ blocks: BlockData[]; connections: WireData[] }> {
+  const out: Array<{ blocks: BlockData[]; connections: WireData[] }> = []
+  const visit = (sh: { blocks?: BlockData[]; connections?: WireData[] }) => {
+    const blocks = sh.blocks || []
+    const connections = sh.connections || []
+    out.push({ blocks, connections })
+    for (const b of blocks) {
+      if (b.type === 'subsystem' && Array.isArray(b.parameters?.sheets)) {
+        for (const nested of b.parameters.sheets) {
+          visit(nested)
+        }
+      }
+    }
+  }
+  for (const s of sheets) visit(s)
+  return out
+}
+
+/**
+ * Validate sheet labels.
+ * - Duplicate sinks: only within the same local `blocks` list (per sheet/scope).
+ * - Unmatched sources: resolve against sinks in this list **and** nested
+ *   subsystem sheets (Simulink global Goto / ModelFlattener fallback).
+ */
 export function validateSheetLabels(blocks: BlockData[]): SheetLabelValidationIssue[] {
   const issues: SheetLabelValidationIssue[] = []
-  const sinkSignalNames = new Map<string, BlockData[]>()
+  const localSinks = new Map<string, BlockData[]>()
   
-  // Check for duplicate sink signal names and empty names
+  // Check for duplicate sink signal names and empty names (local scope only)
   for (const block of blocks) {
     if (block.type === 'sheet_label_sink') {
       const signalName = block.parameters?.signalName
@@ -135,15 +184,15 @@ export function validateSheetLabels(blocks: BlockData[]): SheetLabelValidationIs
         continue
       }
       
-      if (!sinkSignalNames.has(signalName)) {
-        sinkSignalNames.set(signalName, [])
+      if (!localSinks.has(signalName)) {
+        localSinks.set(signalName, [])
       }
-      sinkSignalNames.get(signalName)!.push(block)
+      localSinks.get(signalName)!.push(block)
     }
   }
   
-  // Report duplicate sink names
-  for (const [signalName, sinkBlocks] of sinkSignalNames) {
+  // Report duplicate sink names within this scope only
+  for (const [signalName, sinkBlocks] of localSinks) {
     if (sinkBlocks.length > 1) {
       for (const block of sinkBlocks) {
         issues.push({
@@ -156,8 +205,18 @@ export function validateSheetLabels(blocks: BlockData[]): SheetLabelValidationIs
       }
     }
   }
+
+  // Nested sinks (for unmatched-source resolution only)
+  const allBlocks = collectBlocksRecursive(blocks)
+  const reachableSinkNames = new Set<string>()
+  for (const block of allBlocks) {
+    if (block.type === 'sheet_label_sink') {
+      const signalName = block.parameters?.signalName
+      if (signalName && signalName.trim()) reachableSinkNames.add(signalName)
+    }
+  }
   
-  // Check for unmatched sources
+  // Check for unmatched sources against local + nested sinks
   for (const block of blocks) {
     if (block.type === 'sheet_label_source') {
       const signalName = block.parameters?.signalName
@@ -172,7 +231,7 @@ export function validateSheetLabels(blocks: BlockData[]): SheetLabelValidationIs
         continue
       }
       
-      if (!sinkSignalNames.has(signalName)) {
+      if (!reachableSinkNames.has(signalName)) {
         issues.push({
           type: 'unmatched_source',
           blockId: block.id,

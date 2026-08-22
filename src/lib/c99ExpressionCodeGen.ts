@@ -7,7 +7,7 @@ import { Expression, BinaryExpression, UnaryExpression,
 const MATH_FUNCTIONS = new Set([
   'sqrt', 'pow', 'sin', 'cos', 'tan', 'atan', 'atan2', 'acos', 'asin',
   'ceil', 'floor', 'trunc', 'round', 'lround', 'log', 'log2', 'log10',
-  'abs', 'labs', 'fabs', 'fmax', 'fmin', 'signbit'
+  'abs', 'labs', 'fabs', 'fmax', 'fmin', 'signbit', 'fmod', 'fmodf'
 ])
 
 /**

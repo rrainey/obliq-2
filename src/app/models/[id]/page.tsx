@@ -560,30 +560,31 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     console.log('[handleBlocksMove] active sheet blocks after save:', activeSheet?.blocks.map(b => ({ id: b.id, pos: b.position })))
   }
 
-  const handleBlockDelete = (blockId: string) => {
-    // Find the block to get its name for confirmation
-    const block = blocks.find(b => b.id === blockId)
-    if (!block) return
+  const handleBlockDelete = (blockIds: string[]) => {
+    const ids = [...new Set(blockIds)].filter(id => blocks.some(b => b.id === id))
+    if (ids.length === 0) return
 
-    // Confirm deletion
-    if (!window.confirm(`Delete block "${block.name}" and all its connections?`)) {
+    const confirmMessage =
+      ids.length === 1
+        ? `Delete block "${blocks.find(b => b.id === ids[0])!.name}" and all its connections?`
+        : `Delete these ${ids.length} selected blocks and all their connections?`
+
+    if (!window.confirm(confirmMessage)) {
       return
     }
 
-    // Use the store's deleteBlock action which handles both blocks and connected wires
-    deleteBlock(blockId)
-    
-    // Clear selection if this block was selected
-    if (selectedBlockId === blockId) {
-      setSelectedBlockId(null)
-    }
-    
-    // Clear config if this block was being configured
-    if (configBlock?.id === blockId) {
-      setConfigBlock(null)
+    // Store deleteBlock also removes connected wires
+    for (const blockId of ids) {
+      deleteBlock(blockId)
     }
 
-    console.log('Block deleted:', block.name)
+    if (selectedBlockId && ids.includes(selectedBlockId)) {
+      setSelectedBlockId(null)
+    }
+    if (configBlock && ids.includes(configBlock.id)) {
+      setConfigBlock(null)
+    }
+    clearSelection()
   }
 
   const handleWireCreate = (sourcePort: PortInfo, targetPort: PortInfo) => {
@@ -1041,7 +1042,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           compiledWasmToUse = wasmResult
 
         } catch (error) {
-          console.error('[Run Simulation] Compilation failed:', error)
+          // Expected compile failures: toast only — avoid console.error (Next overlay).
           notifications.show({
             title: 'Compilation Failed',
             message: error instanceof Error ? error.message : 'Unknown error',
@@ -1856,12 +1857,12 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                 })
               }}
               onError={(error, details) => {
-                console.error('[Pre-warming] Compilation error:', error, details)
+                // Expected model compile failures are shown via WasmErrorDisplay +
+                // toast — do not console.error (Next.js surfaces that as a noisy overlay).
                 setCompilationError(error)
                 setCompilationErrorDetails(details || null)
                 setIsCompiling(false)
 
-                // Show error notification
                 notifications.show({
                   title: 'WASM Compilation Failed',
                   message: 'Check your model',

@@ -5,7 +5,7 @@
 Transform Signal Logger and Signal Display blocks from passive sinks (where data is externally collected) to active data collectors (where blocks manage their own sample buffers internally in WASM).
 
 ### Key Design Decisions
-1. **Maximum samples**: Default 1000, configurable via block parameters
+1. **Maximum samples**: Default 4000, configurable via block parameters
 2. **Type-aware storage**: Allocate buffers matching input signal type (scalar, vector, matrix)
 3. **Single retrieval**: Get all samples with one WASM call after simulation completes
 4. **Eliminate output mapping**: No longer treat loggers/displays as "outputs" in WASM

@@ -195,7 +195,7 @@ Naming: **`M` + from-system + to-system** transforms a vector **from** the secon
 | `[MES]` E→S DCM + \(\Theta_E\) / LaunchDate | **Done** (`as205Mes.ts`) |
 | ECI 6DoF plant + \(r_S=\mathrm{MES}\,r_E\) export | **Done** (9.4+ via `as205EciPlant.ts`) |
 | Residual: \(h\), mass, \(q̄\) | **Focus now** |
-| Residual: Space-frame \(V\), γ, XYZ | **Partial** (`log_X/Y/Z_S`); live \(v_S\) deferred |
+| Residual: Space-frame \(V\), γ, XYZ | **Loggers ready** (`log_V_S`, `log_VX/Y/Z_S`, `log_X/Y/Z_S`); CLI mapping optional |
 | `pad_roll_L` on \(q_0\) | **Not yet** |
 
 Site constants: `AS205_presettings.m` / `AS205_PAD` (LC-34, \(A_z\), \(R_L\)).

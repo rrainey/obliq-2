@@ -89,6 +89,18 @@ export function refineDataStoreTypes(
       if (!conn) continue
       const srcType = typeMap.get(conn.sourceBlockId)
       if (srcType && srcType !== 'void') {
+        // Do not widen scalar timing/gain stores (tau_*_sec etc.) to huge
+        // vectors from mis-typed filter/memory writes.
+        if (
+          store.dataType === 'double' &&
+          srcType.includes('[') &&
+          /_sec$|_rad$|tau_|Chi_|alpha_|nIGM|nHSL|SMC/i.test(store.name)
+        ) {
+          const m = srcType.match(/\[(\d+)\]/)
+          if (m && Number(m[1]) > 3) {
+            return store
+          }
+        }
         return { ...store, dataType: srcType }
       }
     }

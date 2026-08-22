@@ -6,6 +6,7 @@ import {
   as205DefaultPadStateEci,
   buildAs205PadStateEci,
   dcmToQuat,
+  elevRadFromMesAndCbE,
   mat3ToSourceValue,
   quatToDcm
 } from '../examples/saturn-ib/as205EciPlant'
@@ -41,16 +42,13 @@ describe('as205EciPlant', () => {
     }
   })
 
-  test('pad ECI: |r_E|=|R_S|, C_bE=MESᵀ, v_E = C_bE·V_S', () => {
+  test('pad ECI: |r_E|=|R_S|, C_bE=LIOᵀ (Az=pad_roll), v_E = C_bE·v_b', () => {
     const padS = as205SimulinkPadStateS()
     const padE = as205DefaultPadStateEci()
     expect(Math.hypot(...padE.r0_E)).toBeCloseTo(Math.hypot(...padS.R_S_0_m), 6)
-    expect(padE.v0_b[0]).toBeCloseTo(padS.V_S_0_m[0], 9)
-    expect(padE.v0_b[1]).toBeCloseTo(padS.V_S_0_m[1], 9)
-    expect(padE.v0_b[2]).toBeCloseTo(padS.V_S_0_m[2], 9)
 
     const C = padE.C_bE
-    const vFromC = mat3MulVec(C, padS.V_S_0_m)
+    const vFromC = mat3MulVec(C, padE.v0_b)
     expect(vFromC[0]).toBeCloseTo(padE.v0_E[0], 6)
     expect(vFromC[1]).toBeCloseTo(padE.v0_E[1], 6)
     expect(vFromC[2]).toBeCloseTo(padE.v0_E[2], 6)
@@ -75,13 +73,15 @@ describe('as205EciPlant', () => {
       }
     }
     expect(mat3OrthonormalityError(C)).toBeLessThan(1e-12)
-    // C_bE should equal MESᵀ
-    const Mt = mat3Transpose(padE.MES)
+    // C_bE = LIOᵀ (Position I), not MESᵀ
+    const Lt = mat3Transpose(padE.LIO)
     for (let i = 0; i < 3; i++) {
       for (let j = 0; j < 3; j++) {
-        expect(C[i][j]).toBeCloseTo(Mt[i][j], 12)
+        expect(C[i][j]).toBeCloseTo(Lt[i][j], 12)
       }
     }
+    // LIO ≠ MES (Az 100° vs 82.82°)
+    expect(Math.abs(padE.LIO[1][0] - padE.MES[1][0])).toBeGreaterThan(1e-3)
   })
 
   test('explicit Θ_E overrides LaunchDate path', () => {
@@ -99,6 +99,13 @@ describe('as205EciPlant', () => {
     const v = mat3ToSourceValue(padE.MES)
     expect(v).toHaveLength(3)
     expect(v[0]).toHaveLength(3)
+  })
+
+  test('elev from Body→S is π/2 at pad (X_B ‖ X_S)', () => {
+    const padE = as205DefaultPadStateEci()
+    // Position I and S share local-up X; roll about X leaves elev = π/2
+    const elev = elevRadFromMesAndCbE(padE.MES, padE.C_bE)
+    expect(elev).toBeCloseTo(Math.PI / 2, 6)
   })
 })
 
@@ -123,9 +130,12 @@ describe('9.4 ECI plant wiring', () => {
 
     expect(sheet.blocks.some(b => b.name === 'MES_E_to_S')).toBe(true)
     expect(sheet.blocks.some(b => b.name === 'r_S')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'v_S')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'V_S_mag')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'C_bE_live')).toBe(true)
     expect(sheet.blocks.some(b => b.name === 'log_X_S')).toBe(true)
-    expect(sheet.blocks.some(b => b.name === 'log_Y_S')).toBe(true)
-    expect(sheet.blocks.some(b => b.name === 'log_Z_S')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'log_V_S')).toBe(true)
+    expect(sheet.blocks.some(b => b.name === 'log_VX_S')).toBe(true)
 
     const prop = propagateSignalTypes(
       sheet.blocks as any,
@@ -133,6 +143,12 @@ describe('9.4 ECI plant wiring', () => {
     )
     const typeErrors = prop.errors.filter(e => e.severity === 'error')
     expect(typeErrors.map(e => e.message)).toEqual([])
+
+    // Live S-frame velocity path types resolve
+    const vEId = sheet.blocks.find(b => b.name === 'v_E')!.id
+    const vSId = sheet.blocks.find(b => b.name === 'v_S')!.id
+    expect(prop.blockOutputTypes.get(`${vEId}:0`)).toBe('double[3]')
+    expect(prop.blockOutputTypes.get(`${vSId}:0`)).toBe('double[3]')
 
     const gen = new CodeGenerator({
       modelName: 'sixdof_eci',
@@ -143,10 +159,11 @@ describe('9.4 ECI plant wiring', () => {
     expect(result.source).toContain('_step')
   })
 
-  test('9.6 still builds on ECI base', () => {
+  test('9.6 still builds on ECI base with live v_S', () => {
     const m = buildSixDofOpenLoopChiAttitudePd()
     expect(m.name).toBe('saturn-9.6-chi-table2b-attitude-pd')
     expect(m.sheets[0].blocks.some(b => b.name === 'MES_E_to_S')).toBe(true)
+    expect(m.sheets[0].blocks.some(b => b.name === 'v_S')).toBe(true)
     expect(m.description).toMatch(/ECI/i)
   })
 })

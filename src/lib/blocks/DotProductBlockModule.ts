@@ -5,28 +5,37 @@ import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
 
 export class DotProductBlockModule implements IBlockModule {
-  generateComputation(block: BlockData, inputs: string[]): string {
+  generateComputation(
+    block: BlockData,
+    inputs: string[],
+    inputTypes?: string[]
+  ): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
-    
+
     let code = `    // Dot product block: ${block.name}\n`
-    
+
     if (inputs.length < 2) {
       code += `    ${outputName} = 0.0; // Error: Dot product requires 2 inputs\n`
       return code
     }
-    
-    // Get the vector dimension from the first input type
-    // This assumes type validation has ensured both inputs have the same dimensions
-    const inputType1 = this.getInputTypeFromContext(block, 0) // This would need context
-    const typeInfo = BlockModuleUtils.parseType(inputType1 || 'double[3]')
-    const vectorSize = typeInfo.arraySize || 3
-    
-    // Generate dot product computation with known size
+
+    const t0 = BlockModuleUtils.parseType(inputTypes?.[0] || 'double[3]')
+    const col0 = !!(t0.isMatrix && t0.cols === 1 && t0.rows)
+    const vectorSize =
+      (t0.isArray && t0.arraySize) ||
+      (col0 && t0.rows) ||
+      3
+    const acc = (inp: string, typ: string | undefined, i: string) => {
+      const t = BlockModuleUtils.parseType(typ || 'double[3]')
+      if (t.isMatrix && t.cols === 1) return `${inp}[${i}][0]`
+      return `${inp}[${i}]`
+    }
+
     code += `    ${outputName} = 0.0;\n`
     code += `    for (int i = 0; i < ${vectorSize}; i++) {\n`
-    code += `        ${outputName} += ${inputs[0]}[i] * ${inputs[1]}[i];\n`
+    code += `        ${outputName} += ${acc(inputs[0], inputTypes?.[0], 'i')} * ${acc(inputs[1], inputTypes?.[1], 'i')};\n`
     code += `    }\n`
-    
+
     return code
   }
 
@@ -57,12 +66,5 @@ export class DotProductBlockModule implements IBlockModule {
 
   getInputPortLabels(block: BlockData): string[] | undefined {
     return ['a', 'b']
-  }
-
-  // Helper method - in practice this would get the type from the connection context
-  private getInputTypeFromContext(block: BlockData, portIndex: number): string | null {
-    // This is a placeholder - the actual implementation would need access to
-    // the connected wire types through the code generation context
-    return null
   }
 }

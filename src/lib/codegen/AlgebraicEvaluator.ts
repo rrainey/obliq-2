@@ -325,26 +325,35 @@ export class AlgebraicEvaluator {
     signalsVar: string = 'model',  // Changed default
     statesVar: string = 'model'     // Changed default
   ): string[] {
-    const inputs: string[] = []
-
-    // Find all connections to this block, sorted by target port index
-    // Filter out control ports (negative indices: -1 enable, -2 reset)
-    // Data ports (including integrator x(0) at port 1) remain
+    // Port-indexed (same shape as getBlockInputTypes) so mux/product ports
+    // align when there are gaps or duplicate wires.
     const connections = this.model.connections
       .filter(c => c.targetBlockId === block.originalId && c.targetPortIndex >= 0)
       .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
 
+    let maxPort = -1
+    for (const c of connections) {
+      if (c.targetPortIndex > maxPort) maxPort = c.targetPortIndex
+    }
+    const inputs: string[] = Array.from({ length: maxPort + 1 }, () => '0.0')
+
     for (const connection of connections) {
-      const sourceBlock = this.model.blocks.find(b => 
-        b.originalId === connection.sourceBlockId
+      const sourceBlock = this.model.blocks.find(
+        b => b.originalId === connection.sourceBlockId
       )
-      
-      if (sourceBlock) {
-        const expr = this.generateSignalExpression(sourceBlock, connection.sourcePortIndex, signalsVar)
-        inputs.push(expr)
+      if (!sourceBlock) continue
+      const expr = this.generateSignalExpression(
+        sourceBlock,
+        connection.sourcePortIndex,
+        signalsVar
+      )
+      const port = connection.targetPortIndex
+      // Prefer first non-default; dimensional sources win on duplicates
+      if (inputs[port] === '0.0') {
+        inputs[port] = expr
       }
     }
-    
+
     return inputs
   }
   
@@ -452,17 +461,27 @@ export class AlgebraicEvaluator {
    * Get input types for a block
    */
   private getBlockInputTypes(block: FlattenedBlock): string[] {
-    const types: string[] = []
-
-    // Find all connections to this block, sorted by target port index
-    // Filter out special control ports (negative indices: -1 enable, -2 reset)
+    // Data ports only; prefer dimensional type when multiple wires hit one port
     const connections = this.model.connections
       .filter(c => c.targetBlockId === block.originalId && c.targetPortIndex >= 0)
       .sort((a, b) => a.targetPortIndex - b.targetPortIndex)
 
+    let maxPort = -1
+    for (const c of connections) {
+      if (c.targetPortIndex > maxPort) maxPort = c.targetPortIndex
+    }
+    const types: string[] = Array.from({ length: maxPort + 1 }, () => 'double')
+
     for (const connection of connections) {
       const sourceType = this.typeMap.get(connection.sourceBlockId) || 'double'
-      types.push(sourceType)
+      const port = connection.targetPortIndex
+      const prev = types[port]
+      if (
+        prev === 'double' ||
+        (!prev.includes('[') && sourceType.includes('['))
+      ) {
+        types[port] = sourceType
+      }
     }
 
     return types

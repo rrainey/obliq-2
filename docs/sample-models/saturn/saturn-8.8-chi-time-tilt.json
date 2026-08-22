@@ -3,7 +3,7 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-11T23:34:31.028Z",
+      "created": "2026-08-22T02:45:40.189Z",
       "description": "Time-tilt chi pitch program via lookup_1d + rate_limiter"
     },
     "sheets": [

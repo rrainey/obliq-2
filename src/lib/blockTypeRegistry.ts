@@ -726,7 +726,7 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
       { name: 'density_kgpm3' },
       { name: 'speed_of_sound_mps' }
     ],
-    description: '1976 COESA atmosphere: T, P, ρ, a vs geometric altitude (m)'
+    description: '1976 COESA atmosphere: T, a, P, ρ vs geometric altitude (m) — Simulink port order'
   },
 
   [BlockTypes.BODY2QUATERNION_RATES]: {

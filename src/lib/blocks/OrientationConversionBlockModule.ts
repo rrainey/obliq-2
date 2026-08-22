@@ -18,10 +18,10 @@ import { IBlockModule, BlockModuleUtils } from './BlockModule'
  */
 export type OrientationConversionType =
   | 'euler_to_dcm'      // 3 inputs (Phi, Theta, Psi) → 1 output (3x3 DCM)
-  | 'dcm_to_euler'      // 1 input (3x3 DCM) → 3 outputs (Phi, Theta, Psi)
+  | 'dcm_to_euler'      // 1 input (3x3 DCM) → 1 output double[3] {Phi, Theta, Psi}
   | 'euler_to_quat'     // 3 inputs (Phi, Theta, Psi) → 1 output (4x1 quaternion)
   | 'dcm_to_quat'       // 1 input (3x3 DCM) → 1 output (4x1 quaternion)
-  | 'quat_to_euler'     // 1 input (4x1 quaternion) → 3 outputs (Phi, Theta, Psi)
+  | 'quat_to_euler'     // 1 input (4x1 quaternion) → 1 output double[3] {Phi, Theta, Psi}
   | 'quat_to_dcm'       // 1 input (4x1 quaternion) → 1 output (3x3 DCM)
 
 export class OrientationConversionBlockModule implements IBlockModule {
@@ -34,13 +34,13 @@ export class OrientationConversionBlockModule implements IBlockModule {
 
     switch (conversionType) {
       case 'euler_to_dcm':
-        code += this.generateEulerToDCM(inputs, outputName)
+        code += this.generateEulerToDCM(inputs, outputName, inputTypes)
         break
       case 'dcm_to_euler':
-        code += this.generateDCMToEuler(inputs, outputName, block.name)
+        code += this.generateDCMToEuler(inputs, outputName, block.name, inputTypes)
         break
       case 'euler_to_quat':
-        code += this.generateEulerToQuat(inputs, outputName)
+        code += this.generateEulerToQuat(inputs, outputName, inputTypes)
         break
       case 'dcm_to_quat':
         code += this.generateDCMToQuat(inputs, outputName)
@@ -62,10 +62,24 @@ export class OrientationConversionBlockModule implements IBlockModule {
    * Euler angles (Phi, Theta, Psi) to DCM using ZYX rotation sequence
    * DCM = R_z(Psi) * R_y(Theta) * R_x(Phi)
    */
-  private generateEulerToDCM(inputs: string[], outputName: string): string {
-    const phi = inputs[0] || '0.0'      // Roll
-    const theta = inputs[1] || '0.0'    // Pitch
-    const psi = inputs[2] || '0.0'      // Yaw
+  private generateEulerToDCM(
+    inputs: string[],
+    outputName: string,
+    inputTypes?: string[]
+  ): string {
+    // Simulink often muxes [phi,theta,psi] into a single vector input
+    let phi = inputs[0] || '0.0'
+    let theta = inputs[1] || '0.0'
+    let psi = inputs[2] || '0.0'
+    const t0 = inputTypes?.[0] || ''
+    if (
+      inputs.length === 1 &&
+      (t0.includes('[3]') || t0 === 'double[3]' || t0.startsWith('double[3]'))
+    ) {
+      phi = `${inputs[0]}[0]`
+      theta = `${inputs[0]}[1]`
+      psi = `${inputs[0]}[2]`
+    }
 
     return `    {
         double c_phi = cos(${phi});
@@ -95,14 +109,28 @@ export class OrientationConversionBlockModule implements IBlockModule {
    * DCM to Euler angles extraction
    * Handles gimbal lock at theta = ±90 degrees
    */
-  private generateDCMToEuler(inputs: string[], outputName: string, blockName: string): string {
+  private generateDCMToEuler(
+    inputs: string[],
+    outputName: string,
+    _blockName: string,
+    inputTypes?: string[]
+  ): string {
+    // Simulink Aerospace DCM→Euler is a single 3-vector (phi,theta,psi) → Demux.
+    const inType = inputTypes?.[0] || ''
+    // Ground/scalar stubs (unused CM_ISS paths) → identity DCM → zero Euler
+    if (!inType.includes('[')) {
+      return `    {
+        // Scalar/Ground DCM stub → identity → zero Euler angles
+        ${outputName}[0] = 0.0;
+        ${outputName}[1] = 0.0;
+        ${outputName}[2] = 0.0;
+    }
+`
+    }
     const dcm = inputs[0] || 'dcm'
-    const phiOut = `model->signals.${BlockModuleUtils.sanitizeIdentifier(blockName)}_phi`
-    const thetaOut = `model->signals.${BlockModuleUtils.sanitizeIdentifier(blockName)}_theta`
-    const psiOut = `model->signals.${BlockModuleUtils.sanitizeIdentifier(blockName)}_psi`
 
     return `    {
-        // Extract Euler angles from DCM
+        // Extract Euler angles from DCM → double[3] {phi, theta, psi}
         // Theta (pitch) from -sin(theta) = DCM[0][2]
         double sin_theta = -${dcm}[0][2];
 
@@ -110,20 +138,20 @@ export class OrientationConversionBlockModule implements IBlockModule {
         if (sin_theta > 1.0) sin_theta = 1.0;
         if (sin_theta < -1.0) sin_theta = -1.0;
 
-        ${thetaOut} = asin(sin_theta);
+        ${outputName}[1] = asin(sin_theta);
 
         // Check for gimbal lock (theta near ±90 degrees)
-        double cos_theta = cos(${thetaOut});
+        double cos_theta = cos(${outputName}[1]);
 
         if (fabs(cos_theta) > 1.0e-10) {
             // Normal case: no gimbal lock
-            ${phiOut} = atan2(${dcm}[1][2], ${dcm}[2][2]);
-            ${psiOut} = atan2(${dcm}[0][1], ${dcm}[0][0]);
+            ${outputName}[0] = atan2(${dcm}[1][2], ${dcm}[2][2]);
+            ${outputName}[2] = atan2(${dcm}[0][1], ${dcm}[0][0]);
         } else {
             // Gimbal lock: theta = ±90 degrees
             // Set psi = 0 and compute phi from remaining elements
-            ${psiOut} = 0.0;
-            ${phiOut} = atan2(-${dcm}[2][1], ${dcm}[1][1]);
+            ${outputName}[2] = 0.0;
+            ${outputName}[0] = atan2(-${dcm}[2][1], ${dcm}[1][1]);
         }
     }
 `
@@ -133,10 +161,23 @@ export class OrientationConversionBlockModule implements IBlockModule {
    * Euler angles to Quaternion (scalar-first)
    * q = [q0, q1, q2, q3] where q0 is scalar
    */
-  private generateEulerToQuat(inputs: string[], outputName: string): string {
-    const phi = inputs[0] || '0.0'
-    const theta = inputs[1] || '0.0'
-    const psi = inputs[2] || '0.0'
+  private generateEulerToQuat(
+    inputs: string[],
+    outputName: string,
+    inputTypes?: string[]
+  ): string {
+    let phi = inputs[0] || '0.0'
+    let theta = inputs[1] || '0.0'
+    let psi = inputs[2] || '0.0'
+    const t0 = inputTypes?.[0] || ''
+    if (
+      inputs.length === 1 &&
+      (t0.includes('[3]') || t0 === 'double[3]' || t0.startsWith('double[3]'))
+    ) {
+      phi = `${inputs[0]}[0]`
+      theta = `${inputs[0]}[1]`
+      psi = `${inputs[0]}[2]`
+    }
 
     return `    {
         double c_phi_2 = cos(${phi} * 0.5);
@@ -204,11 +245,9 @@ export class OrientationConversionBlockModule implements IBlockModule {
   /**
    * Quaternion to Euler angles
    */
-  private generateQuatToEuler(inputs: string[], outputName: string, blockName: string): string {
+  private generateQuatToEuler(inputs: string[], outputName: string, _blockName: string): string {
     const quat = inputs[0] || 'quat'
-    const phiOut = `model->signals.${BlockModuleUtils.sanitizeIdentifier(blockName)}_phi`
-    const thetaOut = `model->signals.${BlockModuleUtils.sanitizeIdentifier(blockName)}_theta`
-    const psiOut = `model->signals.${BlockModuleUtils.sanitizeIdentifier(blockName)}_psi`
+    // Single double[3] {phi, theta, psi} — matches Simulink vector out → Demux
 
     return `    {
         double q0 = ${quat}[0][0];  // Scalar
@@ -219,20 +258,20 @@ export class OrientationConversionBlockModule implements IBlockModule {
         // Phi (roll)
         double sinr_cosp = 2.0 * (q0 * q1 + q2 * q3);
         double cosr_cosp = 1.0 - 2.0 * (q1 * q1 + q2 * q2);
-        ${phiOut} = atan2(sinr_cosp, cosr_cosp);
+        ${outputName}[0] = atan2(sinr_cosp, cosr_cosp);
 
         // Theta (pitch)
         double sinp = 2.0 * (q0 * q2 - q3 * q1);
         if (fabs(sinp) >= 1.0) {
-            ${thetaOut} = copysign(M_PI / 2.0, sinp);  // Gimbal lock
+            ${outputName}[1] = copysign(M_PI / 2.0, sinp);  // Gimbal lock
         } else {
-            ${thetaOut} = asin(sinp);
+            ${outputName}[1] = asin(sinp);
         }
 
         // Psi (yaw)
         double siny_cosp = 2.0 * (q0 * q3 + q1 * q2);
         double cosy_cosp = 1.0 - 2.0 * (q2 * q2 + q3 * q3);
-        ${psiOut} = atan2(siny_cosp, cosy_cosp);
+        ${outputName}[2] = atan2(siny_cosp, cosy_cosp);
     }
 `
   }
@@ -244,7 +283,7 @@ export class OrientationConversionBlockModule implements IBlockModule {
     const quat = inputs[0] || 'quat'
 
     return `    {
-        double q0 = ${quat}[0][0];  // Scalar
+        double q0 = ${quat}[0][0];  // Scalar (expects double[4][1])
         double q1 = ${quat}[1][0];
         double q2 = ${quat}[2][0];
         double q3 = ${quat}[3][0];
@@ -281,7 +320,7 @@ export class OrientationConversionBlockModule implements IBlockModule {
         return 'double[4][1]'  // 4x1 quaternion column vector
       case 'dcm_to_euler':
       case 'quat_to_euler':
-        return 'double'  // Returns multiple separate outputs
+        return 'double[3]'  // Single vector {phi, theta, psi} (Simulink Aerospace)
       default:
         return 'double'
     }
@@ -300,8 +339,7 @@ export class OrientationConversionBlockModule implements IBlockModule {
         return `    double ${baseName}[4][1];`
       case 'dcm_to_euler':
       case 'quat_to_euler':
-        // Three separate output signals for Euler angles
-        return `    double ${baseName}_phi;\n    double ${baseName}_theta;\n    double ${baseName}_psi;`
+        return `    double ${baseName}[3];`
       default:
         return BlockModuleUtils.generateStructMember(block.name, outputType)
     }
@@ -350,9 +388,7 @@ export class OrientationConversionBlockModule implements IBlockModule {
     const dcm = inputs[0] as number[][] | undefined
 
     if (!dcm || !Array.isArray(dcm) || dcm.length !== 3) {
-      blockState.outputs[0] = 0
-      blockState.outputs[1] = 0
-      blockState.outputs[2] = 0
+      blockState.outputs[0] = [0, 0, 0]
       return
     }
 
@@ -375,9 +411,7 @@ export class OrientationConversionBlockModule implements IBlockModule {
       phi = Math.atan2(-dcm[2][1], dcm[1][1])
     }
 
-    blockState.outputs[0] = phi
-    blockState.outputs[1] = theta
-    blockState.outputs[2] = psi
+    blockState.outputs[0] = [phi, theta, psi]
   }
 
   private simEulerToQuat(
@@ -455,9 +489,7 @@ export class OrientationConversionBlockModule implements IBlockModule {
     const quat = inputs[0] as number[][] | undefined
 
     if (!quat || !Array.isArray(quat) || quat.length !== 4) {
-      blockState.outputs[0] = 0
-      blockState.outputs[1] = 0
-      blockState.outputs[2] = 0
+      blockState.outputs[0] = [0, 0, 0]
       return
     }
 
@@ -481,9 +513,7 @@ export class OrientationConversionBlockModule implements IBlockModule {
     const cosy_cosp = 1 - 2 * (q2 * q2 + q3 * q3)
     const psi = Math.atan2(siny_cosp, cosy_cosp)
 
-    blockState.outputs[0] = phi
-    blockState.outputs[1] = theta
-    blockState.outputs[2] = psi
+    blockState.outputs[0] = [phi, theta, psi]
   }
 
   private simQuatToDCM(
@@ -547,7 +577,7 @@ export class OrientationConversionBlockModule implements IBlockModule {
         return 1  // Quaternion
       case 'dcm_to_euler':
       case 'quat_to_euler':
-        return 3  // Phi, Theta, Psi
+        return 1  // double[3] {phi, theta, psi}
       default:
         return 1
     }
@@ -583,7 +613,7 @@ export class OrientationConversionBlockModule implements IBlockModule {
         return ['q']
       case 'dcm_to_euler':
       case 'quat_to_euler':
-        return ['Phi_rad', 'Theta_rad', 'Psi_rad']
+        return ['Euler_rad']
       default:
         return undefined
     }

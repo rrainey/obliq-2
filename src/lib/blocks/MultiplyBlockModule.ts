@@ -7,30 +7,75 @@ import { IBlockModule, BlockModuleUtils } from './BlockModule'
 export class MultiplyBlockModule implements IBlockModule {
   generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
-    
+
     if (inputs.length === 0) {
       return `    ${outputName} = 0.0; // No inputs\n`
     }
-    
-    // Get the output type from inputTypes if available
-    const outputType = inputTypes && inputTypes.length > 0 ? inputTypes[0] : 'double'
+
+    // Prefer a dimensional input as the element-wise shape (scalar×vector → vector)
+    const outputType =
+      (inputTypes || []).find(t => t && t.includes('[')) ||
+      (inputTypes && inputTypes.length > 0 ? inputTypes[0] : 'double')
     const typeInfo = BlockModuleUtils.parseType(outputType)
-    
-    // Use the utility function for element-wise operations
-    return BlockModuleUtils.generateElementWiseOperation(
-      outputName,
-      inputs,
-      '*',
-      typeInfo
-    )
+
+    // Simulink Product Inputs string: '*' multiply, '/' divide (e.g. "*/", "**/", "/*").
+    // Leading '/' means start from the reciprocal of that input.
+    const opsRaw = String(block.parameters?.ops ?? '')
+    const ops =
+      opsRaw.replace(/[^*/]/g, '') || '*'.repeat(inputs.length)
+    const hasDivide = ops.includes('/')
+
+    if (!hasDivide) {
+      return BlockModuleUtils.generateElementWiseOperation(
+        outputName,
+        inputs,
+        '*',
+        typeInfo,
+        inputTypes
+      )
+    }
+
+    const access = (inp: string, typ: string | undefined, idx: string) => {
+      if (typ && typ.includes('[')) return `${inp}${idx}`
+      return `(${inp})`
+    }
+
+    const term = (k: number, idx: string) => {
+      const a = access(inputs[k], inputTypes?.[k], idx)
+      const op = ops[k] || '*'
+      if (k === 0) return op === '/' ? `(1.0/${a})` : a
+      return ` ${op} ${a}`
+    }
+
+    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+      let code = `    // Matrix element-wise product/divide (ops=${ops})\n`
+      code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
+      code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
+      code += `            ${outputName}[i][j] = `
+      for (let k = 0; k < inputs.length; k++) code += term(k, '[i][j]')
+      code += `;\n        }\n    }\n`
+      return code
+    }
+
+    if (typeInfo.isArray && typeInfo.arraySize) {
+      let code = `    // Vector element-wise product/divide (ops=${ops})\n`
+      code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
+      code += `        ${outputName}[i] = `
+      for (let k = 0; k < inputs.length; k++) code += term(k, '[i]')
+      code += `;\n    }\n`
+      return code
+    }
+
+    let computation = `${outputName} = `
+    for (let k = 0; k < inputs.length; k++) computation += term(k, '')
+    return `    // Product/divide (ops=${ops})\n    ${computation};\n`
   }
 
   getOutputType(block: BlockData, inputTypes: string[]): string {
-    // Multiply block output type matches the first input type
-    // (assumes all inputs have the same type for element-wise multiplication)
-    if (inputTypes.length === 0) {
-      return 'double' // Default type
-    }
+    // Prefer dimensional type so scalar×vector → vector
+    const dim = inputTypes.find(t => t && t.includes('['))
+    if (dim) return dim
+    if (inputTypes.length === 0) return 'double'
     return inputTypes[0]
   }
 
@@ -55,8 +100,13 @@ export class MultiplyBlockModule implements IBlockModule {
   }
 
   getInputPortCount(block: BlockData): number {
-    // Multiply blocks have a configurable number of inputs (default 2)
-    return block.parameters?.inputCount || block.parameters?.inputs || 2
+    // Prefer numInputs (mdl2obliq / Sum-style); fall back to legacy keys
+    return (
+      block.parameters?.numInputs ||
+      block.parameters?.inputCount ||
+      block.parameters?.inputs ||
+      2
+    )
   }
 
   getOutputPortCount(block: BlockData): number {

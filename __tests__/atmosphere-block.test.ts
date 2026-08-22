@@ -57,8 +57,9 @@ function minimalAtmosphereModel() {
         connections: [
           { id: 'w1', sourceBlockId: 'h', sourcePortIndex: 0, targetBlockId: 'atm', targetPortIndex: 0 },
           { id: 'w2', sourceBlockId: 'atm', sourcePortIndex: 0, targetBlockId: 'outT', targetPortIndex: 0 },
-          { id: 'w3', sourceBlockId: 'atm', sourcePortIndex: 2, targetBlockId: 'outRho', targetPortIndex: 0 },
-          { id: 'w4', sourceBlockId: 'atm', sourcePortIndex: 3, targetBlockId: 'outA', targetPortIndex: 0 },
+          // COESA order: T=0, a=1, P=2, rho=3
+          { id: 'w3', sourceBlockId: 'atm', sourcePortIndex: 3, targetBlockId: 'outRho', targetPortIndex: 0 },
+          { id: 'w4', sourceBlockId: 'atm', sourcePortIndex: 1, targetBlockId: 'outA', targetPortIndex: 0 },
         ],
       },
     ],
@@ -87,11 +88,12 @@ describe('Atmosphere Block (P7)', () => {
   test('four outputs, one input', () => {
     expect(module.getInputPortCount(block())).toBe(1)
     expect(module.getOutputPortCount(block())).toBe(4)
+    // Simulink / aerolib COESA order: T, a, P, rho
     expect(module.getOutputPortLabels(block())).toEqual([
       'temperature_K',
+      'speed_of_sound_mps',
       'pressure_Pa',
-      'density_kgpm3',
-      'speed_of_sound_mps'
+      'density_kgpm3'
     ])
   })
 
@@ -210,10 +212,11 @@ describe('Atmosphere type propagation (UI)', () => {
 })
 
 describe('Atmosphere WASM multi-output signal names', () => {
-  test('getSignalMemberName uses density suffix for port 2', () => {
+  test('getSignalMemberName uses COESA suffixes (T,a,P,rho)', () => {
     expect(getSignalMemberName('Atm', 'atmosphere', 0)).toBe('Atm_temperature_K')
-    expect(getSignalMemberName('Atm', 'atmosphere', 2)).toBe('Atm_density_kgpm3')
-    expect(getSignalMemberName('Atm', 'atmosphere', 3)).toBe('Atm_speed_of_sound_mps')
+    expect(getSignalMemberName('Atm', 'atmosphere', 1)).toBe('Atm_speed_of_sound_mps')
+    expect(getSignalMemberName('Atm', 'atmosphere', 2)).toBe('Atm_pressure_Pa')
+    expect(getSignalMemberName('Atm', 'atmosphere', 3)).toBe('Atm_density_kgpm3')
   })
 
   test('WASM wrapper references Atm_density_kgpm3 not Atm', () => {

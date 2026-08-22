@@ -1,37 +1,30 @@
 /**
  * 6-DOF variable-mass equations of motion (quaternion attitude)
  *
- * Body-frame translational EOM:
+ * Aligns with Aerospace Blockset **Custom Variable Mass 6DoF (Quaternion)**
+ * body-axis EOM used in saturn_ib_stack.mdl:
+ *
+ * Translation (body):
  *   v̇_b = F_b / m − ω × v_b + g_b
  *
- * Body-frame rotational EOM (principal axes, I ∝ m):
- *   I(m) = I_ref * (m / m_ref)
- *   ω̇ = I⁻¹ [ M_b − ω × (I ω) ]
+ * Rotation (variable mass — includes İω term):
+ *   I(m) = I_ref · (m / m_ref)     (principal / diagonal I_ref for now)
+ *   İ    = I_ref · (ṁ / m_ref)     (ṁ = −ṁ_prop)
+ *   ω̇    = I⁻¹ [ M_b − ω × (I ω) − İ ω ]
  *
  * Quaternion kinematics:
- *   q̇ = ½ Ω(ω) q   (body2quaternion_rates)
+ *   q̇ = ½ Ω(ω) q   (body2quaternion_rates) + unit renorm
  *
  * Inertial kinematics:
- *   ṙ_i = C_bi · v_b     (C_bi from quat_to_dcm: body → inertial)
+ *   ṙ_i = C_bi · v_b
  *
- * Mass:
- *   ṁ = −ṁ_prop          (ṁ_prop ≥ 0 is propellant burn rate)
+ * Gravity (point mass; Simulink may use oblate Earth model later):
+ *   g_i = −μ r_i / |r|³ ,  g_b = C_biᵀ · g_i
  *
- * Gravity (point mass):
- *   g_i = −μ r_i / |r|³
- *   g_b = C_biᵀ · g_i
+ * Still simplified vs full mdl: diagonal I only (no products of inertia /
+ * matrix inverse); mass integrated inside (custom type feeds m,I from parent).
  *
- * Conventions:
- *   - Quaternion scalar-first [q0,q1,q2,q3], body rates (P,Q,R) = ω in body axes
- *   - DCM from orientation_conversion quat_to_dcm treated as body→inertial
- *   - Principal inertia only (diagonal I); off-diagonal products of inertia omitted
- *   - Pitch programs: see as205ChiTable.ts for TN Table 2B χ_c vs plant elev mapping
- *     (no full Apollo platform-frame treatment here)
- *
- * AS-205 9.4+ inertial frame:
- *   - r_i is **E-system** (classical ECI / Simulink veh frame)
- *   - Pad IC: as205EciPlant (Initial Position S → MESᵀ → r_E; B‖S ⇒ q0 = dcm(MESᵀ))
- *   - S recovered as r_S = MES · r_E for TN Space-frame columns (loggers)
+ * AS-205 9.4+ frame: r_i in E; pad via as205EciPlant; S export via MES.
  */
 
 import {
@@ -47,7 +40,22 @@ import {
   as205DefaultPadStateEci,
   mat3ToSourceValue
 } from './as205EciPlant'
-import { AS205_PAD } from './as205PadFrames'
+import { AS205_PAD, OMEGA_EARTH } from './as205PadFrames'
+import {
+  AERO_S_REF_M2,
+  CA_MACH_BREAKPOINTS,
+  CA_VALUES,
+  CN_ANGLE_DEG_BREAKPOINTS,
+  CN_MACH_BREAKPOINTS,
+  CN_TABLE,
+  CP_MACH_BREAKPOINTS,
+  CP_VALUES_M,
+  SIB_CG_MASS_BREAKPOINTS_KG,
+  SIB_CG_X_M,
+  SIB_CG_Y_M,
+  SIB_CG_Z_M
+} from './as205Aero'
+import { H1_GIMBAL_LIMIT_DEG } from './as205Engines'
 
 /** Local types (avoid circular import with sliceModels) */
 export interface SliceBlock {
@@ -119,6 +127,33 @@ function W(from: SliceBlock, to: SliceBlock, fp = 0, tp = 0): SliceWire {
 }
 
 /**
+ * Physics / MDL Custom-6DoF adapter options (see DCM_QUAT_EOM_AUDIT.md).
+ */
+export interface EomPhysicsOptions {
+  /**
+   * If true: F_aug = F_b + m·g_b, then v̇ = F_aug/m − ω×v (no separate +g_b).
+   * Matches MDL “gravity in Forces” contract; spherical g still computed here.
+   */
+  forcePathGravity?: boolean
+  /**
+   * If true: drop İω term (MDL grounds I_dot into 6DoF).
+   */
+  zeroIdot?: boolean
+  /**
+   * If true: ṙ = C_ib·v_b with C_bi=quat_to_dcm(q), C_ib=C_biᵀ.
+   * Use with mdlWire IC q=dcmToQuat(LIO) so Ve=Transpose(ASB)·Vb.
+   */
+  veViaTranspose?: boolean
+}
+
+/** Locked MDL wire-as-is + Custom 6DoF adapter defaults for Saturn plant. */
+export const EOM_MDL_ADAPTER: EomPhysicsOptions = {
+  forcePathGravity: true,
+  zeroIdot: true,
+  veViaTranspose: true
+}
+
+/**
  * Build the 6-DOF variable-mass quaternion EOM as a main demonstration sheet.
  *
  * External drives (sources, replace with input_ports for a subsystem):
@@ -127,7 +162,13 @@ function W(from: SliceBlock, to: SliceBlock, fp = 0, tp = 0): SliceWire {
  * IC sources:
  *   r0_i [3], v0_b [3], omega0 [3], q0 [4×1], m0
  */
-export function buildSixDofVariableMassEom(): SliceModel {
+export function buildSixDofVariableMassEom(
+  physics: EomPhysicsOptions = {}
+): SliceModel {
+  const forcePathGravity = physics.forcePathGravity === true
+  const zeroIdot = physics.zeroIdot === true
+  const veViaTranspose = physics.veViaTranspose === true
+
   resetIds()
   const blocks: SliceBlock[] = []
   const wires: SliceWire[] = []
@@ -408,9 +449,25 @@ export function buildSixDofVariableMassEom(): SliceModel {
   connect(C_ib, g_b, 0, 0)
   connect(g_i, g_b, 0, 1)
 
-  // ─── Translational: v̇ = F/m − ω×v + g_b ────────────────────────────
+  // ─── Translational ───────────────────────────────────────────────────
+  // Legacy: v̇ = F/m − ω×v + g_b
+  // forcePathGravity: F_aug = F + m·g_b; v̇ = F_aug/m − ω×v  (MDL Forces contract)
+  const m_g_b = add(B('matrix_multiply', 'm_g_b', 500, 360, {}))
+  connect(mass, m_g_b, 0, 0)
+  connect(g_b, m_g_b, 0, 1)
+  const F_for_accel = forcePathGravity
+    ? (() => {
+        const F_aug = add(
+          B('sum', 'F_aug_with_gravity', 560, 360, { signs: '++', numInputs: 2 })
+        )
+        connect(Fb, F_aug, 0, 0)
+        connect(m_g_b, F_aug, 0, 1)
+        return F_aug
+      })()
+    : Fb
+
   const F_over_m = add(B('divide', 'F_over_m', 500, 400, {}))
-  connect(Fb, F_over_m, 0, 0)
+  connect(F_for_accel, F_over_m, 0, 0)
   connect(mass, F_over_m, 0, 1)
 
   const w_cross_v = add(B('cross', 'w_x_v', 500, 480, {}))
@@ -422,21 +479,28 @@ export function buildSixDofVariableMassEom(): SliceModel {
   const vdot_1 = add(B('sum', 'vdot_tmp', 700, 400, { signs: '++', numInputs: 2 }))
   connect(F_over_m, vdot_1, 0, 0)
   connect(neg_wxv, vdot_1, 0, 1)
-  const v_dot = add(B('sum', 'v_dot', 820, 400, { signs: '++', numInputs: 2 }))
-  connect(vdot_1, v_dot, 0, 0)
-  connect(g_b, v_dot, 0, 1)
-  connect(v_dot, v_b, 0, 0)
+  if (forcePathGravity) {
+    // F already includes m·g_b — no separate +g_b
+    connect(vdot_1, v_b, 0, 0)
+  } else {
+    const v_dot = add(B('sum', 'v_dot', 820, 400, { signs: '++', numInputs: 2 }))
+    connect(vdot_1, v_dot, 0, 0)
+    connect(g_b, v_dot, 0, 1)
+    connect(v_dot, v_b, 0, 0)
+  }
 
-  // ─── ṙ_i = C_bi * v_b ────────────────────────────────────────────────
+  // ─── ṙ_i: legacy C_bi·v_b; mdlWire Ve=Transpose(ASB)·Vb ⇒ C_ib·v_b ───
   const r_dot = add(B('matrix_multiply', 'r_dot', 780, 520, {}))
-  connect(C_bi, r_dot, 0, 0)
+  connect(veViaTranspose ? C_ib : C_bi, r_dot, 0, 0)
   connect(v_b, r_dot, 0, 1)
   connect(r_dot, r_i, 0, 0)
 
-  // ─── Rotational Euler (principal axes) ───────────────────────────────
-  // Iω
-  const demux_Iw_in = demux_w // reuse P,Q,R
-  // Iw_x = Ixx * P, etc.
+  // ─── Rotational Euler (variable-mass, principal axes) ─────────────────
+  // Simulink Custom Variable Mass 6DoF:
+  //   ω̇ = I⁻¹ [ M − ω×(Iω) − İω ]
+  // I = I_ref (m/m_ref),  İ = I_ref (ṁ/m_ref),  ṁ = −ṁ_prop
+  //
+  // Iω (component-wise for diagonal I)
   const Iw_x = add(B('matrix_multiply', 'Iw_x', 500, 300, {}))
   const Iw_y = add(B('matrix_multiply', 'Iw_y', 500, 340, {}))
   const Iw_z = add(B('matrix_multiply', 'Iw_z', 500, 380, {}))
@@ -455,7 +519,6 @@ export function buildSixDofVariableMassEom(): SliceModel {
       outputType: 'double[3]'
     })
   )
-  // mux: for vector 1x3, inputs are 3 scalars in order
   connect(Iw_x, Iw, 0, 0)
   connect(Iw_y, Iw, 0, 1)
   connect(Iw_z, Iw, 0, 2)
@@ -467,22 +530,66 @@ export function buildSixDofVariableMassEom(): SliceModel {
   const neg_wIw = add(B('uminus', 'neg_wIw', 820, 300, {}))
   connect(w_cross_Iw, neg_wIw)
 
-  // M_net = M − ω×(Iω)
-  const M_net = add(B('sum', 'M_net', 700, 360, { signs: '++', numInputs: 2 }))
-  connect(Mb, M_net, 0, 0)
-  connect(neg_wIw, M_net, 0, 1)
+  // İ = I_ref · (ṁ / m_ref);  ṁ signal is m_dot = −mdot_prop
+  const mdot_over_mref = add(B('divide', 'mdot_over_mref', 300, 800, {}))
+  connect(mdot, mdot_over_mref, 0, 0)
+  connect(m_ref, mdot_over_mref, 0, 1)
+  const Idot_xx = add(B('matrix_multiply', 'Idot_xx', 480, 800, {}))
+  const Idot_yy = add(B('matrix_multiply', 'Idot_yy', 480, 840, {}))
+  const Idot_zz = add(B('matrix_multiply', 'Idot_zz', 480, 880, {}))
+  connect(Ixx_ref, Idot_xx, 0, 0)
+  connect(mdot_over_mref, Idot_xx, 0, 1)
+  connect(Iyy_ref, Idot_yy, 0, 0)
+  connect(mdot_over_mref, Idot_yy, 0, 1)
+  connect(Izz_ref, Idot_zz, 0, 0)
+  connect(mdot_over_mref, Idot_zz, 0, 1)
+  // İω
+  const Idot_w_x = add(B('matrix_multiply', 'Idot_w_x', 640, 800, {}))
+  const Idot_w_y = add(B('matrix_multiply', 'Idot_w_y', 640, 840, {}))
+  const Idot_w_z = add(B('matrix_multiply', 'Idot_w_z', 640, 880, {}))
+  connect(Idot_xx, Idot_w_x, 0, 0)
+  connect(demux_w, Idot_w_x, 0, 1)
+  connect(Idot_yy, Idot_w_y, 0, 0)
+  connect(demux_w, Idot_w_y, 1, 1)
+  connect(Idot_zz, Idot_w_z, 0, 0)
+  connect(demux_w, Idot_w_z, 2, 1)
+  const Idot_w = add(
+    B('mux', 'Idot_omega', 780, 820, {
+      outputShape: 'vector',
+      rows: 1,
+      cols: 3,
+      baseType: 'double',
+      outputType: 'double[3]'
+    })
+  )
+  connect(Idot_w_x, Idot_w, 0, 0)
+  connect(Idot_w_y, Idot_w, 0, 1)
+  connect(Idot_w_z, Idot_w, 0, 2)
+  const neg_Idot_w = add(B('uminus', 'neg_Idot_w', 900, 820, {}))
+  connect(Idot_w, neg_Idot_w)
 
-  // ω̇_i = M_net_i / I_i
+  // M_net = M − ω×(Iω) − İω  (zeroIdot: drop İω — MDL grounds I_dot)
+  const M_tmp = add(B('sum', 'M_tmp', 700, 360, { signs: '++', numInputs: 2 }))
+  connect(Mb, M_tmp, 0, 0)
+  connect(neg_wIw, M_tmp, 0, 1)
+  let M_net: SliceBlock = M_tmp
+  if (!zeroIdot) {
+    M_net = add(B('sum', 'M_net', 820, 360, { signs: '++', numInputs: 2 }))
+    connect(M_tmp, M_net, 0, 0)
+    connect(neg_Idot_w, M_net, 0, 1)
+  }
+
+  // ω̇_i = M_net_i / I_i  (principal-axis inverse)
   const demux_M = add(
-    B('demux', 'demux_Mnet', 820, 360, {
+    B('demux', 'demux_Mnet', 940, 360, {
       outputCount: 3,
       inputDimensions: [3]
     })
   )
   connect(M_net, demux_M)
-  const wd_x = add(B('divide', 'wd_x', 960, 300, {}))
-  const wd_y = add(B('divide', 'wd_y', 960, 340, {}))
-  const wd_z = add(B('divide', 'wd_z', 960, 380, {}))
+  const wd_x = add(B('divide', 'wd_x', 1080, 300, {}))
+  const wd_y = add(B('divide', 'wd_y', 1080, 340, {}))
+  const wd_z = add(B('divide', 'wd_z', 1080, 380, {}))
   connect(demux_M, wd_x, 0, 0)
   connect(Ixx, wd_x, 0, 1)
   connect(demux_M, wd_y, 1, 0)
@@ -490,7 +597,7 @@ export function buildSixDofVariableMassEom(): SliceModel {
   connect(demux_M, wd_z, 2, 0)
   connect(Izz, wd_z, 0, 1)
   const w_dot = add(
-    B('mux', 'omega_dot', 1080, 320, {
+    B('mux', 'omega_dot', 1200, 320, {
       outputShape: 'vector',
       rows: 1,
       cols: 3,
@@ -504,12 +611,12 @@ export function buildSixDofVariableMassEom(): SliceModel {
   connect(w_dot, omega, 0, 0)
 
   // ─── Outputs ─────────────────────────────────────────────────────────
-  const out_r = add(B('output_port', 'r_i_out', 1200, 600, { portName: 'r_i' }))
-  const out_v = add(B('output_port', 'v_b_out', 1200, 400, { portName: 'v_b' }))
-  const out_w = add(B('output_port', 'omega_out', 1200, 200, { portName: 'omega_b' }))
-  const out_q = add(B('output_port', 'q_out', 1200, 40, { portName: 'q' }))
-  const out_m = add(B('output_port', 'mass_out', 1200, 920, { portName: 'mass' }))
-  const out_h = add(B('output_port', 'rmag_out', 1200, 660, { portName: 'r_mag' }))
+  const out_r = add(B('output_port', 'r_i_out', 1360, 600, { portName: 'r_i' }))
+  const out_v = add(B('output_port', 'v_b_out', 1360, 400, { portName: 'v_b' }))
+  const out_w = add(B('output_port', 'omega_out', 1360, 200, { portName: 'omega_b' }))
+  const out_q = add(B('output_port', 'q_out', 1360, 40, { portName: 'q' }))
+  const out_m = add(B('output_port', 'mass_out', 1360, 920, { portName: 'mass' }))
+  const out_h = add(B('output_port', 'rmag_out', 1360, 660, { portName: 'r_mag' }))
 
   connect(r_i, out_r)
   connect(v_b, out_v)
@@ -526,10 +633,15 @@ export function buildSixDofVariableMassEom(): SliceModel {
     extents: { width: 1400, height: 1000 }
   }
 
+  const descParts = [
+    '6-DOF variable-mass EOM',
+    forcePathGravity ? 'forcePathGravity' : 'g_in_vdot',
+    zeroIdot ? 'zeroIdot' : 'Idot_omega',
+    veViaTranspose ? 'veViaTranspose' : 've=C_bi*vb'
+  ]
   return {
     name: 'saturn-6dof-varmass-quaternion-eom',
-    description:
-      '6-DOF variable-mass EOM with unit-quaternion renormalization, principal inertia ∝ mass, point-mass gravity, body forces/moments',
+    description: descParts.join('; '),
     sheets: [mainSheet],
     parameters: [
       {
@@ -570,12 +682,14 @@ export interface EomSubsystemOptions {
    * Body velocity IC (m/s). AS-205: V_S at pad (B‖S); r integrates in E.
    */
   v0_b?: number[]
-  /** Body→inertial quat IC (column). AS-205: dcm_to_quat(MESᵀ). */
+  /** Attitude quat IC (column). Legacy LIOᵀ or mdlWire LIO — see physics.veViaTranspose. */
   q0?: number[][]
+  /** MDL Custom-6DoF adapter physics (defaults off for demos). */
+  physics?: EomPhysicsOptions
 }
 
-/** EOM as flattenable subsystem (shared by burn demos). */
-function buildEomSubsystemBlock(
+/** EOM as flattenable subsystem (shared by burn demos / Obliq Saturn_IB plant). */
+export function buildEomSubsystemBlock(
   x = 520,
   y = 220,
   options: EomSubsystemOptions = {}
@@ -595,7 +709,7 @@ function buildEomSubsystemBlock(
     r_mag: number
   }
 } {
-  const core = buildSixDofVariableMassEom()
+  const core = buildSixDofVariableMassEom(options.physics ?? {})
   const coreSheet = core.sheets[0]
 
   const renamePort: Record<string, { portName: string; dataType: string }> = {
@@ -1052,11 +1166,11 @@ export function buildSixDofOpenLoopAscent(): SliceModel {
     W(Vmag, Vsq, 0, 0),
     W(Vmag, Vsq, 0, 1),
     W(half, halfRho, 0, 0),
-    W(atm, halfRho, 2, 1), // density
+    W(atm, halfRho, 3, 1), // density
     W(halfRho, qbar, 0, 0),
     W(Vsq, qbar, 0, 1),
     W(alt, outAlt),
-    W(atm, outRho, 2, 0),
+    W(atm, outRho, 3, 0),
     W(qbar, outQbar),
     // Displays
     W(eomSubsystem, dispR, ports.r_mag, 0),
@@ -1598,7 +1712,7 @@ export function buildSixDofOpenLoopAscentWithAero(): SliceModel {
     W(Vmag, Vsq, 0, 0),
     W(Vmag, Vsq, 0, 1),
     W(half, halfRho, 0, 0),
-    W(atm, halfRho, 2, 1),
+    W(atm, halfRho, 3, 1),
     W(halfRho, qbar, 0, 0),
     W(Vsq, qbar, 0, 1),
     // Aero unit velocity
@@ -1633,7 +1747,7 @@ export function buildSixDofOpenLoopAscentWithAero(): SliceModel {
     W(eomSubsystem, outM, ports.mass, 0),
     W(eomSubsystem, outRmag, ports.r_mag, 0),
     W(alt, outAlt),
-    W(atm, outRho, 2, 0),
+    W(atm, outRho, 3, 0),
     W(qbar, outQbar),
     W(Dmag, outDrag),
     // Displays
@@ -1775,7 +1889,82 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     value: 0,
     dataType: 'double'
   })
-  const Fthrust = B('mux', 'F_thrust', 480, 120, {
+  // ── H-1 engine cluster + TVC (replaces free My / axial-only F) ──
+  // F_eng, M_eng from T and gimbal β_P, β_Y (see as205Engines.ts)
+  // Outer half thrust gimballed, inner half fixed +X; M about CG(mass).
+  const CGx = B('lookup_1d', 'CG_x_m', 480, 60, {
+    inputValues: SIB_CG_MASS_BREAKPOINTS_KG,
+    outputValues: SIB_CG_X_M,
+    extrapolation: 'clamp'
+  })
+  // β_P, β_Y (deg) — from control; default 0 until wired
+  const betaP = B('source', 'beta_P_deg', 480, 100, {
+    signalType: 'constant',
+    value: 0,
+    dataType: 'double'
+  })
+  const betaY = B('source', 'beta_Y_deg', 480, 140, {
+    signalType: 'constant',
+    value: 0,
+    dataType: 'double'
+  })
+  // Clamp gimbals ±H1_GIMBAL_LIMIT_DEG
+  const betaPLim = B('limit', 'beta_P_lim', 620, 100, {
+    lowerLimit: -H1_GIMBAL_LIMIT_DEG,
+    upperLimit: H1_GIMBAL_LIMIT_DEG
+  })
+  const betaYLim = B('limit', 'beta_Y_lim', 620, 140, {
+    lowerLimit: -H1_GIMBAL_LIMIT_DEG,
+    upperLimit: H1_GIMBAL_LIMIT_DEG
+  })
+  // Equivalent cluster (as205Engines): Th=T/2 outer gimballed + T/2 inner fixed +X
+  // Fx=Th*(cos bp cos by + 1); Fy=Th*sin by; Fz=Th*sin bp cos by
+  // My=Th*CGx*sin bp cos by; Mz=-Th*CGx*sin by
+  const Th = B('evaluate', 'T_half', 620, 60, {
+    numInputs: 1,
+    expression: '0.5*in(0)'
+  })
+  const bpR = B('evaluate', 'beta_P_rad', 780, 100, {
+    numInputs: 1,
+    expression: 'in(0)*3.141592653589793/180.0'
+  })
+  const byR = B('evaluate', 'beta_Y_rad', 780, 140, {
+    numInputs: 1,
+    expression: 'in(0)*3.141592653589793/180.0'
+  })
+  const Fx_eng = B('evaluate', 'Fx_eng', 940, 60, {
+    numInputs: 3,
+    expression: 'in(0)*(cos(in(1))*cos(in(2))+1.0)'
+  })
+  const Fy_eng = B('evaluate', 'Fy_eng', 940, 100, {
+    numInputs: 2,
+    expression: 'in(0)*sin(in(1))'
+  })
+  const Fz_eng = B('evaluate', 'Fz_eng', 940, 140, {
+    numInputs: 3,
+    expression: 'in(0)*sin(in(1))*cos(in(2))'
+  })
+  const FengVec = B('mux', 'F_engines_N', 1100, 80, {
+    rows: 1,
+    cols: 3,
+    baseType: 'double',
+    outputType: 'double[3]',
+    outputShape: 'vector'
+  })
+  const Mx_eng = B('source', 'Mx_eng', 940, 180, {
+    signalType: 'constant',
+    value: 0,
+    dataType: 'double'
+  })
+  const My_eng = B('evaluate', 'My_eng', 940, 220, {
+    numInputs: 4,
+    expression: 'in(0)*in(1)*sin(in(2))*cos(in(3))'
+  })
+  const Mz_eng = B('evaluate', 'Mz_eng', 940, 260, {
+    numInputs: 3,
+    expression: '-in(0)*in(1)*sin(in(2))'
+  })
+  const MengVec = B('mux', 'M_engines_Nm', 1100, 200, {
     rows: 1,
     cols: 3,
     baseType: 'double',
@@ -1783,7 +1972,7 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     outputShape: 'vector'
   })
 
-  // ── Atmosphere + q̄ + aero drag (9.3) ──
+  // ── Atmosphere + q̄ + aero ──
   // Geometric altitude ≈ |r_E| − R_L (AS-205 pad radius; |R_S|=|R_E|=R_L at pad)
   const Re = B('source', 'R_earth', 720, 560, {
     signalType: 'constant',
@@ -1803,12 +1992,10 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     value: 0.5,
     dataType: 'double'
   })
-  const Vmag = B('mag', 'V_mag', 880, 420, {})
-  const Vsq = B('multiply', 'V_sq', 1020, 420, { numInputs: 2 })
 
-  // ── S-frame export via constant [MES]: r_S = MES · r_E ──
-  // MES frozen at GRR (Apollo 7 epoch). For TN Space-frame XYZ residuals later.
-  // Live v_S = MES·C_bE·v_b deferred (type-prop mat×vec enqueue order).
+  // ── S-frame export via constant [MES] (frozen at GRR / Apollo 7 epoch) ──
+  // r_S = MES · r_E
+  // v_E = C_bE · v_b ,  v_S = MES · v_E
   const MES = B('source', 'MES_E_to_S', 720, 40, {
     signalType: 'constant',
     value: mat3ToSourceValue(padE.MES),
@@ -1819,40 +2006,161 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     outputCount: 3,
     inputDimensions: [3]
   })
-
-  const halfRho = B('multiply', 'half_rho', 1160, 480, { numInputs: 2 })
-  const qbar = B('multiply', 'qbar', 1300, 440, { numInputs: 2 })
-  // Cd ~ 0.35 on A≈34 m² (D=6.6 m) → CdA≈12; 17 was high for late-ascent drag
-  const CdA = B('source', 'CdA_m2', 880, 340, {
-    signalType: 'constant',
-    value: 12.0,
-    dataType: 'double'
+  const C_bE_live = B('orientation_conversion', 'C_bE_live', 1480, 40, {
+    conversionType: 'quat_to_dcm'
   })
-  const Dmag = B('multiply', 'D_mag', 1160, 380, { numInputs: 2 })
-  const Vsafe = B('evaluate', 'V_safe', 1020, 340, {
-    numInputs: 1,
-    expression: 'in(0) > 1e-3 ? in(0) : 1e-3'
-  })
-  const demuxV = B('demux', 'demux_vb', 880, 260, {
+  const v_E_vec = B('matrix_multiply', 'v_E', 1620, 40, {})
+  const v_S = B('matrix_multiply', 'v_S', 1760, 40, {})
+  const V_S_mag = B('mag', 'V_S_mag', 1900, 40, {})
+  const demux_vS = B('demux', 'demux_v_S', 1900, 100, {
     outputCount: 3,
     inputDimensions: [3]
   })
-  const vh0 = B('divide', 'vhat_x', 1020, 220, {})
-  const vh1 = B('divide', 'vhat_y', 1020, 260, {})
-  const vh2 = B('divide', 'vhat_z', 1020, 300, {})
-  const vhat = B('mux', 'v_hat', 1160, 260, {
+
+  // ── Air-relative velocity for aero (critical) ──
+  // At pad, inertial v_b ≈ Earth-rate (~409 m/s horizontal) with X_b vertical
+  // ⇒ α≈90° if aero used inertial v_b — multi-MN side force / blow-up.
+  // Atmosphere co-rotates: v_air_E = v_E − ω_E × r_E ; α,β,q̄,Mach from v_air_b.
+  const omegaE = B('source', 'omega_E_eci', 720, 360, {
+    signalType: 'constant',
+    value: [0, 0, OMEGA_EARTH],
+    dataType: 'double[3]'
+  })
+  const v_rot_E = B('cross', 'v_earth_rot', 900, 360, {})
+  const v_air_E = B('sum', 'v_air_E', 1040, 360, {
+    signs: '+-',
+    numInputs: 2
+  })
+  const C_ib = B('transpose', 'C_ib_aero', 1480, 100, {})
+  const v_air_b = B('matrix_multiply', 'v_air_b', 1620, 100, {})
+  const Vair_mag = B('mag', 'V_air_mag', 880, 420, {})
+  const Vsq = B('multiply', 'V_air_sq', 1020, 420, { numInputs: 2 })
+  const halfRho = B('multiply', 'half_rho', 1160, 480, { numInputs: 2 })
+  const qbar = B('multiply', 'qbar', 1300, 440, { numInputs: 2 })
+
+  // ── Simulink-style aero (CA_T, CN, CP → F_aero, M_aero) — match RTW <S110> ──
+  const Sref = B('source', 'S_ref_m2', 720, 640, {
+    signalType: 'constant',
+    value: AERO_S_REF_M2,
+    dataType: 'double'
+  })
+  const CGy = B('lookup_1d', 'CG_y_m', 720, 700, {
+    inputValues: SIB_CG_MASS_BREAKPOINTS_KG,
+    outputValues: SIB_CG_Y_M,
+    extrapolation: 'clamp'
+  })
+  const CGz = B('lookup_1d', 'CG_z_m', 720, 760, {
+    inputValues: SIB_CG_MASS_BREAKPOINTS_KG,
+    outputValues: SIB_CG_Z_M,
+    extrapolation: 'clamp'
+  })
+  const CG = B('mux', 'CG_m', 880, 700, {
     rows: 1,
     cols: 3,
     baseType: 'double',
     outputType: 'double[3]',
     outputShape: 'vector'
   })
-  const Dvec = B('matrix_multiply', 'D_vec', 1300, 320, {})
-  const Faero = B('uminus', 'F_aero', 1440, 320, {})
-  const Fb = B('sum', 'F_b_cmd', 1580, 200, {
+  const demuxV = B('demux', 'demux_v_air_b', 880, 260, {
+    outputCount: 3,
+    inputDimensions: [3]
+  })
+  const Vsafe = B('evaluate', 'V_air_safe', 1020, 340, {
+    numInputs: 1,
+    expression: 'in(0) > 1e-3 ? in(0) : 1e-3'
+  })
+  // α = atan2(w,u), β = asin(v/V) on **air-relative** body velocity
+  const alpha = B('evaluate', 'alpha_rad', 1020, 220, {
+    numInputs: 2,
+    expression: 'atan2(in(1), in(0) == 0.0 && in(1) == 0.0 ? 1e-9 : in(0))'
+  })
+  const beta = B('evaluate', 'beta_rad', 1020, 280, {
+    numInputs: 2,
+    expression:
+      'asin(in(0)/in(1) > 1.0 ? 1.0 : (in(0)/in(1) < -1.0 ? -1.0 : in(0)/in(1)))'
+  })
+  // mdl: Angle Conversion (signed deg) → CN Lookup2D → Unary Minus (not |α|·sign)
+  const alphaDeg = B('evaluate', 'alpha_deg', 1180, 220, {
+    numInputs: 1,
+    expression: 'in(0)*180.0/3.141592653589793'
+  })
+  const betaDeg = B('evaluate', 'beta_deg', 1180, 280, {
+    numInputs: 1,
+    expression: 'in(0)*180.0/3.141592653589793'
+  })
+  // Mach = V / a_sound (atmosphere port 3)
+  const Mach = B('divide', 'Mach', 1040, 600, {})
+  const CA = B('lookup_1d', 'CA_T', 1180, 600, {
+    inputValues: CA_MACH_BREAKPOINTS,
+    outputValues: CA_VALUES,
+    extrapolation: 'clamp'
+  })
+  const CNa = B('lookup_2d', 'CN_alpha', 1340, 200, {
+    input1Values: CN_MACH_BREAKPOINTS,
+    input2Values: CN_ANGLE_DEG_BREAKPOINTS,
+    outputTable: CN_TABLE,
+    extrapolation: 'clamp'
+  })
+  const CNb = B('lookup_2d', 'CN_beta', 1340, 280, {
+    input1Values: CN_MACH_BREAKPOINTS,
+    input2Values: CN_ANGLE_DEG_BREAKPOINTS,
+    outputTable: CN_TABLE,
+    extrapolation: 'clamp'
+  })
+  const CP = B('lookup_1d', 'CP_m', 1180, 680, {
+    inputValues: CP_MACH_BREAKPOINTS,
+    outputValues: CP_VALUES_M,
+    extrapolation: 'clamp'
+  })
+  // q̄·S
+  const qS = B('multiply', 'qbar_S', 1440, 440, { numInputs: 2 })
+  // RTW Product2: F = [-CA, -CN_β, -CN_α] * q̄ * S_ref
+  const Fx = B('evaluate', 'F_aero_x', 1580, 200, {
+    numInputs: 2,
+    expression: '-in(0)*in(1)'
+  })
+  const Fy = B('evaluate', 'F_aero_y', 1580, 260, {
+    numInputs: 2,
+    expression: '-in(0)*in(1)'
+  })
+  const Fz = B('evaluate', 'F_aero_z', 1580, 320, {
+    numInputs: 2,
+    expression: '-in(0)*in(1)'
+  })
+  const Faero = B('mux', 'F_aero', 1720, 240, {
+    rows: 1,
+    cols: 3,
+    baseType: 'double',
+    outputType: 'double[3]',
+    outputShape: 'vector'
+  })
+  // Body force = engines (TVC) + aero
+  const Fb = B('sum', 'F_b_cmd', 1860, 160, {
     signs: '++',
     numInputs: 2
   })
+  // r_arm = CP_vec − CG(mass); M = r × F
+  const demuxCG = B('demux', 'demux_CG', 1340, 700, {
+    outputCount: 3,
+    inputDimensions: [3]
+  })
+  const rx = B('sum', 'r_arm_x', 1500, 640, { signs: '+-', numInputs: 2 })
+  const ry = B('uminus', 'r_arm_y', 1500, 700, {})
+  const rz = B('uminus', 'r_arm_z', 1500, 760, {})
+  const rArm = B('mux', 'r_arm', 1640, 680, {
+    rows: 1,
+    cols: 3,
+    baseType: 'double',
+    outputType: 'double[3]',
+    outputShape: 'vector'
+  })
+  const Maero = B('cross', 'M_aero', 1780, 640, {})
+  // Body moment = engine TVC + aero moments (RTW CG/CN path; was MaeroOff)
+  const Mb = B('sum', 'M_b_cmd', 1860, 220, {
+    signs: '++',
+    numInputs: 2
+  })
+
 
   // ── χ time-tilt program (8.8-style, flight time from liftoff) ──
   // Simplified AS-205-ish tilt: hold vertical, then nose-down to ~28° by staging.
@@ -1900,22 +2208,18 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     numerator: [1],
     denominator: [0.1556, 1]
   })
-  const Kq = B('source', 'Kq_gain', 1180, 60, {
+  // Pitch-rate loop commands **pitch gimbal** β_P (deg), not free My.
+  // K_β ≈ 40 deg/(rad/s): Q_err=0.1 → 4° gimbal (within ±8° H-1 limit).
+  const Kq = B('source', 'K_beta_rate', 1180, 60, {
     signalType: 'constant',
-    value: 8e6,
+    value: 40,
     dataType: 'double'
   })
-  const MyRaw = B('matrix_multiply', 'My_raw', 1320, 140, {})
+  const betaP_from_rate = B('matrix_multiply', 'beta_P_from_rate', 1320, 140, {})
+  // My_limit name kept for 9.6 patches — holds β_P command (deg), not free My
   const MyLim = B('limit', 'My_limit', 1460, 140, {
-    lowerLimit: -3e7,
-    upperLimit: 3e7
-  })
-  const Mb = B('mux', 'M_b_cmd', 1600, 140, {
-    rows: 1,
-    cols: 3,
-    baseType: 'double',
-    outputType: 'double[3]',
-    outputShape: 'vector'
+    lowerLimit: -H1_GIMBAL_LIMIT_DEG,
+    upperLimit: H1_GIMBAL_LIMIT_DEG
   })
 
   // ── Ports + visualization ──
@@ -1931,48 +2235,71 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
   const outChi = B('output_port', 'chi_cmd', 400, 340, { portName: 'chi_cmd_deg' })
   const outQrate = B('output_port', 'Q_rps', 900, 40, { portName: 'Q_rps' })
   const outQcmd = B('output_port', 'Q_cmd_out', 700, 340, { portName: 'Q_cmd_rps' })
-  const outMy = B('output_port', 'My', 1600, 60, { portName: 'My_Nm' })
+  // outMy port name kept; signal is β_P (deg) after TVC migration
+  const outMy = B('output_port', 'My', 1600, 60, { portName: 'beta_P_cmd_deg' })
+  const outBetaY = B('output_port', 'beta_Y_out', 1600, 100, {
+    portName: 'beta_Y_cmd_deg'
+  })
+  const outMengY = B('output_port', 'My_eng_out', 1600, 140, {
+    portName: 'My_engines_Nm'
+  })
   const outRS = B('output_port', 'r_S_out', 1180, 20, { portName: 'r_S_m' })
+  const outVS = B('output_port', 'v_S_out', 2040, 40, { portName: 'v_S_mps' })
+  const outVSmag = B('output_port', 'V_S_mag_out', 2040, 80, {
+    portName: 'V_S_mag_mps'
+  })
 
   const coll = { maxSamples: collectorMaxSamples }
-  const dispChi = B('signal_display', 'disp_chi', 1760, 120, {
+  const dispChi = B('signal_display', 'disp_chi', 1760, 160, {
     title: 'χ cmd (deg)',
     ...coll
   })
-  const dispQ = B('signal_display', 'disp_Q', 1760, 200, {
+  const dispQ = B('signal_display', 'disp_Q', 1760, 240, {
     title: 'Pitch rate Q (rad/s)',
     ...coll
   })
-  const dispQcmd = B('signal_display', 'disp_Qcmd', 1760, 280, {
+  const dispQcmd = B('signal_display', 'disp_Qcmd', 1760, 320, {
     title: 'Q_cmd (rad/s)',
     ...coll
   })
-  const dispH = B('signal_display', 'disp_altitude', 1760, 360, {
+  const dispH = B('signal_display', 'disp_altitude', 1760, 400, {
     title: 'Altitude MSL (m)',
     ...coll
   })
-  const dispM = B('signal_display', 'disp_mass', 1760, 440, {
+  const dispM = B('signal_display', 'disp_mass', 1760, 480, {
     title: 'Mass (kg)',
     ...coll
   })
-  const dispQbar = B('signal_display', 'disp_qbar', 1760, 520, {
+  const dispQbar = B('signal_display', 'disp_qbar', 1760, 560, {
     title: 'Dynamic pressure q̄ (Pa)',
     ...coll
   })
-  const dispMy = B('signal_display', 'disp_My', 1760, 600, {
-    title: 'Pitch moment My (N·m)',
+  const dispMy = B('signal_display', 'disp_My', 1760, 640, {
+    title: 'Pitch gimbal β_P (deg)',
+    ...coll
+  })
+  const dispBetaY = B('signal_display', 'disp_beta_Y', 1760, 720, {
+    title: 'Yaw gimbal β_Y (deg)',
+    ...coll
+  })
+  const dispVS = B('signal_display', 'disp_V_S', 2040, 160, {
+    title: 'Space-frame |V_S| (m/s)',
     ...coll
   })
 
-  const logH = B('signal_logger', 'log_altitude', 1920, 200, { ...coll })
-  const logM = B('signal_logger', 'log_mass', 1920, 280, { ...coll })
-  const logQbar = B('signal_logger', 'log_qbar', 1920, 360, { ...coll })
-  const logChi = B('signal_logger', 'log_chi', 1920, 440, { ...coll })
-  const logQ = B('signal_logger', 'log_Q', 1920, 520, { ...coll })
-  // S-frame position for future TN Space residual (not residual CLI default)
-  const logXS = B('signal_logger', 'log_X_S', 2080, 200, { ...coll })
-  const logYS = B('signal_logger', 'log_Y_S', 2080, 280, { ...coll })
-  const logZS = B('signal_logger', 'log_Z_S', 2080, 360, { ...coll })
+  const logH = B('signal_logger', 'log_altitude', 1920, 240, { ...coll })
+  const logM = B('signal_logger', 'log_mass', 1920, 320, { ...coll })
+  const logQbar = B('signal_logger', 'log_qbar', 1920, 400, { ...coll })
+  const logChi = B('signal_logger', 'log_chi', 1920, 480, { ...coll })
+  const logQ = B('signal_logger', 'log_Q', 1920, 560, { ...coll })
+  // S-frame state for TN Space residual (not CLI default; use --fields when ready)
+  const logXS = B('signal_logger', 'log_X_S', 2080, 240, { ...coll })
+  const logYS = B('signal_logger', 'log_Y_S', 2080, 320, { ...coll })
+  const logZS = B('signal_logger', 'log_Z_S', 2080, 400, { ...coll })
+  const logVSmag = B('signal_logger', 'log_V_S', 2080, 480, { ...coll })
+  const logVSx = B('signal_logger', 'log_VX_S', 2080, 560, { ...coll })
+  const logVSy = B('signal_logger', 'log_VY_S', 2080, 640, { ...coll })
+  const logVSz = B('signal_logger', 'log_VZ_S', 2080, 720, { ...coll })
 
   const parentBlocks = [
     liftoff,
@@ -1982,30 +2309,72 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     thrustMag,
     mdotCmd,
     zero,
-    Fthrust,
+    CGx,
+    betaP,
+    betaY,
+    betaPLim,
+    betaYLim,
+    Th,
+    bpR,
+    byR,
+    Fx_eng,
+    Fy_eng,
+    Fz_eng,
+    FengVec,
+    Mx_eng,
+    My_eng,
+    Mz_eng,
+    MengVec,
     eomSubsystem,
     MES,
     r_S,
     demux_rS,
+    C_bE_live,
+    v_E_vec,
+    v_S,
+    V_S_mag,
+    demux_vS,
+    omegaE,
+    v_rot_E,
+    v_air_E,
+    C_ib,
+    v_air_b,
     Re,
     alt,
     atm,
     half,
-    Vmag,
+    Vair_mag,
     Vsq,
     halfRho,
     qbar,
-    CdA,
-    Dmag,
-    Vsafe,
+    Sref,
+    CGy,
+    CGz,
+    CG,
     demuxV,
-    vh0,
-    vh1,
-    vh2,
-    vhat,
-    Dvec,
+    Vsafe,
+    alpha,
+    beta,
+    alphaDeg,
+    betaDeg,
+    Mach,
+    CA,
+    CNa,
+    CNb,
+    CP,
+    qS,
+    Fx,
+    Fy,
+    Fz,
     Faero,
     Fb,
+    demuxCG,
+    rx,
+    ry,
+    rz,
+    rArm,
+    Maero,
+    Mb,
     chiLut,
     chiRateLim,
     chiToRad,
@@ -2017,9 +2386,8 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     Qerr,
     Qfilt,
     Kq,
-    MyRaw,
+    betaP_from_rate,
     MyLim,
-    Mb,
     outR,
     outV,
     outW,
@@ -2033,7 +2401,11 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     outQrate,
     outQcmd,
     outMy,
+    outBetaY,
+    outMengY,
     outRS,
+    outVS,
+    outVSmag,
     dispChi,
     dispQ,
     dispQcmd,
@@ -2041,6 +2413,8 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     dispM,
     dispQbar,
     dispMy,
+    dispBetaY,
+    dispVS,
     logH,
     logM,
     logQbar,
@@ -2048,51 +2422,121 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     logQ,
     logXS,
     logYS,
-    logZS
+    logZS,
+    logVSmag,
+    logVSx,
+    logVSy,
+    logVSz
   ]
 
   const parentWires: SliceWire[] = [
-    // Propulsion
+    // Propulsion timer
     W(liftoff, edge),
     W(one, tBurn, 0, 0),
     W(edge, tBurn, 0, -2),
     W(tBurn, thrustMag),
     W(thrustMag, outT),
     W(tBurn, mdotCmd),
-    W(thrustMag, Fthrust, 0, 0),
-    W(zero, Fthrust, 0, 1),
-    W(zero, Fthrust, 0, 2),
-    // Atmosphere + aero
+    // H-1 engines + TVC: T, β_P, β_Y → F_eng, M_eng
+    W(thrustMag, Th),
+    W(betaP_from_rate, MyLim), // rate loop → β_P command (via My_limit name)
+    W(MyLim, betaPLim),
+    W(betaY, betaYLim),
+    W(betaPLim, bpR),
+    W(betaYLim, byR),
+    W(Th, Fx_eng, 0, 0),
+    W(bpR, Fx_eng, 0, 1),
+    W(byR, Fx_eng, 0, 2),
+    W(Th, Fy_eng, 0, 0),
+    W(byR, Fy_eng, 0, 1),
+    W(Th, Fz_eng, 0, 0),
+    W(bpR, Fz_eng, 0, 1),
+    W(byR, Fz_eng, 0, 2),
+    W(Fx_eng, FengVec, 0, 0),
+    W(Fy_eng, FengVec, 0, 1),
+    W(Fz_eng, FengVec, 0, 2),
+    W(Th, My_eng, 0, 0),
+    W(CGx, My_eng, 0, 1),
+    W(bpR, My_eng, 0, 2),
+    W(byR, My_eng, 0, 3),
+    W(Th, Mz_eng, 0, 0),
+    W(CGx, Mz_eng, 0, 1),
+    W(byR, Mz_eng, 0, 2),
+    W(Mx_eng, MengVec, 0, 0),
+    W(My_eng, MengVec, 0, 1),
+    W(Mz_eng, MengVec, 0, 2),
+    // Atmosphere + air-relative q̄
     W(eomSubsystem, alt, ports.r_mag, 0),
     W(Re, alt, 0, 1),
     W(alt, atm),
-    W(eomSubsystem, Vmag, ports.v_b, 0),
-    W(Vmag, Vsq, 0, 0),
-    W(Vmag, Vsq, 0, 1),
+    W(omegaE, v_rot_E, 0, 0),
+    W(eomSubsystem, v_rot_E, ports.r_i, 1),
+    W(v_E_vec, v_air_E, 0, 0),
+    W(v_rot_E, v_air_E, 0, 1),
+    W(C_bE_live, C_ib),
+    W(C_ib, v_air_b, 0, 0),
+    W(v_air_E, v_air_b, 0, 1),
+    W(v_air_b, Vair_mag),
+    W(Vair_mag, Vsq, 0, 0),
+    W(Vair_mag, Vsq, 0, 1),
     W(half, halfRho, 0, 0),
-    W(atm, halfRho, 2, 1),
+    W(atm, halfRho, 3, 1),
     W(halfRho, qbar, 0, 0),
     W(Vsq, qbar, 0, 1),
-    W(eomSubsystem, demuxV, ports.v_b, 0),
-    W(Vmag, Vsafe),
-    W(demuxV, vh0, 0, 0),
-    W(Vsafe, vh0, 0, 1),
-    W(demuxV, vh1, 1, 0),
-    W(Vsafe, vh1, 0, 1),
-    W(demuxV, vh2, 2, 0),
-    W(Vsafe, vh2, 0, 1),
-    W(vh0, vhat, 0, 0),
-    W(vh1, vhat, 0, 1),
-    W(vh2, vhat, 0, 2),
-    W(qbar, Dmag, 0, 0),
-    W(CdA, Dmag, 0, 1),
-    W(Dmag, Dvec, 0, 0),
-    W(vhat, Dvec, 0, 1),
-    W(Dvec, Faero),
-    W(Fthrust, Fb, 0, 0),
+    // Aero
+    W(v_air_b, demuxV),
+    W(Vair_mag, Vsafe),
+    W(demuxV, alpha, 0, 0),
+    W(demuxV, alpha, 2, 1),
+    W(demuxV, beta, 1, 0),
+    W(Vsafe, beta, 0, 1),
+    W(alpha, alphaDeg),
+    W(beta, betaDeg),
+    W(Vair_mag, Mach, 0, 0),
+    W(atm, Mach, 1, 1),
+    W(Mach, CA),
+    W(Mach, CNa, 0, 0),
+    W(alphaDeg, CNa, 0, 1),
+    W(Mach, CNb, 0, 0),
+    W(betaDeg, CNb, 0, 1),
+    W(Mach, CP),
+    W(qbar, qS, 0, 0),
+    W(Sref, qS, 0, 1),
+    W(CA, Fx, 0, 0),
+    W(qS, Fx, 0, 1),
+    W(CNb, Fy, 0, 0),
+    W(qS, Fy, 0, 1),
+    W(CNa, Fz, 0, 0),
+    W(qS, Fz, 0, 1),
+    W(Fx, Faero, 0, 0),
+    W(Fy, Faero, 0, 1),
+    W(Fz, Faero, 0, 2),
+    // F_b = F_engines + F_aero
+    W(FengVec, Fb, 0, 0),
     W(Faero, Fb, 0, 1),
     W(Fb, eomSubsystem, 0, ports.F_b),
     W(mdotCmd, eomSubsystem, 0, ports.mdot),
+    // Mass-sched CG (RTW <S122>) for H-1 arms + aero r_arm
+    W(eomSubsystem, CGx, ports.mass, 0),
+    W(eomSubsystem, CGy, ports.mass, 0),
+    W(eomSubsystem, CGz, ports.mass, 0),
+    W(CGx, CG, 0, 0),
+    W(CGy, CG, 0, 1),
+    W(CGz, CG, 0, 2),
+    // M_aero = r × F (live; companion-plant parity)
+    W(CG, demuxCG),
+    W(CP, rx, 0, 0),
+    W(demuxCG, rx, 0, 1),
+    W(demuxCG, ry, 1, 0),
+    W(demuxCG, rz, 2, 0),
+    W(rx, rArm, 0, 0),
+    W(ry, rArm, 0, 1),
+    W(rz, rArm, 0, 2),
+    W(rArm, Maero, 0, 0),
+    W(Faero, Maero, 0, 1),
+    W(MengVec, Mb, 0, 0),
+    W(Maero, Mb, 0, 1),
+    W(Mb, eomSubsystem, 0, ports.M_b),
     // χ program → Q_cmd
     W(tBurn, chiLut),
     W(chiLut, chiRateLim),
@@ -2102,18 +2546,13 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     W(chiPrev, dChi, 0, 1),
     W(dChi, Qcmd, 0, 0),
     W(dtSrc, Qcmd, 0, 1),
-    // Rate loop
+    // Rate loop → β_P gimbal
     W(eomSubsystem, demuxW, ports.omega_b, 0),
     W(Qcmd, Qerr, 0, 0),
     W(demuxW, Qerr, 1, 1),
     W(Qerr, Qfilt),
-    W(Qfilt, MyRaw, 0, 0),
-    W(Kq, MyRaw, 0, 1),
-    W(MyRaw, MyLim),
-    W(zero, Mb, 0, 0),
-    W(MyLim, Mb, 0, 1),
-    W(zero, Mb, 0, 2),
-    W(Mb, eomSubsystem, 0, ports.M_b),
+    W(Qfilt, betaP_from_rate, 0, 0),
+    W(Kq, betaP_from_rate, 0, 1),
     // EOM / sensor outs
     W(eomSubsystem, outR, ports.r_i, 0),
     W(eomSubsystem, outV, ports.v_b, 0),
@@ -2127,11 +2566,22 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     W(demuxW, outQrate, 1, 0),
     W(Qcmd, outQcmd),
     W(MyLim, outMy),
-    // S-frame via MES: r_S = MES · r_E (constant MES at GRR)
+    W(betaYLim, outBetaY),
+    W(My_eng, outMengY),
+    // S-frame via MES
     W(MES, r_S, 0, 0),
     W(eomSubsystem, r_S, ports.r_i, 1),
     W(r_S, demux_rS),
     W(r_S, outRS),
+    W(eomSubsystem, C_bE_live, ports.q, 0),
+    W(C_bE_live, v_E_vec, 0, 0),
+    W(eomSubsystem, v_E_vec, ports.v_b, 1),
+    W(MES, v_S, 0, 0),
+    W(v_E_vec, v_S, 0, 1),
+    W(v_S, V_S_mag),
+    W(v_S, demux_vS),
+    W(v_S, outVS),
+    W(V_S_mag, outVSmag),
     // Displays
     W(chiRateLim, dispChi),
     W(demuxW, dispQ, 1, 0),
@@ -2140,6 +2590,8 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     W(eomSubsystem, dispM, ports.mass, 0),
     W(qbar, dispQbar),
     W(MyLim, dispMy),
+    W(betaYLim, dispBetaY),
+    W(V_S_mag, dispVS),
     // Loggers
     W(alt, logH),
     W(eomSubsystem, logM, ports.mass, 0),
@@ -2148,20 +2600,24 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
     W(demuxW, logQ, 1, 0),
     W(demux_rS, logXS, 0, 0),
     W(demux_rS, logYS, 1, 0),
-    W(demux_rS, logZS, 2, 0)
+    W(demux_rS, logZS, 2, 0),
+    W(V_S_mag, logVSmag),
+    W(demux_vS, logVSx, 0, 0),
+    W(demux_vS, logVSy, 1, 0),
+    W(demux_vS, logVSz, 2, 0)
   ]
 
   return {
     name: 'saturn-9.4-open-loop-chi-6dof-ascent',
     description:
-      'Open-loop χ on 6-DoF in ECI (E): pad r_E/v_b/q_bE via MES+Initial Position, B‖S, TN thrust/mdot, χ→My; r_S=MES·r_E export. TN residual h/mass primary.',
+      'ECI 6DoF + H-1 TVC (β_P/β_Y → F,M) + air-rel F&M aero (RTW CN Unary-Minus + <S122> CG mass-sched) + MES. No free My. TN residual diagnostic.',
     sheets: [
       {
         id: 'main',
         name: 'OpenLoopChiAscent',
         blocks: parentBlocks,
         connections: parentWires,
-        extents: { width: 2100, height: 780 }
+        extents: { width: 2200, height: 820 }
       }
     ],
     parameters: [
@@ -2190,9 +2646,9 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
       {
         name: 'pitch_rate_gain',
         dataType: 'double',
-        defaultValue: '8e6',
+        defaultValue: '40',
         signalType: 'double',
-        value: 8e6
+        value: 40
       },
       {
         name: 'm0_kg',
@@ -2215,8 +2671,7 @@ export function buildSixDofOpenLoopChiAscent(): SliceModel {
  *
  * χ_c from Table 2B is TN convention (0° = vertical, negative downrange).
  * Converted for the open-loop rate path as elev = 90 + χ_c (see as205ChiTable.ts).
- * Still **rate-only** tracking of d(elev)/dt → My — not closed-loop attitude from
- * quaternion / platform frames (deferred; ask before inventing frame transforms).
+ * Rate-only tracking: d(elev)/dt → Q_cmd → β_P gimbal (H-1 TVC), not free My.
  *
  * Prefer TN residual vs Table 5; Simulink may disagree.
  */
@@ -2247,29 +2702,32 @@ export function buildSixDofOpenLoopChiAscentTable2B(): SliceModel {
 
   m.name = 'saturn-9.5-open-loop-chi-table2b-ascent'
   m.description =
-    '9.4 ECI 6DoF plant + TN-AP-67-158 Table 2B χ_c pitch program (elev=90+χ_c) → Q_cmd → My. Rate loop only; TN primary for residuals.'
+    '9.4 ECI 6DoF + H-1 TVC + TN Table 2B χ→β_P + air-rel F&M (RTW CG/CN). Rate loop only; TN primary for residuals.'
   if (sheet.name) sheet.name = 'OpenLoopChiTable2B'
   return m
 }
 
 /**
- * Phase 9.6 — Table 2B elev program with **body-pitch attitude PD**
+ * Phase 9.6 — Table 2B elev program with **Body→S elevation PD → H-1 gimbals**
  *
- * Latest residuals: mass tracks TN well (~3 t RMS); late altitude still short.
- * Rate-only control (9.5) may lag the elev program. 9.6 closes a simple loop in
- * **body pitch only** (no platform / IGM frames):
+ * Measured elev from body X in S (plumbline / TN Space-frame axes):
+ *   C_bS = MES · C_bE          (Body→S DCM; EDD-style composition)
+ *   X_b^S = C_bS · [1,0,0]
+ *   elev = asin(clamp(X_b^S · X_S)) = asin(X_b^S_x)
+ *     → π/2 at vertical (B‖S pad), decreases as nose tips toward Z_S
  *
- *   θ̂ = ∫ Q dt ,  θ̂(0) = π/2  (elev rad, 90° vertical)
- *   e = elev_cmd_rad − θ̂
- *   My = Kp·e − Kd·Q   (limited)
+ * Actuation is **H-1 TVC only** (no free My/Mx/Mz):
+ *   e = elev_meas − elev_cmd     // +β_P → +My → decreases elev (tip downrange)
+ *   β_P (deg) = Kp·e − Kd·Q      // limited ±8°
+ *   β_Y (deg) = +Kd_lat·R        // yaw-rate damp (H-1 Mz≈−T CGx β_Y ⇒ β_Y∝R)
+ *   F_b, M_b = engine cluster(T, β_P, β_Y) + aero
  *
- * elev_cmd still from Table 2B via elev = 90 + χ_c. Prefer TN for residuals.
+ * Gains in deg / (rad error) and deg / (rad/s) — sized for dMy/dβ_P ≈ CGx·T/2.
+ * elev_cmd from Table 2B via elev = 90 + χ_c (deg). Aero uses air-relative v.
  */
 export function buildSixDofOpenLoopChiAttitudePd(): SliceModel {
-  // Re-build Table 2B plant then rewire moment command to attitude PD.
-  // omega0 = 0 so θ̂ starts clean at vertical.
   const m = buildSixDofOpenLoopChiAscentTable2B()
-  // Patch EOM omega IC inside subsystem
+  // omega0 = 0 for clean pad vertical
   const eom = m.sheets[0].blocks.find(b => b.name === 'EOM_6DoF_VarMass')!
   const eomBlocks = eom.parameters?.sheets?.[0]?.blocks as SliceBlock[] | undefined
   if (eomBlocks) {
@@ -2287,54 +2745,92 @@ export function buildSixDofOpenLoopChiAttitudePd(): SliceModel {
   const demuxW = sheet.blocks.find(b => b.name === 'demux_omega')!
   const chiToRad = sheet.blocks.find(b => b.name === 'chi_to_rad')!
   const myLim = sheet.blocks.find(b => b.name === 'My_limit')!
-  const myRaw = sheet.blocks.find(b => b.name === 'My_raw')!
-  const zero = sheet.blocks.find(b => b.name === 'zero')!
+  const betaPFromRate = sheet.blocks.find(b => b.name === 'beta_P_from_rate')!
+  const betaYLim = sheet.blocks.find(b => b.name === 'beta_Y_lim')!
+  const betaYSrc = sheet.blocks.find(b => b.name === 'beta_Y_deg')!
+  const MES = sheet.blocks.find(b => b.name === 'MES_E_to_S')!
+  const C_bE = sheet.blocks.find(b => b.name === 'C_bE_live')!
 
-  // Drop rate-only gain path into My_limit (keep Q_cmd displays intact)
+  // Drop rate-only β_P → My_limit and open-loop β_Y source → lim
+  // (rate path blocks stay wired to themselves; only actuator feed is replaced)
   sheet.connections = sheet.connections.filter(c => {
-    if (c.targetBlockId === myRaw.id) return false
-    if (c.sourceBlockId === myRaw.id && c.targetBlockId === myLim.id) return false
+    if (
+      c.sourceBlockId === betaPFromRate.id &&
+      c.targetBlockId === myLim.id
+    ) {
+      return false
+    }
+    if (
+      c.sourceBlockId === betaYSrc.id &&
+      c.targetBlockId === betaYLim.id
+    ) {
+      return false
+    }
     return true
   })
 
-  // Continue ID sequence from 9.4/9.5 build (no resetIds)
-  const theta0 = B('source', 'theta0_rad', 900, 520, {
+  // Body→S: C_bS = MES · C_bE (Simulink BODYtoSM DCM path)
+  const C_bS = B('matrix_multiply', 'C_bS', 900, 520, {})
+  // Full SM Euler: dcm_to_quat → quat_to_euler (Φ,Θ,Ψ body vs S)
+  const q_bS = B('orientation_conversion', 'q_bS', 1040, 480, {
+    conversionType: 'dcm_to_quat'
+  })
+  const eul_bS = B('orientation_conversion', 'eul_BodyToSM', 1180, 440, {
+    conversionType: 'quat_to_euler'
+  })
+  const e1 = B('source', 'e1_body', 900, 600, {
     signalType: 'constant',
-    value: Math.PI / 2,
-    dataType: 'double'
+    value: [1, 0, 0],
+    dataType: 'double[3]'
   })
-  const theta = B('integrator', 'theta_elev_rad', 1040, 480, {
-    showInitPort: true,
-    initialValue: 0,
-    showEnableInput: false,
-    showResetInput: false
+  const Xb_S = B('matrix_multiply', 'Xb_in_S', 1040, 560, {})
+  const demux_XbS = B('demux', 'demux_Xb_S', 1180, 560, {
+    outputCount: 3,
+    inputDimensions: [3]
   })
-  const attErr = B('sum', 'att_err_rad', 1180, 420, {
+  // elev from horizontal for TN Table 2B program (≠ Euler Θ)
+  const elevMeas = B('evaluate', 'elev_meas_rad', 1320, 520, {
+    numInputs: 1,
+    expression:
+      'asin(in(0) > 1.0 ? 1.0 : (in(0) < -1.0 ? -1.0 : in(0)))'
+  })
+  // e = elev_cmd − elev_meas (H-1: β_P<0 tips downrange; match companion plant)
+  const attErr = B('sum', 'att_err_rad', 1460, 460, {
     signs: '+-',
     numInputs: 2
   })
-  const Kp = B('source', 'Kp_att', 1180, 340, {
+  // Kp ≈ 20 deg/rad elev error (~1.1° gimbal per 3° elev error)
+  const Kp = B('source', 'Kp_att', 1460, 380, {
     signalType: 'constant',
-    value: 2.5e7,
+    value: 20,
     dataType: 'double'
   })
-  const MyAtt = B('matrix_multiply', 'My_att', 1320, 400, {})
-  const Kd = B('source', 'Kd_rate', 1180, 520, {
+  // My_att name kept for tests — signal is β_P_att (deg)
+  const MyAtt = B('matrix_multiply', 'My_att', 1600, 440, {})
+  // Kd ≈ 8 deg/(rad/s)
+  const Kd = B('source', 'Kd_rate', 1460, 560, {
     signalType: 'constant',
-    value: 8e6,
+    value: 8,
     dataType: 'double'
   })
-  const negQ = B('uminus', 'neg_Q', 1040, 560, {})
-  const MyDamp = B('matrix_multiply', 'My_damp', 1320, 520, {})
-  const MyPd = B('sum', 'My_pd', 1460, 460, {
+  const negQ = B('uminus', 'neg_Q', 1320, 600, {})
+  const MyDamp = B('matrix_multiply', 'My_damp', 1600, 560, {})
+  // My_pd = β_P_pd (deg) → My_limit (±8°) → beta_P_lim → engines
+  const MyPd = B('sum', 'My_pd', 1740, 500, {
     signs: '++',
     numInputs: 2
   })
-  // Raise moment limit slightly for attitude catch-up
+  // Yaw-rate → β_Y gimbal (no free Mz). Roll Mx not produced by equal-gimbal cluster.
+  const KdLat = B('source', 'Kd_lat', 1460, 640, {
+    signalType: 'constant',
+    value: 8,
+    dataType: 'double'
+  })
+  const betaY_from_rate = B('matrix_multiply', 'beta_Y_from_rate', 1600, 740, {})
   myLim.parameters = {
     ...myLim.parameters,
-    lowerLimit: -5e7,
-    upperLimit: 5e7
+    lowerLimit: -H1_GIMBAL_LIMIT_DEG,
+    upperLimit: H1_GIMBAL_LIMIT_DEG
   }
 
   const coll = {
@@ -2342,18 +2838,38 @@ export function buildSixDofOpenLoopChiAttitudePd(): SliceModel {
       (sheet.blocks.find(b => b.name === 'log_altitude')?.parameters
         ?.maxSamples as number) || 3800
   }
-  const dispTheta = B('signal_display', 'disp_theta', 1760, 600, {
-    title: 'θ̂ elev (rad)',
+  const dispTheta = B('signal_display', 'disp_theta', 1880, 480, {
+    title: 'elev meas (rad)',
     ...coll
   })
-  const logTheta = B('signal_logger', 'log_theta', 1920, 520, { ...coll })
-  const outTheta = B('output_port', 'theta_out', 1600, 520, {
-    portName: 'theta_elev_rad'
+  const logTheta = B('signal_logger', 'log_theta', 2040, 480, { ...coll })
+  const outTheta = B('output_port', 'theta_out', 1880, 560, {
+    portName: 'elev_meas_rad'
+  })
+  // BODYtoSM Euler loggers (Simulink BodytoSM_Phi/Theta/Yaw)
+  const logPhi = B('signal_logger', 'log_BodyToSM_Phi', 2040, 560, { ...coll })
+  const logThSM = B('signal_logger', 'log_BodyToSM_Theta', 2040, 640, {
+    ...coll
+  })
+  const logPsi = B('signal_logger', 'log_BodyToSM_Psi', 2040, 720, { ...coll })
+  const outPhi = B('output_port', 'phi_SM_out', 1880, 640, {
+    portName: 'BodyToSM_Phi_rad'
+  })
+  const outThSM = B('output_port', 'theta_SM_out', 1880, 720, {
+    portName: 'BodyToSM_Theta_rad'
+  })
+  const outPsi = B('output_port', 'psi_SM_out', 1880, 800, {
+    portName: 'BodyToSM_Psi_rad'
   })
 
   sheet.blocks.push(
-    theta0,
-    theta,
+    C_bS,
+    q_bS,
+    eul_bS,
+    e1,
+    Xb_S,
+    demux_XbS,
+    elevMeas,
     attErr,
     Kp,
     MyAtt,
@@ -2361,57 +2877,82 @@ export function buildSixDofOpenLoopChiAttitudePd(): SliceModel {
     negQ,
     MyDamp,
     MyPd,
+    KdLat,
+    betaY_from_rate,
     dispTheta,
     logTheta,
-    outTheta
+    outTheta,
+    logPhi,
+    logThSM,
+    logPsi,
+    outPhi,
+    outThSM,
+    outPsi
   )
 
   sheet.connections.push(
-    // θ̂ = ∫ Q , IC = π/2
-    W(demuxW, theta, 1, 0),
-    W(theta0, theta, 0, 1),
-    // e = elev_cmd_rad − θ̂
-    W(chiToRad, attErr, 0, 0),
-    W(theta, attErr, 0, 1),
-    // My_att = Kp * e
+    // C_bS = MES · C_bE
+    W(MES, C_bS, 0, 0),
+    W(C_bE, C_bS, 0, 1),
+    // Full Body→SM Euler
+    W(C_bS, q_bS),
+    W(q_bS, eul_bS),
+    W(eul_bS, logPhi, 0, 0),
+    W(eul_bS, logThSM, 1, 0),
+    W(eul_bS, logPsi, 2, 0),
+    W(eul_bS, outPhi, 0, 0),
+    W(eul_bS, outThSM, 1, 0),
+    W(eul_bS, outPsi, 2, 0),
+    // elev PD → β_P (deg): e = elev_meas − elev_cmd
+    W(C_bS, Xb_S, 0, 0),
+    W(e1, Xb_S, 0, 1),
+    W(Xb_S, demux_XbS),
+    W(demux_XbS, elevMeas, 0, 0),
+    W(chiToRad, attErr, 0, 0), // +cmd
+    W(elevMeas, attErr, 0, 1), // −meas → e = cmd − meas
     W(attErr, MyAtt, 0, 0),
     W(Kp, MyAtt, 0, 1),
-    // My_damp = Kd * (−Q)
     W(demuxW, negQ, 1, 0),
     W(negQ, MyDamp, 0, 0),
     W(Kd, MyDamp, 0, 1),
-    // My = My_att + My_damp → limit
     W(MyAtt, MyPd, 0, 0),
     W(MyDamp, MyPd, 0, 1),
     W(MyPd, myLim),
-    // viz
-    W(theta, dispTheta),
-    W(theta, logTheta),
-    W(theta, outTheta)
+    // Yaw-rate damp → β_Y gimbal (β_Y ∝ +R for H-1 Mz damping)
+    W(demuxW, betaY_from_rate, 2, 0),
+    W(KdLat, betaY_from_rate, 0, 1),
+    W(betaY_from_rate, betaYLim),
+    W(elevMeas, dispTheta),
+    W(elevMeas, logTheta),
+    W(elevMeas, outTheta)
   )
-
-  // Mb still driven by MyLim → already wired
-  void zero
 
   m.name = 'saturn-9.6-chi-table2b-attitude-pd'
   m.description =
-    '9.5 ECI 6DoF + body-pitch attitude PD: θ̂=∫Q, My=Kp(elev_cmd−θ̂)−Kd·Q. Table 2B elev; MES S export. TN residuals primary.'
+    '9.5 ECI 6DoF + H-1 TVC + BodyToSM elev PD → β_P + R-damp → β_Y; air-rel F&M (RTW CG/CN); İω. No free My. TN residual diagnostic.'
   sheet.name = 'ChiAttitudePd'
   m.parameters = [
     ...(m.parameters || []),
     {
       name: 'Kp_att',
       dataType: 'double',
-      defaultValue: '2.5e7',
+      defaultValue: '20',
       signalType: 'double',
-      value: 2.5e7
+      value: 20
     },
     {
       name: 'Kd_rate',
       dataType: 'double',
-      defaultValue: '8e6',
+      defaultValue: '8',
       signalType: 'double',
-      value: 8e6
+      value: 8
+    },
+    {
+      name: 'Kd_lat',
+      dataType: 'double',
+      defaultValue: '8',
+      signalType: 'double',
+      value: 8
     }
   ]
   return m

@@ -3,7 +3,7 @@
   "data": {
     "version": "2.2",
     "metadata": {
-      "created": "2026-08-11T23:34:31.028Z",
+      "created": "2026-08-22T02:45:40.189Z",
       "description": "COESA atmosphere + dynamic pressure q=0.5*rho*V^2 during climb"
     },
     "sheets": [
@@ -170,15 +170,15 @@
           {
             "id": "wire_14",
             "sourceBlockId": "atmosphere_3",
-            "sourcePortIndex": 2,
-            "targetBlockId": "output_port_8",
+            "sourcePortIndex": 1,
+            "targetBlockId": "output_port_11",
             "targetPortIndex": 0
           },
           {
             "id": "wire_15",
             "sourceBlockId": "atmosphere_3",
             "sourcePortIndex": 3,
-            "targetBlockId": "output_port_11",
+            "targetBlockId": "output_port_8",
             "targetPortIndex": 0
           },
           {
@@ -205,7 +205,7 @@
           {
             "id": "wire_19",
             "sourceBlockId": "atmosphere_3",
-            "sourcePortIndex": 2,
+            "sourcePortIndex": 3,
             "targetBlockId": "multiply_6",
             "targetPortIndex": 1
           },

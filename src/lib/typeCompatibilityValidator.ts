@@ -243,12 +243,12 @@ export function validateModelTypeCompatibilityMultiSheet(
       const signalType = typeResult.signalTypes.get(wire.id)
       
       if (!signalType) {
-        // Unable to determine type
+        // Unable to determine type — warning, not a hard error
         const sourceBlock = sheet.blocks.find(b => b.id === wire.sourceBlockId)
         const targetBlock = sheet.blocks.find(b => b.id === wire.targetBlockId)
         
         if (sourceBlock && targetBlock) {
-          allErrors.push({
+          allWarnings.push({
             message: `Unable to determine signal type for connection from ${sourceBlock.name} to ${targetBlock.name}`,
             wireId: wire.id,
             severity: 'warning'

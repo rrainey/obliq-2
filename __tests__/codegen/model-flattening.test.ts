@@ -1,6 +1,7 @@
 // __tests__/codegen/model-flattening.test.ts
 
 import { ModelFlattener } from '@/lib/codegen/ModelFlattener'
+import { TypePropagator } from '@/lib/codegen/TypePropagator'
 import { Sheet } from '@/lib/simulationTypes'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
@@ -114,6 +115,57 @@ describe('Model Flattening', () => {
   })
 
   describe('Subsystem Flattening', () => {
+    test('uniquifies nested block IDs so they cannot collide with parent sheet', () => {
+      const subBlocks = [
+        createBlock('source_1', 'source', 'InnerSrc', {
+          signalType: 'constant',
+          value: 1,
+          dataType: 'double'
+        }),
+        createBlock('sub_out', 'output_port', 'Out', { portName: 'Out' })
+      ]
+      const subConnections = [
+        createConnection('sw1', 'source_1', 0, 'sub_out', 0)
+      ]
+      const subSheet = createSheet(
+        'sub_sheet',
+        'SubSheet',
+        subBlocks,
+        subConnections
+      )
+
+      const mainBlocks = [
+        createBlock('source_1', 'source', 'OuterSrc', {
+          signalType: 'constant',
+          value: 2,
+          dataType: 'double'
+        }),
+        createBlock('sub', 'subsystem', 'Sub', {
+          inputPorts: [],
+          outputPorts: ['Out'],
+          sheets: [subSheet]
+        }),
+        createBlock('out', 'output_port', 'Y', { portName: 'Y' })
+      ]
+      const mainConnections = [
+        createConnection('mw1', 'sub', 0, 'out', 0)
+      ]
+      const mainSheet = createSheet(
+        'main',
+        'Main',
+        mainBlocks,
+        mainConnections
+      )
+
+      const flattener = new ModelFlattener()
+      const result = flattener.flattenModel([mainSheet])
+      const ids = result.model.blocks.map(b => b.originalId)
+      const dups = ids.filter((id, i) => ids.indexOf(id) !== i)
+      expect(dups).toEqual([])
+      expect(ids).toContain('source_1') // parent
+      expect(ids).toContain('sub__source_1') // nested, prefixed
+    })
+
     test('should flatten simple subsystem', () => {
       const subBlocks = [
         createBlock('sub_input', 'input_port', 'In1', { portName: 'In1' }),
@@ -215,6 +267,141 @@ describe('Model Flattening', () => {
       const flatMultiply = result.model.blocks.find(b => b.block.type === 'multiply')
       expect(flatMultiply?.flattenedName).toBe('OuterSub_InnerSub_Multiply1')
       expect(flatMultiply?.subsystemPath).toEqual(['OuterSub', 'InnerSub'])
+
+      // Depth≥2 port remapping must reach the leaf (not stop at dissolved child subsystem)
+      expect(
+        result.warnings.filter(w => w.includes('non-existent'))
+      ).toEqual([])
+      const leafId = flatMultiply!.originalId
+      expect(
+        result.model.connections.some(
+          c =>
+            c.sourceBlockId === 'main_source' && c.targetBlockId === leafId
+        )
+      ).toBe(true)
+    })
+
+    test('double-nested matrix_multiply keeps vector type (depth≥2 port remap)', () => {
+      // Regression: docs/codegen-double-nest-vector-types.md
+      // Root → Outer → Inner[matrix_multiply → demux]; wires must reach Mv as double[3].
+      const I3 = [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1]
+      ]
+      const innerSheet = createSheet(
+        'inner_sheet',
+        'Inner',
+        [
+          createBlock('inA', 'input_port', 'A', {
+            portName: 'A',
+            dataType: 'double[3][3]',
+            defaultValue: I3
+          }),
+          createBlock('inV', 'input_port', 'v', {
+            portName: 'v',
+            dataType: 'double[3]',
+            defaultValue: [1, 0, 0]
+          }),
+          createBlock('mm', 'matrix_multiply', 'Mv', {}),
+          createBlock('dmx', 'demux', 'demux_v', {
+            outputCount: 3,
+            inputDimensions: [3]
+          }),
+          createBlock('out0', 'output_port', 'y0', {
+            portName: 'y0',
+            dataType: 'double'
+          })
+        ],
+        [
+          createConnection('w1', 'inA', 0, 'mm', 0),
+          createConnection('w2', 'inV', 0, 'mm', 1),
+          createConnection('w3', 'mm', 0, 'dmx', 0),
+          createConnection('w4', 'dmx', 0, 'out0', 0)
+        ]
+      )
+      const outerSheet = createSheet(
+        'outer_sheet',
+        'Outer',
+        [
+          createBlock('oinA', 'input_port', 'A', {
+            portName: 'A',
+            dataType: 'double[3][3]',
+            defaultValue: I3
+          }),
+          createBlock('oinV', 'input_port', 'v', {
+            portName: 'v',
+            dataType: 'double[3]',
+            defaultValue: [1, 0, 0]
+          }),
+          createBlock('inner', 'subsystem', 'Inner', {
+            sheets: [innerSheet],
+            inputPorts: ['A', 'v'],
+            outputPorts: ['y0'],
+            codeGenStrategy: 'flatten'
+          }),
+          createBlock('oout', 'output_port', 'y0', {
+            portName: 'y0',
+            dataType: 'double'
+          })
+        ],
+        [
+          createConnection('ow1', 'oinA', 0, 'inner', 0),
+          createConnection('ow2', 'oinV', 0, 'inner', 1),
+          createConnection('ow3', 'inner', 0, 'oout', 0)
+        ]
+      )
+      const mainSheet = createSheet(
+        'main',
+        'Main',
+        [
+          createBlock('srcA', 'source', 'A', {
+            signalType: 'constant',
+            value: I3,
+            dataType: 'double[3][3]'
+          }),
+          createBlock('srcV', 'source', 'v', {
+            signalType: 'constant',
+            value: [1, 2, 3],
+            dataType: 'double[3]'
+          }),
+          createBlock('outer', 'subsystem', 'Outer', {
+            sheets: [outerSheet],
+            inputPorts: ['A', 'v'],
+            outputPorts: ['y0'],
+            codeGenStrategy: 'flatten'
+          }),
+          createBlock('yout', 'output_port', 'y', {
+            portName: 'y',
+            dataType: 'double'
+          })
+        ],
+        [
+          createConnection('mw1', 'srcA', 0, 'outer', 0),
+          createConnection('mw2', 'srcV', 0, 'outer', 1),
+          createConnection('mw3', 'outer', 0, 'yout', 0)
+        ]
+      )
+
+      const { model, warnings } = new ModelFlattener().flattenModel([mainSheet])
+      expect(warnings.filter(w => w.includes('non-existent'))).toEqual([])
+
+      const mv = model.blocks.find(b => b.block.type === 'matrix_multiply')
+      expect(mv).toBeTruthy()
+      expect(mv!.subsystemPath).toEqual(['Outer', 'Inner'])
+      expect(
+        model.connections.some(
+          c => c.sourceBlockId === 'srcA' && c.targetBlockId === mv!.originalId
+        )
+      ).toBe(true)
+      expect(
+        model.connections.some(
+          c => c.sourceBlockId === 'srcV' && c.targetBlockId === mv!.originalId
+        )
+      ).toBe(true)
+
+      const types = new TypePropagator(model).propagate()
+      expect(types.get(mv!.originalId)).toBe('double[3]')
     })
 
     test('should handle multiple subsystem instances', () => {

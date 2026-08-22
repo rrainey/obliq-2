@@ -210,20 +210,54 @@ export class UnitsConversionBlockModule implements IBlockModule {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     const conversionType: string = block.parameters?.conversionType || 'deg_to_rad'
     const info = getConversionInfo(conversionType)
+    const inExpr = inputs[0] || '0.0'
+    const inType = inputTypes?.[0] || 'double'
+    const typeInfo = BlockModuleUtils.parseType(inType)
 
     if (!info) {
-      return `    // Unknown conversion type: ${conversionType}\n    ${outputName} = ${inputs[0] || '0.0'};\n`
+      // Identity / unknown unit pair — still preserve vector/matrix shape
+      let code = `    // Units Conversion: ${block.name} (passthrough ${conversionType})\n`
+      if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+        for (let i = 0; i < typeInfo.rows; i++) {
+          for (let j = 0; j < typeInfo.cols; j++) {
+            code += `    ${outputName}[${i}][${j}] = ${inExpr}[${i}][${j}];\n`
+          }
+        }
+      } else if (typeInfo.isArray && typeInfo.arraySize) {
+        for (let i = 0; i < typeInfo.arraySize; i++) {
+          code += `    ${outputName}[${i}] = ${inExpr}[${i}];\n`
+        }
+      } else {
+        code += `    ${outputName} = ${inExpr};\n`
+      }
+      return code
     }
 
     let code = `    // Units Conversion: ${block.name} (${info.label})\n`
 
-    if (info.expression) {
-      // Temperature conversions use expressions
-      const expr = info.expression.replace(/\(x\)/g, `(${inputs[0] || '0.0'})`)
-      code += `    ${outputName} = ${expr};\n`
-    } else if (info.factor) {
-      // Simple multiplication factor
-      code += `    ${outputName} = ${inputs[0] || '0.0'} * (${info.factor});\n`
+    const applyScalar = (xExpr: string): string => {
+      if (info.expression) {
+        return info.expression.replace(/\(x\)/g, `(${xExpr})`)
+      }
+      if (info.factor) {
+        return `${xExpr} * (${info.factor})`
+      }
+      return xExpr
+    }
+
+    // Preserve vector/matrix shape with element-wise conversion
+    if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+      for (let i = 0; i < typeInfo.rows; i++) {
+        for (let j = 0; j < typeInfo.cols; j++) {
+          code += `    ${outputName}[${i}][${j}] = ${applyScalar(`${inExpr}[${i}][${j}]`)};\n`
+        }
+      }
+    } else if (typeInfo.isArray && typeInfo.arraySize) {
+      for (let i = 0; i < typeInfo.arraySize; i++) {
+        code += `    ${outputName}[${i}] = ${applyScalar(`${inExpr}[${i}]`)};\n`
+      }
+    } else {
+      code += `    ${outputName} = ${applyScalar(inExpr)};\n`
     }
 
     return code

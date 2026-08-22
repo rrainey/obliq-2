@@ -232,6 +232,12 @@ export class IntegratorBlockModule implements IBlockModule {
   }
 
   getOutputType(block: BlockData, inputTypes: string[]): string {
+    // Explicit dataType from emit/translator wins (e.g. double[4][1] quat)
+    const explicit = block.parameters?.dataType
+    if (typeof explicit === 'string' && explicit.includes('[')) {
+      return explicit
+    }
+
     // Output type is the state type. Prefer derivative (port 0) when known;
     // with showInitPort, x(0) (port 1) is often the only typed input in a
     // kinematics feedback loop (q̇ depends on q) until a later pass.

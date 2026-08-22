@@ -26,7 +26,7 @@ const CONVERSION_TYPES = [
     label: 'DCM to Euler',
     description: 'Extract Euler angles from Direction Cosine Matrix',
     inputs: '1 input: DCM (double[3][3])',
-    outputs: '3 outputs: Phi_rad, Theta_rad, Psi_rad (double)'
+    outputs: '1 output: Euler_rad (double[3] = {Phi, Theta, Psi})'
   },
   {
     value: 'euler_to_quat',
@@ -47,7 +47,7 @@ const CONVERSION_TYPES = [
     label: 'Quaternion to Euler',
     description: 'Extract Euler angles from Quaternion',
     inputs: '1 input: q (double[4][1])',
-    outputs: '3 outputs: Phi_rad, Theta_rad, Psi_rad (double)'
+    outputs: '1 output: Euler_rad (double[3] = {Phi, Theta, Psi})'
   },
   {
     value: 'quat_to_dcm',

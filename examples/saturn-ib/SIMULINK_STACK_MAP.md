@@ -62,13 +62,15 @@ TN-AP-67-158 (working assumption)
 
 | Priority | Subsystem / block | Port / signal | obliq status |
 |----------|-------------------|---------------|--------------|
-| P0 | `Custom Variable Mass 6DoF (Quaternion)` | Body-axis EOM, \(q\), \(\mathbf{r}\), \(\mathbf{v}\) | **ECI plant** (9.4+): `r_i` in E, body \(v/\omega\), \(q_{bE}\) |
+| P0 | `Custom Variable Mass 6DoF (Quaternion)` | Body-axis EOM, \(q\), \(\mathbf{r}\), \(\mathbf{v}\) | **ECI + \(\dot I\omega\)** principal; not full \(I\) tensor / external \(m,I\) ports |
 | P0 | Site / AS-205 constants | `A_z`, \(\phi_L\), \(R_L\), … | `AS205_presettings.m` / `as205PadFrames.ts` |
 | P1 | `Initial Position and Velocity (Eqns 3.4…)` | `R_S_0_m`, `V_S_0_mps` | **Ported** (`as205InitialPosition.ts` → 9.4/9.5/9.6 ICs) |
 | P1 | `Body to ECI` / `ECItoBODY` | `BODYtoECI`, `veh_q_ECI` | Not as full ECI world |
 | P1 | `E-Frame to s-Frame (MES)` | DCM E→S | **Ported** (`as205Mes.ts`); helpers `eciToS` / `sToEci` / pad→E |
-| P2 | `BODYtoSM Transform` | \(\Phi,\Theta,\Psi\) body vs S | Not ported |
+| P2 | `BODYtoSM Transform` | \(\Phi,\Theta,\Psi\) body vs S | **Ported** (`as205BodyToSm.ts` + 9.6 `eul_BodyToSM` / loggers); elev PD still uses geometric elev |
+| P2 | `H-1 Engine Cluster` / TVC | \(F,M\) from \(T\), \(\beta_P,\beta_Y\) | **Ported** (`as205Engines.ts` → 9.4+): 4 outer gimballed + 4 inner fixed; \(\pm8^\circ\); **no free My** — control commands gimbals |
 | P2 | `LVDC S-Frame Position & Velocity` | Nav S state | Not ported |
+| P2 | `Aerodynamic Forces and Moments` | \(F,M\) aero | **Ported** (`as205Aero.ts` → 9.4+): CA_T, CN(α/β), CP, \(S=34.25\); CG const (no mass-sched CG yet) |
 | P2 | `Earth Gravity Model` | \(g\) | Point mass only |
 | P3 | FCC / IGM / staging | Full stack | Phase 8 slices only |
 
@@ -100,7 +102,7 @@ After \(T_{\mathrm{GRR}}\), **MES is constant**.
 |----------|--------|
 | Site, \(A_z\), \(\phi_L\), \(R_L\), guidance presettings | **TN-AP-67-158** (`AS205_presettings.m`) |
 | Trajectory residual golden | **TN-AP-67-158** (never-flown revised L/V ref.) |
-| `LaunchDate` → GMST / \(\Theta_E\) / MES | **Apollo 7 actual** liftoff (`AS205_DEFAULT_LAUNCH_DATE`) |
+| `LaunchDate` → GMST / \(\Theta_E\) / MES | **RTW epoch 14:57:45** (`AS205_DEFAULT_LAUNCH_DATE`; not 15:02:45) |
 
 TN parameters were not what Apollo 7 flew; LaunchDate was substituted with flown values so astronomy/MES is realistic. Residual still targets the TN tables used to validate Simulink. Flown Apollo 7 trajectory doc deferred.
 
@@ -135,11 +137,15 @@ CLI: prefer
 
 ## Recommended translation sequence
 
-1. **Keep residual focus** on \(h\), mass while porting.  
-2. ~~**Port Initial Position (S)**~~ — **done** (`as205InitialPosition.ts`).  
-3. ~~**Port MES**~~ — **done** (`as205Mes.ts`).  
-4. ~~**ECI 6DoF**~~ — **done** (`as205EciPlant.ts` + 9.4/9.5/9.6): \(r_E\), \(v_b=V_S\), \(q_0=\mathrm{dcm}(\mathrm{MES}^\top)\); loggers `log_X_S/Y_S/Z_S`.  
-5. Body→SM / LVDC S-frame nav; live \(v_S\) export (type-prop mat×vec order).
+**Comparison gold while building:** TN-AP-67-158 (frame-light \(h\), mass, \(V_S\)). Discrepancies expected until a full phase build-up exists — treat as incomplete-model, not gain-tune-first.
+
+1. ~~Pad I.P. + MES + ECI plant + live \(v_S\)~~  
+2. ~~Variable-mass \(\dot I\omega\) in 6DoF~~ (principal)  
+3. ~~**BodyToSM Euler**~~ — **done**  
+4. ~~**Aero F&M**~~ — **done** (mdl CA/CN/CP tables; CG still constant)  
+5. Full \(I\) tensor / mass-scheduled CG; oblate gravity; LVDC S-nav; FCC/IGM as in stack  
+
+
 
 ### MES formulas (implemented)
 

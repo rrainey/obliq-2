@@ -39,6 +39,9 @@ const MATH_FUNCTIONS: Record<string, { args: number, description: string }> = {
   'atan2': { args: 2, description: 'arc tangent of y/x' },
   'fmax': { args: 2, description: 'maximum value' },
   'fmin': { args: 2, description: 'minimum value' },
+  // Floating mod (Simulink Math Function Operator=mod)
+  'fmod': { args: 2, description: 'floating-point remainder' },
+  'fmodf': { args: 2, description: 'float remainder' },
 }
 
 export class C99ExpressionValidator {

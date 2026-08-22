@@ -4,6 +4,7 @@ import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { areTypesCompatible, getTypeCompatibilityError, parseType, ParsedType, typeToString, isMatrixType, getMatrixDimensions } from './typeValidator'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
+import { collectSheetsRecursive } from './sheetLabelUtils'
 
 // Debug flag for verbose logging - set to true to enable detailed trace output
 const DEBUG_PROPAGATION = false
@@ -25,6 +26,79 @@ function debugLog(...args: unknown[]) {
  */
 function isTypeLoopBreaker(blockType: string): boolean {
   return blockType === 'integrator' || blockType === 'unit_delay'
+}
+
+/** Configured arity for sum/multiply: signs length, else numInputs/inputCount, else 2. */
+function configuredArithmeticInputCount(block: BlockData): number {
+  if (typeof block.parameters?.signs === 'string' && block.parameters.signs.length > 0) {
+    return block.parameters.signs.length
+  }
+  const n = block.parameters?.numInputs ?? block.parameters?.inputCount
+  if (typeof n === 'number' && n >= 1) return n
+  return 2
+}
+
+/**
+ * Multi-input sum/multiply output type: identical shapes → that shape;
+ * scalar/bool may broadcast onto a shared vector/matrix shape.
+ */
+function elementWiseArithmeticOutputType(parsedTypes: ParsedType[]): string | null {
+  if (parsedTypes.length === 0) return null
+  const firstType = parsedTypes[0]
+  const allSameType = parsedTypes.every(
+    t =>
+      t.baseType === firstType.baseType &&
+      t.isArray === firstType.isArray &&
+      t.arraySize === firstType.arraySize &&
+      t.isMatrix === firstType.isMatrix &&
+      t.rows === firstType.rows &&
+      t.cols === firstType.cols
+  )
+  if (allSameType) return typeToString(firstType)
+
+  const isNumScalar = (t: ParsedType) =>
+    !t.isArray &&
+    !t.isMatrix &&
+    (t.baseType === 'double' || t.baseType === 'float' || t.baseType === 'bool')
+  const scalars = parsedTypes.filter(isNumScalar)
+  const vectors = parsedTypes.filter(t => t.isArray || t.isMatrix)
+  if (scalars.length + vectors.length === parsedTypes.length && vectors.length >= 1) {
+    const v0 = vectors[0]
+    if (vectors.every(v => typeToString(v) === typeToString(v0))) {
+      return typeToString(v0)
+    }
+  }
+  if (vectors.length === 0 && parsedTypes.every(isNumScalar)) {
+    return 'double'
+  }
+  return null
+}
+
+/** Sum/multiply: allow scalar/bool broadcast onto a shared vector/matrix shape. */
+function elementWiseInputsCompatible(inputTypes: string[], blockType: string): boolean {
+  if (inputTypes.length <= 1) return true
+  if (inputTypes.every(t => t === inputTypes[0])) return true
+  if (blockType !== 'multiply' && blockType !== 'sum') return false
+  try {
+    const parsed = inputTypes.map(t => parseType(t))
+    const isNumScalar = (p: ParsedType) =>
+      !p.isArray &&
+      !p.isMatrix &&
+      (p.baseType === 'double' || p.baseType === 'float' || p.baseType === 'bool')
+    const scalars = parsed.filter(isNumScalar)
+    const vectors = parsed.filter(p => p.isArray || p.isMatrix)
+    if (scalars.length + vectors.length !== parsed.length) return false
+    if (vectors.length === 0) {
+      // all scalars: bool mixes with double OK
+      return parsed.every(isNumScalar)
+    }
+    // One distinct vector/matrix shape; remaining inputs scalars
+    const v0 = vectors[0]
+    const sameVec = vectors.every(v => typeToString(v) === typeToString(v0))
+    return sameVec && scalars.length >= 1
+  } catch {
+    return false
+  }
 }
 
 function isDeferredStateBlock(blockType: string): boolean {
@@ -166,8 +240,15 @@ function getBlockOutputType(block: BlockData): string | null {
       return null
 
     case 'evaluate':
-      // Evaluate block always outputs double
-      return 'double'
+      // RelationalOperator/Logic / MultiPortSwitch may declare outputType.
+      // When unset, defer to determineProcessingBlockOutputType (inputs).
+      if (block.parameters?.outputType) {
+        return block.parameters.outputType
+      }
+      if (block.parameters?.dataType) {
+        return block.parameters.dataType
+      }
+      return null
     
     case 'mux':  // Mux output type depends on configuration
       // Mux outputType parameter contains the full type string (e.g., 'double[2][2]')
@@ -207,8 +288,9 @@ function getBlockOutputType(block: BlockData): string | null {
       // Sheet label sources will get their type from the associated sink
       return null
 
-    // Trig blocks always output double
+    // Trig: shape follows input (vectorized sin/cos/sincos); mag/dot → scalar
     case 'trig':
+      return null
     case 'mag':  // Magnitude always outputs scalar double
     case 'dot':  // Dot product always outputs scalar double
       return 'double'
@@ -331,24 +413,19 @@ function determineProcessingBlockOutputType(
       // All outputs are scalar double regardless of altitude type (must be scalar)
       return 'double'
 
-    case 'sum':
-    case 'multiply': {
-      // For arithmetic operations, all inputs must have the same type
-      // Output type matches input type (works for scalars, arrays, and matrices)
-      const firstType = parsedTypes[0]
-      const allSameType = parsedTypes.every(t => 
-        t.baseType === firstType.baseType &&
-        t.isArray === firstType.isArray &&
-        t.arraySize === firstType.arraySize &&
-        t.isMatrix === firstType.isMatrix &&
-        t.rows === firstType.rows &&
-        t.cols === firstType.cols
-      )
-      
-      if (allSameType) {
-        return typeToString(firstType)
+    case 'sum': {
+      // Sum of Elements (configured numInputs/signs length === 1):
+      // vector/matrix → scalar base type (sum of all elements).
+      if (block && configuredArithmeticInputCount(block) === 1 && parsedTypes.length === 1) {
+        const only = parsedTypes[0]
+        if (only.isArray || only.isMatrix) return only.baseType
+        return typeToString(only)
       }
-      return null // Type mismatch
+      // Multi-input: same-shaped → element-wise; scalar broadcasts onto vector/matrix
+      return elementWiseArithmeticOutputType(parsedTypes)
+    }
+    case 'multiply': {
+      return elementWiseArithmeticOutputType(parsedTypes)
     }
 
     case 'divide': {
@@ -407,6 +484,10 @@ function determineProcessingBlockOutputType(
       // Scalar double (v1)
       return 'double'
 
+    case 'trig':
+      // Preserve vector shape (incl. both sincos ports)
+      return typeToString(parsedTypes[0])
+
     case 'transfer_function':
     case 'discrete_transform':
       // Transfer function: output type matches input type
@@ -462,6 +543,47 @@ function determineProcessingBlockOutputType(
       if (!allMuxScalars) return null
       // Output type depends on input count - create a vector by default
       return `${muxBaseType}[${parsedTypes.length}]`
+
+    case 'evaluate': {
+      if (block?.parameters?.outputType) {
+        return String(block.parameters.outputType)
+      }
+      if (block?.parameters?.dataType) {
+        return String(block.parameters.dataType)
+      }
+      const expr = String(block?.parameters?.expression || '')
+      // MultiPortSwitch: nested (in(0)==k ? in(j) : …) selecting whole ports
+      const isMultiport =
+        /^\(in\(0\)==\(/.test(expr) && /\?in\(\d+\)/.test(expr)
+      if (isMultiport) {
+        const vectors = parsedTypes.filter(t => t.isArray || t.isMatrix)
+        if (vectors.length > 0) {
+          return typeToString(vectors[0])
+        }
+        return 'double'
+      }
+      // Element extract in(i)[k] / in(i)(k) → scalar
+      if (/in\(\d+\)\[/.test(expr) || /in\(\d+\)\(/.test(expr)) {
+        return 'double'
+      }
+      // Constant / no input references (e.g. "0.0", "1.0") — do not inherit
+      // unused wired input shapes (matrix-mux cells often wire a shared vector
+      // into every Fcn even when the expression ignores it).
+      if (!/\bin\s*\(/.test(expr)) {
+        return 'double'
+      }
+      if (parsedTypes.length === 1) {
+        return typeToString(parsedTypes[0])
+      }
+      if (parsedTypes.every(t => !t.isArray && !t.isMatrix)) {
+        return 'double'
+      }
+      const vectors = parsedTypes.filter(t => t.isArray || t.isMatrix)
+      if (vectors.length === 1) {
+        return typeToString(vectors[0])
+      }
+      return typeToString(parsedTypes[0])
+    }
 
     default:
       return null
@@ -737,7 +859,7 @@ export function propagateSignalTypes(
           break
         case 'dcm_to_euler':
         case 'quat_to_euler':
-          outputTypes = ['double', 'double', 'double']  // Three Euler angle outputs
+          outputTypes = ['double[3]']  // Single vector {phi,theta,psi} (Simulink Aerospace)
           break
         default:
           outputTypes = ['double']
@@ -923,6 +1045,10 @@ export function propagateSignalTypes(
     }
   }
 
+  // Resolve arithmetic / etc. that had all inputs typed but missed the queue
+  // (e.g. Sum after late same-sheet Goto/From, Sum-of-Elements with numInputs=1).
+  resolvePendingBlocksWithKnownInputs(blocks, wires, blockOutputTypes, signalTypes)
+
   // Final pass: deferred state blocks (TF / discrete) still missing a type → double
   for (const block of blocks) {
     if (!isDeferredStateBlock(block.type)) continue
@@ -958,16 +1084,12 @@ export function propagateSignalTypes(
   for (const block of blocks) {
     if (['sum', 'multiply'].includes(block.type)) {
       const inputTypes = getBlockInputTypes(block, wiresByTarget, blockOutputTypes)
-      if (inputTypes.length > 1) {
-        const firstType = inputTypes[0]
-        const allSame = inputTypes.every(t => t === firstType)
-        if (!allSame) {
-          errors.push({
-            blockId: block.id,
-            message: `Type mismatch at ${block.name}: All inputs must have the same type. Found: ${inputTypes.join(', ')}`,
-            severity: 'error'
-          })
-        }
+      if (inputTypes.length > 1 && !elementWiseInputsCompatible(inputTypes, block.type)) {
+        errors.push({
+          blockId: block.id,
+          message: `Type mismatch at ${block.name}: All inputs must have the same type. Found: ${inputTypes.join(', ')}`,
+          severity: 'error'
+        })
       }
     }
   }
@@ -1055,41 +1177,35 @@ export function propagateSignalTypes(
     // Update validation for sum and multiply blocks to include matrices
     if (['sum', 'multiply'].includes(block.type)) {
       const inputTypes = getBlockInputTypes(block, wiresByTarget, blockOutputTypes)
-      if (inputTypes.length > 1) {
-        const firstType = inputTypes[0]
-        const allSame = inputTypes.every(t => t === firstType)
-        if (!allSame) {
-          // Provide more detailed error for matrix mismatches
-          try {
-            const parsed = inputTypes.map(t => parseType(t))
-            const hasMatrix = parsed.some(p => p.isMatrix)
-            if (hasMatrix) {
-              const descriptions = inputTypes.map((t, i) => {
-                const p = parsed[i]
-                if (p.isMatrix) return `${p.rows}×${p.cols} matrix`
-                if (p.isArray) return `vector[${p.arraySize}]`
-                return `scalar`
-              })
-              errors.push({
-                blockId: block.id,
-                message: `Type mismatch at ${block.name}: All inputs must have the same dimensions. Found: ${descriptions.join(', ')}`,
-                severity: 'error'
-              })
-            } else {
-              errors.push({
-                blockId: block.id,
-                message: `Type mismatch at ${block.name}: All inputs must have the same type. Found: ${inputTypes.join(', ')}`,
-                severity: 'error'
-              })
-            }
-          } catch {
-            // Fallback to original error
+      if (inputTypes.length > 1 && !elementWiseInputsCompatible(inputTypes, block.type)) {
+        try {
+          const parsed = inputTypes.map(t => parseType(t))
+          const hasMatrix = parsed.some(p => p.isMatrix)
+          if (hasMatrix) {
+            const descriptions = inputTypes.map((t, i) => {
+              const p = parsed[i]
+              if (p.isMatrix) return `${p.rows}×${p.cols} matrix`
+              if (p.isArray) return `vector[${p.arraySize}]`
+              return `scalar`
+            })
+            errors.push({
+              blockId: block.id,
+              message: `Type mismatch at ${block.name}: All inputs must have the same dimensions. Found: ${descriptions.join(', ')}`,
+              severity: 'error'
+            })
+          } else {
             errors.push({
               blockId: block.id,
               message: `Type mismatch at ${block.name}: All inputs must have the same type. Found: ${inputTypes.join(', ')}`,
               severity: 'error'
             })
           }
+        } catch {
+          errors.push({
+            blockId: block.id,
+            message: `Type mismatch at ${block.name}: All inputs must have the same type. Found: ${inputTypes.join(', ')}`,
+            severity: 'error'
+          })
         }
       }
     }
@@ -1200,15 +1316,9 @@ function getSubsystemOutputType(
       if (block.type === 'output_port' && blockPortName === outputPortName) {
         debugLog(`    Found output_port block: id="${block.id}", name="${block.name}", dataType="${block.parameters?.dataType}"`)
 
-        // For segregated subsystems (and output ports with explicit types),
-        // use the declared dataType parameter directly - this is the correct approach
-        // since subsystem outputs should be determined from internal analysis, not external connections
-        if (block.parameters?.dataType) {
-          debugLog(`    Using explicit dataType: ${block.parameters.dataType}`)
-          return block.parameters.dataType
-        }
-
-        // Fallback: trace back through connections (for inline subsystems without explicit port types)
+        // Prefer type inferred from the internal driver (e.g. Mux → double[3]).
+        // mdl2obliq often declares Outport dataType as plain "double" when
+        // PortDimensions are absent — that must not shadow a vector/matrix source.
         const inputWire = sheet.connections?.find((w : any) =>
           w.targetBlockId === block.id && w.targetPortIndex === 0
         )
@@ -1217,37 +1327,46 @@ function getSubsystemOutputType(
           const sourceKey = `${inputWire.sourceBlockId}:${inputWire.sourcePortIndex}`
           debugLog(`    Wire found: sourceKey="${sourceKey}"`)
 
-          const sourceType = blockOutputTypes.get(sourceKey)
+          let sourceType = blockOutputTypes.get(sourceKey)
           debugLog(`    External blockOutputTypes lookup: ${sourceType || 'NOT FOUND'}`)
 
-          if (sourceType) {
-            return sourceType
-          } else {
-            // Need to propagate types within the subsystem first
+          if (!sourceType) {
             debugLog(`    Running recursive propagation on subsystem sheet...`)
             const subsystemResult = propagateSignalTypes(
               sheet.blocks,
               sheet.connections
             )
-
-            debugLog(`    Recursive result: ${subsystemResult.blockOutputTypes.size} types, ${subsystemResult.errors.length} errors`)
             for (const [key, type] of subsystemResult.blockOutputTypes) {
-              debugLog(`      ${key} = ${type}`)
+              blockOutputTypes.set(`${subsystemBlock.id}:${key}`, type)
             }
+            sourceType = subsystemResult.blockOutputTypes.get(sourceKey)
+            debugLog(`    Internal lookup for "${sourceKey}": ${sourceType || 'NOT FOUND'}`)
+          }
 
-            const internalSourceType = subsystemResult.blockOutputTypes.get(sourceKey)
-            debugLog(`    Internal lookup for "${sourceKey}": ${internalSourceType || 'NOT FOUND'}`)
-
-            if (internalSourceType) {
-              // Copy internal types to main type map with prefixed keys
-              for (const [key, type] of subsystemResult.blockOutputTypes) {
-                blockOutputTypes.set(`${subsystemBlock.id}:${key}`, type)
-              }
-              return internalSourceType
+          if (sourceType) {
+            const declared = block.parameters?.dataType as string | undefined
+            // Unresolved From/Goto often types as scalar double while the Outport
+            // correctly declares double[3]/[4][1]. Prefer the richer declared type.
+            if (
+              declared &&
+              declared.includes('[') &&
+              !sourceType.includes('[')
+            ) {
+              debugLog(
+                `    Preferring declared ${declared} over inferred scalar ${sourceType}`
+              )
+              return declared
             }
+            return sourceType
           }
         } else {
           debugLog(`    FAIL: No wire connecting to output_port input`)
+        }
+
+        // Fallback: declared dataType (segregated / explicit ports)
+        if (block.parameters?.dataType) {
+          debugLog(`    Using explicit dataType fallback: ${block.parameters.dataType}`)
+          return block.parameters.dataType
         }
       }
     }
@@ -1267,12 +1386,17 @@ export function propagateSignalTypesMultiSheet(
   const signalTypes: SignalTypeMap = new Map()
   const blockOutputTypes: BlockOutputTypes = new Map()
 
+  // Include nested subsystem sheets so global Goto sinks under IU are typed
+  // before root From* sources are resolved (matches ModelFlattener).
+  const expandedSheets = collectSheetsRecursive(sheets)
+  debugLog(`Expanded to ${expandedSheets.length} sheets (incl. nested)`)
+
   // First pass: propagate types within each sheet and collect sheet label sink types
   debugLog('--- PASS 1: Initial propagation within each sheet ---')
   const sheetLabelSinkTypes: Map<string, string> = new Map()
 
-  for (let sheetIdx = 0; sheetIdx < sheets.length; sheetIdx++) {
-    const sheet = sheets[sheetIdx]
+  for (let sheetIdx = 0; sheetIdx < expandedSheets.length; sheetIdx++) {
+    const sheet = expandedSheets[sheetIdx]
     debugLog(`\nSheet ${sheetIdx}: ${sheet.blocks.length} blocks, ${sheet.connections.length} connections`)
 
     // Log block summary
@@ -1313,12 +1437,21 @@ export function propagateSignalTypesMultiSheet(
     }
   }
 
+  // Drop Pass-1 "missing sink" errors that nested sheets later resolved (global Goto).
+  for (let i = allErrors.length - 1; i >= 0; i--) {
+    const msg = allErrors[i]?.message || ''
+    const m = msg.match(/references non-existent signal "([^"]+)"/)
+    if (m && sheetLabelSinkTypes.has(m[1])) {
+      allErrors.splice(i, 1)
+    }
+  }
+
   debugLog('\n--- PASS 2: Set sheet label source types from sink types ---')
   debugLog(`SheetLabelSinkTypes collected: ${Array.from(sheetLabelSinkTypes.entries()).map(([k,v]) => `${k}=${v}`).join(', ')}`)
 
   // Second pass: Set sheet label source types from sink types
   // This pre-populates the source types before re-running propagation
-  for (const sheet of sheets) {
+  for (const sheet of expandedSheets) {
     for (const block of sheet.blocks) {
       if (block.type === 'sheet_label_source' && block.parameters?.signalName) {
         const sinkType = sheetLabelSinkTypes.get(block.parameters.signalName)
@@ -1332,13 +1465,53 @@ export function propagateSignalTypesMultiSheet(
     }
   }
 
+  // Pass 2b: seed nested input_port types from external wires into subsystems.
+  // Simulink inherits vector size on Inports; mdl2obliq often declares plain double.
+  debugLog('\n--- PASS 2b: Seed subsystem input_port types from parent wires ---')
+  for (const sheet of expandedSheets) {
+    for (const wire of sheet.connections) {
+      if ((wire.targetPortIndex ?? 0) < 0) continue
+      const sub = sheet.blocks.find(b => b.id === wire.targetBlockId)
+      if (!sub || sub.type !== 'subsystem') continue
+      const srcType = blockOutputTypes.get(
+        `${wire.sourceBlockId}:${wire.sourcePortIndex ?? 0}`
+      )
+      if (!srcType) continue
+      const portNames: string[] = sub.parameters?.inputPorts || []
+      const portName = portNames[wire.targetPortIndex ?? 0]
+      if (!portName) continue
+      for (const nested of sub.parameters?.sheets || []) {
+        for (const ip of nested.blocks || []) {
+          if (ip.type !== 'input_port') continue
+          const ipName = ip.parameters?.portName || ip.name
+          if (ipName !== portName) continue
+          const key = `${ip.id}:0`
+          const declared = String(ip.parameters?.dataType || 'double')
+          // Prefer richer external type over scalar default declaration
+          if (
+            !blockOutputTypes.has(key) ||
+            (srcType.includes('[') && !declared.includes('['))
+          ) {
+            blockOutputTypes.set(key, srcType)
+            if (srcType.includes('[') && !declared.includes('[')) {
+              ip.parameters = { ...(ip.parameters || {}), dataType: srcType }
+            }
+            debugLog(
+              `  Seeded ${sub.name}.${portName} (${ip.id}) = ${srcType}`
+            )
+          }
+        }
+      }
+    }
+  }
+
   debugLog('\n--- PASS 3: Re-run propagation with preset types ---')
   debugLog(`BlockOutputTypes before pass 3: ${blockOutputTypes.size} entries`)
 
   // Third pass: Re-run propagation with sheet label source types now set
   // This allows downstream blocks to get their types resolved
-  for (let sheetIdx = 0; sheetIdx < sheets.length; sheetIdx++) {
-    const sheet = sheets[sheetIdx]
+  for (let sheetIdx = 0; sheetIdx < expandedSheets.length; sheetIdx++) {
+    const sheet = expandedSheets[sheetIdx]
     debugLog(`\nSheet ${sheetIdx} pass 3:`)
 
     const sheetResult = propagateSignalTypesWithPreset(
@@ -1370,7 +1543,7 @@ export function propagateSignalTypesMultiSheet(
   debugLog('\n--- PASS 4: Update late-discovered sink types and re-propagate ---')
 
   // First, update sheetLabelSinkTypes with any newly discovered sink types from Pass 3
-  for (const sheet of sheets) {
+  for (const sheet of expandedSheets) {
     for (const block of sheet.blocks) {
       if (block.type === 'sheet_label_sink' && block.parameters?.signalName) {
         const signalName = block.parameters.signalName
@@ -1393,7 +1566,7 @@ export function propagateSignalTypesMultiSheet(
 
   // Now re-process sheet_label_source blocks that still don't have types
   let pass4Updates = 0
-  for (const sheet of sheets) {
+  for (const sheet of expandedSheets) {
     // Create wire lookup maps for this sheet
     const wiresBySource = new Map<string, WireData[]>()
     for (const wire of sheet.connections) {
@@ -1441,6 +1614,18 @@ export function propagateSignalTypesMultiSheet(
   }
   debugLog(`  Pass 4 updated ${pass4Updates} sheet_label_source blocks`)
 
+  // Pass 5: resolve blocks that now have all inputs typed but never ran
+  // (e.g. Sum waiting on a late From/Goto, or Sum-of-Elements with numInputs=1).
+  debugLog('\n--- PASS 5: Resolve pending blocks with known inputs ---')
+  for (const sheet of expandedSheets) {
+    resolvePendingBlocksWithKnownInputs(
+      sheet.blocks,
+      sheet.connections,
+      blockOutputTypes,
+      signalTypes
+    )
+  }
+
   debugLog('\n=== propagateSignalTypesMultiSheet END ===')
   debugLog(`Final: ${blockOutputTypes.size} block output types, ${signalTypes.size} signal types, ${allErrors.length} errors`)
 
@@ -1448,6 +1633,77 @@ export function propagateSignalTypesMultiSheet(
     signalTypes,
     blockOutputTypes,
     errors: allErrors
+  }
+}
+
+/**
+ * Fixpoint: for any block still missing an output type whose inputs are all
+ * typed, determine the output and stamp connected wires. Repeats until stable
+ * so chains (Sum → Evaluate → …) catch up after late sheet-label typing.
+ */
+function resolvePendingBlocksWithKnownInputs(
+  blocks: BlockData[],
+  wires: WireData[],
+  blockOutputTypes: BlockOutputTypes,
+  signalTypes: SignalTypeMap
+): void {
+  const wiresByTarget = new Map<string, WireData[]>()
+  const wiresBySource = new Map<string, WireData[]>()
+  for (const wire of wires) {
+    const tk = `${wire.targetBlockId}:${wire.targetPortIndex}`
+    const sk = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+    if (!wiresByTarget.has(tk)) wiresByTarget.set(tk, [])
+    wiresByTarget.get(tk)!.push(wire)
+    if (!wiresBySource.has(sk)) wiresBySource.set(sk, [])
+    wiresBySource.get(sk)!.push(wire)
+  }
+
+  let changed = true
+  let guard = 0
+  while (changed && guard++ < blocks.length + 8) {
+    changed = false
+    for (const block of blocks) {
+      const outPorts = getBlockOutputPortCount(block)
+      if (outPorts <= 0) continue
+      const outKey = `${block.id}:0`
+      if (blockOutputTypes.has(outKey)) continue
+
+      const expected = getBlockInputPortCount(block)
+      if (expected <= 0) continue
+      const inputTypes = getBlockInputTypes(block, wiresByTarget, blockOutputTypes)
+      if (inputTypes.length < expected) continue
+
+      let determined: string | null = null
+      if (isTypeLoopBreaker(block.type)) {
+        determined = determineStateBlockOutputType(block, wiresByTarget, blockOutputTypes)
+      } else {
+        determined = determineProcessingBlockOutputType(block.type, inputTypes, block)
+      }
+      if (!determined) continue
+
+      for (let p = 0; p < outPorts; p++) {
+        blockOutputTypes.set(`${block.id}:${p}`, determined)
+      }
+      const connected = wiresBySource.get(outKey) || []
+      for (const wire of connected) {
+        try {
+          const parsedType = parseType(determined)
+          signalTypes.set(wire.id, {
+            wireId: wire.id,
+            sourceBlockId: wire.sourceBlockId,
+            sourcePortIndex: wire.sourcePortIndex,
+            targetBlockId: wire.targetBlockId,
+            targetPortIndex: wire.targetPortIndex,
+            type: determined,
+            parsedType
+          })
+        } catch {
+          /* ignore */
+        }
+      }
+      changed = true
+      debugLog(`  Pass5 resolved "${block.name}" (${block.type}) → ${determined}`)
+    }
   }
 }
 
@@ -1879,12 +2135,7 @@ function getBlockOutputPortCount(block: BlockData): number {
       // Demux has dynamic outputs based on outputCount configuration
       return block.parameters?.outputCount || 1
     case 'orientation_conversion': {
-      const conversionType = block.parameters?.conversionType || 'euler_to_dcm'
-      // dcm_to_euler, quat_to_euler: 3 outputs (Phi, Theta, Psi)
-      // All others: 1 output (DCM or quaternion)
-      if (conversionType === 'dcm_to_euler' || conversionType === 'quat_to_euler') {
-        return 3
-      }
+      // All conversion modes expose a single output port (DCM, quat, or Euler vector)
       return 1
     }
     default:
@@ -1899,7 +2150,7 @@ function getBlockInputPortCount(block: BlockData): number {
   switch (block.type) {
     case 'sum':
     case 'multiply':
-      return 2 // Default, but can have more
+      return configuredArithmeticInputCount(block)
     case 'scale':
     case 'limit':
     case 'units_conversion':
