@@ -11,6 +11,7 @@ import { SourceBlockModule } from './SourceBlockModule'
 import { ClockBlockModule } from './ClockBlockModule'
 import { ScaleBlockModule } from './ScaleBlockModule'
 import { EvaluateBlockModule } from './EvaluateBlockModule'
+import { SaturationDynamicBlockModule } from './SaturationDynamicBlockModule'
 import { TransferFunctionBlockModule } from './TransferFunctionBlockModule'
 import { Lookup1DBlockModule } from './Lookup1DBlockModule'
 import { Lookup2DBlockModule } from './Lookup2DBlockModule'
@@ -25,6 +26,7 @@ import { DotProductBlockModule } from './DotProductBlockModule'
 import { IfBlockModule } from './IfBlockModule'
 import { ConditionBlockModule } from './ConditionBlockModule'
 import { AbsoluteValueBlockModule } from './AbsoluteValueBlockModule'
+import { SquareBlockModule } from './SquareBlockModule'
 import { UnaryMinusBlockModule } from './UnaryMinusBlockModule'
 import { LimitBlockModule } from './LimitBlockModule'
 import { RelayBlockModule } from './RelayBlockModule'
@@ -174,11 +176,17 @@ export class BlockModuleFactory {
       case 'abs': 
         return new AbsoluteValueBlockModule()
 
+      case 'square':
+        return new SquareBlockModule()
+
       case 'uminus':
         return new UnaryMinusBlockModule()
 
       case 'limit':
         return new LimitBlockModule()
+
+      case 'saturation_dynamic':
+        return new SaturationDynamicBlockModule()
 
       case 'relay':
         return new RelayBlockModule()

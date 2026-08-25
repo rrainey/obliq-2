@@ -19,6 +19,22 @@ export class IfBlockModule implements IBlockModule {
     const input1 = inputs[0]
     const control = inputs[1]
     const input2 = inputs[2]
+
+    // Simulink Switch Criteria (mdl2obliq sets switchCriteria / switchThreshold)
+    const switchCriteria = String(
+      (block.parameters as Record<string, unknown> | undefined)?.switchCriteria ?? ''
+    ).trim()
+    const switchThreshold = Number(
+      (block.parameters as Record<string, unknown> | undefined)?.switchThreshold ?? 0
+    )
+    const thrLit = Number.isFinite(switchThreshold) ? String(switchThreshold) : '0'
+    let controlTest = control
+    if (switchCriteria === 'u2 >= Threshold') {
+      controlTest = `((${control}) >= (${thrLit}))`
+    } else if (switchCriteria === 'u2 > Threshold') {
+      controlTest = `((${control}) > (${thrLit}))`
+    }
+    // else: u2 ~= 0 / unset → C truthy (nonzero), matching historical Obliq if
     
     // Prefer a dimensional data-path type (ports 0 or 2); control is often bool/scalar
     const types = inputTypes || []
@@ -32,6 +48,9 @@ export class IfBlockModule implements IBlockModule {
     const typeInfo = BlockModuleUtils.parseType(outputType)
     
     code += `    // If control is true/nonzero, output = input2, else output = input1\n`
+    if (switchCriteria) {
+      code += `    // Switch criteria: ${switchCriteria} (threshold=${thrLit})\n`
+    }
     
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       const matAcc = (expr: string, typ: string) => {
@@ -41,7 +60,7 @@ export class IfBlockModule implements IBlockModule {
       }
       const t0 = types[0] || ''
       const t2 = types[2] || ''
-      code += `    if (${control}) {\n`
+      code += `    if (${controlTest}) {\n`
       code += `        for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `            for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
       code += `                ${outputName}[i][j] = ${matAcc(input2, t2)};\n`
@@ -63,7 +82,7 @@ export class IfBlockModule implements IBlockModule {
         if (typ.includes('[')) return `${expr}[i]`
         return `(${expr})`
       }
-      code += `    if (${control}) {\n`
+      code += `    if (${controlTest}) {\n`
       code += `        // Copy input2 to output\n`
       code += `        for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
       code += `            ${outputName}[i] = ${acc(input2, t2)};\n`
@@ -76,7 +95,7 @@ export class IfBlockModule implements IBlockModule {
       code += `    }\n`
     } else {
       // Scalar conditional assignment
-      code += `    ${outputName} = ${control} ? ${input2} : ${input1};\n`
+      code += `    ${outputName} = ${controlTest} ? ${input2} : ${input1};\n`
     }
     
     return code

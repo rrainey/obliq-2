@@ -5,7 +5,7 @@
  * Usage (from repo root):
  *   npx --yes tsx scripts/compare-as205.ts \
  *     --model path/to/sim_export.csv \
- *     [--ref docs/sample-models/saturn/as205-reference/as205_trajectory_reference.csv] \
+ *     [--ref ../viper/lib_SaturnIBObliq/model/as205-reference/as205_trajectory_reference.csv] \
  *     [--offset 1] [--tmin 0] [--tmax 150] [--tol 1] \
  *     [--fields h_m,mass_kg,qbar_Pa] \
  *     [--out residual-report.md]
@@ -21,7 +21,7 @@ import {
   compareCsvTexts,
   type ComparableField,
   type CompareOptions
-} from '../examples/saturn-ib/as205Compare'
+} from '../../viper/lib_SaturnIBObliq/ts/as205Compare'
 
 function usage(): never {
   console.error(`Usage: npx tsx scripts/compare-as205.ts --model <logger.csv> [options]
@@ -60,7 +60,7 @@ function main() {
     arg('--ref') ||
     path.join(
       repoRoot,
-      'docs/sample-models/saturn/as205-reference/as205_trajectory_reference.csv'
+      '../viper/lib_SaturnIBObliq/model/as205-reference/as205_trajectory_reference.csv'
     )
 
   if (!fs.existsSync(modelPath!)) {

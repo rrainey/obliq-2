@@ -3,7 +3,7 @@
  * Usage: npx tsx scripts/onpad-dual-path-compare.ts [t_sec]
  */
 import * as fs from 'fs'
-import { as205OnPadStateAtTime } from '../examples/saturn-ib/as205OnPad'
+import { as205OnPadStateAtTime } from '../../viper/lib_SaturnIBObliq/ts/as205OnPad'
 
 function hypot(xs: number[]): number {
   return Math.sqrt(xs.reduce((s, x) => s + x * x, 0))

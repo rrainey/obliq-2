@@ -76,6 +76,14 @@ const blockTypes: BlockType[] = [
     vectorSupport: 'scalar-only'
   },
   {
+    id: 'square',
+    name: 'Square (x²)',
+    category: 'Math',
+    description: 'Element-wise square y = u²',
+    icon: 'x²',
+    vectorSupport: 'full'
+  },
+  {
     id: 'uminus',
     name: 'Unary Minus',
     category: 'Math',

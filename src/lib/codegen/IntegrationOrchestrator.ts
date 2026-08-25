@@ -16,6 +16,9 @@ export interface IntegrationOrchestratorOptions {
   
   /** Whether to include timing instrumentation */
   includeTiming?: boolean
+
+  /** Emit RK4 stage isfinite checks (OBLIQ_DEBUG_MATH) */
+  debugMath?: boolean
 }
 
 /**
@@ -38,11 +41,21 @@ export class IntegrationOrchestrator {
     this.options = {
       includeComments: options.includeComments ?? true,
       integrationMethod: options.integrationMethod ?? 'rk4',
-      includeTiming: options.includeTiming ?? false
+      includeTiming: options.includeTiming ?? false,
+      debugMath: options.debugMath ?? false
     }
     this.stateIntegrator = new StateIntegrator(model, typeMap, {
-      includeComments: this.options.includeComments
+      includeComments: this.options.includeComments,
+      debugMath: this.options.debugMath
     })
+  }
+
+  /**
+   * Generate optional helpers that must appear before _step (e.g. finite asserts).
+   */
+  generateHelpers(): string {
+    if (!this.options.debugMath) return ''
+    return this.stateIntegrator.generateFiniteAssertFunction()
   }
   
   /**
@@ -55,8 +68,9 @@ export class IntegrationOrchestrator {
       code += CCodeBuilder.generateCommentBlock([
         'Main simulation step function',
         'Orchestrates algebraic evaluation and state integration',
-        `Integration method: ${this.options.integrationMethod.toUpperCase()}`
-      ])
+        `Integration method: ${this.options.integrationMethod.toUpperCase()}`,
+        this.options.debugMath ? 'OBLIQ_DEBUG_MATH: RK4 stage isfinite checks enabled' : ''
+      ].filter(Boolean))
     }
     
     code += CCodeBuilder.generateFunctionHeader(
@@ -95,9 +109,10 @@ export class IntegrationOrchestrator {
       code += '\n'
     }
     
-    // Update simulation time
-    code += '    /* Update simulation time */\n'
+    // Update simulation time and multi-rate sample tick
+    code += '    /* Update simulation time + sample tick (for MDL SampleTime hits) */\n'
     code += '    model->time += model->dt;\n'
+    code += '    model->sample_tick++;\n'
     code += '\n'
     
     code += '}\n'

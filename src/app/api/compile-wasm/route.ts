@@ -176,10 +176,14 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
   }
 
   const sheets = versionData.data.sheets
+  const debugMath = !!versionData.data.globalSettings?.debugMath
 
-  // Generate cache key
-  const cacheKey = generateCacheKey(modelId, { sheets }, { optimizationLevel })
-  console.log(`[compile-wasm] Cache key: ${cacheKey}`)
+  // Generate cache key (debugMath changes codegen → separate cache entry)
+  const cacheKey = generateCacheKey(modelId, { sheets }, {
+    optimizationLevel,
+    includeDebugInfo: debugMath
+  })
+  console.log(`[compile-wasm] Cache key: ${cacheKey}${debugMath ? ' (debugMath)' : ''}`)
 
   // Check cache (unless noCache is set)
   const cacheManager = new SupabaseCacheManager()
@@ -236,7 +240,12 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
     const generator = new WasmCodeGenerator({
       modelName: sanitizeModelName(model.name),
       includeEmscriptenExports: true,
-      includeDebugFunctions: false
+      includeDebugFunctions: false,
+      debugMath,
+      integrationAlgorithm:
+        versionData.data.globalSettings?.integrationAlgorithm === 'euler'
+          ? 'euler'
+          : 'rk4'
     })
 
     generatedCode = generator.generateWasm(sheets)

@@ -28,6 +28,7 @@ Options:
   --profile <name>         generic (default) | saturn-ib-stack
   --dt <sec>               Default step used in smoke main (default 0.005)
   --algorithm <rk4|euler>  Integration algorithm (default rk4)
+  --debug-math             Safe divide/mod abort + RK4 isfinite checks
   --compile                gcc-compile static lib + smoke main after emit
   --help                   This message
 `)
@@ -46,7 +47,14 @@ function positionalModel(): string | undefined {
   for (let i = 2; i < process.argv.length; i++) {
     const a = process.argv[i]
     if (a.startsWith('--')) {
-      if (a !== '--compile' && a !== '--help' && a !== '-h') i++
+      if (
+        a !== '--compile' &&
+        a !== '--debug-math' &&
+        a !== '--help' &&
+        a !== '-h'
+      ) {
+        i++
+      }
       continue
     }
     return a
@@ -173,9 +181,14 @@ void ${modelName}_apply_external_inputs(
   for (int i = 0; i < 3; i++) model->inputs.CG_LLA_deg_m[i] = in->CG_LLA_deg_m[i];
   for (int i = 0; i < 4; i++) model->inputs.q_ECItoSM[i][0] = in->q_ECItoSM[i];
   model->inputs.T_L_prime_sec = in->T_L_prime_sec;
-  /* Algebraic IC (LLA→ECF, DCM→quat) depends on inputs; reseed states once. */
-  ${modelName}_evaluate_algebraic(model);
+  /*
+   * Algebraic IC (LLA→ECF, DCM→quat) depends on inputs — reseed once.
+   * Do NOT evaluate_algebraic on every apply: step() already runs algebra,
+   * and a second pass would re-fire data-store writes (e.g. IGM T_1_i -= 1.6
+   * twice per dt) and poison guidance state.
+   */
   if (!${modelName}_ics_seeded) {
+    ${modelName}_evaluate_algebraic(model);
     ${modelName}_reseed_integrator_ics(model);
     ${modelName}_evaluate_algebraic(model);
     ${modelName}_ics_seeded = 1;
@@ -220,10 +233,11 @@ void ${modelName}_collect_external_outputs(
   /* Pack primary trajectory: S_IB until stage sep; S_IVB after; else IC Product.
    * (S_IVB xe IC is Body_to_ECI_Sum and is not pad-correct before sep.) */
   {
+    /* Ve: prefer identity-elided inertial transform Product (was Velocity_Conversion1). */
     const double *xe_ivb = model->signals.S_IVB_Stage_Custom_Variable_Mass_6DoF_Quaternion_xe_ye_ze;
-    const double *ve_ivb = model->signals.S_IVB_Stage_Custom_Variable_Mass_6DoF_Quaternion_Velocity_Conversion1;
+    const double *ve_ivb = model->signals.S_IVB_Stage_Custom_Variable_Mass_6DoF_Quaternion_transform_to_Inertial_axes_Product;
     const double *xe_ib = model->signals.S_IB_Stage_Custom_Variable_Mass_6DoF_Quaternion_xe_ye_ze;
-    const double *ve_ib = model->signals.S_IB_Stage_Custom_Variable_Mass_6DoF_Quaternion_Velocity_Conversion1;
+    const double *ve_ib = model->signals.S_IB_Stage_Custom_Variable_Mass_6DoF_Quaternion_transform_to_Inertial_axes_Product;
     const double *xe_ic = model->signals.Initial_Conditions_Product;
     const double *q_ib = &model->signals.S_IB_Stage_Custom_Variable_Mass_6DoF_Quaternion_Calculate_DCM_Euler_Angles_q0_q1_q2_q3[0][0];
     double rib = sqrt(xe_ib[0]*xe_ib[0]+xe_ib[1]*xe_ib[1]+xe_ib[2]*xe_ib[2]);
@@ -231,14 +245,20 @@ void ${modelName}_collect_external_outputs(
     int use_ivb = out->bStageSep && rivb > 1.0;
     const double *xe = use_ivb ? xe_ivb : (rib > 1.0 ? xe_ib : xe_ic);
     const double *ve = use_ivb ? ve_ivb : ve_ib;
+    /* Prefer WGS84 ellipsoid height from ECI_to_LLA (Add17); crude |r|-6371e3
+     * was ~2 km high at Cape vs RTW geodetic h and misled ascent compares. */
+    double h_ib = model->signals.S_IB_Stage_ECI_to_LLA_Add17;
+    double h_ivb = model->signals.S_IVB_Stage_ECI_to_LLA_Add17;
     double r = sqrt(xe[0]*xe[0] + xe[1]*xe[1] + xe[2]*xe[2]);
+    double h_crude = r > 0.0 ? (r - 6371000.0) : 0.0;
+    double h = use_ivb ? h_ivb : (rib > 1.0 ? h_ib : h_crude);
     out->OUT11[0] = xe[0];
     out->OUT11[1] = xe[1];
     out->OUT11[2] = xe[2];
     out->OUT11[3] = ve[0];
     out->OUT11[4] = ve[1];
     out->OUT11[5] = ve[2];
-    out->OUT11[6] = r > 0.0 ? (r - 6371000.0) : 0.0;
+    out->OUT11[6] = h;
     /* Fallback quat from S_IB EOM if top-level veh_q_ECI port is still zero */
     {
       double qn = fabs(out->veh_q_ECI[0]) + fabs(out->veh_q_ECI[1]) +
@@ -354,7 +374,9 @@ int main(int argc, char **argv) {
 
   ${modelName}_init(&model, ${dt});
   ${modelName}_apply_external_inputs(&model, &in);
-  /* IC snapshot after init (before stepping) */
+  /* Algebra/enables/ICs need live ExtU (CG_LLA, LaunchDate, …) */
+  ${modelName}_seed_from_inputs(&model);
+  /* IC snapshot after seed (before stepping) */
   ${modelName}_collect_external_outputs(&model, &out);
   write_final_json("final-ic.json", model.time, &out);
 
@@ -454,11 +476,16 @@ function main() {
     loaded.integrationAlgorithm ||
     'rk4'
 
+  const debugMath = process.argv.includes('--debug-math')
   const gen = new CodeGenerator({
     modelName,
     integrationAlgorithm: algorithm,
-    generateMain: false
+    generateMain: false,
+    debugMath
   })
+  if (debugMath) {
+    console.log('OBLIQ_DEBUG_MATH enabled (safe div/mod + RK4 isfinite)')
+  }
   const result = gen.generate(
     loaded.sheets as any,
     loaded.parameters as any,

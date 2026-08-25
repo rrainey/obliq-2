@@ -42,6 +42,8 @@ export class EnableEvaluator {
     hasEnableInput: boolean
     parentSubsystemId: string | null
     enableWireSourceExpr?: string
+    enableEdge?: 'rising' | 'level'
+    icNeedsLoadingFields?: string[]
   }> {
     return this.model.subsystemEnableInfo.map(info => {
       const result = {
@@ -49,7 +51,9 @@ export class EnableEvaluator {
         subsystemName: info.subsystemName,
         hasEnableInput: info.hasEnableInput,
         parentSubsystemId: info.parentSubsystemId,
-        enableWireSourceExpr: undefined as string | undefined
+        enableEdge: info.enableEdge,
+        enableWireSourceExpr: undefined as string | undefined,
+        icNeedsLoadingFields: undefined as string[] | undefined
       }
       
       if (info.hasEnableInput && info.enableWire) {
@@ -63,6 +67,25 @@ export class EnableEvaluator {
             sourceBlock,
             info.enableWire.sourcePortIndex
           )
+        }
+      }
+
+      // showInitPort integrators in this scope: set IcNeedsLoading on becoming-enabled
+      if (info.hasEnableInput) {
+        const fields: string[] = []
+        for (const blockId of info.controlledBlockIds || []) {
+          const block = this.model.blocks.find(b => b.originalId === blockId)
+          if (
+            block &&
+            block.block.type === 'integrator' &&
+            block.block.parameters?.showInitPort
+          ) {
+            const intName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
+            fields.push(`${intName}_ic_needs_loading`)
+          }
+        }
+        if (fields.length > 0) {
+          result.icNeedsLoadingFields = fields
         }
       }
       

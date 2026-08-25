@@ -228,7 +228,10 @@ export class EvaluateBlockModule implements IBlockModule {
       }
       
       // Generate C code from the AST using sanitized input names
-      const { code: exprCode, needsMath } = c99ExpressionToCode(ast, sanitizedInputs)
+      const { code: exprCode, needsMath } = c99ExpressionToCode(ast, sanitizedInputs, {
+        debugMath: !!context?.debugMath,
+        blockName: block.name || 'evaluate'
+      })
       
       if (needsMath) {
         code += `    // Note: This expression requires #include <math.h>\n`

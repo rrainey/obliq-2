@@ -2,39 +2,49 @@
 //
 // Unit delay (z⁻¹ / Memory): output is the previous sample of the input.
 //
-// Algorithm (once per simulation step during algebraic evaluation):
-//   1. y = state
-//   2. if sample due: state = u
+// Two-phase algorithm (Simulink-compatible):
+//   Phase 1 generateComputation:       y = state
+//   Phase 2 generateDeferredStateUpdate: if sample due (and enabled): state = u
+//
+// Updating state in phase 1 (before producers like Sum run) makes discrete
+// feedback z⁻² and destabilizes IIRs (Saturn reciprocal-acceleration filter).
 //
 // sampleInterval == 0  → update every model step
-// sampleInterval > 0   → update when model->time crosses next sample boundary
-//                        (same pattern as discrete_transform)
+// sampleInterval > 0   → update on sample_tick hit (same gate as discrete algebra)
 //
 // Continuous integration does not touch this state (getBlockStateOrder returns 0
 // for non-integrator/TF blocks).
 
 import { BlockData } from '@/components/BlockNode'
-import { IBlockModule, BlockModuleUtils } from './BlockModule'
+import { IBlockModule, BlockModuleUtils, CodeGenContext } from './BlockModule'
 
 export class UnitDelayBlockModule implements IBlockModule {
+  private sampleIntervalOf(block: BlockData): number {
+    return Number(
+      block.parameters?.sampleInterval ?? block.parameters?.sampleTimeSec ?? 0
+    )
+  }
 
-  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
+  generateComputation(
+    block: BlockData,
+    inputs: string[],
+    inputTypes?: string[],
+    _context?: CodeGenContext
+  ): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     const name = BlockModuleUtils.sanitizeIdentifier(block.name)
-    const sampleInterval = Number(block.parameters?.sampleInterval ?? 0)
 
-    let code = `    // Unit Delay block: ${block.name}\n`
+    let code = `    // Unit Delay block: ${block.name} (output phase)\n`
 
     if (inputs.length === 0) {
       code += `    ${outputName} = 0.0; // No input\n`
       return code
     }
 
-    const inputExpr = inputs[0]
     const outputType = this.getOutputType(block, inputTypes || [])
     const typeInfo = BlockModuleUtils.parseType(outputType)
 
-    // 1) Output previous state
+    // Output previous state only — state update is deferred
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
@@ -49,15 +59,52 @@ export class UnitDelayBlockModule implements IBlockModule {
       code += `    ${outputName} = model->states.${name}_state;\n`
     }
 
-    // 2) Update state when sample is due
+    return code
+  }
+
+  generateDeferredStateUpdate(
+    block: BlockData,
+    inputs: string[],
+    inputTypes?: string[],
+    context?: CodeGenContext
+  ): string {
+    if (inputs.length === 0) {
+      return ''
+    }
+
+    const name = BlockModuleUtils.sanitizeIdentifier(block.name)
+    const sampleInterval = this.sampleIntervalOf(block)
+    const outputType = this.getOutputType(block, inputTypes || [])
+    const typeInfo = BlockModuleUtils.parseType(outputType)
+    const inputExpr = inputs[0]
+    const enableExpr =
+      context?.enableExpr && context.enableExpr !== '1'
+        ? context.enableExpr
+        : null
+
+    let code = `    // Unit Delay state update: ${block.name}\n`
+
+    const conditions: string[] = []
+    if (enableExpr) {
+      conditions.push(enableExpr)
+    }
     if (sampleInterval > 0) {
-      code += `    if (model->time >= model->states.${name}_next_sample_time - 1e-9) {\n`
-      code += this.generateStateUpdate(name, inputExpr, typeInfo, '        ')
-      code += `        model->states.${name}_next_sample_time += ${sampleInterval};\n`
+      // Must match AlgebraicEvaluator sample_tick gates on sibling discrete
+      // algebra. Time-based next_sample_time desyncs: enable between hits can
+      // overwrite Memory with stale u (soe=0) and scramble FIR taps
+      // (Saturn reciprocal-acceleration → negative soe → G2≪0 → T3 NaN).
+      conditions.push(
+        `(model->sample_tick % (unsigned long long)llround((${sampleInterval}) / model->dt) == 0ULL)`
+      )
+    }
+
+    const indent = conditions.length > 0 ? '        ' : '    '
+    if (conditions.length > 0) {
+      code += `    if (${conditions.join(' && ')}) {\n`
+    }
+    code += this.generateStateUpdate(name, inputExpr, typeInfo, indent)
+    if (conditions.length > 0) {
       code += `    }\n`
-    } else {
-      // Every step
-      code += this.generateStateUpdate(name, inputExpr, typeInfo, '    ')
     }
 
     return code
@@ -104,7 +151,7 @@ export class UnitDelayBlockModule implements IBlockModule {
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
     const name = BlockModuleUtils.sanitizeIdentifier(block.name)
     const typeInfo = BlockModuleUtils.parseType(outputType)
-    const sampleInterval = Number(block.parameters?.sampleInterval ?? 0)
+    const sampleInterval = this.sampleIntervalOf(block)
     const members: string[] = []
 
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
@@ -115,18 +162,21 @@ export class UnitDelayBlockModule implements IBlockModule {
       members.push(`    double ${name}_state;`)
     }
 
-    if (sampleInterval > 0) {
-      members.push(`    double ${name}_next_sample_time;`)
-    }
-
     return members
   }
 
   generateInitialization(block: BlockData, outputType?: string): string {
     const name = BlockModuleUtils.sanitizeIdentifier(block.name)
-    const initialValue = block.parameters?.initialValue ?? 0
-    const sampleInterval = Number(block.parameters?.sampleInterval ?? 0)
-    const typeInfo = BlockModuleUtils.parseType(outputType || 'double')
+    // mdl2obliq historically used initialCondition; Obliq UI uses initialValue
+    const initialValue =
+      block.parameters?.initialValue ?? block.parameters?.initialCondition ?? 0
+    const sampleInterval = this.sampleIntervalOf(block)
+    const typeInfo = BlockModuleUtils.parseType(
+      outputType ||
+        (Array.isArray(initialValue)
+          ? `double[${initialValue.length}]`
+          : 'double')
+    )
     const scalarInitial = typeof initialValue === 'number' ? initialValue : 0
 
     let code = `    // Initialize unit delay: ${block.name}\n`
@@ -137,6 +187,12 @@ export class UnitDelayBlockModule implements IBlockModule {
           let val = scalarInitial
           if (Array.isArray(initialValue) && Array.isArray(initialValue[i])) {
             val = (initialValue[i] as number[])[j] ?? scalarInitial
+          } else if (
+            Array.isArray(initialValue) &&
+            !Array.isArray(initialValue[0])
+          ) {
+            // Flat vector written into column/row matrix state
+            val = (initialValue as number[])[i * typeInfo.cols! + j] ?? scalarInitial
           }
           code += `    model->states.${name}_state[${i}][${j}] = ${val};\n`
         }
@@ -151,10 +207,6 @@ export class UnitDelayBlockModule implements IBlockModule {
       }
     } else {
       code += `    model->states.${name}_state = ${scalarInitial};\n`
-    }
-
-    if (sampleInterval > 0) {
-      code += `    model->states.${name}_next_sample_time = 0.0;\n`
     }
 
     return code

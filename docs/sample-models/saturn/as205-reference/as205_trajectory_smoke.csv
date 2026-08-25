@@ -1,7 +1,0 @@
-# Synthetic smoke data for unit tests only — NOT TN-AP-67-158 flight data
-t_s,h_m,v_mps,gamma_rad,mass_kg,qbar_Pa,source_note
-0,50,0,1.5708,590000,0,smoke
-10,2000,100,1.4,580000,5000,smoke
-20,8000,250,1.2,560000,12000,smoke
-40,25000,500,0.9,520000,8000,smoke
-60,50000,800,0.6,480000,2000,smoke

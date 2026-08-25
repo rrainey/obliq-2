@@ -83,6 +83,12 @@ export class SourceBlockModule implements IBlockModule {
       const c99Amplitude = toC99Initializer(amplitude, 'double')
       const c99Omega = toC99Initializer(omega, 'double')
       code += `    ${outputName} = ${c99Amplitude} * sin(${c99Omega} * model->time);\n`
+    } else if (signalType === 'sample_time') {
+      // Simulink Sample Time Math "Ts Only": weightValue * simulation step (seconds)
+      const weight = Number(block.parameters?.weightValue ?? 1)
+      const w = Number.isFinite(weight) ? weight : 1
+      const c99W = toC99Initializer(w, 'double')
+      code += `    ${outputName} = ${c99W} * model->dt;\n`
     } else {
       // Other signal generators not yet implemented
       code += `    // Signal generator type: ${signalType}\n`
@@ -106,12 +112,13 @@ export class SourceBlockModule implements IBlockModule {
   requiresState(block: BlockData): boolean {
     // Source blocks might need state for signal generation
     const signalType = block.parameters?.signalType || 'constant'
-    return signalType !== 'constant'
+    // sample_time is stateless (reads model->dt each step), like a live constant
+    return signalType !== 'constant' && signalType !== 'sample_time'
   }
 
   generateStateStructMembers(block: BlockData, outputType: string): string[] {
     const signalType = block.parameters?.signalType || 'constant'
-    if (signalType === 'constant') {
+    if (signalType === 'constant' || signalType === 'sample_time') {
       return []
     }
     
@@ -122,7 +129,7 @@ export class SourceBlockModule implements IBlockModule {
 
   generateInitialization(block: BlockData): string {
     const signalType = block.parameters?.signalType || 'constant'
-    if (signalType === 'constant') {
+    if (signalType === 'constant' || signalType === 'sample_time') {
       return ''
     }
     

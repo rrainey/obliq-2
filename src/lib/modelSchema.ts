@@ -160,7 +160,12 @@ const IntegrationAlgorithmSchema = z.enum(['euler', 'rk4']).default('rk4')
 const GlobalSettingsSchema = z.object({
   simulationTimeStep: z.number().positive('Simulation time step must be positive'),
   simulationDuration: z.number().positive('Simulation duration must be positive'),
-  integrationAlgorithm: IntegrationAlgorithmSchema.optional().default('rk4')
+  integrationAlgorithm: IntegrationAlgorithmSchema.optional().default('rk4'),
+  /**
+   * When true, codegen emits OBLIQ_DEBUG_MATH: safe divide/mod that abort with
+   * block name, and isfinite checks on each RK4 derivative stage.
+   */
+  debugMath: z.boolean().optional().default(false)
 })
 
 // Metadata schema

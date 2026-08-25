@@ -18,13 +18,13 @@
 import { execSync } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
-import { EOM_MDL_ADAPTER } from '../examples/saturn-ib/sixDofVarMassEom'
+import { EOM_MDL_ADAPTER } from '../../viper/lib_SaturnIBObliq/ts/sixDofVarMassEom'
 import {
   eomRhs,
   type EomParams,
   type EomState,
   type Vec3
-} from '../examples/saturn-ib/sixDofVarMassEomRhs'
+} from '../../viper/lib_SaturnIBObliq/ts/sixDofVarMassEomRhs'
 
 const ROOT = path.resolve(__dirname, '..')
 const OUT = '/tmp/mdl2obliq-eom'

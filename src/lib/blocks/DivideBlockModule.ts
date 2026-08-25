@@ -8,11 +8,19 @@
 //   - Scalar / vector or matrix → invalid (rejected in type validation)
 
 import { BlockData } from '@/components/BlockNode'
-import { IBlockModule, BlockModuleUtils } from './BlockModule'
+import { IBlockModule, BlockModuleUtils, CodeGenContext } from './BlockModule'
+import { emitSafeDiv } from '@/lib/codegen/DebugMathRuntime'
 
 export class DivideBlockModule implements IBlockModule {
-  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
+  generateComputation(
+    block: BlockData,
+    inputs: string[],
+    inputTypes?: string[],
+    context?: CodeGenContext
+  ): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
+    const debugMath = !!context?.debugMath
+    const blockLabel = block.name || 'divide'
 
     let code = `    // Divide block: ${block.name}\n`
 
@@ -29,7 +37,10 @@ export class DivideBlockModule implements IBlockModule {
     const denInfo = BlockModuleUtils.parseType(denType)
     const denIsScalar = !denInfo.isArray && !denInfo.isMatrix
 
-    // Output shape follows numerator (or den if we ever allowed scalar/vector — we don't)
+    const div = (n: string, d: string) =>
+      debugMath ? emitSafeDiv(n, d, blockLabel) : `(${n}) / (${d})`
+
+    // Output shape follows numerator
     const outInfo = numInfo
 
     if (outInfo.isMatrix && outInfo.rows && outInfo.cols) {
@@ -37,9 +48,9 @@ export class DivideBlockModule implements IBlockModule {
       code += `    for (int i = 0; i < ${outInfo.rows}; i++) {\n`
       code += `        for (int j = 0; j < ${outInfo.cols}; j++) {\n`
       if (denIsScalar) {
-        code += `            ${outputName}[i][j] = ${numExpr}[i][j] / ${denExpr};\n`
+        code += `            ${outputName}[i][j] = ${div(`${numExpr}[i][j]`, denExpr)};\n`
       } else {
-        code += `            ${outputName}[i][j] = ${numExpr}[i][j] / ${denExpr}[i][j];\n`
+        code += `            ${outputName}[i][j] = ${div(`${numExpr}[i][j]`, `${denExpr}[i][j]`)};\n`
       }
       code += `        }\n`
       code += `    }\n`
@@ -47,14 +58,13 @@ export class DivideBlockModule implements IBlockModule {
       code += `    // Vector element-wise divide\n`
       code += `    for (int i = 0; i < ${outInfo.arraySize}; i++) {\n`
       if (denIsScalar) {
-        code += `        ${outputName}[i] = ${numExpr}[i] / ${denExpr};\n`
+        code += `        ${outputName}[i] = ${div(`${numExpr}[i]`, denExpr)};\n`
       } else {
-        code += `        ${outputName}[i] = ${numExpr}[i] / ${denExpr}[i];\n`
+        code += `        ${outputName}[i] = ${div(`${numExpr}[i]`, `${denExpr}[i]`)};\n`
       }
       code += `    }\n`
     } else {
-      // Scalar / scalar (or scalar/scalar only — scalar/vector rejected by type system)
-      code += `    ${outputName} = ${numExpr} / ${denExpr};\n`
+      code += `    ${outputName} = ${div(numExpr, denExpr)};\n`
     }
 
     return code

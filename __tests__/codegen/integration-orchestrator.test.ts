@@ -131,6 +131,7 @@ describe('IntegrationOrchestrator', () => {
         flattenedName: 'TransferFunction1',
         subsystemPath: [],
         enableScope: null,
+        sampleScope: null,
         originalSheetId: 'sheet1',
         originalId: 'tf1'
       }]
@@ -165,6 +166,7 @@ describe('IntegrationOrchestrator', () => {
         flattenedName: 'TransferFunction1',
         subsystemPath: [],
         enableScope: null,
+        sampleScope: null,
         originalSheetId: 'sheet1',
         originalId: 'tf1'
       }]

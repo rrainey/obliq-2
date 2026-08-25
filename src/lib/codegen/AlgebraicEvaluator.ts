@@ -1,25 +1,53 @@
 // lib/codegen/AlgebraicEvaluator.ts
 
-import { FlattenedModel, FlattenedBlock } from './ModelFlattener'
+import { FlattenedModel, FlattenedBlock, withFlattenedSampleParams } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 import { SubsystemInfo } from './SubsystemInfo'
 import { CodeGenContext } from '../blocks/BlockModule'
 import { getSignalMemberName } from './signalMemberName'
+import { EnableEvaluator } from './EnableEvaluator'
 
 /**
  * Generates the algebraic evaluation function for a flattened model.
  * This function computes all block outputs without changing states.
  */
+export interface AlgebraicEvaluatorOptions {
+  /** Emit runtime-safe divide/mod (OBLIQ_DEBUG_MATH) */
+  debugMath?: boolean
+}
+
 export class AlgebraicEvaluator {
   private model: FlattenedModel
   private modelName: string
   private typeMap: Map<string, string>
+  private debugMath: boolean
+  private enableEvaluator: EnableEvaluator
+  private hasEnableSubsystems: boolean
+  private hasSampleScopes: boolean
+  /** Blocks that drive subsystem enable pins — must not be algebra-gated. */
+  private enableSourceBlockIds: Set<string>
   
-  constructor(model: FlattenedModel, typeMap: Map<string, string>) {
+  constructor(
+    model: FlattenedModel,
+    typeMap: Map<string, string>,
+    options: AlgebraicEvaluatorOptions = {}
+  ) {
     this.model = model
     this.modelName = CCodeBuilder.sanitizeIdentifier(model.metadata.modelName)
     this.typeMap = typeMap
+    this.debugMath = !!options.debugMath
+    this.enableEvaluator = new EnableEvaluator(model)
+    this.hasEnableSubsystems = model.subsystemEnableInfo.some(info => info.hasEnableInput)
+    this.hasSampleScopes = model.blocks.some(
+      b => typeof b.sampleScope === 'number' && b.sampleScope > 0
+    )
+    this.enableSourceBlockIds = new Set()
+    for (const info of model.subsystemEnableInfo) {
+      if (info.hasEnableInput && info.enableWire?.sourceBlockId) {
+        this.enableSourceBlockIds.add(info.enableWire.sourceBlockId)
+      }
+    }
   }
   
   /**
@@ -28,8 +56,11 @@ export class AlgebraicEvaluator {
   generate(): string {
     let code = CCodeBuilder.generateCommentBlock([
       'Evaluate algebraic relationships (pure function, no state changes)',
-      'Computes all block outputs based on current inputs and states'
-    ])
+      'Computes all block outputs based on current inputs and states',
+      this.hasEnableSubsystems
+        ? 'Blocks inside a disabled enabled-subsystem are skipped (signals hold last values)'
+        : ''
+    ].filter(Boolean))
     
     code += CCodeBuilder.generateFunctionHeader(
       'void',
@@ -231,42 +262,188 @@ export class AlgebraicEvaluator {
         }
         code += ' */\n'
 
-        // Create a modified block with the flattened name for code generation
-        // This ensures unique signal names when blocks from different subsystems have the same name
-        const blockWithFlattenedName = {
-          ...block.block,
-          name: block.flattenedName
-        }
+        // Flattened name + inherited sampleScope → parameters.sampleTimeSec
+        // (shared with Header/Init so unit_delay next_sample_time stays consistent).
+        const blockWithFlattenedName = withFlattenedSampleParams(block)
 
         // Create context with model parameter names for expression validation
         const context: CodeGenContext = {
-          parameterNames: this.model.parameters.map(p => p.name)
+          parameterNames: this.model.parameters.map(p => p.name),
+          debugMath: this.debugMath
         }
 
-        // For transfer functions, we need special handling to use states
+        // Emit computation; wrap in enable-gate when inside a disabled-capable subsystem
+        let computation = ''
         if (block.block.type === 'transfer_function') {
           const modifiedInputs = this.getTransferFunctionInputs(block, inputs)
-          code += generator.generateComputation(blockWithFlattenedName, modifiedInputs, inputTypes, context)
+          computation = generator.generateComputation(blockWithFlattenedName, modifiedInputs, inputTypes, context)
         } else if (block.block.type === 'integrator') {
           // Data ports (left): [0]=derivative, [1]=x(0) if showInitPort
           // Control reset (-2) is appended after data ports for rising-edge reset logic
+          // Pass enableExpr so IcNeedsLoading only fires while the scope is enabled
+          // (integrators are not wrapped in the algebra enable gate — they always publish).
           const integratorInputs = this.getIntegratorInputExpressions(block)
           const integratorInputTypes = this.getIntegratorInputTypes(block)
-          code += generator.generateComputation(blockWithFlattenedName, integratorInputs, integratorInputTypes, context)
+          const integratorContext: CodeGenContext = {
+            ...context,
+            enableExpr: this.enableEvaluator.generateBlockEnableCheck(block.originalId)
+          }
+          computation = generator.generateComputation(
+            blockWithFlattenedName,
+            integratorInputs,
+            integratorInputTypes,
+            integratorContext
+          )
+        } else if (block.block.type === 'unit_delay') {
+          // Output phase only; state update deferred so producers (Sum) are current.
+          computation = generator.generateComputation(
+            blockWithFlattenedName,
+            inputs,
+            inputTypes,
+            context
+          )
         } else {
-          code += generator.generateComputation(blockWithFlattenedName, inputs, inputTypes, context)
+          computation = generator.generateComputation(blockWithFlattenedName, inputs, inputTypes, context)
         }
+
+        code += this.wrapWithExecutionGates(block, computation)
 
       } catch (error) {
         code += `    /* Error generating code for ${block.block.type}: ${error} */\n`
       }
     }
 
+    // Phase 2: unit_delay / Memory state = u after all algebraic outputs are current
+    code += this.generateDeferredStateUpdates(executionOrder)
+
     // Add sample storage for data collection blocks
     code += this.generateDataCollectionStorage(executionOrder)
 
     code += '\n'
     return code
+  }
+
+  /**
+   * Emit deferred unit_delay state updates (state = u) after producers have run.
+   * Enable-gates updates so disabled subsystems freeze delay lines (RTW).
+   */
+  private generateDeferredStateUpdates(executionOrder: FlattenedBlock[]): string {
+    let code = ''
+    let header = false
+
+    for (const block of executionOrder) {
+      if (block.block.type === 'input_port' || block.block.type === 'output_port') {
+        continue
+      }
+      if (block.isSegregated || !BlockModuleFactory.isSupported(block.block.type)) {
+        continue
+      }
+
+      try {
+        const generator = BlockModuleFactory.getBlockModule(block.block.type)
+        if (!generator.generateDeferredStateUpdate) {
+          continue
+        }
+
+        const inputs = this.getBlockInputExpressions(block, 'model', 'model')
+        const inputTypes = this.getBlockInputTypes(block)
+        const blockWithFlattenedName = withFlattenedSampleParams(block)
+        const context: CodeGenContext = {
+          parameterNames: this.model.parameters.map(p => p.name),
+          debugMath: this.debugMath,
+          enableExpr: this.enableEvaluator.generateBlockEnableCheck(block.originalId)
+        }
+
+        const update = generator.generateDeferredStateUpdate(
+          blockWithFlattenedName,
+          inputs,
+          inputTypes,
+          context
+        )
+        if (!update || !update.trim()) {
+          continue
+        }
+
+        if (!header) {
+          code += '\n    /* Deferred discrete state updates (unit_delay / Memory) */\n'
+          header = true
+        }
+        code += `\n    /* ${block.flattenedName} state update */\n`
+        code += update
+      } catch {
+        continue
+      }
+    }
+
+    return code
+  }
+
+  /**
+   * Gate algebraic updates by enable scope and/or MDL SampleTime.
+   *
+   * Enable: skip while disabled so signals hold last values
+   * (matches RK4/derivative gating).
+   *
+   * Sample: skip off discrete hits so DSM writes / guidance algebra
+   * match RTW rtmIsSampleHit (e.g. IGM 1.6 s on a 0.005 s plant).
+   *
+   * Exceptions (must run every step while present):
+   * - integrators / unit_delay: publish frozen state→signal
+   * - enable-wire sources (SwitchCase case_*): keep nested action
+   *   enables current for end-of-step enable resolve
+   */
+  private wrapWithExecutionGates(block: FlattenedBlock, computation: string): string {
+    if (!computation.trim()) {
+      return computation
+    }
+    const t = block.block.type
+    if (t === 'integrator' || t === 'unit_delay') {
+      return computation
+    }
+    if (this.enableSourceBlockIds.has(block.originalId)) {
+      return computation
+    }
+
+    const conditions: string[] = []
+
+    if (this.hasEnableSubsystems) {
+      const enableExpr = this.enableEvaluator.generateBlockEnableCheck(block.originalId)
+      if (enableExpr !== '1') {
+        conditions.push(enableExpr)
+      }
+    }
+
+    if (this.hasSampleScopes) {
+      const sampleExpr = this.generateSampleHitCheck(block)
+      if (sampleExpr !== '1') {
+        conditions.push(sampleExpr)
+      }
+    }
+
+    if (conditions.length === 0) {
+      return computation
+    }
+
+    const cond =
+      conditions.length === 1 ? conditions[0]! : conditions.join(' && ')
+    let code = `    if (${cond}) {\n`
+    code += CCodeBuilder.indent(computation, 2)
+    if (!code.endsWith('\n')) code += '\n'
+    code += '    }\n'
+    return code
+  }
+
+  /**
+   * RTW-style sample hit: tick % round(period/dt) == 0.
+   * sample_tick is steps since t=0 (0 on first algebra).
+   */
+  private generateSampleHitCheck(block: FlattenedBlock): string {
+    const period = block.sampleScope
+    if (typeof period !== 'number' || !(period > 0)) {
+      return '1'
+    }
+    // Integer steps per period from live dt (Saturn dt=0.005 → 1.6→320, 0.04→8, 0.8→160)
+    return `(model->sample_tick % (unsigned long long)llround((${period}) / model->dt) == 0ULL)`
   }
   
   /**
@@ -293,11 +470,7 @@ export class AlgebraicEvaluator {
             const inputExpression = inputs[0]
             const inputType = this.getBlockInputTypes(block)[0] || 'double'
 
-            // Create a modified block with the flattened name
-            const blockWithFlattenedName = {
-              ...block.block,
-              name: block.flattenedName
-            }
+            const blockWithFlattenedName = withFlattenedSampleParams(block)
 
             // Generate sample storage code
             if (generator.generateSampleStorage) {

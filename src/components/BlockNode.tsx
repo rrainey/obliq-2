@@ -531,6 +531,7 @@ const getBlockSymbol = (data: BlockNodeData) => {
     'divide': '÷',
     'scale': data.parameters?.gain || 'K',
     'abs': '|x|',
+    'square': 'x²',
     'uminus': '-x',
     'sign': 'sgn',
     'input_port': '▶',

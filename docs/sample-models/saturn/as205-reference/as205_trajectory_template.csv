@@ -1,5 +1,0 @@
-# AS-205 reference trajectory CSV (TN-AP-67-158)
-# Units: SI — t_s [s from liftoff], h_m [m], v_mps [m/s], gamma_rad [rad], mass_kg [kg], qbar_Pa [Pa]
-# Fill from TN tables; do not treat Simulink as authoritative.
-# source_note: e.g. "TN-AP-67-158 p.XX table Y"
-t_s,h_m,v_mps,gamma_rad,mass_kg,qbar_Pa,source_note

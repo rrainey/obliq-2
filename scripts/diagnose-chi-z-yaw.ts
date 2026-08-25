@@ -4,13 +4,13 @@
  *
  * Usage:
  *   npx --yes tsx scripts/diagnose-chi-z-yaw.ts \
- *     [--out examples/saturn-ib/chi-z-yaw-diagnose.csv]
+ *     [--out ../viper/lib_SaturnIBObliq/artifacts/chi-z-yaw-diagnose.csv]
  */
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { igmChiYZFromUnitVector } from '../examples/saturn-ib/igmChiAssembly'
-import { chiToPsiDeg } from '../examples/saturn-ib/igmChiToPsi'
+import { igmChiYZFromUnitVector } from '../../viper/lib_SaturnIBObliq/ts/igmChiAssembly'
+import { chiToPsiDeg } from '../../viper/lib_SaturnIBObliq/ts/igmChiToPsi'
 
 const RAD2DEG = 180 / Math.PI
 

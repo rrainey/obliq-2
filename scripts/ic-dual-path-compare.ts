@@ -18,13 +18,13 @@ import {
   mat3MulVec,
   mat3Transpose,
   type Mat3
-} from '../examples/saturn-ib/as205Mes'
+} from '../../viper/lib_SaturnIBObliq/ts/as205Mes'
 import {
   as205DefaultPadStateEci,
   dcmToQuat
-} from '../examples/saturn-ib/as205EciPlant'
-import { as205SimulinkPadStateS } from '../examples/saturn-ib/as205InitialPosition'
-import { AS205_PAD, type Vec3 } from '../examples/saturn-ib/as205PadFrames'
+} from '../../viper/lib_SaturnIBObliq/ts/as205EciPlant'
+import { as205SimulinkPadStateS } from '../../viper/lib_SaturnIBObliq/ts/as205InitialPosition'
+import { AS205_PAD, type Vec3 } from '../../viper/lib_SaturnIBObliq/ts/as205PadFrames'
 
 const WGS84_A = 6378137.0
 const WGS84_E2 = 6.6943800042608068e-3

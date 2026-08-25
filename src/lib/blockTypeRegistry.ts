@@ -27,6 +27,7 @@ export const BlockTypes = {
   DIVIDE: 'divide',
   SCALE: 'scale',
   ABS: 'abs',
+  SQUARE: 'square',
   UMINUS: 'uminus',
   SIGN: 'sign',
   EVALUATE: 'evaluate',
@@ -522,6 +523,16 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [{ name: 'input' }],
     outputs: [{ name: 'output' }],
     description: 'Absolute value of scalar input'
+  },
+
+  [BlockTypes.SQUARE]: {
+    type: BlockTypes.SQUARE,
+    displayName: 'Square (x²)',
+    category: 'Math',
+    defaultParameters: {},
+    inputs: [{ name: 'in' }],
+    outputs: [{ name: 'out' }],
+    description: 'Element-wise square: y = u² (scalar, vector, or matrix)'
   },
 
   [BlockTypes.UMINUS]: {

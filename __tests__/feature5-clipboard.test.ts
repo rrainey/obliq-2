@@ -518,7 +518,7 @@ describe('Feature 5: Block Cut/Copy and Paste', () => {
 
       const state = useModelStore.getState()
       const pastedBlock = state.blocks.find(b => b.id !== 'existing' && b.type === 'source')
-      expect(pastedBlock!.name).toBe('Source2')
+      expect(pastedBlock!.name).toBe('Source1_2')
     })
 
     test('paste generates sequential names for multiple duplicates', () => {
@@ -549,10 +549,10 @@ describe('Feature 5: Block Cut/Copy and Paste', () => {
       const state = useModelStore.getState()
       const pastedBlocks = state.blocks.filter(b => b.id !== 'e1' && b.id !== 'e2')
       const names = pastedBlocks.map(b => b.name).sort()
-      expect(names).toEqual(['Source3', 'Source4'])
+      expect(names).toEqual(['Source1_2', 'Source2_2'])
     })
 
-    test('paste handles gaps in existing numbering', () => {
+    test('paste suffixes original name even when other numbered names exist', () => {
       const clipboardData: ClipboardData = {
         version: '1.0',
         timestamp: Date.now(),
@@ -578,9 +578,83 @@ describe('Feature 5: Block Cut/Copy and Paste', () => {
 
       const state = useModelStore.getState()
       const pastedBlock = state.blocks.find(b => b.id !== 'e1' && b.id !== 'e2')
-      // Should get Source3 based on count (2 existing sources + 1), but Source3 exists
-      // So it should increment to Source4
-      expect(pastedBlock!.name).toBe('Source4')
+      // Keep original stem; only suffix when that exact name is taken
+      expect(pastedBlock!.name).toBe('Source1_2')
+    })
+  })
+
+  describe('Nested subsystem ID remapping', () => {
+    test('paste remaps nested ids so a second paste does not collide', () => {
+      const nestedId = 'subsystem_1429'
+      const makeSub = (rootId: string): BlockData => ({
+        id: rootId,
+        type: 'subsystem',
+        name: 'S_IB',
+        position: { x: 0, y: 0 },
+        parameters: {
+          sheets: [
+            {
+              id: 'inner_sheet',
+              name: 'Inner',
+              extents: { width: 400, height: 300 },
+              blocks: [
+                {
+                  id: nestedId,
+                  type: 'sum',
+                  name: 'Add2',
+                  position: { x: 10, y: 10 },
+                  parameters: {},
+                },
+              ],
+              connections: [],
+            },
+          ],
+        },
+      })
+
+      const clipboardData: ClipboardData = {
+        version: '1.0',
+        timestamp: Date.now(),
+        blocks: [makeSub('sub_root')],
+        wires: [],
+        dependencies: { parameters: [] },
+      }
+
+      // Target already has the nested id from a prior import
+      useModelStore.setState({
+        clipboardData,
+        blocks: [makeSub('existing_sub')],
+        wires: [],
+        sheets: [
+          {
+            id: 'main',
+            name: 'Main',
+            blocks: [makeSub('existing_sub')],
+            connections: [],
+            extents: { width: 1000, height: 800 },
+          },
+        ],
+        activeSheetId: 'main',
+      })
+
+      const { pasteFromClipboard } = useModelStore.getState()
+      const result = pasteFromClipboard()
+      expect(result.success).toBe(true)
+
+      const state = useModelStore.getState()
+      const pasted = state.blocks.find(b => b.id !== 'existing_sub')
+      expect(pasted).toBeDefined()
+      const inner = (pasted!.parameters?.sheets as any[])[0]
+      expect(inner.blocks[0].id).not.toBe(nestedId)
+
+      const allIds = new Set<string>()
+      for (const b of state.blocks) {
+        allIds.add(b.id)
+        for (const sh of (b.parameters?.sheets as any[]) || []) {
+          for (const ib of sh.blocks || []) allIds.add(ib.id)
+        }
+      }
+      expect(allIds.size).toBe(4) // existing_sub + nested + pasted_sub + pasted_nested
     })
   })
 

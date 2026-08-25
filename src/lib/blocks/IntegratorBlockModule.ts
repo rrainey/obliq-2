@@ -19,7 +19,7 @@
 
 import { BlockData } from '@/components/BlockNode'
 import { BlockState, SimulationState } from '@/lib/simulationTypes'
-import { IBlockModule, BlockModuleUtils } from './BlockModule'
+import { IBlockModule, BlockModuleUtils, CodeGenContext } from './BlockModule'
 
 export class IntegratorBlockModule implements IBlockModule {
   /**
@@ -27,7 +27,12 @@ export class IntegratorBlockModule implements IBlockModule {
    * State integration is handled by StateIntegrator (Euler/RK4).
    * Also handles reset logic which affects state but not integration method.
    */
-  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
+  generateComputation(
+    block: BlockData,
+    inputs: string[],
+    inputTypes?: string[],
+    context?: CodeGenContext
+  ): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     const intName = BlockModuleUtils.sanitizeIdentifier(block.name)
     const {
@@ -62,6 +67,34 @@ export class IntegratorBlockModule implements IBlockModule {
     let resetExpr: string | undefined
     if (showResetInput) {
       resetExpr = inputs[nextIndex]
+    }
+
+    // RTW IcNeedsLoading: load live x(0) only while the enable scope is active.
+    // Integrators publish state→signal even when disabled, so this must be gated
+    // here (not via the usual algebra enable wrap).
+    if (showInitPort && initExpr) {
+      const enableExpr = context?.enableExpr && context.enableExpr !== '1'
+        ? context.enableExpr
+        : null
+      const loadIndent = enableExpr ? '        ' : '    '
+      code += `    /* IcNeedsLoading: defer x(0) until first enabled evaluation */\n`
+      if (enableExpr) {
+        code += `    if (${enableExpr} && model->states.${intName}_ic_needs_loading) {\n`
+      } else {
+        code += `    if (model->states.${intName}_ic_needs_loading) {\n`
+      }
+      code += this.generateStateAssignFromSource(
+        intName,
+        typeInfo,
+        initExpr,
+        initialValue,
+        useLimits,
+        lowerLimit,
+        upperLimit,
+        loadIndent
+      )
+      code += `${loadIndent}model->states.${intName}_ic_needs_loading = 0;\n`
+      code += `    }\n`
     }
 
     // Reset logic (rising edge detection)
@@ -124,9 +157,14 @@ export class IntegratorBlockModule implements IBlockModule {
       return expr
     }
 
+    // AlgebraicEvaluator falls back to '0.0' when x(0) is unconnected. That is a
+    // scalar literal — must not emit 0.0[i] / 0.0[i][j] for vector/matrix states.
+    const isScalarLiteral =
+      !!initExpr && /^-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(initExpr.trim())
+
     let code = ''
-    if (initExpr) {
-      // Live x(0) signal
+    if (initExpr && !isScalarLiteral) {
+      // Live x(0) signal (array/matrix or scalar signal expression)
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
         code += `${indent}for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
         code += `${indent}    for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
@@ -136,6 +174,21 @@ export class IntegratorBlockModule implements IBlockModule {
       } else if (typeInfo.isArray && typeInfo.arraySize) {
         code += `${indent}for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
         code += `${indent}    model->states.${intName}_states[i] = ${clamp(`${initExpr}[i]`)};\n`
+        code += `${indent}}\n`
+      } else {
+        code += `${indent}model->states.${intName}_states[0] = ${clamp(initExpr)};\n`
+      }
+    } else if (initExpr && isScalarLiteral) {
+      // Unconnected / constant scalar x(0): broadcast to all elements
+      if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
+        code += `${indent}for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
+        code += `${indent}    for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
+        code += `${indent}        model->states.${intName}_states[i][j] = ${clamp(initExpr)};\n`
+        code += `${indent}    }\n`
+        code += `${indent}}\n`
+      } else if (typeInfo.isArray && typeInfo.arraySize) {
+        code += `${indent}for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
+        code += `${indent}    model->states.${intName}_states[i] = ${clamp(initExpr)};\n`
         code += `${indent}}\n`
       } else {
         code += `${indent}model->states.${intName}_states[0] = ${clamp(initExpr)};\n`
@@ -274,7 +327,7 @@ export class IntegratorBlockModule implements IBlockModule {
     const intName = BlockModuleUtils.sanitizeIdentifier(block.name)
     const typeInfo = BlockModuleUtils.parseType(outputType)
     const members: string[] = []
-    const { showResetInput = false } = block.parameters || {}
+    const { showResetInput = false, showInitPort = false } = block.parameters || {}
 
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       members.push(`    double ${intName}_states[${typeInfo.rows}][${typeInfo.cols}];`)
@@ -282,6 +335,11 @@ export class IntegratorBlockModule implements IBlockModule {
       members.push(`    double ${intName}_states[${typeInfo.arraySize}];`)
     } else {
       members.push(`    double ${intName}_states[1];`)
+    }
+
+    if (showInitPort) {
+      // RTW IcNeedsLoading: defer x(0) copy until first enabled evaluation
+      members.push(`    int ${intName}_ic_needs_loading;`)
     }
 
     if (showResetInput) {
@@ -312,32 +370,13 @@ export class IntegratorBlockModule implements IBlockModule {
       return String(val)
     }
 
-    const getClampedExpr = (expr: string): string => {
-      if (useLimits && isFinite(lowerLimit) && isFinite(upperLimit)) {
-        return `fmax(${lowerLimit}, fmin(${upperLimit}, ${expr}))`
-      }
-      return expr
-    }
-
-    // showInitPort: initialize from x(0) signal expression (port 1) when connected
-    if (showInitPort && initSignalExpr) {
-      code += `    // Initialize ${intName}_states from x(0) port signal\n`
-      if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-        code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
-        code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
-        code += `            model->states.${intName}_states[i][j] = ${getClampedExpr(`${initSignalExpr}[i][j]`)};\n`
-        code += `        }\n`
-        code += `    }\n`
-      } else if (typeInfo.isArray && typeInfo.arraySize) {
-        code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-        code += `        model->states.${intName}_states[i] = ${getClampedExpr(`${initSignalExpr}[i]`)};\n`
-        code += `    }\n`
-      } else {
-        code += `    model->states.${intName}_states[0] = ${getClampedExpr(initSignalExpr)};\n`
-      }
-    } else if (showInitPort) {
-      // Init port enabled but not connected — use 0
-      code += `    // Initialize ${intName}_states to 0 (x(0) port not connected)\n`
+    // showInitPort: RTW IcNeedsLoading — do NOT eagerly copy x(0) here.
+    // Seed state to 0 and set the flag; generateComputation loads live x(0)
+    // on the first enabled algebraic evaluation (handoff for disabled stages).
+    // initSignalExpr is intentionally unused at init/reseed time.
+    void initSignalExpr
+    if (showInitPort) {
+      code += `    /* IcNeedsLoading: defer x(0) for ${intName}; load when enabled */\n`
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
         for (let i = 0; i < typeInfo.rows; i++) {
           for (let j = 0; j < typeInfo.cols; j++) {
@@ -351,6 +390,7 @@ export class IntegratorBlockModule implements IBlockModule {
       } else {
         code += `    model->states.${intName}_states[0] = 0.0;\n`
       }
+      code += `    model->states.${intName}_ic_needs_loading = 1;\n`
     } else {
       // Static initial value from parameters
       const scalarInitial = typeof initialValue === 'number' ? initialValue : 0
@@ -445,7 +485,8 @@ export class IntegratorBlockModule implements IBlockModule {
 
   isDirectFeedthrough(block: BlockData): boolean {
     // Output is integrated state, not a direct function of derivative input.
-    // Note: when showInitPort is on, x(0) is only used at init and on reset, not continuously.
+    // Note: when showInitPort is on, x(0) is sampled on first enabled eval
+    // (IcNeedsLoading) and on reset — not continuously.
     return false
   }
 

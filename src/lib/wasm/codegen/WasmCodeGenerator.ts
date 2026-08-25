@@ -571,6 +571,7 @@ export class WasmCodeGenerator extends CodeGenerator {
     // Global model instance
     wrapper += `// Global model instance
 static ${sanitizedName}_t ${sanitizedName}_instance = {0};
+static int ${sanitizedName}_wasm_needs_seed = 1;
 
 `
 
@@ -658,6 +659,7 @@ static ${sanitizedName}_t ${sanitizedName}_instance = {0};
     return `// Initialize the model with a given timestep
 ${keepalive}void wasm_init(double dt) {
     ${modelName}_init(&${modelName}_instance, dt);
+    ${modelName}_wasm_needs_seed = 1;
 }
 
 `
@@ -808,6 +810,11 @@ ${keepalive}double wasm_get_output(int index) {
 ${keepalive}void wasm_step(double dt) {
     // Update dt if changed
     ${modelName}_instance.dt = dt;
+    /* After ExtU is set (and after init), seed algebra/enables/ICs once */
+    if (${modelName}_wasm_needs_seed) {
+        ${modelName}_seed_from_inputs(&${modelName}_instance);
+        ${modelName}_wasm_needs_seed = 0;
+    }
     ${modelName}_step(&${modelName}_instance);
 }
 

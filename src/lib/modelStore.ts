@@ -16,6 +16,11 @@ import {
   serializeClipboard,
   deserializeClipboard,
 } from '@/types/clipboard'
+import {
+  collectIdsFromSheets,
+  collectNamesFromBlocks,
+  remapClipboardSelection,
+} from '@/lib/clipboardRemap'
 
 export interface Sheet {
   id: string
@@ -81,8 +86,8 @@ export interface ModelActions {
   setIsOlderVersion: (isOlder: boolean) => void
   setError: (error: string | null) => void
   setModelLoading: (loading: boolean) => void
-  saveModel: (globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => Promise<boolean>
-  saveAsNewModel: (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => Promise<string | null>
+  saveModel: (globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4'; debugMath?: boolean }) => Promise<boolean>
+  saveAsNewModel: (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4'; debugMath?: boolean }) => Promise<string | null>
   saveAutoSave: () => Promise<boolean>
   deleteAutoSave: () => Promise<void>
   enableAutoSave: () => void
@@ -278,7 +283,7 @@ export const useModelStore = create<ModelStore>()(
     setError: (error) => set({ error }),
     setModelLoading: (modelLoading) => set({ modelLoading }),
     
-    saveModel: async (globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => {
+    saveModel: async (globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4'; debugMath?: boolean }) => {
       const state = get()
 
       if (!state.model) {
@@ -326,7 +331,8 @@ export const useModelStore = create<ModelStore>()(
           globalSettings: {
             simulationTimeStep: globalSettings?.simulationTimeStep ?? 0.01,
             simulationDuration: globalSettings?.simulationDuration ?? 10.0,
-            integrationAlgorithm: globalSettings?.integrationAlgorithm ?? 'rk4'
+            integrationAlgorithm: globalSettings?.integrationAlgorithm ?? 'rk4',
+            debugMath: globalSettings?.debugMath ?? false
           },
           parameters: updatedState.parameters,  // Feature 1: Include parameters
           dataStores: (updatedState as any).dataStores || []
@@ -405,7 +411,7 @@ export const useModelStore = create<ModelStore>()(
       }
     },
 
-    saveAsNewModel: async (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4' }) => {
+    saveAsNewModel: async (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4'; debugMath?: boolean }) => {
       const state = get()
 
       if (!state.model) {
@@ -435,7 +441,8 @@ export const useModelStore = create<ModelStore>()(
           globalSettings: {
             simulationTimeStep: globalSettings?.simulationTimeStep ?? 0.01,
             simulationDuration: globalSettings?.simulationDuration ?? 10.0,
-            integrationAlgorithm: globalSettings?.integrationAlgorithm ?? 'rk4'
+            integrationAlgorithm: globalSettings?.integrationAlgorithm ?? 'rk4',
+            debugMath: globalSettings?.debugMath ?? false
           },
           parameters: updatedState.parameters  // Feature 1: Include parameters
         }
@@ -1258,68 +1265,31 @@ export const useModelStore = create<ModelStore>()(
         baseOffset = { x: 20, y: 20 }
       }
 
-      // Generate new IDs and map old -> new
-      const blockIdMap = new Map<string, string>()
-      const wireIdMap = new Map<string, string>()
+      // Deep-remap ids (including nested subsystem sheets) and uniquify names
+      // against the entire destination model so paste never collides with
+      // existing React keys / flatten ids.
+      const existingIds = collectIdsFromSheets(state.sheets)
+      // Current canvas may be ahead of sheets[] until saveCurrentSheetData —
+      // include live blocks/wires too.
+      for (const b of state.blocks) existingIds.add(b.id)
+      for (const w of state.wires) existingIds.add(w.id)
+      const nestedFromLive = collectIdsFromSheets([
+        {
+          id: state.activeSheetId || 'active',
+          name: 'active',
+          blocks: state.blocks,
+          connections: state.wires,
+          extents: { width: 0, height: 0 },
+        },
+      ])
+      for (const id of nestedFromLive) existingIds.add(id)
 
-      // Build a set of existing block names for duplicate detection
-      const existingNames = new Set(state.blocks.map(b => b.name))
-
-      // Helper to generate a unique block name
-      const generateUniqueName = (blockType: string, originalName: string): string => {
-        // If the original name doesn't conflict, keep it
-        if (!existingNames.has(originalName)) {
-          existingNames.add(originalName)  // Reserve this name
-          return originalName
-        }
-
-        // Generate a new name: <BlockType><next index>
-        const baseName = blockType.charAt(0).toUpperCase() + blockType.slice(1).replace('_', ' ')
-        let index = state.blocks.filter(b => b.type === blockType).length + 1
-
-        // Find the next available index
-        let newName = `${baseName}${index}`
-        while (existingNames.has(newName)) {
-          index++
-          newName = `${baseName}${index}`
-        }
-
-        existingNames.add(newName)  // Reserve this name
-        return newName
-      }
-
-      // Clone and transform blocks
-      const newBlocks: BlockData[] = clipboardData.blocks.map(block => {
-        const newId = `${block.type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        blockIdMap.set(block.id, newId)
-
-        // Generate unique name if there's a conflict
-        const newName = generateUniqueName(block.type, block.name)
-
-        const newBlock: BlockData = {
-          ...JSON.parse(JSON.stringify(block)), // Deep clone
-          id: newId,
-          name: newName,
-          position: {
-            x: block.position.x + baseOffset.x,
-            y: block.position.y + baseOffset.y,
-          },
-        }
-
-        return newBlock
-      })
-
-      // Clone and remap wires
-      const newWires: WireData[] = clipboardData.wires.map(wire => {
-        const newId = `wire_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        wireIdMap.set(wire.id, newId)
-
-        return {
-          ...wire,
-          id: newId,
-          sourceBlockId: blockIdMap.get(wire.sourceBlockId) || wire.sourceBlockId,
-          targetBlockId: blockIdMap.get(wire.targetBlockId) || wire.targetBlockId,
-        }
+      const { blocks: newBlocks, wires: newWires } = remapClipboardSelection({
+        blocks: clipboardData.blocks,
+        wires: clipboardData.wires,
+        existingIds,
+        existingNames: collectNamesFromBlocks(state.blocks),
+        positionOffset: baseOffset,
       })
 
       // Add blocks and wires to current sheet

@@ -255,6 +255,15 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     outputs: ['output']
   },
   {
+    type: 'square',
+    displayName: 'Square (x²)',
+    category: 'Math',
+    description: 'Element-wise square: y = u² (scalar, vector, or matrix)',
+    parameters: {},
+    inputs: ['in'],
+    outputs: ['out']
+  },
+  {
     type: 'uminus',
     displayName: 'Unary Minus',
     category: 'Math',

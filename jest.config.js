@@ -15,6 +15,9 @@ const config = {
   // Add more setup options before each test is run
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
+    "^mdl2obliq$": "<rootDir>/../mdl2obliq/src/index.ts",
+    "^mdl2obliq/(.*)$": "<rootDir>/../mdl2obliq/src/$1",
+
     // Handle module aliases (same as in tsconfig.json)
     '^@/(.*)$': '<rootDir>/$1',
   },

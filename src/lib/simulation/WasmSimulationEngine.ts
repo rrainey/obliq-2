@@ -479,8 +479,27 @@ export class WasmSimulationEngine {
 
     const timestep = dt ?? this.state.timeStep
 
-    // Execute simulation step
-    this.module._wasm_step(timestep)
+    // Execute simulation step (abort()/math traps surface as WebAssembly.RuntimeError)
+    try {
+      this.module._wasm_step(timestep)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      const t = (() => {
+        try {
+          return this.module?._wasm_get_time?.()
+        } catch {
+          return undefined
+        }
+      })()
+      const hint =
+        /abort|RuntimeError|divide|remainder|OBLIQ_DEBUG_MATH|null/i.test(msg)
+          ? ' (often divide/mod-by-zero or non-finite RK4 derivative; rebuild with debugMath / --debug-math)'
+          : ''
+      throw new Error(
+        `WASM simulation step failed${t !== undefined ? ` at t≈${t}` : ''}: ${msg}${hint}`,
+        { cause: err instanceof Error ? err : undefined }
+      )
+    }
 
     // Update time
     this.state.time = this.module._wasm_get_time()

@@ -14,6 +14,9 @@ export interface StateIntegratorOptions {
   
   /** Whether to check enable states during integration */
   checkEnableStates?: boolean
+
+  /** Emit isfinite checks on RK4 k1..k4 (OBLIQ_DEBUG_MATH) */
+  debugMath?: boolean
 }
 
 /**
@@ -36,7 +39,8 @@ export class StateIntegrator {
     this.typeMap = typeMap
     this.options = {
       includeComments: options.includeComments ?? true,
-      checkEnableStates: options.checkEnableStates ?? true
+      checkEnableStates: options.checkEnableStates ?? true,
+      debugMath: options.debugMath ?? false
     }
   }
   
@@ -89,7 +93,9 @@ export class StateIntegrator {
     code += '        model,\n'
     code += '        &model->states,\n'
     code += '        &derivatives\n'
-    code += '    );\n\n'
+    code += '    );\n'
+    code += this.generateFiniteAssertCall('derivatives', 'model->time')
+    code += '\n'
 
     // Then update states
     code += '    /* Update states using Euler method */\n'
@@ -349,7 +355,9 @@ export class StateIntegrator {
     code += '        model,\n'
     code += '        &model->states,\n'
     code += '        &k1\n'
-    code += '    );\n\n'
+    code += '    );\n'
+    code += this.generateFiniteAssertCall('k1', 'model->time')
+    code += '\n'
 
     // k2 = f(t + h/2, y + h/2 * k1)
     code += '    /* Calculate k2 = f(t + h/2, y + h/2 * k1) */\n'
@@ -360,7 +368,9 @@ export class StateIntegrator {
     code += '        model,\n'
     code += '        &temp_states,\n'
     code += '        &k2\n'
-    code += '    );\n\n'
+    code += '    );\n'
+    code += this.generateFiniteAssertCall('k2', 'model->time + half_h')
+    code += '\n'
 
     // k3 = f(t + h/2, y + h/2 * k2)
     code += '    /* Calculate k3 = f(t + h/2, y + h/2 * k2) */\n'
@@ -371,7 +381,9 @@ export class StateIntegrator {
     code += '        model,\n'
     code += '        &temp_states,\n'
     code += '        &k3\n'
-    code += '    );\n\n'
+    code += '    );\n'
+    code += this.generateFiniteAssertCall('k3', 'model->time + half_h')
+    code += '\n'
 
     // k4 = f(t + h, y + h * k3)
     code += '    /* Calculate k4 = f(t + h, y + h * k3) */\n'
@@ -382,12 +394,125 @@ export class StateIntegrator {
     code += '        model,\n'
     code += '        &temp_states,\n'
     code += '        &k4\n'
-    code += '    );\n\n'
+    code += '    );\n'
+    code += this.generateFiniteAssertCall('k4', 'model->time + h')
+    code += '\n'
     
     // Update states using RK4 formula
     code += '    /* Update states using RK4 formula: y[n+1] = y[n] + h/6 * (k1 + 2*k2 + 2*k3 + k4) */\n'
     code += this.generateRK4FinalUpdate(statefulBlocks)
     
+    return code
+  }
+
+  /**
+   * Emit a call to the finite-assert helper after an RK4 stage (no-op if debugMath off).
+   */
+  private generateFiniteAssertCall(stageVar: string, timeExpr: string): string {
+    if (!this.options.debugMath) return ''
+    return `    ${this.modelName}_assert_states_finite(&${stageVar}, "${stageVar}", ${timeExpr});\n`
+  }
+
+  /**
+   * Generate ${model}_assert_states_finite — field-wise isfinite checks for derivatives.
+   */
+  generateFiniteAssertFunction(): string {
+    if (!this.options.debugMath) return ''
+    // No derivatives to check (algebraic-only models)
+    if (!this.hasStatefulBlocks()) return ''
+
+    let code = CCodeBuilder.generateCommentBlock([
+      'OBLIQ_DEBUG_MATH: abort if any derivative component is non-finite',
+      'Called after each RK4 stage (k1..k4)'
+    ])
+    code += `static void ${this.modelName}_assert_states_finite(const ${this.modelName}_states_t* s, const char* stage, double t) {\n`
+
+    for (const block of this.getStatefulBlocks()) {
+      const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
+      const typeInfo = this.getBlockTypeInfo(block)
+      const stateOrder = this.getBlockStateOrder(block)
+      const simplified = this.usesSimplifiedStateAccess(block)
+      const field = `${safeName}_states`
+
+      if (stateOrder <= 0) continue
+
+      if (typeInfo.isMatrix) {
+        const [rows, cols] = typeInfo.dimensions
+        code += `    for (int i = 0; i < ${rows}; i++) {\n`
+        code += `        for (int j = 0; j < ${cols}; j++) {\n`
+        if (simplified) {
+          code += `            OBLIQ_CHECK_FINITE(s->${field}[i][j], stage, t, "${field}");\n`
+        } else {
+          code += `            for (int k = 0; k < ${stateOrder}; k++) {\n`
+          code += `                OBLIQ_CHECK_FINITE(s->${field}[i][j][k], stage, t, "${field}");\n`
+          code += `            }\n`
+        }
+        code += `        }\n`
+        code += `    }\n`
+      } else if (typeInfo.isVector) {
+        const size = typeInfo.dimensions[0]
+        code += `    for (int i = 0; i < ${size}; i++) {\n`
+        if (simplified) {
+          code += `        OBLIQ_CHECK_FINITE(s->${field}[i], stage, t, "${field}");\n`
+        } else {
+          code += `        for (int j = 0; j < ${stateOrder}; j++) {\n`
+          code += `            OBLIQ_CHECK_FINITE(s->${field}[i][j], stage, t, "${field}");\n`
+          code += `        }\n`
+        }
+        code += `    }\n`
+      } else {
+        code += `    for (int i = 0; i < ${stateOrder}; i++) {\n`
+        code += `        OBLIQ_CHECK_FINITE(s->${field}[i], stage, t, "${field}");\n`
+        code += `    }\n`
+      }
+    }
+
+    // Segregated subsystem derivative fields live under s->SubName.*
+    for (const sub of this.getStatefulSubsystems()) {
+      const subName = sub.sanitizedName
+      for (const block of this.getSubsystemStatefulBlocks(sub)) {
+        const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName || block.block.name)
+        const typeInfo = this.getSubsystemBlockTypeInfo(sub, block)
+        const stateOrder = this.getBlockStateOrder(block)
+        const simplified = this.usesSimplifiedStateAccess(block)
+        const field = `${safeName}_states`
+        const path = `${subName}.${field}`
+
+        if (stateOrder <= 0) continue
+
+        if (typeInfo.isMatrix) {
+          const [rows, cols] = typeInfo.dimensions
+          code += `    for (int i = 0; i < ${rows}; i++) {\n`
+          code += `        for (int j = 0; j < ${cols}; j++) {\n`
+          if (simplified) {
+            code += `            OBLIQ_CHECK_FINITE(s->${path}[i][j], stage, t, "${path}");\n`
+          } else {
+            code += `            for (int k = 0; k < ${stateOrder}; k++) {\n`
+            code += `                OBLIQ_CHECK_FINITE(s->${path}[i][j][k], stage, t, "${path}");\n`
+            code += `            }\n`
+          }
+          code += `        }\n`
+          code += `    }\n`
+        } else if (typeInfo.isVector) {
+          const size = typeInfo.dimensions[0]
+          code += `    for (int i = 0; i < ${size}; i++) {\n`
+          if (simplified) {
+            code += `        OBLIQ_CHECK_FINITE(s->${path}[i], stage, t, "${path}");\n`
+          } else {
+            code += `        for (int j = 0; j < ${stateOrder}; j++) {\n`
+            code += `            OBLIQ_CHECK_FINITE(s->${path}[i][j], stage, t, "${path}");\n`
+            code += `        }\n`
+          }
+          code += `    }\n`
+        } else {
+          code += `    for (int i = 0; i < ${stateOrder}; i++) {\n`
+          code += `        OBLIQ_CHECK_FINITE(s->${path}[i], stage, t, "${path}");\n`
+          code += `    }\n`
+        }
+      }
+    }
+
+    code += '}\n'
     return code
   }
   

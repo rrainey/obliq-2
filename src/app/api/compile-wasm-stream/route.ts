@@ -210,8 +210,13 @@ export async function POST(request: NextRequest) {
 
         const sheets = versionData.data.sheets
         const parameters = versionData.data.parameters || [] // Feature 3
+        const debugMath = !!versionData.data.globalSettings?.debugMath
 
-        const cacheKey = generateCacheKey(modelId, { sheets, parameters }, { optimizationLevel, enableSimd })
+        const cacheKey = generateCacheKey(modelId, { sheets, parameters }, {
+          optimizationLevel,
+          enableSimd,
+          includeDebugInfo: debugMath
+        })
         console.log(`[compile-wasm-stream] Generated cache key: ${cacheKey}`)
 
         const cacheManager = new SupabaseCacheManager()
@@ -300,7 +305,12 @@ export async function POST(request: NextRequest) {
           const generator = new WasmCodeGenerator({
             modelName: sanitizeModelName(model.name),
             includeEmscriptenExports: true,
-            includeDebugFunctions: false
+            includeDebugFunctions: false,
+            debugMath,
+            integrationAlgorithm:
+              versionData.data.globalSettings?.integrationAlgorithm === 'euler'
+                ? 'euler'
+                : 'rk4'
           })
 
           generatedCode = generator.generateWasm(sheets, parameters)

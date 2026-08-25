@@ -695,6 +695,131 @@ describe('Model Flattening', () => {
       const warnings = result.warnings.join(' ')
       expect(warnings).toContain('UnmatchedSignal')
     })
+
+    test('should preserve Inport→Outport passthrough inside a subsystem', () => {
+      // S-IB Attitude Rate Error pattern: filters are dead-ended; In1→Out1 bypass
+      const innerBlocks = [
+        createBlock('in1', 'input_port', 'In1', { portName: 'In1' }),
+        createBlock('out1', 'output_port', 'Out1', { portName: 'Out1' }),
+        createBlock('ground', 'source', 'Ground', { value: 0 }),
+        createBlock('dead', 'output_port', 'Dead', { portName: 'Dead' })
+      ]
+      const innerConns = [
+        createConnection('bypass', 'in1', 0, 'out1', 0),
+        createConnection('dead_w', 'ground', 0, 'dead', 0)
+      ]
+      const innerSheet = createSheet('inner', 'Inner', innerBlocks, innerConns)
+
+      const mainBlocks = [
+        createBlock('src', 'source', 'RateSrc', { value: 42 }),
+        createBlock('sub', 'subsystem', 'RateError', {
+          inputPorts: ['In1'],
+          outputPorts: ['Out1'],
+          sheets: [innerSheet]
+        }),
+        createBlock('sink', 'output_port', 'Sum14', { portName: 'Sum14' })
+      ]
+      const mainConns = [
+        createConnection('w1', 'src', 0, 'sub', 0),
+        createConnection('w2', 'sub', 0, 'sink', 0)
+      ]
+      const mainSheet = createSheet('main', 'Main', mainBlocks, mainConns)
+
+      const flattener = new ModelFlattener()
+      const result = flattener.flattenModel([mainSheet])
+
+      const src = result.model.blocks.find(b => b.block.name === 'RateSrc')
+      const sink = result.model.blocks.find(b => b.block.name === 'Sum14')
+      expect(src).toBeTruthy()
+      expect(sink).toBeTruthy()
+      const bridge = result.model.connections.find(
+        c =>
+          c.sourceBlockId === src!.originalId &&
+          c.targetBlockId === sink!.originalId
+      )
+      expect(bridge).toBeTruthy()
+    })
+
+    test('should transitively resolve From→Goto→From chains across subsystems', () => {
+      // S-IB pattern: plant → local Goto(Xe) ; From(Xe) → outport
+      // Root: S-IB.Xe → global Goto(Xe) ; nested From(Xe) → consumer
+      const plantBlocks = [
+        createBlock('plant', 'source', 'PlantXe', { value: 1 }),
+        createBlock('local_goto', 'sheet_label_sink', 'GotoXe', {
+          signalName: 'Xe_m',
+          tagVisibility: 'local'
+        }),
+        createBlock('local_from', 'sheet_label_source', 'FromXe', { signalName: 'Xe_m' }),
+        createBlock('xe_out', 'output_port', 'Xe_m', { portName: 'Xe_m' })
+      ]
+      const plantConns = [
+        createConnection('p1', 'plant', 0, 'local_goto', 0),
+        createConnection('p2', 'local_from', 0, 'xe_out', 0)
+      ]
+      const plantSheet = createSheet('plant', 'Plant', plantBlocks, plantConns)
+
+      const consumerBlocks = [
+        createBlock('nested_from', 'sheet_label_source', 'FromXeNested', {
+          signalName: 'Xe_m'
+        }),
+        createBlock('consumer', 'output_port', 'Consumer', { portName: 'Consumer' })
+      ]
+      const consumerConns = [
+        createConnection('c1', 'nested_from', 0, 'consumer', 0)
+      ]
+      const consumerSheet = createSheet(
+        'consumer',
+        'ConsumerSheet',
+        consumerBlocks,
+        consumerConns
+      )
+
+      const mainBlocks = [
+        createBlock('sib', 'subsystem', 'S_IB', {
+          inputPorts: [],
+          outputPorts: ['Xe_m'],
+          sheets: [plantSheet]
+        }),
+        createBlock('global_goto', 'sheet_label_sink', 'GotoXeGlobal', {
+          signalName: 'Xe_m',
+          tagVisibility: 'global'
+        }),
+        createBlock('iu', 'subsystem', 'IU', {
+          inputPorts: [],
+          outputPorts: ['Consumer'],
+          sheets: [consumerSheet]
+        }),
+        createBlock('main_out', 'output_port', 'MainOut', { portName: 'MainOut' })
+      ]
+      const mainConns = [
+        createConnection('m1', 'sib', 0, 'global_goto', 0),
+        createConnection('m2', 'iu', 0, 'main_out', 0)
+      ]
+      const mainSheet = createSheet('main', 'Main', mainBlocks, mainConns)
+
+      const flattener = new ModelFlattener()
+      const result = flattener.flattenModel([mainSheet])
+
+      const labels = result.model.blocks.filter(
+        b =>
+          b.block.type === 'sheet_label_sink' ||
+          b.block.type === 'sheet_label_source'
+      )
+      expect(labels).toHaveLength(0)
+
+      // Nested From must bridge to PlantXe (via IU outport → MainOut), not a
+      // stripped inner From id that would become algebra 0.0.
+      const plant = result.model.blocks.find(b => b.block.name === 'PlantXe')
+      const mainOut = result.model.blocks.find(b => b.block.name === 'MainOut')
+      expect(plant).toBeTruthy()
+      expect(mainOut).toBeTruthy()
+      const bridge = result.model.connections.find(
+        c =>
+          c.sourceBlockId === plant!.originalId &&
+          c.targetBlockId === mainOut!.originalId
+      )
+      expect(bridge).toBeTruthy()
+    })
   })
 
   describe('Connection Type Preservation', () => {

@@ -155,10 +155,12 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     duration: string
     timeStep: string
     integrationAlgorithm: 'euler' | 'rk4'
+    debugMath: boolean
   }>({
     duration: '10.0',
     timeStep: '0.01',
-    integrationAlgorithm: 'rk4'
+    integrationAlgorithm: 'rk4',
+    debugMath: false
   })
 
   // WASM compilation state
@@ -343,7 +345,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         setSimulationSettings({
           duration: versionData.data.globalSettings.simulationDuration?.toString() || '10.0',
           timeStep: versionData.data.globalSettings.simulationTimeStep?.toString() || '0.01',
-          integrationAlgorithm: versionData.data.globalSettings.integrationAlgorithm || 'rk4'
+          integrationAlgorithm: versionData.data.globalSettings.integrationAlgorithm || 'rk4',
+          debugMath: !!versionData.data.globalSettings.debugMath
         })
       }
       
@@ -404,7 +407,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           setSimulationSettings({
             duration: autoSaveData.data.globalSettings.simulationDuration?.toString() || '10.0',
             timeStep: autoSaveData.data.globalSettings.simulationTimeStep?.toString() || '0.01',
-            integrationAlgorithm: autoSaveData.data.globalSettings.integrationAlgorithm || 'rk4'
+            integrationAlgorithm: autoSaveData.data.globalSettings.integrationAlgorithm || 'rk4',
+            debugMath: !!autoSaveData.data.globalSettings.debugMath
           })
         }
       }
@@ -509,7 +513,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     const globalSettings = {
       simulationTimeStep: settingsValidation.timeStep,
       simulationDuration: settingsValidation.duration,
-      integrationAlgorithm: simulationSettings.integrationAlgorithm
+      integrationAlgorithm: simulationSettings.integrationAlgorithm,
+      debugMath: simulationSettings.debugMath
     }
 
     const success = await saveModel(globalSettings)
@@ -791,7 +796,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         globalSettings: {
           simulationTimeStep: Number.isFinite(timeStep) ? timeStep : 0.01,
           simulationDuration: Number.isFinite(duration) ? duration : 10,
-          integrationAlgorithm: simulationSettings.integrationAlgorithm || 'rk4'
+          integrationAlgorithm: simulationSettings.integrationAlgorithm || 'rk4',
+          debugMath: !!simulationSettings.debugMath
         }
       }
     }
@@ -1448,12 +1454,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }
 
-  const handleSimulationSettingsChange = useCallback((settings: { duration: string; timeStep: string; integrationAlgorithm?: 'euler' | 'rk4' }) => {
+  const handleSimulationSettingsChange = useCallback((settings: { duration: string; timeStep: string; integrationAlgorithm?: 'euler' | 'rk4'; debugMath?: boolean }) => {
     setSimulationSettings(prev => ({
       ...prev,
       duration: settings.duration,
       timeStep: settings.timeStep,
-      integrationAlgorithm: settings.integrationAlgorithm || prev.integrationAlgorithm
+      integrationAlgorithm: settings.integrationAlgorithm || prev.integrationAlgorithm,
+      debugMath: settings.debugMath ?? prev.debugMath
     }))
   }, [])
 
@@ -1826,6 +1833,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             initialDuration={parseFloat(simulationSettings.duration) || 10.0}
             initialTimeStep={parseFloat(simulationSettings.timeStep) || 0.01}
             initialIntegrationAlgorithm={simulationSettings.integrationAlgorithm}
+            initialDebugMath={simulationSettings.debugMath}
             onChange={handleSimulationSettingsChange}
             useWorker={useWorker}
             onWorkerChange={setUseWorker}

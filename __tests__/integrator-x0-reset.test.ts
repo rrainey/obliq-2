@@ -49,31 +49,89 @@ describe('Integrator x(0) and reset (P0)', () => {
     })
   })
 
-  describe('Initialization from x(0) (P0-I1)', () => {
-    test('generateInitialization uses initSignalExpr when showInitPort', () => {
+  describe('Initialization from x(0) (P0-I1 / IcNeedsLoading)', () => {
+    test('showInitPort defers x(0): zeros state and sets ic_needs_loading', () => {
       const code = module.generateInitialization(
         block({ showInitPort: true }),
         'double',
         'model->signals.IC_Source'
       )
-      expect(code).toContain('from x(0) port signal')
-      expect(code).toContain('model->signals.IC_Source')
+      expect(code).toContain('IcNeedsLoading')
+      expect(code).toContain('_states[0] = 0.0')
+      expect(code).toContain('_ic_needs_loading = 1')
+      // Must NOT eagerly copy live x(0) at init/reseed (disabled-stage handoff)
+      expect(code).not.toContain('model->signals.IC_Source')
       expect(code).not.toContain('= 7')
     })
 
-    test('generateInitialization uses 0 when showInitPort but no signal', () => {
+    test('showInitPort without signal still sets ic_needs_loading', () => {
       const code = module.generateInitialization(
         block({ showInitPort: true }),
         'double',
         undefined
       )
-      expect(code).toContain('x(0) port not connected')
       expect(code).toContain('_states[0] = 0.0')
+      expect(code).toContain('_ic_needs_loading = 1')
     })
 
     test('generateInitialization uses initialValue without showInitPort', () => {
       const code = module.generateInitialization(block({ initialValue: 3.5 }), 'double')
       expect(code).toContain('_states[0] = 3.5')
+      expect(code).not.toContain('ic_needs_loading')
+    })
+
+    test('showInitPort adds ic_needs_loading state member', () => {
+      const members = module.generateStateStructMembers(block({ showInitPort: true }), 'double')
+      expect(members.some(m => m.includes('_ic_needs_loading'))).toBe(true)
+    })
+  })
+
+  describe('IcNeedsLoading load on first enabled eval', () => {
+    test('loads live x(0) when flag set (always-enabled)', () => {
+      const code = module.generateComputation(
+        block({ showInitPort: true }),
+        ['model->signals.Deriv', 'model->signals.IC'],
+        ['double', 'double']
+      )
+      expect(code).toContain('ic_needs_loading')
+      expect(code).toContain('model->signals.IC')
+      expect(code).toContain('_ic_needs_loading = 0')
+      expect(code).not.toContain('enable_states')
+    })
+
+    test('gates x(0) load on enableExpr when in enabled subsystem', () => {
+      const code = module.generateComputation(
+        block({ showInitPort: true }),
+        ['model->signals.Deriv', 'model->signals.Sum_k'],
+        ['double', 'double'],
+        { enableExpr: 'model->enable_states.S_IVB_Stage_enabled' }
+      )
+      expect(code).toContain(
+        'model->enable_states.S_IVB_Stage_enabled && model->states.MyInt_ic_needs_loading'
+      )
+      expect(code).toContain('model->signals.Sum_k')
+      expect(code).toContain('_ic_needs_loading = 0')
+    })
+
+    test('vector IC load copies each element', () => {
+      const code = module.generateComputation(
+        block({ showInitPort: true }),
+        ['model->signals.Deriv', 'model->signals.Sum_k'],
+        ['double[3]', 'double[3]'],
+        { enableExpr: 'model->enable_states.Stage_enabled' }
+      )
+      expect(code).toContain('model->signals.Sum_k[i]')
+      expect(code).toContain('_ic_needs_loading = 0')
+    })
+
+    test('unconnected x(0) fallback 0.0 does not emit 0.0[i] for vectors', () => {
+      const code = module.generateComputation(
+        block({ showInitPort: true }),
+        ['model->signals.Deriv', '0.0'],
+        ['double[3]', 'double[3]']
+      )
+      expect(code).not.toContain('0.0[i]')
+      expect(code).toMatch(/_states\[i\] = 0\.0/)
     })
   })
 

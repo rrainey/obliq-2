@@ -48,14 +48,24 @@ export class SelectorBlockModule implements IBlockModule {
       return code
     }
 
-    if (inInfo.isMatrix) {
-      // v1: treat matrix as not fully supported — use row-major linear index if needed later
-      code += `    // Selector matrix input not supported in v1 — zeros\n`
+    if (inInfo.isMatrix && inInfo.rows && inInfo.cols) {
+      // Diagonal extract when every index is on-diagonal and in-range (EOM I[3][3] → Ixx/Iyy/Izz).
+      // Out-of-range indices (e.g. packed-İ slots 3..5 on a 3×3) → 0 (no Idot).
+      const n = Math.min(inInfo.rows, inInfo.cols)
+      code += `    // Selector: matrix diagonal extract / OOB→0 (${inInfo.rows}×${inInfo.cols})\n`
       if (indices.length === 1) {
-        code += `    ${outputName} = 0.0;\n`
+        const i = indices[0]!
+        code +=
+          i >= 0 && i < n
+            ? `    ${outputName} = ${inputExpr}[${i}][${i}];\n`
+            : `    ${outputName} = 0.0;\n`
       } else {
         for (let k = 0; k < indices.length; k++) {
-          code += `    ${outputName}[${k}] = 0.0;\n`
+          const i = indices[k]!
+          code +=
+            i >= 0 && i < n
+              ? `    ${outputName}[${k}] = ${inputExpr}[${i}][${i}];\n`
+              : `    ${outputName}[${k}] = 0.0;\n`
         }
       }
       return code
@@ -79,6 +89,7 @@ export class SelectorBlockModule implements IBlockModule {
     if (inputTypes.length > 0) {
       const parsed = BlockModuleUtils.parseType(inputTypes[0])
       baseType = parsed.baseType
+      // Matrix → diagonal (or OOB zeros) still yields scalar / vector of |indices|
     }
     if (indices.length === 1) {
       return baseType

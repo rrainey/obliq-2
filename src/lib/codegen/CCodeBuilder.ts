@@ -308,7 +308,8 @@ export class CCodeBuilder {
   static generateEnableStateStruct(subsystemEnableInfo: Array<{
     subsystemId: string,
     subsystemName: string,
-    hasEnableInput: boolean
+    hasEnableInput: boolean,
+    enableEdge?: 'rising' | 'level'
   }>): string {
     const members: string[] = []
     
@@ -322,6 +323,14 @@ export class CCodeBuilder {
           undefined,
           `Enable state for ${info.subsystemName}`
         ))
+        if (info.enableEdge === 'rising') {
+          members.push(this.generateStructMember(
+            'int',
+            `${safeName}_trig_prev`,
+            undefined,
+            `Previous trigger level for rising-edge ${info.subsystemName}`
+          ))
+        }
       }
     }
     
@@ -363,15 +372,20 @@ export class CCodeBuilder {
     subsystemId: string,
     subsystemName: string,
     hasEnableInput: boolean,
-    parentSubsystemId: string | null
+    parentSubsystemId: string | null,
+    enableEdge?: 'rising' | 'level'
   }>): string {
     let code = '    /* Initialize enable states */\n'
     
     for (const info of subsystemEnableInfo) {
       if (info.hasEnableInput) {
         const safeName = this.sanitizeIdentifier(info.subsystemName)
-        // Initialize to enabled by default
-        code += `    model->enable_states.${safeName}_enabled = 1;\n`
+        // Start disabled; init/step call evaluate_enable_states after root algebra
+        // so subsystems that begin disabled never run algebra on zero state.
+        code += `    model->enable_states.${safeName}_enabled = 0;\n`
+        if (info.enableEdge === 'rising') {
+          code += `    model->enable_states.${safeName}_trig_prev = 0;\n`
+        }
       }
     }
     
@@ -387,7 +401,10 @@ export class CCodeBuilder {
       subsystemName: string,
       hasEnableInput: boolean,
       parentSubsystemId: string | null,
-      enableWireSourceExpr?: string
+      enableWireSourceExpr?: string,
+      enableEdge?: 'rising' | 'level'
+      /** State field names (sans model->states.) to set on SUBSYS_BECOMING_ENABLED */
+      icNeedsLoadingFields?: string[]
     }>,
     modelName: string
   ): string {
@@ -402,9 +419,12 @@ export class CCodeBuilder {
       '3. Root level is always enabled',
       '',
       'When disabled:',
+      '- Algebraic evaluation inside the subsystem is skipped (signals hold)',
       '- State integration is skipped',
       '- Outputs use last computed values',
-      '- States remain frozen'
+      '- States remain frozen',
+      '',
+      'On becoming enabled (0→1): set IcNeedsLoading on showInitPort integrators'
     ])
     
     code += this.generateFunctionHeader(
@@ -421,12 +441,84 @@ export class CCodeBuilder {
       const depthB = this.getHierarchyDepth(b.subsystemId, subsystemEnableInfo)
       return depthA - depthB
     })
+
+    const emitBecomingEnabled = (
+      info: (typeof subsystemEnableInfo)[0],
+      indent: string,
+      prevVar: string
+    ): string => {
+      const safeSysName = this.sanitizeIdentifier(info.subsystemName)
+      const fields = info.icNeedsLoadingFields || []
+      if (fields.length === 0) return ''
+      let chunk = `${indent}/* SUBSYS_BECOMING_ENABLED: reload integrator ICs */\n`
+      chunk += `${indent}if (model->enable_states.${safeSysName}_enabled && !${prevVar}) {\n`
+      for (const field of fields) {
+        chunk += `${indent}    model->states.${field} = 1;\n`
+      }
+      chunk += `${indent}}\n`
+      return chunk
+    }
     
+    const assignEnable = (
+      info: (typeof subsystemEnableInfo)[0],
+      indent: string
+    ): string => {
+      const safeSysName = this.sanitizeIdentifier(info.subsystemName)
+      const rising = info.enableEdge === 'rising'
+      const hasIc = (info.icNeedsLoadingFields || []).length > 0
+      let chunk = ''
+      if (hasIc) {
+        chunk += `${indent}{\n`
+        chunk += `${indent}    int _prev_enabled = model->enable_states.${safeSysName}_enabled;\n`
+        const inner = indent + '    '
+        if (info.enableWireSourceExpr) {
+          const levelExpr = this.generateBooleanExpression(info.enableWireSourceExpr)
+          if (rising) {
+            chunk += `${inner}/* Rising-edge trigger (Simulink TriggerPort) */\n`
+            chunk += `${inner}{\n`
+            chunk += `${inner}    int _trig = ${levelExpr};\n`
+            chunk += `${inner}    model->enable_states.${safeSysName}_enabled = (_trig && !model->enable_states.${safeSysName}_trig_prev) ? 1 : 0;\n`
+            chunk += `${inner}    model->enable_states.${safeSysName}_trig_prev = _trig;\n`
+            chunk += `${inner}}\n`
+          } else {
+            chunk += `${inner}/* Level enable */\n`
+            chunk += `${inner}model->enable_states.${safeSysName}_enabled = ${levelExpr};\n`
+          }
+        } else if (!rising) {
+          chunk += `${inner}/* No enable wire connected - default to enabled */\n`
+          chunk += `${inner}model->enable_states.${safeSysName}_enabled = 1;\n`
+        } else {
+          chunk += `${inner}model->enable_states.${safeSysName}_enabled = 0;\n`
+        }
+        chunk += emitBecomingEnabled(info, inner, '_prev_enabled')
+        chunk += `${indent}}\n`
+      } else if (info.enableWireSourceExpr) {
+        const levelExpr = this.generateBooleanExpression(info.enableWireSourceExpr)
+        if (rising) {
+          chunk += `${indent}/* Rising-edge trigger (Simulink TriggerPort) */\n`
+          chunk += `${indent}{\n`
+          chunk += `${indent}    int _trig = ${levelExpr};\n`
+          chunk += `${indent}    model->enable_states.${safeSysName}_enabled = (_trig && !model->enable_states.${safeSysName}_trig_prev) ? 1 : 0;\n`
+          chunk += `${indent}    model->enable_states.${safeSysName}_trig_prev = _trig;\n`
+          chunk += `${indent}}\n`
+        } else {
+          chunk += `${indent}/* Level enable */\n`
+          chunk += `${indent}model->enable_states.${safeSysName}_enabled = ${levelExpr};\n`
+        }
+      } else if (!rising) {
+        chunk += `${indent}/* No enable wire connected - default to enabled */\n`
+        chunk += `${indent}model->enable_states.${safeSysName}_enabled = 1;\n`
+      } else {
+        chunk += `${indent}model->enable_states.${safeSysName}_enabled = 0;\n`
+      }
+      return chunk
+    }
+
     for (const info of sortedSubsystems) {
       if (!info.hasEnableInput) continue
-      
+
       const safeSysName = this.sanitizeIdentifier(info.subsystemName)
-      
+
       // Check parent enable state first
       if (info.parentSubsystemId) {
         const parentInfo = subsystemEnableInfo.find(s => s.subsystemId === info.parentSubsystemId)
@@ -435,34 +527,26 @@ export class CCodeBuilder {
           code += `\n    /* ${info.subsystemName} inherits from parent ${parentInfo.subsystemName} */\n`
           code += `    if (!model->enable_states.${safeParentName}_enabled) {\n`
           code += `        model->enable_states.${safeSysName}_enabled = 0;\n`
+          if (info.enableEdge === 'rising' && info.enableWireSourceExpr) {
+            // Still sample trigger so we do not false-fire when parent re-enables
+            code += `        {\n`
+            code += `            int _trig = ${this.generateBooleanExpression(info.enableWireSourceExpr)};\n`
+            code += `            model->enable_states.${safeSysName}_trig_prev = _trig;\n`
+            code += `        }\n`
+          }
           code += `    } else {\n`
-          
-          // Evaluate own enable signal if parent is enabled
-          if (info.enableWireSourceExpr) {
-            code += `        /* Evaluate enable signal */\n`
-            code += `        model->enable_states.${safeSysName}_enabled = ${this.generateBooleanExpression(info.enableWireSourceExpr)};\n`
-          } else {
-            code += `        /* No enable wire connected - default to enabled */\n`
-            code += `        model->enable_states.${safeSysName}_enabled = 1;\n`
-          }
-          
+          code += assignEnable(info, '        ')
           code += `    }\n`
-        } else {
-          // Parent doesn't have enable input, just evaluate own signal
-          if (info.enableWireSourceExpr) {
-            code += `\n    /* Evaluate enable signal for ${info.subsystemName} */\n`
-            code += `    model->enable_states.${safeSysName}_enabled = ${this.generateBooleanExpression(info.enableWireSourceExpr)};\n`
-          }
+        } else if (info.enableWireSourceExpr || info.enableEdge === 'rising') {
+          code += `\n    /* Evaluate enable/trigger for ${info.subsystemName} */\n`
+          code += assignEnable(info, '    ')
         }
-      } else {
-        // Root-level subsystem
-        if (info.enableWireSourceExpr) {
-          code += `\n    /* Evaluate enable signal for ${info.subsystemName} */\n`
-          code += `    model->enable_states.${safeSysName}_enabled = ${this.generateBooleanExpression(info.enableWireSourceExpr)};\n`
-        }
+      } else if (info.enableWireSourceExpr || info.enableEdge === 'rising') {
+        code += `\n    /* Evaluate enable/trigger for ${info.subsystemName} */\n`
+        code += assignEnable(info, '    ')
       }
     }
-    
+
     code += '}\n'
     return code
   }

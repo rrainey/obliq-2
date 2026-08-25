@@ -7,8 +7,21 @@ import { IBlockModule, BlockModuleUtils } from './BlockModule'
 export class LimitBlockModule implements IBlockModule {
   generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
-    const lowerLimit = block.parameters?.lowerLimit ?? -Infinity
-    const upperLimit = block.parameters?.upperLimit ?? Infinity
+    // Missing / null / non-finite → unbounded (JSON null must not become 0)
+    const rawLo = block.parameters?.lowerLimit
+    const rawHi = block.parameters?.upperLimit
+    const lowerLimit =
+      rawLo === null || rawLo === undefined || rawLo === ''
+        ? -Infinity
+        : Number(rawLo)
+    const upperLimit =
+      rawHi === null || rawHi === undefined || rawHi === ''
+        ? Infinity
+        : Number(rawHi)
+    const lo = Number.isFinite(lowerLimit) ? lowerLimit : -Infinity
+    const hi = Number.isFinite(upperLimit) ? upperLimit : Infinity
+    const loC = Number.isFinite(lo) ? String(lo) : '-INFINITY'
+    const hiC = Number.isFinite(hi) ? String(hi) : 'INFINITY'
 
     if (inputs.length === 0) {
       return `    ${outputName} = 0.0; // No input\n`
@@ -20,23 +33,31 @@ export class LimitBlockModule implements IBlockModule {
     const inputType = inputTypes && inputTypes.length > 0 ? inputTypes[0] : 'double'
     const typeInfo = BlockModuleUtils.parseType(inputType)
 
-    let code = `    // Limit block: ${block.name} (lower = ${lowerLimit}, upper = ${upperLimit})\n`
+    // RTW-style: finite box, or one-sided floor/ceil when a bound is ±Inf
+    const clampExpr = (u: string) => {
+      if (!Number.isFinite(lo) && !Number.isFinite(hi)) return u
+      if (!Number.isFinite(hi)) return `fmax(${loC}, ${u})`
+      if (!Number.isFinite(lo)) return `fmin(${hiC}, ${u})`
+      return `fmax(${loC}, fmin(${hiC}, ${u}))`
+    }
+
+    let code = `    // Limit block: ${block.name} (lower = ${loC}, upper = ${hiC})\n`
 
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       // Matrix limiting
       code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
       code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
-      code += `            ${outputName}[i][j] = fmax(${lowerLimit}, fmin(${upperLimit}, ${input}[i][j]));\n`
+      code += `            ${outputName}[i][j] = ${clampExpr(`${input}[i][j]`)};\n`
       code += `        }\n`
       code += `    }\n`
     } else if (typeInfo.isArray && typeInfo.arraySize) {
       // Vector limiting
       code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-      code += `        ${outputName}[i] = fmax(${lowerLimit}, fmin(${upperLimit}, ${input}[i]));\n`
+      code += `        ${outputName}[i] = ${clampExpr(`${input}[i]`)};\n`
       code += `    }\n`
     } else {
       // Scalar limiting
-      code += `    ${outputName} = fmax(${lowerLimit}, fmin(${upperLimit}, ${input}));\n`
+      code += `    ${outputName} = ${clampExpr(input)};\n`
     }
 
     return code

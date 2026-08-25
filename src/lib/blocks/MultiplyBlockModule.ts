@@ -2,11 +2,19 @@
 
 import { BlockData } from '@/components/BlockNode'
 import { BlockState, SimulationState } from '@/lib/simulationTypes'
-import { IBlockModule, BlockModuleUtils } from './BlockModule'
+import { IBlockModule, BlockModuleUtils, CodeGenContext } from './BlockModule'
+import { emitSafeDiv } from '@/lib/codegen/DebugMathRuntime'
 
 export class MultiplyBlockModule implements IBlockModule {
-  generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
+  generateComputation(
+    block: BlockData,
+    inputs: string[],
+    inputTypes?: string[],
+    context?: CodeGenContext
+  ): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
+    const debugMath = !!context?.debugMath
+    const blockLabel = block.name || 'multiply'
 
     if (inputs.length === 0) {
       return `    ${outputName} = 0.0; // No inputs\n`
@@ -43,8 +51,16 @@ export class MultiplyBlockModule implements IBlockModule {
     const term = (k: number, idx: string) => {
       const a = access(inputs[k], inputTypes?.[k], idx)
       const op = ops[k] || '*'
-      if (k === 0) return op === '/' ? `(1.0/${a})` : a
-      return ` ${op} ${a}`
+      if (k === 0) {
+        if (op === '/') {
+          return debugMath ? emitSafeDiv('1.0', a, blockLabel) : `(1.0/${a})`
+        }
+        return a
+      }
+      if (op === '/') {
+        return debugMath ? ` * ${emitSafeDiv('1.0', a, blockLabel)}` : ` / ${a}`
+      }
+      return ` * ${a}`
     }
 
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {

@@ -1,6 +1,6 @@
 // lib/codegen/HeaderGenerator.ts
 
-import { FlattenedModel } from './ModelFlattener'
+import { FlattenedModel, withFlattenedSampleParams } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 import { parseType, isValidType } from '@/lib/typeValidator'
@@ -157,6 +157,9 @@ export class HeaderGenerator {
     // Add time tracking
     members.push(`    double time;`)
     members.push(`    double dt; /* Time step */`)
+    members.push(
+      `    unsigned long long sample_tick; /* Fundamental steps since t=0 (multi-rate hits) */`
+    )
     members.push(`    int use_rk4; /* Integration method: 1=RK4, 0=Euler */`)
 
     return CCodeBuilder.generateStruct(
@@ -356,11 +359,7 @@ export class HeaderGenerator {
       try {
         const generator = BlockModuleFactory.getBlockModule(block.block.type)
         const outputType = this.getBlockOutputType(block)
-        // Create a modified block with the flattened name for struct member generation
-        const blockWithFlattenedName = {
-          ...block.block,
-          name: block.flattenedName
-        }
+        const blockWithFlattenedName = withFlattenedSampleParams(block)
         const member = generator.generateStructMember(blockWithFlattenedName, outputType)
 
         if (member) {
@@ -405,11 +404,8 @@ export class HeaderGenerator {
 
         if (generator.requiresState(block.block)) {
           const outputType = this.getBlockOutputType(block)
-          // Create a modified block with the flattened name for state struct generation
-          const blockWithFlattenedName = {
-            ...block.block,
-            name: block.flattenedName
-          }
+          // Merge inherited sampleScope so unit_delay declares next_sample_time
+          const blockWithFlattenedName = withFlattenedSampleParams(block)
           const stateMembers = generator.generateStateStructMembers(blockWithFlattenedName, outputType)
           members.push(...stateMembers)
         }
@@ -475,6 +471,13 @@ export class HeaderGenerator {
       `${this.modelName}_reseed_integrator_ics`,
       [`${this.modelName}_t* model`],
       'Re-apply integrator ICs from x(0) after algebraic IC signals are live'
+    ) + '\n'
+
+    prototypes += CCodeBuilder.generateFunctionPrototype(
+      'void',
+      `${this.modelName}_seed_from_inputs`,
+      [`${this.modelName}_t* model`],
+      'After apply ExtU: algebra → enables → integrator ICs → algebra'
     ) + '\n'
     
     // Step function

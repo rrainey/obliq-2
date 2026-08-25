@@ -49,15 +49,16 @@ describe('Transfer Function Block (continuous)', () => {
   })
 
   describe('Code generation', () => {
-    test('dynamic TF output reads states[0]', () => {
+    test('dynamic TF output is C·x (not bare states[0])', () => {
+      // H = 1/(0.1584 s + 1) → y = (1/0.1584) * x[0]
       const b = tfBlock('FO', [1], [0.1584, 1])
       const code = mod.generateComputation(b, ['model->signals.U'], ['double'])
       expect(code).toContain('Transfer function block: FO')
-      expect(code).toContain('model->signals.FO = model->states.FO_states[0]')
+      expect(code).toMatch(/FO = \(6\.31\d*\) \* model->states\.FO_states\[0\]/)
     })
 
-    test('state derivative embeds normalized pole coeffs (1st order)', () => {
-      // H(s) = 1 / (0.1584 s + 1)  →  x' = (u - x) / 0.1584
+    test('state derivative is controllable canonical (1st order)', () => {
+      // H(s) = 1 / (0.1584 s + 1)  →  x' = u - (1/0.1584)*x
       const b = tfBlock('Fcn3', [1], [0.1584, 1])
       const code = mod.generateStateDerivative(
         b,
@@ -67,8 +68,10 @@ describe('Transfer Function Block (continuous)', () => {
       )
       expect(code).toContain('State derivatives for Fcn3')
       expect(code).toContain('state_derivatives->Fcn3_states[0]')
-      // (1/0.1584)*u - (1/0.1584)*x
+      expect(code).toContain('model->signals.U')
       expect(code).toMatch(/6\.31/)
+      // Must NOT scale input by num[0]/den[0] alone (old bug)
+      expect(code).not.toMatch(/\(6\.31\d*\) \* model->signals\.U/)
     })
 
     test('empty parameters fall back to 1/(s+1) — documents codegen default', () => {
@@ -86,9 +89,31 @@ describe('Transfer Function Block (continuous)', () => {
         'current_states',
         'double'
       )
-      // Default den [1,1], num [1] → x' = 1*u - 1*x
-      expect(deriv).toContain('(1) * model->signals.U')
+      // Default den [1,1], num [1] → x' = u - 1*x
+      expect(deriv).toContain('model->signals.U')
       expect(deriv).toContain('(1) * current_states->EmptyTF_states[0]')
+    })
+
+    test('S-IVB rate filter poly-num has unity DC gain (not num[0])', () => {
+      // MDL Transfer Fcn10: num [0.00014, 0.0004, 1] / den [7.225e-5, ...]
+      const num = [0.00014, 0.0004, 1]
+      const den = [7.225e-5, 0.003759, 0.07917, 1]
+      const b = tfBlock('Transfer_Fcn10', num, den)
+      const out = mod.generateComputation(b, ['model->signals.U'], ['double'])
+      const deriv = mod.generateStateDerivative(
+        b,
+        'model->signals.U',
+        'current_states',
+        'double'
+      )
+      // y includes (1/an)*x[0] so DC = 1; must not be only states[0]
+      expect(out).toMatch(/13840/) // ~1/7.225e-5
+      expect(out).toContain('Transfer_Fcn10_states[0]')
+      // ẋ last = u - (1/an)*x[0] - ...  (input unscaled by tiny num[0])
+      expect(deriv).toMatch(
+        /Transfer_Fcn10_states\[2\] = model->signals\.U -/
+      )
+      expect(deriv).not.toMatch(/\(0\.00014/)
     })
   })
 
@@ -105,7 +130,7 @@ describe('Transfer Function Block (continuous)', () => {
       expect(d).toEqual([1])
     })
 
-    test('first-order 1/(τs+1) matches (u-x)/τ', () => {
+    test('first-order 1/(τs+1) matches u - x/τ', () => {
       const tau = 0.1584
       const x = 0.5
       const u = 1
@@ -117,7 +142,7 @@ describe('Transfer Function Block (continuous)', () => {
         }
       } as unknown as BlockState
       const d = mod.computeDerivatives!(blockState, [u], 0)
-      expect(d![0]).toBeCloseTo((u - x) / tau, 10)
+      expect(d![0]).toBeCloseTo(u - x / tau, 10)
     })
 
     test('second-order companion form x0′=x1', () => {

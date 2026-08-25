@@ -44,7 +44,7 @@ import type { ModelParameter } from '@/lib/modelSchema'
  * - v28: Added SIMD optimization support (-msimd128 flag)
  * - v29: Added model parameters support (Feature 3) - parameters in header, source block references
  */
-const CODEGEN_VERSION = 'v29'
+const CODEGEN_VERSION = 'v31' // v31: skip algebra in disabled enabled-subsystems + debugMath
 
 export interface ModelStructure {
   sheets: Sheet[]

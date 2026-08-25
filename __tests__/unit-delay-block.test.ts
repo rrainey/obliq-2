@@ -56,12 +56,13 @@ describe('Unit Delay Block', () => {
       expect(members.some(m => m.includes('next_sample_time'))).toBe(false)
     })
 
-    test('generates next_sample_time when sampleInterval > 0', () => {
+    test('does not allocate next_sample_time (sample_tick gates instead)', () => {
       const members = module.generateStateStructMembers(
         baseBlock({ sampleInterval: 0.1 }),
         'double'
       )
-      expect(members.some(m => m.includes('next_sample_time'))).toBe(true)
+      expect(members.some(m => m.includes('next_sample_time'))).toBe(false)
+      expect(members.some(m => m.includes('_state'))).toBe(true)
     })
 
     test('generates vector state array', () => {
@@ -71,25 +72,56 @@ describe('Unit Delay Block', () => {
   })
 
   describe('Code generation', () => {
-    test('outputs previous state then updates state every step', () => {
-      const code = module.generateComputation(
+    test('output phase publishes state; deferred phase updates state every step', () => {
+      const out = module.generateComputation(
         baseBlock(),
         ['model->signals.Input1'],
         ['double']
       )
-      expect(code).toContain('Unit Delay block: Delay1')
-      expect(code).toContain('model->signals.Delay1 = model->states.Delay1_state')
-      expect(code).toContain('model->states.Delay1_state = model->signals.Input1')
+      expect(out).toContain('Unit Delay block: Delay1')
+      expect(out).toContain('model->signals.Delay1 = model->states.Delay1_state')
+      expect(out).not.toContain('model->states.Delay1_state = model->signals.Input1')
+
+      const upd = module.generateDeferredStateUpdate!(
+        baseBlock(),
+        ['model->signals.Input1'],
+        ['double']
+      )
+      expect(upd).toContain('model->states.Delay1_state = model->signals.Input1')
     })
 
-    test('sampleInterval > 0 gates update on next_sample_time', () => {
-      const code = module.generateComputation(
+    test('sampleInterval > 0 gates deferred update on sample_tick', () => {
+      const upd = module.generateDeferredStateUpdate!(
         baseBlock({ sampleInterval: 0.2 }),
         ['model->signals.Input1'],
         ['double']
       )
-      expect(code).toContain('next_sample_time')
-      expect(code).toContain('0.2')
+      expect(upd).toContain('sample_tick')
+      expect(upd).toContain('0.2')
+      expect(upd).not.toContain('next_sample_time')
+    })
+
+    test('sampleInterval aligns with enable + sample_tick (no time catch-up)', () => {
+      const upd = module.generateDeferredStateUpdate!(
+        baseBlock({ sampleInterval: 1.6 }),
+        ['model->signals.Input1'],
+        ['double'],
+        { enableExpr: 'model->enable_states.Filt_enabled' }
+      )
+      expect(upd).toMatch(/Filt_enabled/)
+      expect(upd).toMatch(/sample_tick % .*1\.6/)
+      expect(upd).not.toContain('next_sample_time')
+    })
+
+    test('enableExpr gates deferred state update', () => {
+      const upd = module.generateDeferredStateUpdate!(
+        baseBlock(),
+        ['model->signals.Input1'],
+        ['double'],
+        { enableExpr: 'model->enable_states.Filt_enabled' }
+      )
+      expect(upd).toMatch(/if \(model->enable_states\.Filt_enabled\)/)
+      expect(upd).toContain('model->states.Delay1_state = model->signals.Input1')
     })
 
     test('vector path uses index loops', () => {
@@ -109,12 +141,13 @@ describe('Unit Delay Block', () => {
       expect(code).toContain('model->states.Delay1_state = 2.5')
     })
 
-    test('initializes sample timer when sampleInterval > 0', () => {
+    test('sampleInterval does not require timer init', () => {
       const code = module.generateInitialization(
-        baseBlock({ sampleInterval: 0.1 }),
+        baseBlock({ sampleInterval: 0.1, initialValue: 0 }),
         'double'
       )
-      expect(code).toContain('next_sample_time = 0.0')
+      expect(code).toContain('_state = 0')
+      expect(code).not.toContain('next_sample_time')
     })
   })
 })

@@ -15,7 +15,7 @@ import {
   compareFinalJson,
   formatFinalJsonReport,
   PRIMARY_FIELDS
-} from '../examples/saturn-ib/compareFinalJson'
+} from '../../viper/lib_SaturnIBObliq/ts/compareFinalJson'
 
 function usage(): never {
   console.error(`Usage: npx tsx scripts/compare-final-json.ts --ref <final.json> --model <final.json> [options]

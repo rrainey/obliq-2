@@ -16,6 +16,13 @@ export class RateLimiterBlockModule implements IBlockModule {
     const name = BlockModuleUtils.sanitizeIdentifier(block.name)
     const risingSlewLimit = Number(block.parameters?.risingSlewLimit ?? 1)
     const fallingSlewLimit = Number(block.parameters?.fallingSlewLimit ?? -1)
+    // Discrete SampleTime: RTW delta = RisingSlewLimit * Ts (per-second × period).
+    // Continuous / unspecified: use model->dt.
+    const sampleTs = Number(block.parameters?.sampleTimeSec)
+    const dtExpr =
+      Number.isFinite(sampleTs) && sampleTs > 0
+        ? String(sampleTs)
+        : 'model->dt'
     const inType = inputTypes?.[0] || 'double'
     const typeInfo = BlockModuleUtils.parseType(inType)
     const size =
@@ -25,7 +32,7 @@ export class RateLimiterBlockModule implements IBlockModule {
         : 0)
 
     let code = `    // Rate Limiter block: ${block.name}\n`
-    code += `    // rising=${risingSlewLimit}/s, falling=${fallingSlewLimit}/s\n`
+    code += `    // rising=${risingSlewLimit}/s, falling=${fallingSlewLimit}/s, Ts=${dtExpr}\n`
 
     if (inputs.length === 0) {
       if (size > 0) {
@@ -43,8 +50,8 @@ export class RateLimiterBlockModule implements IBlockModule {
     if (size > 0) {
       const col = !!(typeInfo.isMatrix && typeInfo.cols === 1)
       code += `    {\n`
-      code += `        double ${name}_max_delta = (${risingSlewLimit}) * model->dt;\n`
-      code += `        double ${name}_min_delta = (${fallingSlewLimit}) * model->dt;\n`
+      code += `        double ${name}_max_delta = (${risingSlewLimit}) * (${dtExpr});\n`
+      code += `        double ${name}_min_delta = (${fallingSlewLimit}) * (${dtExpr});\n`
       code += `        for (int i = 0; i < ${size}; i++) {\n`
       const uAcc = col ? `${u}[i][0]` : `${u}[i]`
       code += `            double ${name}_delta = (${uAcc}) - model->states.${name}_last_output[i];\n`
@@ -56,8 +63,8 @@ export class RateLimiterBlockModule implements IBlockModule {
       code += `    }\n`
     } else {
       code += `    {\n`
-      code += `        double ${name}_max_delta = (${risingSlewLimit}) * model->dt;\n`
-      code += `        double ${name}_min_delta = (${fallingSlewLimit}) * model->dt;\n`
+      code += `        double ${name}_max_delta = (${risingSlewLimit}) * (${dtExpr});\n`
+      code += `        double ${name}_min_delta = (${fallingSlewLimit}) * (${dtExpr});\n`
       code += `        double ${name}_delta = (${u}) - model->states.${name}_last_output;\n`
       code += `        if (${name}_delta > ${name}_max_delta) ${name}_delta = ${name}_max_delta;\n`
       code += `        if (${name}_delta < ${name}_min_delta) ${name}_delta = ${name}_min_delta;\n`

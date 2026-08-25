@@ -10,6 +10,18 @@ import { parseType, normalizeType, isValidType } from '@/lib/typeValidator'
 export interface CodeGenContext {
   /** Names of model parameters that can be used in expressions (validated as identifiers) */
   parameterNames?: string[]
+  /**
+   * When true, emit runtime-safe divide/mod helpers that abort with the block
+   * name on ~0 denominators or non-finite operands (OBLIQ_DEBUG_MATH).
+   */
+  debugMath?: boolean
+  /**
+   * C expression that is non-zero when this block's enable scope is active
+   * (e.g. `model->enable_states.S_IVB_Stage_enabled`). Used by integrators
+   * with showInitPort to defer x(0) load until first enabled eval (RTW
+   * IcNeedsLoading). Omit or `'1'` when the block is always enabled.
+   */
+  enableExpr?: string
 }
 
 /**
@@ -27,6 +39,19 @@ export interface IBlockModule {
    * @returns C code that computes the block's output(s)
    */
   generateComputation(block: BlockData, inputs: string[], inputTypes?: string[], context?: CodeGenContext): string
+
+  /**
+   * Optional second-phase state update after all algebraic outputs are current.
+   * Unit delay / Memory must publish y=state early (non-direct-feedthrough) but
+   * assign state=u only after producers (e.g. Sum) have run — otherwise discrete
+   * feedback sees z⁻² and IIR filters (e.g. reciprocal-acceleration) go unstable.
+   */
+  generateDeferredStateUpdate?(
+    block: BlockData,
+    inputs: string[],
+    inputTypes?: string[],
+    context?: CodeGenContext
+  ): string
 
   /**
    * Determine the output type(s) of this block based on input types.

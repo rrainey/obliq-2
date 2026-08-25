@@ -202,6 +202,7 @@ function getBlockOutputType(block: BlockData): string | null {
     case 'divide':
     case 'scale':
     case 'limit':
+    case 'saturation_dynamic':
     case 'integrator':
     case 'unit_delay':
     case 'units_conversion':
@@ -310,6 +311,7 @@ function getBlockOutputType(block: BlockData): string | null {
     // These blocks pass through their input type - determined during propagation
     case 'if':
     case 'abs':
+    case 'square':
     case 'uminus':
     case 'sign':
     case 'transpose':
@@ -459,12 +461,19 @@ function determineProcessingBlockOutputType(
     
     case 'scale':
     case 'limit':
+    case 'saturation_dynamic':
     case 'integrator':
     case 'unit_delay':
     case 'units_conversion':
     case 'sign':
     case 'quantizer':
-      // Scale/Limit/Integrator/UnitDelay/Units Conversion/Sign/Quantizer: output type matches input type
+      // Scale/Limit/SaturationDynamic/…: output follows primary data input
+      if (block?.type === 'saturation_dynamic' && parsedTypes.length >= 2) {
+        const u = parsedTypes[1]
+        if (u && (u.isArray || u.isMatrix)) return typeToString(u)
+        const vec = parsedTypes.find(t => t.isArray || t.isMatrix)
+        if (vec) return typeToString(vec)
+      }
       return typeToString(parsedTypes[0])
 
     case 'selector': {
@@ -514,6 +523,7 @@ function determineProcessingBlockOutputType(
       return typeToString(parsedTypes[0])
 
     case 'abs':
+    case 'square':
     case 'uminus':
       // Pass-through blocks: output type matches input type exactly
       return typeToString(parsedTypes[0])
@@ -2082,6 +2092,7 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'divide':
     case 'scale':
     case 'limit':
+    case 'saturation_dynamic':
     case 'integrator':
     case 'unit_delay':
     case 'units_conversion':
@@ -2098,6 +2109,7 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'condition':
     case 'sign':
     case 'abs':
+    case 'square':
     case 'uminus':
     case 'mag':
     case 'cross':
@@ -2170,6 +2182,8 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'edge_detect':
     case 'atmosphere':
       return 1
+    case 'saturation_dynamic':
+      return 3
     case 'data_store_read':
       return 0
     case 'integrator': {
@@ -2197,6 +2211,7 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'condition':
     case 'mag':      // Magnitude takes 1 vector
     case 'abs':      // Absolute value takes 1 input
+    case 'square':   // Element-wise x^2 takes 1 input
     case 'uminus':   // Unary minus takes 1 input
     case 'transpose': // Transpose takes 1 matrix
     case 'demux':    // Demux takes 1 vector/matrix input
@@ -2443,20 +2458,37 @@ export function getMatrixBlockOutputType(
       return getDemuxOutputType(parsedInputs)
     
     // Element-wise operations maintain input dimensions
-    case 'sum':
+    case 'sum': {
+      // Sum of Elements: single vector/matrix → scalar
+      if (configuredArithmeticInputCount(block) === 1 && parsedInputs.length === 1) {
+        const only = parsedInputs[0]
+        if (only.isArray || only.isMatrix) return only.baseType
+        return typeToString(only)
+      }
+      return getElementWiseOutputType(block.type, parsedInputs)
+    }
     case 'multiply':
     case 'scale':
       return getElementWiseOutputType(block.type, parsedInputs)
 
     case 'limit':
+    case 'saturation_dynamic':
     case 'integrator':
     case 'unit_delay':
     case 'units_conversion':
     case 'transfer_function':
     case 'discrete_transform':
     case 'sign':
+    case 'square':
     case 'quantizer':
-      // Limit, integrator, unit delay, units conversion, sign, quantizer, and transfer functions process each element independently
+      // Limit / saturation_dynamic / integrator / unit delay / … element-wise.
+      // saturation_dynamic: prefer u (in1) shape when present.
+      if (block.type === 'saturation_dynamic' && parsedInputs.length >= 2) {
+        const u = parsedInputs[1]
+        if (u && (u.isArray || u.isMatrix)) return typeToString(u)
+        const vec = parsedInputs.find(t => t.isArray || t.isMatrix)
+        if (vec) return typeToString(vec)
+      }
       return parsedInputs.length > 0 ? typeToString(parsedInputs[0]) : null
 
     case 'divide':

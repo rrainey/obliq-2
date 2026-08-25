@@ -2,6 +2,7 @@
 
 import { Expression, BinaryExpression, UnaryExpression, 
          FunctionCall, ConditionalExpression } from './c99ExpressionParser'
+import { emitSafeDiv, emitSafeMod } from './codegen/DebugMathRuntime'
 
 // Math functions that need special handling in C
 const MATH_FUNCTIONS = new Set([
@@ -10,18 +11,32 @@ const MATH_FUNCTIONS = new Set([
   'abs', 'labs', 'fabs', 'fmax', 'fmin', 'signbit', 'fmod', 'fmodf'
 ])
 
+export interface C99ExpressionCodeGenOptions {
+  /** When true, wrap / and % (and fmod) with obliq_safe_* helpers */
+  debugMath?: boolean
+  /** Block name used in abort messages */
+  blockName?: string
+  /** C expression for simulation time (default model->time) */
+  timeExpr?: string
+}
+
 /**
  * Convert an expression AST to C code
  * @param expr The expression AST
  * @param inputVars Array of C variable names for inputs (e.g., ["input1", "input2"])
+ * @param options Optional debug-math instrumentation
  * @returns Object with code and whether math.h is needed
  */
 export function c99ExpressionToCode(
-  expr: Expression, 
-  inputVars: string[]
+  expr: Expression,
+  inputVars: string[],
+  options: C99ExpressionCodeGenOptions = {}
 ): { code: string; needsMath: boolean } {
   let needsMath = false
-  
+  const debugMath = !!options.debugMath
+  const blockName = options.blockName || 'evaluate'
+  const timeExpr = options.timeExpr || 'model->time'
+
   function generateExpression(expr: Expression): string {
     switch (expr.type) {
       case 'NumberLiteral': {
@@ -61,7 +76,16 @@ export function c99ExpressionToCode(
   function generateBinaryExpression(expr: BinaryExpression): string {
     const left = generateExpression(expr.left)
     const right = generateExpression(expr.right)
-    
+
+    if (debugMath && expr.operator === '/') {
+      needsMath = true
+      return emitSafeDiv(left, right, blockName, timeExpr)
+    }
+    if (debugMath && expr.operator === '%') {
+      needsMath = true
+      return emitSafeMod(left, right, blockName, timeExpr)
+    }
+
     // Add parentheses to preserve precedence
     return `(${left} ${expr.operator} ${right})`
   }
@@ -97,6 +121,14 @@ export function c99ExpressionToCode(
     if (MATH_FUNCTIONS.has(expr.name)) {
       needsMath = true
       const args = expr.arguments.map(arg => generateExpression(arg))
+      // Instrument fmod like remainder/mod by zero
+      if (
+        debugMath &&
+        (expr.name === 'fmod' || expr.name === 'fmodf') &&
+        args.length >= 2
+      ) {
+        return emitSafeMod(args[0], args[1], blockName, timeExpr)
+      }
       
       // Special handling for certain functions
       switch (expr.name) {

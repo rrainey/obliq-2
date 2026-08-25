@@ -273,6 +273,7 @@ export function getDefaultBlockParameters(blockType: string): Record<string, any
 
     case BlockTypes.IF:
     case BlockTypes.ABS:
+    case BlockTypes.SQUARE:
     case BlockTypes.UMINUS:
     case BlockTypes.MATRIX_MULTIPLY:
     case BlockTypes.TRANSPOSE:

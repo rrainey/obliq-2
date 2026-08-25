@@ -106,8 +106,9 @@ export function validateMultiSheetTypeCompatibility(sheets: SheetData[]): MultiS
         continue
       }
       
-      // Check if block has required inputs
-      const requiredInputs = getRequiredInputCount(block.type)
+      // Check if block has required inputs (respects sum/multiply configured arity —
+      // e.g. Sum of Elements with numInputs/signs length 1 and a non-scalar feed).
+      const requiredInputs = getRequiredInputCount(block)
       const connectedInputs = sheet.connections.filter(w => w.targetBlockId === block.id).length
       
       if (connectedInputs < requiredInputs) {
@@ -123,11 +124,21 @@ export function validateMultiSheetTypeCompatibility(sheets: SheetData[]): MultiS
   return { errors, warnings }
 }
 
-function getRequiredInputCount(blockType: string): number {
-  switch (blockType) {
+function configuredArithmeticArity(block: { parameters?: Record<string, unknown> }): number {
+  const signs = block.parameters?.signs
+  if (typeof signs === 'string' && signs.length > 0) return signs.length
+  const n = block.parameters?.numInputs ?? block.parameters?.inputCount
+  if (typeof n === 'number' && n >= 1) return n
+  return 2
+}
+
+function getRequiredInputCount(block: { type: string; parameters?: Record<string, unknown> }): number {
+  switch (block.type) {
     case 'sum':
     case 'multiply':
-      return 2 // Minimum 2 inputs
+      // Sum of Elements (signs '+' / numInputs 1) legitimately has one input when
+      // that input is a vector/matrix; do not require a second port.
+      return configuredArithmeticArity(block)
     case 'lookup_2d':
       return 2
     case 'scale':
@@ -137,6 +148,7 @@ function getRequiredInputCount(blockType: string): number {
     case 'output_port':
     case 'lookup_1d':
     case 'sheet_label_sink':
+    case 'square':
       return 1
     case 'subsystem':
       return 1 // Default, but depends on configuration

@@ -6,11 +6,19 @@ import { Paper, Text, NumberInput, Stack, Checkbox, Tooltip, SegmentedControl, G
 import { IconInfoCircle } from '@tabler/icons-react'
 import type { IntegrationAlgorithm } from '@/lib/modelSchema'
 
+export type SimulationSettingsChange = {
+  duration: string
+  timeStep: string
+  integrationAlgorithm?: IntegrationAlgorithm
+  debugMath?: boolean
+}
+
 interface SimulationSettingsPanelProps {
   initialDuration: number
   initialTimeStep: number
   initialIntegrationAlgorithm?: IntegrationAlgorithm
-  onChange: (settings: { duration: string; timeStep: string; integrationAlgorithm?: IntegrationAlgorithm }) => void
+  initialDebugMath?: boolean
+  onChange: (settings: SimulationSettingsChange) => void
   useWorker?: boolean
   onWorkerChange?: (useWorker: boolean) => void
   workerAvailable?: boolean
@@ -53,6 +61,7 @@ export default function SimulationSettingsPanel({
   initialDuration,
   initialTimeStep,
   initialIntegrationAlgorithm = 'rk4',
+  initialDebugMath = false,
   onChange,
   useWorker = false,
   onWorkerChange,
@@ -63,18 +72,21 @@ export default function SimulationSettingsPanel({
   const [duration, setDuration] = useState<number | string>(initialDuration)
   const [timeStep, setTimeStep] = useState<number | string>(initialTimeStep)
   const [integrationAlgorithm, setIntegrationAlgorithm] = useState<IntegrationAlgorithm>(initialIntegrationAlgorithm)
+  const [debugMath, setDebugMath] = useState<boolean>(initialDebugMath)
 
   // Use useCallback to prevent onChange from being recreated
   const debouncedOnChange = useCallback((
     newDuration: number | string,
     newTimeStep: number | string,
-    newAlgorithm: IntegrationAlgorithm
+    newAlgorithm: IntegrationAlgorithm,
+    newDebugMath: boolean
   ) => {
     const timer = setTimeout(() => {
       onChange({
         duration: newDuration.toString(),
         timeStep: newTimeStep.toString(),
-        integrationAlgorithm: newAlgorithm
+        integrationAlgorithm: newAlgorithm,
+        debugMath: newDebugMath
       })
     }, 100)
 
@@ -84,21 +96,26 @@ export default function SimulationSettingsPanel({
   // Handle duration change
   const handleDurationChange = useCallback((value: number | string) => {
     setDuration(value)
-    debouncedOnChange(value, timeStep, integrationAlgorithm)
-  }, [timeStep, integrationAlgorithm, debouncedOnChange])
+    debouncedOnChange(value, timeStep, integrationAlgorithm, debugMath)
+  }, [timeStep, integrationAlgorithm, debugMath, debouncedOnChange])
 
   // Handle time step change
   const handleTimeStepChange = useCallback((value: number | string) => {
     setTimeStep(value)
-    debouncedOnChange(duration, value, integrationAlgorithm)
-  }, [duration, integrationAlgorithm, debouncedOnChange])
+    debouncedOnChange(duration, value, integrationAlgorithm, debugMath)
+  }, [duration, integrationAlgorithm, debugMath, debouncedOnChange])
 
   // Handle integration algorithm change
   const handleAlgorithmChange = useCallback((value: string) => {
     const algo = value as IntegrationAlgorithm
     setIntegrationAlgorithm(algo)
-    debouncedOnChange(duration, timeStep, algo)
-  }, [duration, timeStep, debouncedOnChange])
+    debouncedOnChange(duration, timeStep, algo, debugMath)
+  }, [duration, timeStep, debugMath, debouncedOnChange])
+
+  const handleDebugMathChange = useCallback((checked: boolean) => {
+    setDebugMath(checked)
+    debouncedOnChange(duration, timeStep, integrationAlgorithm, checked)
+  }, [duration, timeStep, integrationAlgorithm, debouncedOnChange])
   
   return (
     <Paper p="sm" withBorder>
@@ -154,6 +171,25 @@ export default function SimulationSettingsPanel({
             Steps: {Math.ceil(duration / timeStep).toLocaleString()}
           </Text>
         )}
+
+        <Tooltip
+          label="Instrument generated C: abort on divide/mod by ~0 with block name, and check RK4 derivatives for NaN/Inf after each stage. Requires Force Recompile after toggling."
+          withArrow
+          multiline
+          w={280}
+        >
+          <Checkbox
+            label={
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                Debug math (abort on /0, NaN)
+                <IconInfoCircle size={14} style={{ opacity: 0.6 }} />
+              </span>
+            }
+            checked={debugMath}
+            onChange={(e) => handleDebugMathChange(e.currentTarget.checked)}
+            size="sm"
+          />
+        </Tooltip>
 
         {/* Web Worker toggle */}
         {onWorkerChange && (

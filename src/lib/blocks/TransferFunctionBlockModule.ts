@@ -44,25 +44,53 @@ export class TransferFunctionBlockModule implements IBlockModule {
         code += `    ${outputName} = ${inputExpr} * ${gain};\n`
       }
     } else {
-      // Dynamic system - output equals first state
+      // Dynamic system — controllable canonical form: y = C·x (+ D·u if biproper).
+      // Using only states[0] (and numerator[0] in ẋ) made poly numerators like
+      // [1.4e-4, 4e-4, 1] collapse to DC gain ≈1.4e-4 and killed S-IVB rate damping.
+      const numerator = block.parameters?.numerator || [1]
       const outputType = this.getOutputType(block, inputTypes || [])
       const typeInfo = BlockModuleUtils.parseType(outputType)
-      
+      const inputExpr = inputs[0]
+
       if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-        code += `    // Matrix transfer function output\n`
+        code += `    // Matrix transfer function output (C·x)\n`
         code += `    for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
         code += `        for (int j = 0; j < ${typeInfo.cols}; j++) {\n`
-        code += `            ${outputName}[i][j] = model->states.${tfName}_states[i][j][0];\n`
+        code += this.generateOutputExpression(
+          `${outputName}[i][j]`,
+          `model->states.${tfName}_states[i][j]`,
+          `${inputExpr}[i][j]`,
+          numerator,
+          denominator,
+          stateOrder,
+          3
+        )
         code += `        }\n`
         code += `    }\n`
       } else if (typeInfo.isArray && typeInfo.arraySize) {
-        code += `    // Vector transfer function output\n`
+        code += `    // Vector transfer function output (C·x)\n`
         code += `    for (int i = 0; i < ${typeInfo.arraySize}; i++) {\n`
-        code += `        ${outputName}[i] = model->states.${tfName}_states[i][0];\n`
+        code += this.generateOutputExpression(
+          `${outputName}[i]`,
+          `model->states.${tfName}_states[i]`,
+          `${inputExpr}[i]`,
+          numerator,
+          denominator,
+          stateOrder,
+          2
+        )
         code += `    }\n`
       } else {
-        code += `    // Scalar transfer function output\n`
-        code += `    ${outputName} = model->states.${tfName}_states[0];\n`
+        code += `    // Scalar transfer function output (C·x)\n`
+        code += this.generateOutputExpression(
+          outputName,
+          `model->states.${tfName}_states`,
+          inputExpr,
+          numerator,
+          denominator,
+          stateOrder,
+          1
+        )
       }
     }
     
@@ -141,9 +169,18 @@ export class TransferFunctionBlockModule implements IBlockModule {
     if (denominator.length === 1) {
       return input * (numerator[0] || 0) / denominator[0]
     }
-    
-    // For dynamic systems, output equals the first state
-    return states[0] || 0
+
+    const a_n = denominator[0]
+    if (Math.abs(a_n) < 1e-10) return 0
+    const stateOrder = Math.max(0, denominator.length - 1)
+    let y = 0
+    for (let k = 0; k < stateOrder; k++) {
+      y += (this.coeffOfSk(numerator, k) / a_n) * (states[k] || 0)
+    }
+    if (numerator.length === denominator.length) {
+      y += ((numerator[0] || 0) / a_n) * input
+    }
+    return y
   }
 
   isDirectFeedthrough?(block: BlockData): boolean {
@@ -196,17 +233,7 @@ export class TransferFunctionBlockModule implements IBlockModule {
     denominator: number[],
     states: number[]
   ): number {
-    // Pure gain case
-    if (denominator.length === 1) {
-      return input * (numerator[0] || 0) / denominator[0]
-    }
-    
-    // For dynamic systems, output the current state value
-    if (states.length > 0) {
-      return states[0] // First state is typically the output
-    }
-    
-    return 0
+    return this.computeOutputFromState(input, numerator, denominator, states)
   }
   
   /**
@@ -218,16 +245,9 @@ export class TransferFunctionBlockModule implements IBlockModule {
     numerator: number[],
     denominator: number[],
     states: number[],
-    timeStep: number
+    _timeStep: number
   ): number {
-    // Pure gain case: H(s) = K (only constant term)
-    if (denominator.length === 1) {
-      return input * (numerator[0] || 0) / denominator[0]
-    }
-    
-    // For dynamic systems, output equals the first state
-    // The state integration is now handled externally
-    return states[0] || 0
+    return this.computeOutputFromState(input, numerator, denominator, states)
   }
 
   /**
@@ -302,7 +322,60 @@ export class TransferFunctionBlockModule implements IBlockModule {
   }
   
   /**
-   * Generate derivative computation for a scalar transfer function
+   * Coeff of s^k in a high-order-first polynomial (Simulink / MATLAB style).
+   */
+  private coeffOfSk(poly: number[], k: number): number {
+    const deg = poly.length - 1
+    const idx = deg - k
+    if (idx < 0 || idx >= poly.length) return 0
+    return poly[idx] || 0
+  }
+
+  /**
+   * y = C·x (+ D·u if biproper). C_k = (coeff of s^k in num) / a_n.
+   */
+  private generateOutputExpression(
+    outputLvalue: string,
+    stateAccessor: string,
+    inputExpr: string,
+    numerator: number[],
+    denominator: number[],
+    stateOrder: number,
+    indentLevel: number
+  ): string {
+    const indent = '    '.repeat(indentLevel)
+    const a_n = denominator[0]
+    if (Math.abs(a_n) < 1e-10) {
+      return `${indent}${outputLvalue} = 0.0; /* den leading coeff zero */\n`
+    }
+
+    const terms: string[] = []
+    for (let k = 0; k < stateOrder; k++) {
+      const bk = this.coeffOfSk(numerator, k)
+      const ck = bk / a_n
+      if (Math.abs(ck) > 1e-18) {
+        terms.push(`(${ck}) * ${stateAccessor}[${k}]`)
+      }
+    }
+    // Biproper: relative degree 0 → direct feedthrough D = num[0]/den[0]
+    if (numerator.length === denominator.length) {
+      const d = (numerator[0] || 0) / a_n
+      if (Math.abs(d) > 1e-18) {
+        terms.push(`(${d}) * ${inputExpr}`)
+      }
+    }
+    if (terms.length === 0) {
+      return `${indent}${outputLvalue} = 0.0;\n`
+    }
+    return `${indent}${outputLvalue} = ${terms.join(' + ')};\n`
+  }
+
+  /**
+   * Generate derivative computation for a scalar transfer function.
+   * Controllable canonical form (monic den): B = [0,...,1], C from full numerator.
+   *   x'[i] = x[i+1]
+   *   x'[n-1] = u - Σ (a_k / a_n) x[k]
+   *   y = Σ (b_k / a_n) x[k]
    */
   private generateScalarDerivative(
     tfName: string,
@@ -316,49 +389,28 @@ export class TransferFunctionBlockModule implements IBlockModule {
   ): string {
     const indent = '    '.repeat(indentLevel)
     let code = ''
-    
-    // Normalize by leading coefficient
+
     const a_n = denominator[0]
     if (Math.abs(a_n) < 1e-10) {
       return `${indent}/* Error: Leading denominator coefficient is zero */\n`
     }
-    
-    // Controllable canonical form:
-    // x'[0] = x[1]
-    // x'[1] = x[2]
-    // ...
-    // x'[n-2] = x[n-1]
-    // x'[n-1] = -a[0]/a[n]*x[0] - a[1]/a[n]*x[1] - ... - a[n-1]/a[n]*x[n-1] + b[0]/a[n]*u
-    
+
     for (let i = 0; i < stateOrder; i++) {
       if (i < stateOrder - 1) {
-        // x'[i] = x[i+1]
         code += `${indent}${derivativeAccessor}[${i}] = ${stateAccessor}[${i + 1}];\n`
       } else {
-        // Last state derivative
-        code += `${indent}${derivativeAccessor}[${i}] = `
-        
-        // Input contribution: b[0]/a[n] * u
-        // For transfer functions, we typically only have b[0] (or b[n] depending on notation)
-        const b_0 = numerator[0] || 0
-        if (Math.abs(b_0) > 1e-10) {
-          code += `(${b_0 / a_n}) * ${inputExpr}`
-        } else {
-          code += `0.0`
-        }
-        
-        // Feedback terms: -a[i]/a[n] * x[i]
+        // Last state: +u − Σ (a_k/a_n) x[k]  (a_k = coeff of s^k)
+        code += `${indent}${derivativeAccessor}[${i}] = ${inputExpr}`
         for (let j = 0; j < stateOrder; j++) {
-          const a_j = denominator[denominator.length - 1 - j] || 0
-          if (Math.abs(a_j) > 1e-10) {
+          const a_j = this.coeffOfSk(denominator, j)
+          if (Math.abs(a_j) > 1e-18) {
             code += ` - (${a_j / a_n}) * ${stateAccessor}[${j}]`
           }
         }
-        
         code += `;\n`
       }
     }
-    
+
     return code
   }
 
@@ -445,67 +497,22 @@ export class TransferFunctionBlockModule implements IBlockModule {
   ): number[] {
     const stateOrder = Math.max(0, denominator.length - 1)
     if (stateOrder === 0) return []
-    
+
+    const a_n = denominator[0]
+    if (Math.abs(a_n) < 1e-10) return new Array(stateOrder).fill(0)
+
     const derivatives: number[] = new Array(stateOrder)
-    
-    if (denominator.length === 2) {
-      // First order: dx/dt = (b0*u - a0*x) / a1
-      const a1 = denominator[0]
-      const a0 = denominator[1]
-      const b0 = numerator[numerator.length - 1] || 0
-      
-      if (a1 === 0) return [0]
-      
-      derivatives[0] = (b0 * input - a0 * (states[0] || 0)) / a1
-      
-    } else if (denominator.length === 3) {
-      // Second order: convert to state space
-      const a2 = denominator[0]
-      const a1 = denominator[1]
-      const a0 = denominator[2]
-      const b0 = numerator[numerator.length - 1] || 0
-      
-      if (a2 === 0) return [0, 0]
-      
-      // x1' = x2
-      derivatives[0] = states[1] || 0
-      
-      // x2' = (b0*u - a0*x1 - a1*x2) / a2
-      derivatives[1] = (b0 * input - a0 * (states[0] || 0) - a1 * (states[1] || 0)) / a2
-      
-    } else {
-      // Higher order - use controllable canonical form
-      // x'[i] = x[i+1] for i < n-1
-      // x'[n-1] = -sum(a[i]/a[n] * x[i]) + b[0]/a[n] * u
-      
-      const a_n = denominator[0]
-      if (Math.abs(a_n) < 1e-10) return new Array(stateOrder).fill(0)
-      
-      // First n-1 derivatives
-      for (let i = 0; i < stateOrder - 1; i++) {
-        derivatives[i] = states[i + 1] || 0
-      }
-      
-      // Last derivative
-      let lastDerivative = 0
-      
-      // Input contribution
-      const b_0 = numerator[0] || 0
-      if (Math.abs(b_0) > 1e-10) {
-        lastDerivative += (b_0 / a_n) * input
-      }
-      
-      // Feedback terms
-      for (let j = 0; j < stateOrder; j++) {
-        const a_j = denominator[denominator.length - 1 - j] || 0
-        if (Math.abs(a_j) > 1e-10) {
-          lastDerivative -= (a_j / a_n) * (states[j] || 0)
-        }
-      }
-      
-      derivatives[stateOrder - 1] = lastDerivative
+    for (let i = 0; i < stateOrder - 1; i++) {
+      derivatives[i] = states[i + 1] || 0
     }
-    
+
+    // Controllable canonical: x'[n-1] = u − Σ (a_k/a_n) x[k]
+    let last = input
+    for (let j = 0; j < stateOrder; j++) {
+      const a_j = this.coeffOfSk(denominator, j)
+      last -= (a_j / a_n) * (states[j] || 0)
+    }
+    derivatives[stateOrder - 1] = last
     return derivatives
   }
 }

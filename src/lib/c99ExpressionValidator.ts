@@ -91,7 +91,13 @@ export class C99ExpressionValidator {
 
       case 'Identifier':
         // Check if this is a valid parameter name
-        if (!this.parameterNames.includes(expr.name)) {
+        // Allow C99 math macros used for RTW-compatible sentinels (e.g. log(u≤0)→−Inf)
+        if (
+          !this.parameterNames.includes(expr.name) &&
+          expr.name !== 'INFINITY' &&
+          expr.name !== 'HUGE_VAL' &&
+          expr.name !== 'NAN'
+        ) {
           this.errors.push(`Unknown identifier '${expr.name}'. Expected a model parameter, in(n) function, or literal.`)
         }
         // Valid parameter reference - no error

@@ -24,6 +24,12 @@ export interface FlattenedBlock {
   /** ID of the subsystem that controls this block's enable state (null for root) */
   enableScope: string | null
 
+  /**
+   * Discrete sample period in seconds (MDL SampleTime / SystemSampleTime).
+   * null = every fundamental step (continuous / inherited-none).
+   */
+  sampleScope: number | null
+
   /** Original sheet ID where this block resides */
   originalSheetId: string
 
@@ -36,6 +42,25 @@ export interface FlattenedBlock {
    * separate code will be generated and this block becomes a function call.
    */
   isSegregated?: boolean
+}
+
+/**
+ * Block view for codegen: flattened name + inherited sampleScope merged into
+ * parameters.sampleTimeSec so discrete modules (unit_delay, rate_limiter, …)
+ * see the same Ts in header, init, and algebraic step generation.
+ */
+export function withFlattenedSampleParams(block: FlattenedBlock): BlockData {
+  const sampleScope = block.sampleScope
+  return {
+    ...block.block,
+    name: block.flattenedName,
+    parameters: {
+      ...(block.block.parameters || {}),
+      ...(typeof sampleScope === 'number' && sampleScope > 0
+        ? { sampleTimeSec: sampleScope }
+        : {})
+    }
+  }
 }
 
 /**
@@ -118,6 +143,12 @@ export interface SubsystemEnableInfo {
   
   /** Whether this subsystem has an enable input */
   hasEnableInput: boolean
+
+  /**
+   * 'rising' = Simulink TriggerPort (fire one step on 0→1).
+   * 'level' (default) = EnablePort (active while nonzero).
+   */
+  enableEdge?: 'rising' | 'level'
   
   /** Wire that connects to the enable input (if any) */
   enableWire?: FlattenedConnection
@@ -250,6 +281,8 @@ export class ModelFlattener {
             subsystemId: block.id,
             subsystemName: this.generateFlattenedName(block.name, subsystemPath),
             hasEnableInput,
+            enableEdge:
+              block.parameters?.enableEdge === 'rising' ? 'rising' : 'level',
             parentSubsystemId: subsystemId,
             controlledBlockIds: []
           }
@@ -291,6 +324,21 @@ export class ModelFlattener {
     )
   }
   
+  /**
+   * Resolve discrete sample period for a block given parent subsystem period.
+   * Explicit parameters.sampleTimeSec wins; else inherit parent; else null (every step).
+   */
+  private resolveSampleScope(
+    block: BlockData,
+    parentSampleScope: number | null
+  ): number | null {
+    const raw = block.parameters?.sampleTimeSec
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+      return raw
+    }
+    return parentSampleScope
+  }
+
   /**
    * Generate a flattened name from block name and subsystem path
    */
@@ -486,7 +534,8 @@ export class ModelFlattener {
     subsystemPath: string[] = [],
     parentEnableScope: string | null = null,
     parentSheetId: string = 'root',
-    idPrefix: string = ''
+    idPrefix: string = '',
+    parentSampleScope: number | null = null
   ): {
     blocks: FlattenedBlock[],
     connections: WireData[],
@@ -507,6 +556,10 @@ export class ModelFlattener {
           const currentEnableScope = hasEnableInput
             ? scopedBlockId
             : parentEnableScope
+          const currentSampleScope = this.resolveSampleScope(
+            block,
+            parentSampleScope
+          )
 
           // Check code generation strategy
           const codeGenStrategy = block.parameters?.codeGenStrategy || 'flatten'
@@ -575,6 +628,7 @@ export class ModelFlattener {
                 flattenedName: this.generateFlattenedName(block.name, subsystemPath),
                 subsystemPath: [...subsystemPath],
                 enableScope: parentEnableScope,
+                sampleScope: currentSampleScope,
                 originalSheetId: sheet.id,
                 originalId: scopedBlockId,
                 isSegregated: true
@@ -590,7 +644,8 @@ export class ModelFlattener {
                 newPath,
                 currentEnableScope,
                 sheet.id,
-                childPrefix
+                childPrefix,
+                currentSampleScope
               )
 
               flattenedBlocks.push(...subsystemResult.blocks)
@@ -645,6 +700,7 @@ export class ModelFlattener {
             flattenedName,
             subsystemPath: [...subsystemPath],
             enableScope: parentEnableScope,
+            sampleScope: this.resolveSampleScope(block, parentSampleScope),
             originalSheetId: sheet.id,
             originalId: scopedBlockId
           }
@@ -729,6 +785,10 @@ export class ModelFlattener {
   /**
    * Walk through flattened-away subsystem output ports until a real leaf block.
    * Fixes depth≥2 nests where one remap stopped at a child subsystem id.
+   *
+   * Also handles Inport→Outport passthrough: when the block feeding an
+   * outport is an inport, continue from the external wire into that inport
+   * (e.g. S-IB Attitude Rate Error bypasses filters with In1→Out1).
    */
   private resolveSourceThroughSubsystems(
     sourceBlockId: string,
@@ -737,6 +797,7 @@ export class ModelFlattener {
     portMappings: Map<string, SubsystemPortMapping>,
     flattenedBlocks: FlattenedBlock[],
     processedWires: Set<string>,
+    inputPortOwner: Map<string, { subsystemId: string; portIndex: number }>,
     depth = 0
   ): { sourceBlockId: string; sourcePortIndex: number } | null {
     if (depth > 64) {
@@ -748,6 +809,33 @@ export class ModelFlattener {
 
     if (flattenedBlocks.some(b => b.originalId === sourceBlockId)) {
       return { sourceBlockId, sourcePortIndex }
+    }
+
+    // Inport feeding an Outport (passthrough): jump to the external driver
+    const inOwner = inputPortOwner.get(sourceBlockId)
+    if (inOwner) {
+      const externalIn = connections.find(
+        w =>
+          w.targetBlockId === inOwner.subsystemId &&
+          w.targetPortIndex === inOwner.portIndex
+      )
+      if (!externalIn) {
+        this.addWarning(
+          `Input port passthrough ${sourceBlockId} (subsystem ${inOwner.subsystemId}:${inOwner.portIndex}) has no external driver`
+        )
+        return null
+      }
+      processedWires.add(externalIn.id)
+      return this.resolveSourceThroughSubsystems(
+        externalIn.sourceBlockId,
+        externalIn.sourcePortIndex,
+        connections,
+        portMappings,
+        flattenedBlocks,
+        processedWires,
+        inputPortOwner,
+        depth + 1
+      )
     }
 
     const mapping = portMappings.get(sourceBlockId)
@@ -778,6 +866,7 @@ export class ModelFlattener {
       portMappings,
       flattenedBlocks,
       processedWires,
+      inputPortOwner,
       depth + 1
     )
   }
@@ -897,8 +986,16 @@ export class ModelFlattener {
 
     // Create a set of all port block IDs that will be removed
     const portBlockIds = new Set<string>()
-    for (const mapping of portMappings.values()) {
-      mapping.inputPorts.forEach(id => portBlockIds.add(id))
+    // input_port block id → owning subsystem + port index (for In→Out passthrough)
+    const inputPortOwner = new Map<
+      string,
+      { subsystemId: string; portIndex: number }
+    >()
+    for (const [subsystemId, mapping] of portMappings) {
+      mapping.inputPorts.forEach((id, portIndex) => {
+        portBlockIds.add(id)
+        inputPortOwner.set(id, { subsystemId, portIndex })
+      })
       mapping.outputPorts.forEach(id => portBlockIds.add(id))
     }
 
@@ -935,7 +1032,8 @@ export class ModelFlattener {
             connections,
             portMappings,
             flattenedBlocks,
-            processedWires
+            processedWires,
+            inputPortOwner
           )
           if (!resolved) continue
           sourceBlockId = resolved.sourceBlockId
@@ -1148,20 +1246,16 @@ export class ModelFlattener {
       resolvedConnections.push(connection)
     }
     
-    // Fourth pass: Create new connections from sources to their sinks
-    for (const sourceBlock of sheetLabelSources) {
-      const signalName = sourceBlock.block.parameters?.signalName as string
-      if (!signalName) {
-        this.addWarning(`Sheet label source ${sourceBlock.originalId} has no signal name`)
-        continue
-      }
-
-      // Search for matching sink: current scope → parents, then any scope
-      // (Simulink TagVisibility=global Gotos may live in a sibling/child subsystem).
+    // Helper: find Goto sink for a From (scope walk → global fallback)
+    const findSinkForSource = (
+      sourceBlock: FlattenedBlock,
+      signalName: string
+    ): SheetLabelConnection | undefined => {
       let labelInfo: SheetLabelConnection | undefined
-      let searchScope = sourceBlock.subsystemPath.length > 0
-        ? sourceBlock.subsystemPath.join('/')
-        : 'root'
+      let searchScope =
+        sourceBlock.subsystemPath.length > 0
+          ? sourceBlock.subsystemPath.join('/')
+          : 'root'
 
       const pathParts = [...sourceBlock.subsystemPath]
       while (true) {
@@ -1179,6 +1273,7 @@ export class ModelFlattener {
       }
 
       // Global fallback: first sink anywhere with this signal name
+      // (Simulink TagVisibility=global Gotos may live in a sibling/child subsystem).
       if (!labelInfo || !labelInfo.sink) {
         for (const [, info] of sheetLabelSinks) {
           if (info.signalName === signalName && info.sink) {
@@ -1187,47 +1282,95 @@ export class ModelFlattener {
           }
         }
       }
+      return labelInfo
+    }
 
-      if (!labelInfo || !labelInfo.sink) {
-        const scope = sourceBlock.subsystemPath.length > 0
-          ? sourceBlock.subsystemPath.join('/')
-          : 'root'
-        this.addWarning(`Sheet label source '${signalName}' has no matching sink in scope '${scope}' or parent scopes`)
+    // Fourth pass: direct resolve each From → (block, port) that feeds its Goto
+    const directResolve = new Map<
+      string,
+      { blockId: string; port: number; sinkSignal: string }
+    >()
+    for (const sourceBlock of sheetLabelSources) {
+      const signalName = sourceBlock.block.parameters?.signalName as string
+      if (!signalName) {
+        this.addWarning(`Sheet label source ${sourceBlock.originalId} has no signal name`)
         continue
       }
-      
-      // Find the connection that feeds the sink
-      const sinkInputConnection = connections.find(c => 
-        c.targetBlockId === labelInfo.sink!.blockId && 
-        c.targetPortIndex === 0
+
+      const labelInfo = findSinkForSource(sourceBlock, signalName)
+      if (!labelInfo || !labelInfo.sink) {
+        const scope =
+          sourceBlock.subsystemPath.length > 0
+            ? sourceBlock.subsystemPath.join('/')
+            : 'root'
+        this.addWarning(
+          `Sheet label source '${signalName}' has no matching sink in scope '${scope}' or parent scopes`
+        )
+        continue
+      }
+
+      const sinkInputConnection = connections.find(
+        c =>
+          c.targetBlockId === labelInfo.sink!.blockId && c.targetPortIndex === 0
       )
-      
       if (!sinkInputConnection) {
         this.addWarning(`Sheet label sink '${signalName}' has no input connection`)
         continue
       }
-      
-      // Find all connections from this source
-      const sourceConnections = connections.filter(c => 
-        c.sourceBlockId === sourceBlock.originalId
+
+      directResolve.set(sourceBlock.originalId, {
+        blockId: sinkInputConnection.sourceBlockId,
+        port: sinkInputConnection.sourcePortIndex,
+        sinkSignal: signalName
+      })
+      labelInfo.sourceBlockIds.push(sourceBlock.originalId)
+    }
+
+    // Fifth pass: chase through From→Goto→From chains (e.g. S-IB Xe outport
+    // is From(local Goto) while root Goto(Xe_m) is fed by that subsystem port,
+    // which remaps to the inner From — without transitive resolve the outer
+    // From keeps a dangling sheet_label_source id → algebra sees 0.0).
+    const sourceById = new Map(
+      sheetLabelSources.map(b => [b.originalId, b] as const)
+    )
+    const ultimateResolve = (
+      sourceId: string,
+      seen: Set<string> = new Set()
+    ): { blockId: string; port: number } | null => {
+      const d = directResolve.get(sourceId)
+      if (!d) return null
+      if (seen.has(d.blockId)) {
+        this.addWarning(
+          `Sheet label cycle detected while resolving '${d.sinkSignal}'`
+        )
+        return null
+      }
+      seen.add(d.blockId)
+      if (sourceById.has(d.blockId)) {
+        return ultimateResolve(d.blockId, seen)
+      }
+      return { blockId: d.blockId, port: d.port }
+    }
+
+    for (const sourceBlock of sheetLabelSources) {
+      const ultimate = ultimateResolve(sourceBlock.originalId)
+      if (!ultimate) continue
+
+      const sourceConnections = connections.filter(
+        c => c.sourceBlockId === sourceBlock.originalId
       )
-      
-      // Create direct connections from the sink's source to all the source's targets
+      const direct = directResolve.get(sourceBlock.originalId)!
+
       for (const sourceConn of sourceConnections) {
-        const newConnection: FlattenedConnection = {
-          id: `sheet_label_${sinkInputConnection.id}_to_${sourceConn.id}`,
-          sourceBlockId: sinkInputConnection.sourceBlockId,
-          sourcePortIndex: sinkInputConnection.sourcePortIndex,
+        resolvedConnections.push({
+          id: `sheet_label_${direct.sinkSignal}_${sourceBlock.originalId}_to_${sourceConn.id}`,
+          sourceBlockId: ultimate.blockId,
+          sourcePortIndex: ultimate.port,
           targetBlockId: sourceConn.targetBlockId,
           targetPortIndex: sourceConn.targetPortIndex,
           originalWireId: sourceConn.originalWireId,
           connectionType: 'sheet_label'
-        }
-        
-        resolvedConnections.push(newConnection)
-        
-        // Track this resolution
-        labelInfo.sourceBlockIds.push(sourceBlock.originalId)
+        })
       }
     }
     

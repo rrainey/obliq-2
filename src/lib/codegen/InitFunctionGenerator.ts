@@ -1,6 +1,6 @@
 // lib/codegen/InitFunctionGenerator.ts
 
-import { FlattenedModel } from './ModelFlattener'
+import { FlattenedModel, withFlattenedSampleParams } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 
@@ -66,36 +66,27 @@ export class InitFunctionGenerator {
       code += this.generateEnableStateInit()
     }
 
-    // Initialize constants and source blocks FIRST
-    // This is important for integrator init ports that read from source signals
+    // Initialize constants and source blocks (no ExtU-dependent algebra here).
+    // Host must apply external inputs, then call seed_from_inputs().
     code += this.generateConstantInit()
-
-    // Evaluate feedthrough (IC Product, DCM→quat, etc.) before reading x(0) ports.
-    // Prototype is in the header; definition is emitted later in the .c file.
-    code += `    /* Seed algebraic signals so external IC ports are non-zero */\n`
-    code += `    ${this.modelName}_evaluate_algebraic(model);\n\n`
-
-    // Initialize block-specific states (e.g., integrators from x(0))
-    code += this.generateBlockSpecificInit()
-
-    // Refresh integrator output signals from the seeded states
-    code += `    /* Sync signals from seeded integrator states */\n`
-    code += `    ${this.modelName}_evaluate_algebraic(model);\n\n`
 
     // Initialize data collection buffers
     code += this.generateDataCollectionInit()
 
     code += '}\n\n'
 
-    // Standalone reseed for hosts that apply inputs after init()
+    // Integrator IC copy (signal → state) — used by seed_from_inputs
     code += this.generateReseedIntegratorIcsFunction()
+
+    // Full post-input seed: algebra → enable → integrator ICs → algebra
+    code += this.generateSeedFromInputsFunction()
 
     return code
   }
 
   /**
    * Public helper: re-copy showInitPort / parameter ICs after inputs change.
-   * Call: apply inputs → evaluate_algebraic → reseed_integrator_ics → evaluate_algebraic
+   * Prefer seed_from_inputs() which also refreshes algebra/enables.
    */
   private generateReseedIntegratorIcsFunction(): string {
     let body = this.generateBlockSpecificInit()
@@ -104,7 +95,8 @@ export class InitFunctionGenerator {
         '    /* No integrator external ICs in this model */\n'
     }
     let code = CCodeBuilder.generateCommentBlock([
-      'Re-apply integrator initial conditions from x(0) / parameters',
+      'Re-apply integrator ICs: showInitPort sets IcNeedsLoading (deferred x(0));',
+      'parameter ICs copy immediately. Live x(0) loads on first enabled algebra.',
       'Use after evaluate_algebraic once inputs/constants are live'
     ])
     code += CCodeBuilder.generateFunctionHeader(
@@ -113,6 +105,35 @@ export class InitFunctionGenerator {
       [`${this.modelName}_t* model`]
     )
     code += body
+    code += '}\n\n'
+    return code
+  }
+
+  /**
+   * Apply after ExtU / external inputs are live (and after init()).
+   * Avoids On_Pad/ECI_to_LLA algebra on zero CG_LLA during init.
+   */
+  private generateSeedFromInputsFunction(): string {
+    const hasEnable = this.model.subsystemEnableInfo.some(info => info.hasEnableInput)
+    let code = CCodeBuilder.generateCommentBlock([
+      'Seed algebra, enables, and integrator ICs after external inputs are applied',
+      'Call: init(model, dt) → apply inputs → seed_from_inputs(model)'
+    ])
+    code += CCodeBuilder.generateFunctionHeader(
+      'void',
+      `${this.modelName}_seed_from_inputs`,
+      [`${this.modelName}_t* model`]
+    )
+    code += `    /* Root algebra (IC Product, T_L_prime, On_Pad, …); disabled stages skipped */\n`
+    code += `    ${this.modelName}_evaluate_algebraic(model);\n\n`
+    if (hasEnable) {
+      code += `    /* Resolve subsystem enables from live algebra */\n`
+      code += `    ${this.modelName}_evaluate_enable_states(model);\n\n`
+    }
+    code += `    /* Integrator x(0) from seeded IC signals */\n`
+    code += `    ${this.modelName}_reseed_integrator_ics(model);\n\n`
+    code += `    /* Refresh signals from seeded states / second algebra pass */\n`
+    code += `    ${this.modelName}_evaluate_algebraic(model);\n`
     code += '}\n'
     return code
   }
@@ -129,6 +150,7 @@ export class InitFunctionGenerator {
     return `    /* Initialize time tracking */
     model->time = 0.0;
     model->dt = dt;
+    model->sample_tick = 0ULL;
     model->use_rk4 = ${useRk4}; /* ${algorithmComment} */
 
 `
@@ -244,12 +266,8 @@ export class InitFunctionGenerator {
             initSignalExpr = this.getInitPortSignalExpr(block)
           }
 
-          // Use flattened name so nested subsystem states match the header
-          // (e.g. S_IB_Stage_propellant_used_states, not propellant_used_states)
-          const blockWithFlattenedName = {
-            ...block.block,
-            name: block.flattenedName
-          }
+          // Flattened name + inherited sampleScope (next_sample_time init)
+          const blockWithFlattenedName = withFlattenedSampleParams(block)
           const initCode = generator.generateInitialization(
             blockWithFlattenedName,
             outputType,

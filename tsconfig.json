@@ -25,6 +25,12 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "mdl2obliq": [
+        "../mdl2obliq/src/index.ts"
+      ],
+      "mdl2obliq/*": [
+        "../mdl2obliq/src/*"
       ]
     }
   },

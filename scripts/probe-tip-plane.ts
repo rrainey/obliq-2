@@ -1,13 +1,13 @@
 /**
  * Probe pad LIO vs MES Body→S and tip-plane expectations.
  */
-import { as205DefaultPadStateEci } from '../examples/saturn-ib/as205EciPlant'
+import { as205DefaultPadStateEci } from '../../viper/lib_SaturnIBObliq/ts/as205EciPlant'
 import {
   computeBodyToSm,
   bodyToSmAtPad
-} from '../examples/saturn-ib/as205BodyToSm'
-import { AS205_PAD } from '../examples/saturn-ib/as205PadFrames'
-import { mat3MulVec } from '../examples/saturn-ib/as205Mes'
+} from '../../viper/lib_SaturnIBObliq/ts/as205BodyToSm'
+import { AS205_PAD } from '../../viper/lib_SaturnIBObliq/ts/as205PadFrames'
+import { mat3MulVec } from '../../viper/lib_SaturnIBObliq/ts/as205Mes'
 
 const rad2deg = (r: number) => (r * 180) / Math.PI
 const pad = as205DefaultPadStateEci()

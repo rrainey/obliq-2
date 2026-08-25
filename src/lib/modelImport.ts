@@ -113,11 +113,13 @@ export function normalizeModelData(raw: Record<string, unknown>): Record<string,
           raw.globalSettings.integrationAlgorithm === 'rk4'
             ? raw.globalSettings.integrationAlgorithm
             : 'rk4',
+        debugMath: !!raw.globalSettings.debugMath,
       }
     : {
         simulationTimeStep: 0.01,
         simulationDuration: 10,
         integrationAlgorithm: 'rk4' as const,
+        debugMath: false,
       }
 
   const parameters = Array.isArray(raw.parameters) ? raw.parameters : []
