@@ -3,6 +3,7 @@
 import { C99ExpressionParser, BinaryExpression, Expression } from '@/lib/c99ExpressionParser'
 import { C99ExpressionValidator } from '@/lib/c99ExpressionValidator'
 import { C99ExpressionEvaluator } from '@/lib/c99ExpressionEvaluator'
+import { c99ExpressionToCode } from '@/lib/c99ExpressionCodeGen'
 
 describe('C99 Expression Parser', () => {
   test('parses simple arithmetic', () => {
@@ -265,5 +266,15 @@ describe('C99 Expression Evaluator', () => {
     parser = new C99ExpressionParser('~in(0)')
     ast = parser.parse()
     expect(evaluator.evaluate(ast)).toBe(~5)
+  })
+
+  test('scientific float literals survive code generation intact', () => {
+    // Regression: the literal 1e-12 was being emitted as the invalid "1e-12.0"
+    // by the float-formatting path.
+    const parser = new C99ExpressionParser('in(0) > 1e-12 ? in(0) : 1e-12')
+    const ast = parser.parse()
+    const { code } = c99ExpressionToCode(ast, ['_in0'])
+    expect(code).not.toMatch(/1e-12\.0/)
+    expect(code).toMatch(/1e-12/)
   })
 })

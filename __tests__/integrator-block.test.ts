@@ -274,4 +274,29 @@ describe('Integrator Block', () => {
       expect(module.getOutputType(block, ['double[2][3]'])).toBe('double[2][3]')
     })
   })
+
+  describe('Code Generation - Matrix initial condition', () => {
+    test('matrix x(0) initialises every element with 2D subscripts', () => {
+      // Regression: a double[4][1] initial condition was being assigned as if
+      // both the state and the source were scalars.
+      const module = new IntegratorBlockModule()
+      const block: BlockData = {
+        id: 'integrator_5',
+        name: 'q',
+        type: 'integrator',
+        position: { x: 0, y: 0 },
+        parameters: { showInitPort: true, initialValue: 0 },
+      }
+
+      const code = module.generateInitialization(block, 'double[4][1]', 'model->signals.q0')
+
+      // Every element of the column matrix is addressed individually.
+      for (let row = 0; row < 4; row++) {
+        expect(code).toContain(`q_states[${row}][0]`)
+      }
+      // Never collapsed to a single subscript or a whole-array assignment.
+      expect(code).not.toMatch(/q_states\[\d+\] = /)
+      expect(code).not.toMatch(/q_states = /)
+    })
+  })
 })
