@@ -2,7 +2,7 @@
 
 A web-based visual modeling and simulation tool that enables users to construct, test, and simulate block diagram models directly in the browser, then generate C code for embedded deployment.
 
-> **Important Note**: This project was almost entirely generated using Claude Opus and Sonnet 4 LLMs.  It is an exploration of how LLMs might help humans generate - the code this application generates and the overall security of the application have not been formally verified. **In short, you'd be crazy to try to use this application for anything other than research.**
+> **Important Note**: This project was almost entirely generated using Claude Opus and Sonnet 4 LLMs.  It is an exploration of how LLMs might help humans generate code - the code this application generates and the overall security of the application have not been formally verified. **In short, you'd be crazy to try to use this application for anything other than research.**
 
 ## Overview
 
@@ -22,6 +22,9 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
   - Signal generation (Source blocks for constants and generators)
   - Hierarchical composition (Subsystem blocks)
   - Conditional Signal Flow Control
+  - Discontinuities (Relay, Rate Limiter, Quantizer, Edge Detect)
+  - Model-scoped Data Stores for cross-sheet signals
+  - Aerospace utilities (orientation and units conversion, 1976 COESA atmosphere)
   - Signal type conversion
 
 ### Multiple Signal Types: Scalars, Vectors, and Matricies
@@ -40,26 +43,37 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 | `output_port` | Output Port | Ports | External output from a model or subsystem |
 | `sum` | Sum | Math | Sums multiple input signals with configurable signs (+/-) |
 | `multiply` | Multiply | Math | Element-wise multiplication of multiple input signals |
+| `divide` | Divide | Math | Element-wise division (num/den); scalar denominator broadcasts over a vector/matrix numerator |
 | `scale` | Scale | Math | Multiplies input by a scalar constant (gain) |
 | `abs` | Absolute Value | Math | Absolute value of scalar input |
 | `uminus` | Unary Minus | Math | Negates input (element-wise for vectors/matrices) |
+| `square` | Square (x²) | Math | Element-wise square: y = u² (scalar, vector, or matrix) |
+| `sign` | Sign | Math | Signum function: −1, 0, or +1 (element-wise for vectors/matrices) |
 | `limit` | Limit | Math | Clamps signal values to specified upper/lower range |
 | `evaluate` | Evaluate | Math | Evaluates custom C-style expression with multiple inputs |
 | `trig` | Trig | Math | Trigonometric functions (sin, cos, tan, asin, acos, atan, atan2) |
 | `transfer_function` | Transfer Function | Dynamic | Laplace transfer function with RK4 integration |
 | `discrete_transform` | Discrete Transform | Dynamic | Discrete-time z-transform transfer function |
 | `integrator` | Integrator | Dynamic | Integrator block (1/s) with optional limits and reset |
+| `unit_delay` | Unit Delay | Dynamic | Unit delay (z⁻¹): outputs the previous sample; `sampleInterval` 0 means every step |
+| `relay` | Relay | Discontinuities | Hysteresis switch: on when u ≥ onThreshold, off when u ≤ offThreshold |
+| `rate_limiter` | Rate Limiter | Discontinuities | Limits the output's rate of change (units/sec) using the simulation time step |
+| `quantizer` | Quantizer | Discontinuities | Rounds input to the nearest multiple of a quantum (element-wise) |
+| `edge_detect` | Edge Detect | Discontinuities | Emits a one-step pulse on a rising, falling, or either edge |
 | `lookup_1d` | 1-D Lookup | Lookup | 1-D lookup table with linear interpolation |
 | `lookup_2d` | 2-D Lookup | Lookup | 2-D lookup table with bilinear interpolation |
 | `matrix_multiply` | Matrix Multiply | Matrix | Matrix multiplication (A×B) or scalar multiplication |
 | `transpose` | Transpose | Matrix | Matrix transpose; vectors [n] become [n][1] matrices |
 | `mux` | Mux | Matrix | Multiplexer: combines scalars into vector or matrix |
 | `demux` | Demux | Matrix | Demultiplexer: splits matrix/vector into scalar outputs |
+| `selector` | Selector | Matrix | Selects vector elements by 0-based index (scalar output for a single index) |
 | `cross` | Cross Product | Vector | 3D vector cross product (A × B) |
 | `dot` | Dot Product | Vector | Vector dot product (A · B) |
 | `mag` | Magnitude | Vector | Vector magnitude (Euclidean norm) |
 | `if` | If | Control | Conditional selection based on control signal |
 | `condition` | Condition | Control | Compares input against constant (>, <, >=, <=, ==, !=) |
+| `data_store_write` | Data Store Write | Data | Writes a signal to a model-scoped named store, shared across sheets and subsystems |
+| `data_store_read` | Data Store Read | Data | Reads a model-scoped named data store |
 | `subsystem` | Subsystem | Hierarchical | Encapsulates another sheet as a reusable block |
 | `signal_display` | Signal Display | Sinks | Real-time signal visualization during simulation |
 | `signal_logger` | Signal Logger | Sinks | Logs signal values for CSV export |
@@ -69,7 +83,34 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 | `orientation_conversion` | Orientation Conversion | Aerospace | Converts between Euler angles, DCM, and Quaternion (AIAA convention) |
 | `units_conversion` | Units Conversion | Aerospace | Converts between SI and Imperial units |
 | `body2quaternion_rates` | Body2Quat Rates | Aerospace | Converts body angular rates to quaternion rates |
+| `atmosphere` | Atmosphere | Aerospace | 1976 COESA atmosphere: T, a, P, ρ versus geometric altitude (m) |
 | `comment` | Comment | Annotation | Text annotation with Markdown and LaTeX math support |
+
+Two further block types are supported by simulation and code generation but are
+**not offered in the block palette** — they exist so that models converted from
+Simulink round-trip correctly:
+
+| Block Type | Description |
+|------------|-------------|
+| `saturation_dynamic` | Element-wise `clamp(u, lo, up)`, with the limits supplied as signals rather than parameters |
+| `inertia_diag_pack` | Packs principal-axis inertia and its derivative into `[Ixx, Iyy, Izz, İxx, İyy, İzz]` for aerolib mass properties |
+
+### Diagram Layout
+- **Automatic arrangement** — right-click empty canvas and choose **Reorganize Block Arrangement** to lay the current sheet out left to right
+- Sources are placed on the left and sinks (output ports, displays, loggers) on the right, with the columns between them ordered by signal flow
+- Feedback loops are detected and properly handled
+- Layout is **port-aware**: the vertical order of a block's output ports drives the vertical order of the blocks it feeds, and each block is pulled toward the port that feeds it so wires run straight wherever the geometry allows
+- **Reorganize and Resize Block Arrangement** does the same, and additionally sizes subsystem blocks so their ports spread far enough apart for neighboring blocks to line up with them. This one writes block dimensions into the model, which is why it is a separate action
+- Subsystem blocks can also be resized by hand: right-click the block, choose **Resize...**, and drag any corner handle. Dimensions are stored as optional `width` / `height` parameters
+
+### Printing and PDF Export
+- **Export as PDF...** in the toolbar renders the model as a printable document, one page per sheet
+- Output is **true vector** — drawn from model data rather than captured from the screen — so large-format plots stay sharp and files stay small
+- Options: file name, orientation, page size, scaling (100%, 50%, or scale to fit), large-sheet fitting, and print scope
+- Page sizes cover US (Letter, Legal, Tabloid), ISO (A0–A5), and blueprint sizes (ANSI C–E, ARCH A–E, ARCH E1)
+- Print scope selects the entire model, the current subsystem, or just the current sheet
+- Optional **subsystem summary pages** list a subsystem's input and output ports, its parameters with types and values, and its sheet hierarchy
+- Every page carries a footer with the model name, sheet path, page number, and print date
 
 ### Simulation Engine
 - **Client-side simulation** - Models are compiled dynamically and executed as [Web Assemblies](https://webassembly.org/)
@@ -267,11 +308,11 @@ The incomplete single-table snippet that used to live in this README is **not en
 
 Apply scripts **in this order** (full detail: [`database-scripts/README.md`](./database-scripts/README.md)):
 
-1. `database-scripts/setup.sql` — `models` + RLS  
-2. `database-scripts/versioning.sql` — `model_versions`, removes inline `models.data`, adds `latest_version`  
-3. `database-scripts/03-API-tokens.sql` — `api_tokens`  
-4. `database-scripts/04-wasm-cache.sql` — cache metadata + metrics  
-5. `database-scripts/05-wasm-storage-bucket.sql` — Storage bucket `wasm-cache`  
+1. `database-scripts/setup.sql` — `models` + RLS
+2. `database-scripts/versioning.sql` — `model_versions`, removes inline `models.data`, adds `latest_version`
+3. `database-scripts/03-API-tokens.sql` — `api_tokens`
+4. `database-scripts/04-wasm-cache.sql` — cache metadata + metrics
+5. `database-scripts/05-wasm-storage-bucket.sql` — Storage bucket `wasm-cache`
 
 **Via Studio SQL Editor** (self-hosted: [http://localhost:8000](http://localhost:8000) → SQL Editor): paste each file and run.
 
@@ -328,11 +369,11 @@ Create a blank model from the UI to verify inserts into `models` + `model_versio
 
 ### Loading sample models (Import)
 
-From **My Models** (`/models`), use **Import** to create a new model from JSON. This matches the **Export** format and the fixtures under [`docs/sample-models/`](./docs/sample-models/) (including Saturn slices in [`docs/sample-models/saturn/`](./docs/sample-models/saturn/)):
+From **My Models** (`/models`), use **Import** to create a new model from JSON. This matches the **Export** format and the fixtures under [`docs/sample-models/`](./docs/sample-models/):
 
 ```json
 {
-  "name": "saturn-8.1-gravity-ballistics",
+  "name": "Subs01",
   "data": { "version": "2.2", "sheets": [ ... ], "parameters": [ ... ], "globalSettings": { ... } }
 }
 ```
@@ -340,7 +381,7 @@ From **My Models** (`/models`), use **Import** to create a new model from JSON. 
 **Recommended workflow**
 
 1. Log in → **My Models** → **Import**.
-2. Choose a file such as `docs/sample-models/saturn/saturn-8.1-gravity-ballistics.json`.
+2. Choose a file such as `docs/sample-models/Subs01.json`.
 3. Confirm or edit the model name → **Import** (opens the editor).
 4. Optionally add **Signal Display** / **Signal Logger** sinks (many fixtures only expose output ports).
 5. **Run Simulation** (Docker + `npm run wasm:build-docker` required for compile).
@@ -431,6 +472,16 @@ obliq-2/
 │   │   │   ├── SubsystemCodeGenerator.ts  # Segregated subsystem support
 │   │   │   └── ...
 │   │   │
+│   │   ├── layout/                   # Auto-layout and shared block geometry
+│   │   │   ├── autoLayout.ts         # Layered left-to-right arrangement
+│   │   │   └── blockGeometry.ts      # Block sizes / port offsets (shared with the canvas)
+│   │   │
+│   │   ├── export/                   # PDF export
+│   │   │   ├── pdfRenderer.ts        # Vector renderer (pdf-lib)
+│   │   │   ├── pageSizes.ts          # US / ISO / blueprint page table
+│   │   │   ├── sheetTree.ts          # Sheet enumeration, paths, print scope
+│   │   │   └── blockGlyphs.ts        # Symbol classification + glyph work list
+│   │   │
 │   │   ├── simulation/               # Browser-side simulation engine
 │   │   │   ├── WasmSimulationEngine.ts    # WASM-based simulation
 │   │   │   ├── SimulationWorker.ts        # Web Worker for off-main-thread
@@ -470,7 +521,7 @@ obliq-2/
 │       └── client.ts                 # Automation API client
 │
 ├── __tests__/                        # Test suites
-│   ├── blocks/                       # Block module unit tests
+│   ├── *-block.test.ts               # Block module unit tests (one file per block)
 │   ├── codegen/                      # Code generation tests
 │   ├── simulation/                   # Simulation engine tests
 │   ├── wasm/                         # WASM compilation and execution tests
@@ -597,8 +648,10 @@ If tests fail:
 2. **Build Your Diagram**: Drag blocks from the library and connect them with wires
 3. **Configure Blocks**: Click blocks to set parameters (e.g., transfer function coefficients)
 4. **Run Simulation**: Click "Run Simulation" to see signals propagate in real-time
-5. **Generate Code**: Click "Generate C Code" to download a PlatformIO-compatible library
-6. **Export Data**: Use Signal Logger blocks to capture and export simulation data
+5. **Tidy the Layout**: Right-click empty canvas and choose **Reorganize Block Arrangement**
+6. **Generate Code**: Click "Generate C Code" to download a PlatformIO-compatible library
+7. **Export Data**: Use Signal Logger blocks to capture and export simulation data
+8. **Print or Share**: Click **Export as PDF...** for a printable document, one page per sheet
 
 ## License
 
