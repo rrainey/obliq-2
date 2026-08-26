@@ -1293,6 +1293,37 @@ export function propagateSignalTypes(
   }
 }
 
+/**
+ * Memoises single-sheet propagation for subsystem interiors.
+ *
+ * getSubsystemOutputType re-propagates a subsystem's sheet whenever an output
+ * port's driving type is not already known. That happens once per output port,
+ * per pass, and nests through the hierarchy -- on a 163-sheet model it fired
+ * ~49,000 times and processed 2.06M block-visits against 3,310 real blocks, a
+ * 623x redundancy factor that cost ~4s per call.
+ *
+ * propagateSignalTypes(blocks, connections) is a pure function of those two
+ * arrays, so the result can be keyed on their identity. The store replaces both
+ * arrays on every edit (immutable updates), so a stale sheet can never be read:
+ * an edited sheet arrives as new array objects and misses the cache. Both
+ * identities are checked, and a WeakMap keeps this from retaining freed sheets.
+ */
+const subsheetPropagationCache = new WeakMap<
+  BlockData[],
+  { connections: WireData[]; result: TypePropagationResult }
+>()
+
+function propagateSheetCached(
+  blocks: BlockData[],
+  connections: WireData[]
+): TypePropagationResult {
+  const hit = subsheetPropagationCache.get(blocks)
+  if (hit && hit.connections === connections) return hit.result
+  const result = propagateSignalTypes(blocks, connections)
+  subsheetPropagationCache.set(blocks, { connections, result })
+  return result
+}
+
 function getSubsystemOutputType(
   subsystemBlock: BlockData,
   outputPortName: string,
@@ -1342,7 +1373,7 @@ function getSubsystemOutputType(
 
           if (!sourceType) {
             debugLog(`    Running recursive propagation on subsystem sheet...`)
-            const subsystemResult = propagateSignalTypes(
+            const subsystemResult = propagateSheetCached(
               sheet.blocks,
               sheet.connections
             )

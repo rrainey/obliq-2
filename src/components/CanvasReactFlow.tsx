@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useCallback, useRef, useState, useEffect } from 'react'
+import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
 import ReactFlow, {
   ReactFlowProvider,
   addEdge,
@@ -177,58 +177,49 @@ function CanvasReactFlowInner({
     error: string | null
   } | null>(null)
 
-  // Convert wires to the format needed for port name rendering
-  const wiresForNodes = wires.map(w => ({
+  // Signal type propagation for the whole model.
+  //
+  // This is the most expensive thing the canvas does -- on a large model
+  // (~3300 blocks across ~160 nested sheets) a single call costs seconds. It
+  // used to run unmemoised in the component body on *every* render, and its
+  // result was only ever read to seed useNodesState/useEdgesState on mount, so
+  // every render after the first recomputed it and discarded it. A second copy
+  // ran in the edge-building effect, whose dependencies included `highlightedNet`
+  // -- so merely hovering a wire re-propagated the entire model.
+  //
+  // Now it runs once per actual model change and is shared by both consumers.
+  const propagationResult = useMemo(() => {
+    const sheetsForPropagation = modelSheets && modelSheets.length > 0
+      ? modelSheets.map(s => ({ blocks: s.blocks, connections: s.connections }))
+      : [{ blocks, connections: wires }]
+    return propagateSignalTypesMultiSheet(sheetsForPropagation)
+  }, [blocks, wires, modelSheets])
+
+  // Wire endpoints in the shape BlockNode needs for port-name labels.
+  const wiresForNodes = useMemo(() => wires.map(w => ({
     id: w.id,
     sourceBlockId: w.sourceBlockId,
     sourcePortIndex: w.sourcePortIndex,
     targetBlockId: w.targetBlockId,
     targetPortIndex: w.targetPortIndex,
-  }))
+  })), [wires])
 
-  // Convert blocks and wires to ReactFlow format with enhanced edge data
-  const initialNodes = blocks.map((block) => blockDataToNode(block, wiresForNodes, blocks))
-
-  // Run type propagation ONCE for all wires (not inside the map!)
-  const sheetsForInitialPropagation = modelSheets && modelSheets.length > 0
-    ? modelSheets.map(s => ({ blocks: s.blocks, connections: s.connections }))
-    : [{ blocks, connections: wires }]
-  const initialPropagationResult = propagateSignalTypesMultiSheet(sheetsForInitialPropagation)
-
-  const initialEdges = wires.map(wire => {
-    const signalType = initialPropagationResult.signalTypes.get(wire.id)
-
-    const edgeData: CustomEdgeData = {}
-
-    // Add type error information if available
-    if (signalType) {
-      // Check for type errors in the propagation result
-      const wireError = initialPropagationResult.errors.find(e => e.wireId === wire.id)
-      if (wireError) {
-        edgeData.typeError = {
-          message: wireError.message,
-          severity: wireError.severity,
-          details: signalType ? {
-            actualType: signalType.type,
-            expectedType: undefined // Will be filled if we have more context
-          } : undefined
-        }
-      }
-
-      edgeData.sourceType = signalType.type
-      edgeData.targetType = signalType.type // Same type flows through the wire
-    }
-
-    return {
-      ...wireDataToEdge(wire),
-      type: 'default', // Use custom default edge
-      data: edgeData,
-    }
-  })
-
-  // ReactFlow state
-  const [nodes, setNodes, onNodesChangeInternal] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  // ReactFlow state.
+  //
+  // Nodes are seeded with a real conversion because the `fitView` prop fits at
+  // initial render; seeding empty would fit against nothing and never re-fit
+  // once the sync effect populates them. Computed exactly once via a ref --
+  // useNodesState only reads its argument on mount, so recomputing per render
+  // would be pure waste. Edges are seeded empty because building them requires
+  // type propagation, and the effect below fills them in immediately.
+  const initialNodesRef = useRef<ReturnType<typeof blockDataToNode>[] | null>(null)
+  if (initialNodesRef.current === null) {
+    initialNodesRef.current = blocks.map(block => blockDataToNode(block, wiresForNodes, blocks))
+  }
+  const [nodes, setNodes, onNodesChangeInternal] = useNodesState<BlockNodeData>(
+    initialNodesRef.current as any
+  )
+  const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdgeData>([])
 
   // Track dragging state to detect when multi-node drag ends
   const isDraggingRef = useRef(false)
@@ -315,11 +306,13 @@ function CanvasReactFlowInner({
   }, [onWireRoutingChange])
 
   useEffect(() => {
-    // Run type propagation once for all wires - use multi-sheet for proper sheet label handling
-    const sheetsForPropagation = modelSheets && modelSheets.length > 0
-      ? modelSheets.map(s => ({ blocks: s.blocks, connections: s.connections }))
-      : [{ blocks, connections: wires }]
-    const propagationResult = propagateSignalTypesMultiSheet(sheetsForPropagation)
+    // Index by id so the per-wire loop below stays linear; these used to be
+    // Array.find calls inside the map, i.e. O(wires x errors) and O(wires x blocks).
+    const errorByWireId = new Map<string, typeof propagationResult.errors[number]>()
+    for (const e of propagationResult.errors) {
+      if (e.wireId && !errorByWireId.has(e.wireId)) errorByWireId.set(e.wireId, e)
+    }
+    const blockById = new Map(blocks.map(b => [b.id, b]))
 
     const newEdges = wires.map(wire => {
       const signalType = propagationResult.signalTypes.get(wire.id)
@@ -328,7 +321,7 @@ function CanvasReactFlowInner({
 
       if (signalType) {
         // Check for type errors
-        const wireError = propagationResult.errors.find(e => e.wireId === wire.id)
+        const wireError = errorByWireId.get(wire.id)
         if (wireError) {
           edgeData.typeError = {
             message: wireError.message,
@@ -344,7 +337,7 @@ function CanvasReactFlowInner({
         edgeData.targetType = signalType.type
 
         // Add signal name if it's from a named port
-        const sourceBlock = blocks.find(b => b.id === wire.sourceBlockId)
+        const sourceBlock = blockById.get(wire.sourceBlockId)
         if (sourceBlock?.type === 'input_port' || sourceBlock?.type === 'output_port') {
           edgeData.signalName = sourceBlock.parameters?.signalName || sourceBlock.name
         }
@@ -380,7 +373,7 @@ function CanvasReactFlowInner({
       }
     })
     setEdges(newEdges)
-  }, [wires, blocks, modelSheets, setEdges, handleWireRoutingChange, highlightedNet])
+  }, [wires, blocks, propagationResult, setEdges, handleWireRoutingChange, highlightedNet])
 
   // Handle connection validation
   const isValidConnection = useCallback((connection: Connection) => {
