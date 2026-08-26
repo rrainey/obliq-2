@@ -35,8 +35,10 @@ interface ModelValidationModalProps {
   errors: TypeCompatibilityError[]
   warnings: TypeCompatibilityError[]
   blocks: BlockData[]
-  onSelectBlock?: (blockId: string) => void
-  onSelectWire?: (wireId: string) => void
+  // Called when a validation row is clicked. The handler is responsible for
+  // switching sheets (if the item lives on a different sheet), selecting the
+  // referenced block or wire, and centering the canvas on it.
+  onNavigate?: (item: TypeCompatibilityError) => void
 }
 
 export default function ModelValidationModal({
@@ -45,27 +47,20 @@ export default function ModelValidationModal({
   errors,
   warnings,
   blocks,
-  onSelectBlock,
-  onSelectWire
+  onNavigate
 }: ModelValidationModalProps) {
   const [selectedTab, setSelectedTab] = useState<string | null>('errors')
   const [copied, setCopied] = useState(false)
-  
+
   // Create a map of block IDs to names for better display
   const blockNameMap = new Map(blocks.map(b => [b.id, b.name]))
-  
+
   if (!isOpen) return null
 
   const handleItemClick = (item: TypeCompatibilityError) => {
-    // Close the modal
+    // Close the modal, then let the caller navigate.
     onClose()
-    
-    // Navigate to the error location
-    if (item.wireId && onSelectWire) {
-      onSelectWire(item.wireId)
-    } else if (item.blockId && onSelectBlock) {
-      onSelectBlock(item.blockId)
-    }
+    onNavigate?.(item)
   }
 
   const getLocationDescription = (item: TypeCompatibilityError): string => {

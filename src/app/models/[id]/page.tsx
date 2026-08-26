@@ -134,6 +134,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     switchToSheet, addSheet, renameSheet, deleteSheet,
     addBlock, updateBlock, updateBlocks, deleteBlock, addWire, deleteWire, updateWireRouting, renameBlock,
     setSelectedBlockId, setSelectedBlocks, setSelectedWireId, setConfigBlock, clearSelection,
+    requestFocus,
     // Feature 5: Clipboard actions
     copySelection, cutSelection, pasteFromClipboard, checkClipboardDependencies,
     setSimulationResults, setIsSimulating, setOutputPortValues,
@@ -1692,8 +1693,24 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             <ModelValidationButton
               blocks={blocks}
               wires={wires}
-              onSelectBlock={setSelectedBlockId}
-              onSelectWire={setSelectedWireId}
+              onNavigate={(item) => {
+                // Switch sheets first if the item lives on a different one.
+                if (item.sheetId && item.sheetId !== activeSheetId) {
+                  switchToSheet(item.sheetId)
+                }
+                // Apply selection so the block/wire is highlighted.
+                if (item.wireId) {
+                  setSelectedWireId(item.wireId)
+                } else if (item.blockId) {
+                  setSelectedBlockId(item.blockId)
+                }
+                // Push a focus request; canvas will pan (preserving zoom).
+                requestFocus({
+                  blockId: item.blockId,
+                  wireId: item.wireId,
+                  sheetId: item.sheetId,
+                })
+              }}
             />
 
             <Button

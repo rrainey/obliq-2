@@ -53,6 +53,14 @@ export interface ModelState {
   selectedWireIds: string[]       // Feature 4: Connections between selected blocks
   configBlock: BlockData | null
   resizingBlockId: string | null  // Block currently in interactive resize mode
+  // Focus request: consumed by CanvasReactFlow to pan/center on a block or wire.
+  // Bumping `nonce` re-fires the request even for the same target.
+  focusRequest: {
+    blockId?: string
+    wireId?: string
+    sheetId?: string
+    nonce: number
+  } | null
 
   // Feature 5: Clipboard state
   clipboardData: ClipboardData | null
@@ -121,6 +129,7 @@ export interface ModelActions {
   setSelectedWireId: (wireId: string | null) => void
   setConfigBlock: (block: BlockData | null) => void
   setResizingBlockId: (blockId: string | null) => void
+  requestFocus: (target: { blockId?: string; wireId?: string; sheetId?: string }) => void
 
   // Feature 4: Multi-selection actions
   setSelectedBlocks: (blockIds: string[]) => void
@@ -261,6 +270,7 @@ export const useModelStore = create<ModelStore>()(
     selectedWireIds: [],       // Feature 4: Connections between selected blocks
     configBlock: null,
     resizingBlockId: null,
+    focusRequest: null,
     clipboardData: null,       // Feature 5: Clipboard state
     simulationResults: null,
     isSimulating: false,
@@ -954,6 +964,14 @@ export const useModelStore = create<ModelStore>()(
     setSelectedWireId: (selectedWireId) => set({ selectedWireId }),
     setConfigBlock: (configBlock) => set({ configBlock }),
     setResizingBlockId: (resizingBlockId) => set({ resizingBlockId }),
+    requestFocus: (target) => set((state) => ({
+      focusRequest: {
+        blockId: target.blockId,
+        wireId: target.wireId,
+        sheetId: target.sheetId,
+        nonce: (state.focusRequest?.nonce ?? 0) + 1,
+      },
+    })),
 
     // Feature 4: Multi-selection actions
     setSelectedBlocks: (blockIds: string[]) => {

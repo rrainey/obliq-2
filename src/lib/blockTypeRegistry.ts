@@ -424,7 +424,7 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
       inputPorts: ['Input1'],
       outputPorts: ['Output1'],
       showEnableInput: false,
-      showPortNames: false,
+      showPortNames: true,
       codeGenStrategy: 'flatten',  // 'flatten' | 'segregated' | 'segregated_atomic'
       parameters: []               // Subsystem-scoped parameters (only for segregated strategies)
     },

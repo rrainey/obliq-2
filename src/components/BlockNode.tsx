@@ -54,14 +54,18 @@ const PORT_SPACING = 20
 const MIN_HEIGHT = 64
 const TERMINATOR_HEIGHT = 45 // Flatter height for terminator blocks
 
-// Calculate port position helper
+// Calculate port position helper.
+//
+// Evenly distributes `count` ports across `blockHeight` with equal padding at
+// top and bottom (each port at (i+1)/(count+1) of the height). For blocks at
+// their natural minimum size this matches the prior fixed-PORT_SPACING layout
+// almost exactly, but for resized (taller) subsystem blocks the ports now
+// spread out to use the available margin instead of clumping in the middle.
 const calculatePortPosition = (index: number, count: number, blockHeight: number = MIN_HEIGHT): number => {
   if (count === 1) {
     return blockHeight / 2 // Center single port
   }
-  const totalSpacing = (count - 1) * PORT_SPACING
-  const startY = (blockHeight - totalSpacing) / 2
-  return startY + index * PORT_SPACING
+  return (blockHeight * (index + 1)) / (count + 1)
 }
 
 /**
@@ -1302,7 +1306,10 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
                   key={`input-label-${index}`}
                   className="port-name-label input"
                   style={{
-                    top: calculatePortPosition(index, inputCount, minHeight) - 16,  /* -10 base - 6 (0.75 char) shift up */
+                    // Shift the label down within its port slot so it visually
+                    // groups with its own wire (Gestalt proximity) — more
+                    // whitespace above the label than below.
+                    top: calculatePortPosition(index, inputCount, minHeight) - 12,
                   }}
                 >
                   {portName}
@@ -1335,7 +1342,9 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
                   key={`output-label-${index}`}
                   className="port-name-label output"
                   style={{
-                    top: calculatePortPosition(index, outputCount, minHeight) - 18,  /* -12 base - 6 (0.75 char) shift up */
+                    // Same rebalancing as input labels; the 2 px extra shift
+                    // vs. the input side is preserved from the prior layout.
+                    top: calculatePortPosition(index, outputCount, minHeight) - 14,
                   }}
                 >
                   {portName}

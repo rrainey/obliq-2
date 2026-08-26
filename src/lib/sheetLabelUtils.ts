@@ -108,6 +108,90 @@ export function resolveSheetLabelConnections(blocks: BlockData[]): SheetLabelCon
 }
 
 /**
+ * Compute the set of source ports (`"blockId:portIndex"`) that logically belong
+ * to the same net as `startWire`, traversing sheet-label sink/source pairs
+ * transitively. Used by "Highlight Connections" so a wire that terminates at
+ * a Sheet Label Sink also highlights the outputs of every matching Sheet
+ * Label Source on the same sheet, and vice versa.
+ *
+ * Scope is limited to the given `blocks`/`wires` (typically the current
+ * sheet). Sheet labels reference each other by `signalName`.
+ */
+export function expandNetViaSheetLabels(
+  startWire: WireData,
+  blocks: BlockData[],
+  wires: WireData[]
+): Set<string> {
+  const key = (blockId: string, portIndex: number) => `${blockId}:${portIndex}`
+  const blockById = new Map(blocks.map(b => [b.id, b] as const))
+
+  // signalName -> sinks / sources on this sheet
+  const sinksByName = new Map<string, BlockData[]>()
+  const sourcesByName = new Map<string, BlockData[]>()
+  for (const b of blocks) {
+    const name = b.parameters?.signalName
+    if (!name) continue
+    if (b.type === 'sheet_label_sink') {
+      const arr = sinksByName.get(name) ?? []
+      arr.push(b); sinksByName.set(name, arr)
+    } else if (b.type === 'sheet_label_source') {
+      const arr = sourcesByName.get(name) ?? []
+      arr.push(b); sourcesByName.set(name, arr)
+    }
+  }
+
+  const net = new Set<string>()
+  const queue: Array<{ blockId: string; portIndex: number }> = []
+  const enqueue = (blockId: string, portIndex: number) => {
+    const k = key(blockId, portIndex)
+    if (net.has(k)) return
+    net.add(k)
+    queue.push({ blockId, portIndex })
+  }
+
+  enqueue(startWire.sourceBlockId, startWire.sourcePortIndex)
+
+  while (queue.length) {
+    const src = queue.shift()!
+    const srcBlock = blockById.get(src.blockId)
+
+    // 1. If the source is a sheet_label_source, hop upstream: find the sinks
+    //    with the same signalName, then the wires feeding those sinks, and
+    //    add their source ports to the net.
+    if (srcBlock?.type === 'sheet_label_source') {
+      const name = srcBlock.parameters?.signalName
+      if (name) {
+        for (const sink of sinksByName.get(name) ?? []) {
+          for (const w of wires) {
+            if (w.targetBlockId === sink.id) {
+              enqueue(w.sourceBlockId, w.sourcePortIndex)
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Walk wires driven by this source; if any lands on a sheet_label_sink,
+    //    hop downstream to every matching sheet_label_source on this sheet.
+    for (const w of wires) {
+      if (w.sourceBlockId !== src.blockId || w.sourcePortIndex !== src.portIndex) continue
+      const tgt = blockById.get(w.targetBlockId)
+      if (tgt?.type === 'sheet_label_sink') {
+        const name = tgt.parameters?.signalName
+        if (name) {
+          for (const source of sourcesByName.get(name) ?? []) {
+            // sheet_label_source has a single output port at index 0.
+            enqueue(source.id, 0)
+          }
+        }
+      }
+    }
+  }
+
+  return net
+}
+
+/**
  * Validates sheet label usage and returns any issues found
  */
 export interface SheetLabelValidationIssue {

@@ -9,6 +9,7 @@ import { Sheet } from '@/lib/modelStore'
 import { ModelParameter } from '@/lib/modelSchema'
 import { isValidType, getTypeValidationError } from '@/lib/typeValidator'
 import { isValidC99Initializer, getC99InitializerError, toC99Initializer, parseC99Initializer } from '@/lib/c99InitializerValidator'
+import { createInputPortBlock, createOutputPortBlock } from '@/lib/blockFactory'
 
 interface SubsystemConfigProps {
   block: BlockData
@@ -65,10 +66,125 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
       })
     }
 
+    // Sync port entries with matching port blocks on the subsystem's Main
+    // sheet: renamed entries rename the block (preserving its connections),
+    // removed entries delete the block (and any wires touching it), and new
+    // entries create a block below the visually lowest existing one.
+    const originalInputs: string[] = block.parameters?.inputPorts || []
+    const originalOutputs: string[] = block.parameters?.outputPorts || []
+    const cleanedInputs = inputPorts.filter((p: string) => p.trim() !== '')
+    const cleanedOutputs = outputPorts.filter((p: string) => p.trim() !== '')
+
+    // Rename / add / remove diff. When |removed| == |added|, treat as a
+    // set of renames paired positionally (encounter order) — that handles
+    // the common in-place edit without needing stable port ids. When the
+    // counts differ, fall back to pure remove+add semantics.
+    const diffPortLists = (original: string[], next: string[]) => {
+      const removed = original.filter(n => !next.includes(n))
+      const added = next.filter(n => !original.includes(n))
+      const renames: Array<{ from: string; to: string }> = []
+      let deletes = removed
+      let adds = added
+      if (removed.length > 0 && removed.length === added.length) {
+        for (let i = 0; i < removed.length; i++) {
+          renames.push({ from: removed[i], to: added[i] })
+        }
+        deletes = []
+        adds = []
+      }
+      return { renames, deletes, adds }
+    }
+    const inputDiff = diffPortLists(originalInputs, cleanedInputs)
+    const outputDiff = diffPortLists(originalOutputs, cleanedOutputs)
+
+    const hasAnyChange =
+      inputDiff.renames.length + inputDiff.deletes.length + inputDiff.adds.length +
+      outputDiff.renames.length + outputDiff.deletes.length + outputDiff.adds.length > 0
+
+    if (hasAnyChange) {
+      const mainSheetId = `${block.id}_main`
+      const targetSheetIndex = (() => {
+        const byId = updatedSheets.findIndex(s => s.id === mainSheetId)
+        return byId >= 0 ? byId : (updatedSheets.length > 0 ? 0 : -1)
+      })()
+
+      if (targetSheetIndex >= 0) {
+        const targetSheet = updatedSheets[targetSheetIndex]
+        let blocks: BlockData[] = targetSheet.blocks || []
+        let connections = targetSheet.connections || []
+
+        const applyRenames = (type: 'input_port' | 'output_port', renames: Array<{ from: string; to: string }>) => {
+          if (renames.length === 0) return
+          const mapping = new Map(renames.map(r => [r.from, r.to] as const))
+          blocks = blocks.map(b => {
+            if (b.type !== type) return b
+            const to = mapping.get(b.name)
+            if (!to) return b
+            return {
+              ...b,
+              name: to,
+              parameters: { ...(b.parameters || {}), portName: to },
+            }
+          })
+        }
+
+        const applyDeletes = (type: 'input_port' | 'output_port', names: string[]) => {
+          if (names.length === 0) return
+          const nameSet = new Set(names)
+          const removedIds = new Set<string>(
+            blocks.filter(b => b.type === type && nameSet.has(b.name)).map(b => b.id)
+          )
+          if (removedIds.size === 0) return
+          blocks = blocks.filter(b => !removedIds.has(b.id))
+          connections = connections.filter(
+            (c: any) => !removedIds.has(c.sourceBlockId) && !removedIds.has(c.targetBlockId)
+          )
+        }
+
+        const anchor = (type: 'input_port' | 'output_port', defaultX: number) => {
+          let last: BlockData | null = null
+          for (const b of blocks) {
+            if (b.type !== type) continue
+            if (!last || (b.position?.y ?? 0) > (last.position?.y ?? 0)) last = b
+          }
+          const x = last?.position?.x ?? defaultX
+          const y = last ? (last.position.y + 100) : 150
+          return { x, y }
+        }
+
+        const applyAdds = (
+          type: 'input_port' | 'output_port',
+          names: string[],
+          defaultX: number,
+        ) => {
+          if (names.length === 0) return
+          let cursor = anchor(type, defaultX)
+          const factory = type === 'input_port' ? createInputPortBlock : createOutputPortBlock
+          for (const portName of names) {
+            blocks = [...blocks, factory(targetSheet.id, portName, cursor)]
+            cursor = { x: cursor.x, y: cursor.y + 100 }
+          }
+        }
+
+        // Order matters: rename first so subsequent adds don't collide with
+        // stale names, then delete stale ones, then append new blocks.
+        applyRenames('input_port', inputDiff.renames)
+        applyRenames('output_port', outputDiff.renames)
+        applyDeletes('input_port', inputDiff.deletes)
+        applyDeletes('output_port', outputDiff.deletes)
+        applyAdds('input_port', inputDiff.adds, 100)
+        applyAdds('output_port', outputDiff.adds, 400)
+
+        updatedSheets = updatedSheets.map((s, i) =>
+          i === targetSheetIndex ? { ...s, blocks, connections } : s
+        )
+      }
+    }
+
     const blockParams = {
       sheets: updatedSheets,
-      inputPorts: inputPorts.filter((port: string) => port.trim() !== ''),
-      outputPorts: outputPorts.filter((port: string) => port.trim() !== ''),
+      inputPorts: cleanedInputs,
+      outputPorts: cleanedOutputs,
       showEnableInput,
       showPortNames,
       codeGenStrategy,

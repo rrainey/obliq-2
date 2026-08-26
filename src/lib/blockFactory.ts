@@ -219,6 +219,7 @@ export function getDefaultBlockParameters(blockType: string): Record<string, any
         sheetName: 'Subsystem',
         inputPorts: ['Input1'],
         outputPorts: ['Output1'],
+        showPortNames: true,
         codeGenStrategy: 'flatten'  // 'flatten' | 'segregated' | 'segregated_atomic'
       };
 

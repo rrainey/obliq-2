@@ -41,6 +41,7 @@ import BlockContextMenu from './BlockContextMenu'
 import WireContextMenu from './WireContextMenu'
 import PaneContextMenu from './PaneContextMenu'
 import { computeAutoLayout } from '@/lib/layout/autoLayout'
+import { expandNetViaSheetLabels } from '@/lib/sheetLabelUtils'
 
 interface CanvasReactFlowProps {
   blocks?: BlockData[]
@@ -98,10 +99,13 @@ type PaneContextMenuState = {
   bottom?: number
 }
 
-// Highlighted net identifier (source block + port)
+// A highlighted "net" spans one or more source ports on the current sheet,
+// including ports reached transitively via Sheet Label sink/source pairs.
+// `originWireId` remembers which wire opened the highlight so re-clicking
+// that same wire toggles it off.
 type HighlightedNet = {
-  sourceBlockId: string
-  sourcePortIndex: number
+  originWireId: string
+  sourcePorts: Set<string>  // keys of the form `${blockId}:${portIndex}`
 } | null
 
 // Inner component that has access to ReactFlow instance
@@ -132,7 +136,7 @@ function CanvasReactFlowInner({
   onBlockRename,          // Feature 7
 }: CanvasReactFlowProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
-  const { project, getNode } = useReactFlow()
+  const { project, getNode, setCenter, getZoom } = useReactFlow()
   const store = useStoreApi()
   const viewport = useViewport()
   const [connectionError, setConnectionError] = useState<string | null>(null)
@@ -146,6 +150,10 @@ function CanvasReactFlowInner({
   // Resize mode state (which block, if any, is showing corner resize handles)
   const resizingBlockId = useModelStore(state => state.resizingBlockId)
   const setResizingBlockId = useModelStore(state => state.setResizingBlockId)
+
+  // Focus request: pan the viewport to a specific block or wire when the
+  // validation modal (or anything else) pushes a request.
+  const focusRequest = useModelStore(state => state.focusRequest)
 
   // Context menu state - following ReactFlow pattern
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
@@ -356,10 +364,10 @@ function CanvasReactFlowInner({
       edgeData.routing = wire.routing
       edgeData.onRoutingChange = handleWireRoutingChange
 
-      // Add highlighting info - wire is highlighted if it shares the same source as highlightedNet
+      // Highlight the wire if its source port is in the extended net (which
+      // may span multiple ports via Sheet Label sink/source pairs).
       if (highlightedNet &&
-          wire.sourceBlockId === highlightedNet.sourceBlockId &&
-          wire.sourcePortIndex === highlightedNet.sourcePortIndex) {
+          highlightedNet.sourcePorts.has(`${wire.sourceBlockId}:${wire.sourcePortIndex}`)) {
         edgeData.isHighlighted = true
       }
 
@@ -586,20 +594,17 @@ const handleEdgesChange = useCallback((changes: any[]) => {
     const wire = wires.find(w => w.id === wireId)
     if (!wire) return
 
-    // Check if this net is already highlighted
-    if (highlightedNet &&
-        highlightedNet.sourceBlockId === wire.sourceBlockId &&
-        highlightedNet.sourcePortIndex === wire.sourcePortIndex) {
-      // Toggle off - clear highlighting
+    // Re-clicking the wire that opened the current highlight toggles it off.
+    if (highlightedNet && highlightedNet.originWireId === wireId) {
       setHighlightedNet(null)
-    } else {
-      // Highlight this net (all wires from same source port)
-      setHighlightedNet({
-        sourceBlockId: wire.sourceBlockId,
-        sourcePortIndex: wire.sourcePortIndex,
-      })
+      return
     }
-  }, [wires, highlightedNet])
+
+    // Expand across Sheet Label sink/source pairs so the highlight follows
+    // the logical net, not just direct fan-out.
+    const sourcePorts = expandNetViaSheetLabels(wire, blocks, wires)
+    setHighlightedNet({ originWireId: wireId, sourcePorts })
+  }, [wires, blocks, highlightedNet])
 
   // Handle remove custom routing
   const handleRemoveCustomRouting = useCallback((wireId: string) => {
@@ -651,6 +656,63 @@ const handleEdgesChange = useCallback((changes: any[]) => {
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
   }, [resizingBlockId, setResizingBlockId])
+
+  // React to focusRequest: pan the viewport (preserving zoom) so the requested
+  // block/wire is centered. The request may arrive right after switchToSheet
+  // swaps blocks/wires into the store, so we resolve the target against the
+  // current blocks/wires props.
+  useEffect(() => {
+    if (!focusRequest) return
+
+    // Resolve target position from current blocks/wires. If the sheet just
+    // switched, the props may not have arrived yet — wait a tick.
+    const resolve = (): { x: number; y: number } | null => {
+      if (focusRequest.blockId) {
+        const b = blocks.find(bb => bb.id === focusRequest.blockId)
+        if (!b) return null
+        const node = getNode(b.id)
+        // Prefer the rendered node's measured size if available, else fall
+        // back to block.position with a small default offset.
+        const w = node?.width ?? 80
+        const h = node?.height ?? 64
+        return { x: b.position.x + w / 2, y: b.position.y + h / 2 }
+      }
+      if (focusRequest.wireId) {
+        const w = wires.find(ww => ww.id === focusRequest.wireId)
+        if (!w) return null
+        const src = blocks.find(bb => bb.id === w.sourceBlockId)
+        const tgt = blocks.find(bb => bb.id === w.targetBlockId)
+        if (!src || !tgt) return null
+        const srcNode = getNode(src.id)
+        const tgtNode = getNode(tgt.id)
+        const srcW = srcNode?.width ?? 80
+        const srcH = srcNode?.height ?? 64
+        const tgtW = tgtNode?.width ?? 80
+        const tgtH = tgtNode?.height ?? 64
+        const sx = src.position.x + srcW / 2
+        const sy = src.position.y + srcH / 2
+        const tx = tgt.position.x + tgtW / 2
+        const ty = tgt.position.y + tgtH / 2
+        return { x: (sx + tx) / 2, y: (sy + ty) / 2 }
+      }
+      return null
+    }
+
+    const attempt = (retries: number) => {
+      const p = resolve()
+      if (p) {
+        setCenter(p.x, p.y, { zoom: getZoom(), duration: 400 })
+      } else if (retries > 0) {
+        // Sheet swap may not have propagated yet; try again on the next frame.
+        requestAnimationFrame(() => attempt(retries - 1))
+      }
+    }
+    attempt(6)
+    // Intentionally not depending on blocks/wires: we only re-run when a new
+    // focus request is issued (nonce changes). The retry loop handles the
+    // brief window while a sheet switch is settling.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRequest?.nonce])
 
   // Handle node drag
   const onNodeDrag: NodeDragHandler = useCallback((event, node) => {
@@ -972,8 +1034,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
             (() => {
               const wire = wires.find(w => w.id === wireContextMenu.wireId)
               return wire !== undefined &&
-                wire.sourceBlockId === highlightedNet.sourceBlockId &&
-                wire.sourcePortIndex === highlightedNet.sourcePortIndex
+                highlightedNet.sourcePorts.has(`${wire.sourceBlockId}:${wire.sourcePortIndex}`)
             })()
           }
           hasCustomRouting={

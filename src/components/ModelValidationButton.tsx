@@ -7,22 +7,21 @@ import { useWireValidation } from '@/hooks/useWireValidation'
 import ModelValidationModal from './ModelValidationModal'
 import { BlockData } from './BlockNode'
 import { WireData } from './Wire'
+import { TypeCompatibilityError } from '@/lib/typeCompatibilityValidator'
 import { Button, Badge, Group, Text, Indicator } from '@mantine/core'
 import { IconCircleCheck, IconAlertCircle, IconAlertTriangle, IconRefresh } from '@tabler/icons-react'
 
 interface ModelValidationButtonProps {
   blocks: BlockData[]
   wires: WireData[]
-  onSelectBlock?: (blockId: string) => void
-  onSelectWire?: (wireId: string) => void
+  onNavigate?: (item: TypeCompatibilityError) => void
   className?: string
 }
 
 export default function ModelValidationButton({
   blocks,
   wires,
-  onSelectBlock,
-  onSelectWire,
+  onNavigate,
   className = ''
 }: ModelValidationButtonProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -108,8 +107,7 @@ export default function ModelValidationButton({
         errors={allErrors}
         warnings={allWarnings}
         blocks={blocks}
-        onSelectBlock={onSelectBlock}
-        onSelectWire={onSelectWire}
+        onNavigate={onNavigate}
       />
     </>
   )

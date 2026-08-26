@@ -14,6 +14,10 @@ export interface TypeCompatibilityError {
   blockId?: string
   sourceBlockId?: string
   targetBlockId?: string
+  // Sheet the referenced block/wire lives on. Populated by the multi-sheet
+  // validator so callers can jump straight to the right sheet (including
+  // sheets nested inside subsystems).
+  sheetId?: string
   message: string
   severity: 'error' | 'warning'
   details?: {
@@ -219,51 +223,81 @@ export function validateModelTypeCompatibility(
 // Fix the error objects by removing the 'type' property
 
 export function validateModelTypeCompatibilityMultiSheet(
-  sheets: Array<{ blocks: BlockData[], connections: WireData[] }>
+  sheets: Array<{ id?: string, blocks: BlockData[], connections: WireData[] }>
 ): ModelValidationResult {
   const allErrors: TypeCompatibilityError[] = []
   const allWarnings: TypeCompatibilityError[] = []
-  
+
+  // Recursively walk every sheet (including sheets nested inside subsystem
+  // blocks) so we can tag each block/wire with the sheet it lives on.
+  const blockSheet = new Map<string, string>()
+  const wireSheet = new Map<string, string>()
+  const visitSheet = (sh: { id?: string, blocks?: BlockData[], connections?: WireData[] }) => {
+    const blocks = sh.blocks || []
+    const connections = sh.connections || []
+    const sid = sh.id
+    if (sid) {
+      for (const b of blocks) blockSheet.set(b.id, sid)
+      for (const w of connections) wireSheet.set(w.id, sid)
+    }
+    for (const b of blocks) {
+      if (b.type === 'subsystem' && Array.isArray(b.parameters?.sheets)) {
+        for (const nested of b.parameters.sheets) visitSheet(nested)
+      }
+    }
+  }
+  for (const s of sheets) visitSheet(s)
+
+  const stampSheetId = (e: TypeCompatibilityError): TypeCompatibilityError => {
+    if (e.sheetId) return e
+    if (e.wireId && wireSheet.has(e.wireId)) return { ...e, sheetId: wireSheet.get(e.wireId) }
+    if (e.blockId && blockSheet.has(e.blockId)) return { ...e, sheetId: blockSheet.get(e.blockId) }
+    if (e.sourceBlockId && blockSheet.has(e.sourceBlockId)) return { ...e, sheetId: blockSheet.get(e.sourceBlockId) }
+    if (e.targetBlockId && blockSheet.has(e.targetBlockId)) return { ...e, sheetId: blockSheet.get(e.targetBlockId) }
+    return e
+  }
+
   // Use multi-sheet type propagation
   const typeResult = propagateSignalTypesMultiSheet(sheets)
-  
+
   // Process type propagation errors
   for (const error of typeResult.errors) {
-    allErrors.push({
+    allErrors.push(stampSheetId({
       message: error.message,
       blockId: error.blockId,
       wireId: error.wireId,
       severity: 'error'
-    })
+    }))
   }
-  
+
   // Check each sheet's connections for type compatibility
   for (const sheet of sheets) {
     for (const wire of sheet.connections) {
       const signalType = typeResult.signalTypes.get(wire.id)
-      
+
       if (!signalType) {
         // Unable to determine type — warning, not a hard error
         const sourceBlock = sheet.blocks.find(b => b.id === wire.sourceBlockId)
         const targetBlock = sheet.blocks.find(b => b.id === wire.targetBlockId)
-        
+
         if (sourceBlock && targetBlock) {
-          allWarnings.push({
+          allWarnings.push(stampSheetId({
             message: `Unable to determine signal type for connection from ${sourceBlock.name} to ${targetBlock.name}`,
             wireId: wire.id,
-            severity: 'warning'
-          })
+            severity: 'warning',
+            sheetId: sheet.id
+          }))
         }
       }
     }
   }
-  
+
   // Validate sheet labels across all sheets
   const allBlocks = sheets.flatMap(s => s.blocks)
   const sheetLabelIssues = validateSheetLabels(allBlocks)
-  
+
   // Convert sheet label issues to TypeCompatibilityError format
-  const sheetLabelErrors: TypeCompatibilityError[] = sheetLabelIssues.map(issue => ({
+  const sheetLabelErrors: TypeCompatibilityError[] = sheetLabelIssues.map(issue => stampSheetId({
     message: issue.message,
     location: issue.blockName,
     blockId: issue.blockId,
@@ -275,12 +309,12 @@ export function validateModelTypeCompatibilityMultiSheet(
       sourceType: undefined,
       targetType: undefined
     } : undefined
-  }))
-  
+  } as TypeCompatibilityError))
+
   // Separate errors and warnings
   allErrors.push(...sheetLabelErrors.filter(e => e.severity === 'error'))
   allWarnings.push(...sheetLabelErrors.filter(e => e.severity === 'warning'))
-  
+
   return {
     errors: allErrors,
     warnings: allWarnings,
