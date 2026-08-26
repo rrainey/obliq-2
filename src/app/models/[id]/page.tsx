@@ -57,6 +57,10 @@ import UnitsConversionConfig from '@/components/UnitsConversionConfig'
 import CommentConfig from '@/components/CommentConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
+import ExportPdfDialog from '@/components/ExportPdfDialog'
+import { buildExportPlan } from '@/lib/export/sheetTree'
+import { renderModelToPdf, type PdfExportOptions } from '@/lib/export/pdfRenderer'
+import { createGlyphRasterizer, downloadPdf, defaultPdfFileName } from '@/lib/export/browserGlyphs'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
 import { getSheetPath } from '@/lib/navigationUtils'
 import { parseType } from '@/lib/typeValidator'
@@ -100,6 +104,7 @@ import {
   IconPlayerStop,
   IconCode,
   IconFileExport,
+  IconFileTypePdf,
   IconAlertCircle,
   IconCircleCheck,
   IconAlertTriangle,
@@ -152,6 +157,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false)
   const [showParametersDialog, setShowParametersDialog] = useState(false)
+  const [showExportPdfDialog, setShowExportPdfDialog] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
   const [simulationSettings, setSimulationSettings] = useState<{
     duration: string
     timeStep: string
@@ -1572,6 +1579,49 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     return !isRootSheet
   }
 
+  const handleExportPdf = async (options: PdfExportOptions) => {
+    setExportingPdf(true)
+    try {
+      // Persist the in-memory sheet before walking the tree, or edits to the
+      // active sheet would be missing from the export.
+      saveCurrentSheetData()
+      const currentSheets = useModelStore.getState().sheets
+
+      const plan = buildExportPlan(currentSheets, options.scope, activeSheetId)
+      if (plan.sheets.length === 0) {
+        notifications.show({
+          title: 'Nothing to export',
+          message: 'The selected scope contains no sheets.',
+          color: 'yellow',
+        })
+        return
+      }
+
+      const bytes = await renderModelToPdf(plan, options, {
+        modelName: model?.name || 'Untitled Model',
+        printedAt: new Date(),
+        rasterizeGlyph: createGlyphRasterizer(),
+      })
+
+      downloadPdf(bytes, options.fileName)
+      setShowExportPdfDialog(false)
+      notifications.show({
+        title: 'PDF exported',
+        message: `${plan.sheets.length} sheet${plan.sheets.length === 1 ? '' : 's'} written to ${options.fileName}`,
+        color: 'green',
+      })
+    } catch (err) {
+      console.error('PDF export failed:', err)
+      notifications.show({
+        title: 'PDF export failed',
+        message: err instanceof Error ? err.message : 'Unknown error',
+        color: 'red',
+      })
+    } finally {
+      setExportingPdf(false)
+    }
+  }
+
   const getParentSheetIdForCurrent = () => {
     if (isCurrentSheetInSubsystem()) {
       const { getParentSheetId } = useModelStore.getState()
@@ -1773,6 +1823,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               color="violet"
             >
               Export
+            </Button>
+
+            <Button
+              onClick={() => setShowExportPdfDialog(true)}
+              leftSection={<IconFileTypePdf size={16} />}
+              color="violet"
+              variant="outline"
+            >
+              Export as PDF...
             </Button>
           </Group>
         </Group>
@@ -2075,6 +2134,18 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           currentName={model.name}
           onSave={handleSaveAs}
           onClose={() => setShowSaveAsDialog(false)}
+        />
+      )}
+
+      {showExportPdfDialog && (
+        <ExportPdfDialog
+          opened={showExportPdfDialog}
+          modelName={model.name}
+          defaultFileName={defaultPdfFileName(model.name)}
+          insideSubsystem={isCurrentSheetInSubsystem()}
+          exporting={exportingPdf}
+          onClose={() => setShowExportPdfDialog(false)}
+          onExport={handleExportPdf}
         />
       )}
 
