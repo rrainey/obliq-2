@@ -103,14 +103,27 @@ export function getBlockHeight(
   inputCount: number,
   outputCount: number,
 ): number {
+  if (data.type === 'subsystem' && typeof data.parameters?.height === 'number') {
+    return data.parameters.height
+  }
+  return getIntrinsicBlockHeight(data, inputCount, outputCount)
+}
+
+/**
+ * Height a block wants at its natural size, ignoring any stored resize
+ * override. This is the floor auto-layout must respect when resizing a block:
+ * below it, ports would be packed tighter than PORT_SPACING.
+ */
+export function getIntrinsicBlockHeight(
+  data: GeomBlock,
+  inputCount: number,
+  outputCount: number,
+): number {
   if (data.type === 'input_port' || data.type === 'output_port') {
     return TERMINATOR_HEIGHT
   }
   if (data.type === 'no_connection') {
     return 32 // Half size for no_connection block
-  }
-  if (data.type === 'subsystem' && typeof data.parameters?.height === 'number') {
-    return data.parameters.height
   }
   return Math.max(MIN_HEIGHT, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
 }

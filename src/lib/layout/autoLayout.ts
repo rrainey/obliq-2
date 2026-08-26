@@ -23,7 +23,14 @@
 import type { BlockData } from '@/components/BlockNode'
 import type { WireData } from '@/components/Wire'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
-import { getBlockWidth, getBlockHeight, portOffsetY } from './blockGeometry'
+import { isResizable, RESIZE_SNAP, RESIZE_MIN_WIDTH } from '@/lib/blocks/resizableBlocks'
+import {
+  getBlockWidth,
+  getBlockHeight,
+  getIntrinsicBlockHeight,
+  portOffsetY,
+  portFraction,
+} from './blockGeometry'
 
 export interface AutoLayoutOptions {
   columnSpacing?: number   // horizontal gap between columns (px)
@@ -32,11 +39,32 @@ export interface AutoLayoutOptions {
   originY?: number         // y of the layout's vertical center
   barycenterPasses?: number
   alignmentPasses?: number // port-alignment refinement iterations
+  /**
+   * Allow the layout to resize resizable blocks (currently subsystems) so
+   * their ports spread far enough apart for neighbours to line up with them.
+   * Off by default: resizing writes model data, so it is an explicit opt-in.
+   */
+  resizeBlocks?: boolean
+  maxBlockHeight?: number  // ceiling when resizing (px)
+  resizePasses?: number    // resize/replace refinement iterations
 }
 
 export interface LayoutMove {
   id: string
   position: { x: number; y: number }
+}
+
+/** A block whose stored dimensions the layout wants to change. */
+export interface LayoutResize {
+  id: string
+  width: number
+  height: number
+}
+
+export interface AutoLayoutResult {
+  moves: LayoutMove[]
+  /** Empty unless `resizeBlocks` was enabled. */
+  resizes: LayoutResize[]
 }
 
 // --- Block classification -------------------------------------------------
@@ -69,8 +97,10 @@ function isAnnotation(type: string) { return ANNOTATION_TYPES.has(type) }
 interface Metrics {
   width: number
   height: number
-  inputs: number   // effective input port count
-  outputs: number  // effective output port count
+  inputs: number       // effective input port count
+  outputs: number      // effective output port count
+  minHeight: number    // natural height; a resize may not go below this
+  resizable: boolean
 }
 
 function measure(block: BlockData): Metrics {
@@ -83,6 +113,8 @@ function measure(block: BlockData): Metrics {
     height: getBlockHeight(block, inputs, outputs),
     inputs,
     outputs,
+    minHeight: getIntrinsicBlockHeight(block, inputs, outputs),
+    resizable: isResizable(block.type),
   }
 }
 
@@ -274,10 +306,6 @@ function orderWithinColumns(
   const sortedRanks = [...columns.keys()].sort((a, b) => a - b)
   const maxRank = sortedRanks[sortedRanks.length - 1] ?? 0
 
-  // Normalised port position in [0,1], matching how ports are drawn.
-  const frac = (portIndex: number, count: number) =>
-    count <= 1 ? 0.5 : (portIndex + 1) / (count + 1)
-
   const barycenterFrom = (
     id: string,
     neighbourIndex: Map<string, number>,
@@ -292,8 +320,8 @@ function orderWithinColumns(
       if (idx === undefined) continue
       const m = metrics.get(other)!
       const pos = direction === 'in'
-        ? idx + frac(e.uPort, m.outputs)
-        : idx + frac(e.vPort, m.inputs)
+        ? idx + portFraction(e.uPort, m.outputs)
+        : idx + portFraction(e.vPort, m.inputs)
       sum += pos
       n++
     }
@@ -379,16 +407,13 @@ interface Placement {
   y: Map<string, number>
 }
 
-function assignCoordinates(
-  graph: Graph,
+/** Column x-positions and widths; independent of vertical placement. */
+function computeColumnGeometry(
   columns: Map<number, string[]>,
-  rank: Map<string, number>,
   metrics: Map<string, Metrics>,
   opts: Required<AutoLayoutOptions>,
-): LayoutMove[] {
+) {
   const sortedRanks = [...columns.keys()].sort((a, b) => a - b)
-
-  // --- x: one column at a time, blocks centred within the column width ---
   const colWidth = new Map<number, number>()
   for (const c of sortedRanks) {
     let w = 0
@@ -396,16 +421,30 @@ function assignCoordinates(
     colWidth.set(c, Math.max(w, 1))
   }
   const colX = new Map<number, number>()
-  {
-    let x = opts.originX
-    for (const c of sortedRanks) {
-      colX.set(c, x)
-      x += colWidth.get(c)! + opts.columnSpacing
-    }
+  let x = opts.originX
+  for (const c of sortedRanks) {
+    colX.set(c, x)
+    x += colWidth.get(c)! + opts.columnSpacing
   }
+  return { sortedRanks, colWidth, colX }
+}
 
-  // --- y: seed with each column stacked and centred on 0 ---
+/**
+ * Vertical placement: pull each block toward the port that feeds it, then
+ * resolve overlaps optimally. Returns raw (uncentred) y values so the caller
+ * can iterate on block sizes before committing to a final position.
+ */
+function computePlacement(
+  graph: Graph,
+  columns: Map<number, string[]>,
+  rank: Map<string, number>,
+  metrics: Map<string, Metrics>,
+  opts: Required<AutoLayoutOptions>,
+): Map<string, number> {
+  const sortedRanks = [...columns.keys()].sort((a, b) => a - b)
   const y = new Map<string, number>()
+
+  // Seed: each column stacked and centred on 0.
   for (const c of sortedRanks) {
     const ids = columns.get(c)!
     let totalH = 0
@@ -418,7 +457,6 @@ function assignCoordinates(
     }
   }
 
-  // Absolute y of the port a given edge attaches to, on either end.
   const sourcePortY = (e: LEdge) => {
     const m = metrics.get(e.u)!
     return y.get(e.u)! + portOffsetY(e.uPort, m.outputs, m.height)
@@ -463,15 +501,13 @@ function assignCoordinates(
       if (direction === 'forward') {
         for (const e of graph.inEdges.get(id)!) {
           if (!isForward(e)) continue
-          const own = portOffsetY(e.vPort, m.inputs, m.height)
-          sum += sourcePortY(e) - own
+          sum += sourcePortY(e) - portOffsetY(e.vPort, m.inputs, m.height)
           n++
         }
       } else {
         for (const e of graph.outEdges.get(id)!) {
           if (!isForward(e)) continue
-          const own = portOffsetY(e.uPort, m.outputs, m.height)
-          sum += targetPortY(e) - own
+          sum += targetPortY(e) - portOffsetY(e.uPort, m.outputs, m.height)
           n++
         }
       }
@@ -506,7 +542,132 @@ function assignCoordinates(
   }
   restore(best)
 
-  // --- Global centring: one translation, after alignment has settled ---
+  return y
+}
+
+/**
+ * Fit a new height to each resizable block so its ports land on the
+ * neighbours they connect to.
+ *
+ * A block's port p sits at `top + height * fraction(p)`, so across all of a
+ * block's connections the desired port positions are linear in the height:
+ * regressing target-y against port-fraction gives `top` as the intercept and
+ * the best-fitting **height as the slope**. Two connections at distinct port
+ * fractions are enough to determine it.
+ *
+ * This is what makes alignment reachable at all. Neighbours need
+ * `height + rowSpacing` of clearance between them, while a block's ports are
+ * only `height / (portCount + 1)` apart, so at natural size a multi-port
+ * subsystem simply cannot spread its ports far enough for its neighbours to
+ * line up. Growing the block fixes that.
+ *
+ * Mutates `metrics`; returns whether anything moved materially.
+ */
+function refitResizableBlocks(
+  graph: Graph,
+  y: Map<string, number>,
+  metrics: Map<string, Metrics>,
+  rank: Map<string, number>,
+  opts: Required<AutoLayoutOptions>,
+): boolean {
+  const isForward = (e: LEdge) => rank.get(e.u)! < rank.get(e.v)!
+  let changed = false
+
+  for (const [id, m] of metrics) {
+    if (!m.resizable) continue
+
+    // Sample (port fraction along this block, desired absolute y) pairs.
+    const fractions: number[] = []
+    const targets: number[] = []
+
+    for (const e of graph.outEdges.get(id) ?? []) {
+      if (!isForward(e)) continue
+      const om = metrics.get(e.v)!
+      fractions.push(portFraction(e.uPort, m.outputs))
+      targets.push(y.get(e.v)! + portOffsetY(e.vPort, om.inputs, om.height))
+    }
+    for (const e of graph.inEdges.get(id) ?? []) {
+      if (!isForward(e)) continue
+      const om = metrics.get(e.u)!
+      fractions.push(portFraction(e.vPort, m.inputs))
+      targets.push(y.get(e.u)! + portOffsetY(e.uPort, om.outputs, om.height))
+    }
+
+    if (fractions.length < 2) continue
+
+    const n = fractions.length
+    const fBar = fractions.reduce((a, b) => a + b, 0) / n
+    const tBar = targets.reduce((a, b) => a + b, 0) / n
+    let num = 0, den = 0
+    for (let i = 0; i < n; i++) {
+      const df = fractions[i] - fBar
+      num += df * (targets[i] - tBar)
+      den += df * df
+    }
+    // Every connection attaches at the same port position: no slope to fit.
+    if (den < 1e-9) continue
+
+    let height = num / den
+    if (!Number.isFinite(height)) continue
+    height = Math.round(height / RESIZE_SNAP) * RESIZE_SNAP
+    height = Math.max(m.minHeight, Math.min(opts.maxBlockHeight, height))
+
+    // Keep a grown block from becoming a tall thin sliver. Width only ever
+    // grows, which also guarantees this loop terminates.
+    const wanted = Math.round(height / 4 / RESIZE_SNAP) * RESIZE_SNAP
+    const width = Math.max(m.width, RESIZE_MIN_WIDTH, Math.min(200, wanted))
+
+    if (Math.abs(height - m.height) >= RESIZE_SNAP || width !== m.width) {
+      m.height = height
+      m.width = width
+      changed = true
+    }
+  }
+
+  return changed
+}
+
+// --- Public entry point ---------------------------------------------------
+
+export function computeAutoLayout(
+  blocks: BlockData[],
+  wires: WireData[],
+  options: AutoLayoutOptions = {},
+): AutoLayoutResult {
+  const opts: Required<AutoLayoutOptions> = {
+    columnSpacing: options.columnSpacing ?? 80,
+    rowSpacing: options.rowSpacing ?? 80,
+    originX: options.originX ?? 100,
+    originY: options.originY ?? 400,
+    barycenterPasses: options.barycenterPasses ?? 4,
+    alignmentPasses: options.alignmentPasses ?? 4,
+    resizeBlocks: options.resizeBlocks ?? false,
+    maxBlockHeight: options.maxBlockHeight ?? 1200,
+    resizePasses: options.resizePasses ?? 3,
+  }
+
+  const { graph, laidOut } = buildGraph(blocks, wires)
+  if (laidOut.length === 0) return { moves: [], resizes: [] }
+
+  const metrics = new Map(laidOut.map(b => [b.id, measure(b)]))
+  const original = new Map([...metrics].map(([id, m]) => [id, { width: m.width, height: m.height }]))
+
+  const rank = assignRanks(graph, laidOut)
+  // Ordering depends only on graph structure and port indices, never on pixel
+  // sizes, so resizing cannot invalidate it and it is computed once.
+  const columns = orderWithinColumns(graph, rank, laidOut, metrics, opts.barycenterPasses)
+
+  if (opts.resizeBlocks) {
+    for (let pass = 0; pass < opts.resizePasses; pass++) {
+      const trial = computePlacement(graph, columns, rank, metrics, opts)
+      if (!refitResizableBlocks(graph, trial, metrics, rank, opts)) break
+    }
+  }
+
+  const y = computePlacement(graph, columns, rank, metrics, opts)
+  const { sortedRanks, colWidth, colX } = computeColumnGeometry(columns, metrics, opts)
+
+  // Global centring: a single translation once alignment has settled.
   let minY = Infinity, maxY = -Infinity
   for (const id of graph.nodes) {
     const top = y.get(id)!
@@ -530,30 +691,16 @@ function assignCoordinates(
       })
     }
   }
-  return moves
-}
 
-// --- Public entry point ---------------------------------------------------
-
-export function computeAutoLayout(
-  blocks: BlockData[],
-  wires: WireData[],
-  options: AutoLayoutOptions = {},
-): LayoutMove[] {
-  const opts: Required<AutoLayoutOptions> = {
-    columnSpacing: options.columnSpacing ?? 80,
-    rowSpacing: options.rowSpacing ?? 80,
-    originX: options.originX ?? 100,
-    originY: options.originY ?? 400,
-    barycenterPasses: options.barycenterPasses ?? 4,
-    alignmentPasses: options.alignmentPasses ?? 4,
+  const resizes: LayoutResize[] = []
+  if (opts.resizeBlocks) {
+    for (const [id, m] of metrics) {
+      const was = original.get(id)!
+      if (m.width !== was.width || m.height !== was.height) {
+        resizes.push({ id, width: m.width, height: m.height })
+      }
+    }
   }
 
-  const { graph, laidOut } = buildGraph(blocks, wires)
-  if (laidOut.length === 0) return []
-
-  const metrics = new Map(laidOut.map(b => [b.id, measure(b)]))
-  const rank = assignRanks(graph, laidOut)
-  const columns = orderWithinColumns(graph, rank, laidOut, metrics, opts.barycenterPasses)
-  return assignCoordinates(graph, columns, rank, metrics, opts)
+  return { moves, resizes }
 }

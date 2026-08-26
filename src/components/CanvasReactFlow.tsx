@@ -54,6 +54,7 @@ interface CanvasReactFlowProps {
   onDrop?: (x: number, y: number, blockType: string) => void
   onBlockMove?: (id: string, position: { x: number; y: number }) => void
   onBlocksMove?: (moves: Array<{ id: string; position: { x: number; y: number } }>) => void  // Feature 4: Multi-block move
+  onBlocksResize?: (resizes: Array<{ id: string; width: number; height: number }>) => void   // Auto-layout subsystem resizing
   onBlockSelect?: (id: string | null) => void
   onBlocksSelect?: (ids: string[]) => void  // Feature 4: Multi-selection callback
   onBlockDoubleClick?: (id: string) => void
@@ -120,6 +121,7 @@ function CanvasReactFlowInner({
   onDrop,
   onBlockMove,
   onBlocksMove,           // Feature 4: Multi-block move
+  onBlocksResize,         // Auto-layout subsystem resizing
   onBlockSelect,
   onBlocksSelect,         // Feature 4
   onBlockDoubleClick,
@@ -613,16 +615,22 @@ const handleEdgesChange = useCallback((changes: any[]) => {
     }
   }, [onWireRoutingChange])
 
-  // Auto-layout: reorganize blocks on the current sheet.
-  const handleReorganize = useCallback(() => {
-    const moves = computeAutoLayout(blocks, wires)
+  // Auto-layout: reorganize blocks on the current sheet. With `resizeBlocks`
+  // the layout may also grow subsystems so their ports line up with the blocks
+  // they connect to; sizes are committed before positions so the saved sheet
+  // reflects both.
+  const handleReorganize = useCallback((resizeBlocks: boolean) => {
+    const { moves, resizes } = computeAutoLayout(blocks, wires, { resizeBlocks })
+    if (resizes.length > 0 && onBlocksResize) {
+      onBlocksResize(resizes)
+    }
     if (moves.length === 0) return
     if (onBlocksMove) {
       onBlocksMove(moves)
     } else if (onBlockMove) {
       for (const m of moves) onBlockMove(m.id, m.position)
     }
-  }, [blocks, wires, onBlocksMove, onBlockMove])
+  }, [blocks, wires, onBlocksMove, onBlockMove, onBlocksResize])
 
   // Close context menu when clicking on the pane - Feature 4: Clear all selection
   const onPaneClick = useCallback(() => {
@@ -1066,7 +1074,11 @@ const handleEdgesChange = useCallback((changes: any[]) => {
           bottom={paneContextMenu.bottom}
           onClose={() => setPaneContextMenu(null)}
           onReorganize={() => {
-            handleReorganize()
+            handleReorganize(false)
+            setPaneContextMenu(null)
+          }}
+          onReorganizeAndResize={() => {
+            handleReorganize(true)
             setPaneContextMenu(null)
           }}
         />

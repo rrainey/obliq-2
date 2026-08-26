@@ -18,7 +18,13 @@ const wire = (
   targetPortIndex: number,
 ): WireData => ({ id, sourceBlockId, sourcePortIndex, targetBlockId, targetPortIndex })
 
-const posOf = (moves: ReturnType<typeof computeAutoLayout>, id: string) =>
+const layout = (
+  blocks: BlockData[],
+  wires: WireData[],
+  options?: Parameters<typeof computeAutoLayout>[2],
+) => computeAutoLayout(blocks, wires, options).moves
+
+const posOf = (moves: ReturnType<typeof layout>, id: string) =>
   moves.find(m => m.id === id)!.position
 
 describe('computeAutoLayout', () => {
@@ -30,7 +36,7 @@ describe('computeAutoLayout', () => {
         block('out', 'output_port'),
       ]
       const wires = [wire('w1', 'src', 0, 'gain', 0), wire('w2', 'gain', 0, 'out', 0)]
-      const moves = computeAutoLayout(blocks, wires)
+      const moves = layout(blocks, wires)
 
       expect(posOf(moves, 'src').x).toBeLessThan(posOf(moves, 'gain').x)
       expect(posOf(moves, 'gain').x).toBeLessThan(posOf(moves, 'out').x)
@@ -52,7 +58,7 @@ describe('computeAutoLayout', () => {
         wire('w4', 'i2', 0, 'out', 0),
         wire('w5', 'i2', 0, 'sum', 1), // feedback
       ]
-      const moves = computeAutoLayout(blocks, wires)
+      const moves = layout(blocks, wires)
 
       expect(posOf(moves, 'i1').x).toBeLessThan(posOf(moves, 'i2').x)
       expect(posOf(moves, 'sum').x).toBeLessThan(posOf(moves, 'i1').x)
@@ -83,7 +89,7 @@ describe('computeAutoLayout', () => {
         wire('wC', 'sub', 2, 'cC', 0),
         wire('wD', 'sub', 3, 'cD', 0),
       ]
-      const moves = computeAutoLayout(blocks, wires)
+      const moves = layout(blocks, wires)
 
       const ys = ['cA', 'cB', 'cC', 'cD'].map(id => posOf(moves, id).y)
       // Port 0 is topmost, so its consumer must be topmost, and so on down.
@@ -109,7 +115,7 @@ describe('computeAutoLayout', () => {
         wire('wQ', 'sQ', 0, 'sub', 1),
         wire('wR', 'sR', 0, 'sub', 2),
       ]
-      const moves = computeAutoLayout(blocks, wires)
+      const moves = layout(blocks, wires)
 
       expect(posOf(moves, 'sP').y).toBeLessThan(posOf(moves, 'sQ').y)
       expect(posOf(moves, 'sQ').y).toBeLessThan(posOf(moves, 'sR').y)
@@ -124,7 +130,7 @@ describe('computeAutoLayout', () => {
         block('out', 'output_port'),
       ]
       const wires = [wire('w1', 'src', 0, 'gain', 0), wire('w2', 'gain', 0, 'out', 0)]
-      const moves = computeAutoLayout(blocks, wires)
+      const moves = layout(blocks, wires)
 
       const portY = (id: string, port: number, count: number) => {
         const b = blocks.find(x => x.id === id)!
@@ -164,7 +170,7 @@ describe('computeAutoLayout', () => {
         wire('wB', 'sub', 1, 'cB', 0),
         wire('wC', 'sub', 2, 'cC', 0),
       ]
-      const moves = computeAutoLayout(blocks, wires)
+      const moves = layout(blocks, wires)
 
       const subY = posOf(moves, 'sub').y
       const consumers: Array<[string, number]> = [['cA', 0], ['cB', 1], ['cC', 2]]
@@ -198,7 +204,7 @@ describe('computeAutoLayout', () => {
         wire('wB', 'sub', 1, 'cB', 0),
         wire('wC', 'sub', 2, 'cC', 0),
       ]
-      const moves = computeAutoLayout(blocks, wires)
+      const moves = layout(blocks, wires)
 
       const yA = posOf(moves, 'cA').y
       const yB = posOf(moves, 'cB').y
@@ -223,7 +229,7 @@ describe('computeAutoLayout', () => {
         wire('w2', 'src', 0, 'c2', 0),
         wire('w3', 'src', 0, 'c3', 0),
       ]
-      const moves = computeAutoLayout(blocks, wires, { rowSpacing: 80 })
+      const moves = layout(blocks, wires, { rowSpacing: 80 })
 
       const ys = ['c1', 'c2', 'c3'].map(id => posOf(moves, id).y).sort((a, b) => a - b)
       const h = getBlockHeight(blocks[1], 1, 1)
@@ -238,7 +244,7 @@ describe('computeAutoLayout', () => {
         block('b', 'scale'),
       ]
       const wires = [wire('w1', 'src', 0, 'a', 0), wire('w2', 'src', 0, 'b', 0)]
-      const moves = computeAutoLayout(blocks, wires, { originY: 500 })
+      const moves = layout(blocks, wires, { originY: 500 })
 
       let minY = Infinity, maxY = -Infinity
       for (const m of moves) {
@@ -251,20 +257,140 @@ describe('computeAutoLayout', () => {
     })
   })
 
+  describe('resizeBlocks', () => {
+    const threePortSubsystem = () => {
+      const sub = block('sub', 'subsystem', {
+        inputPorts: ['In1'],
+        outputPorts: ['A', 'B', 'C'],
+        sheets: [],
+      })
+      const blocks = [
+        block('feed', 'source'),
+        sub,
+        block('cA', 'scale'),
+        block('cB', 'scale'),
+        block('cC', 'scale'),
+      ]
+      const wires = [
+        wire('w0', 'feed', 0, 'sub', 0),
+        wire('wA', 'sub', 0, 'cA', 0),
+        wire('wB', 'sub', 1, 'cB', 0),
+        wire('wC', 'sub', 2, 'cC', 0),
+      ]
+      return { blocks, wires }
+    }
+
+    it('reports no resizes unless asked', () => {
+      const { blocks, wires } = threePortSubsystem()
+      expect(computeAutoLayout(blocks, wires).resizes).toEqual([])
+    })
+
+    it('grows a subsystem until its ports can reach their consumers', () => {
+      const { blocks, wires } = threePortSubsystem()
+      const { resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true })
+
+      const sub = resizes.find(r => r.id === 'sub')
+      expect(sub).toBeDefined()
+      // Three ports sit at height/4 intervals and consumers need 64 + 80 of
+      // clearance, so the block has to reach at least 4 * 144 = 576px.
+      expect(sub!.height).toBeGreaterThanOrEqual(576)
+    })
+
+    it('actually achieves alignment once resizing is allowed', () => {
+      const { blocks, wires } = threePortSubsystem()
+      const { moves, resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true })
+      const subH = resizes.find(r => r.id === 'sub')!.height
+      const posIn = (id: string) => moves.find(m => m.id === id)!.position
+      const subY = posIn('sub').y
+
+      for (const [id, port] of [['cA', 0], ['cB', 1], ['cC', 2]] as Array<[string, number]>) {
+        const srcPortY = subY + portOffsetY(port, 3, subH)
+        const consumerH = getBlockHeight(blocks.find(b => b.id === id)!, 1, 1)
+        const tgtPortY = posIn(id).y + portOffsetY(0, 1, consumerH)
+        expect(Math.abs(srcPortY - tgtPortY)).toBeLessThanOrEqual(1)
+      }
+    })
+
+    it('never shrinks a block below its natural port spacing', () => {
+      // Two consumers stacked tightly would "want" a very short subsystem.
+      const sub = block('sub', 'subsystem', {
+        inputPorts: ['In1'],
+        outputPorts: Array.from({ length: 8 }, (_, i) => `O${i}`),
+        sheets: [],
+      })
+      const blocks: BlockData[] = [block('feed', 'source'), sub]
+      const wires = [wire('w0', 'feed', 0, 'sub', 0)]
+      for (let i = 0; i < 8; i++) {
+        blocks.push(block(`c${i}`, 'scale'))
+        wires.push(wire(`w${i + 1}`, 'sub', i, `c${i}`, 0))
+      }
+      const { resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true })
+      const sub2 = resizes.find(r => r.id === 'sub')
+      // Natural height for 8 ports is 8*20 + 20 = 180; never go under it.
+      if (sub2) expect(sub2.height).toBeGreaterThanOrEqual(180)
+    })
+
+    it('respects the maxBlockHeight ceiling', () => {
+      const { blocks, wires } = threePortSubsystem()
+      const { resizes } = computeAutoLayout(blocks, wires, {
+        resizeBlocks: true,
+        maxBlockHeight: 300,
+      })
+      for (const r of resizes) expect(r.height).toBeLessThanOrEqual(300)
+    })
+
+    it('widens a grown block so it does not become a sliver', () => {
+      const { blocks, wires } = threePortSubsystem()
+      const { resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true })
+      const sub = resizes.find(r => r.id === 'sub')!
+      expect(sub.width).toBeGreaterThan(80)
+      expect(sub.width).toBeLessThanOrEqual(200)
+    })
+
+    it('snaps resized dimensions to the resize grid', () => {
+      const { blocks, wires } = threePortSubsystem()
+      const { resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true })
+      for (const r of resizes) {
+        expect(r.height % 10).toBe(0)
+        expect(r.width % 10).toBe(0)
+      }
+    })
+
+    it('leaves non-resizable blocks alone', () => {
+      const { blocks, wires } = threePortSubsystem()
+      const { resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true })
+      expect(resizes.every(r => r.id === 'sub')).toBe(true)
+    })
+
+    it('converges rather than growing without bound', () => {
+      const { blocks, wires } = threePortSubsystem()
+      const few = computeAutoLayout(blocks, wires, { resizeBlocks: true, resizePasses: 2 })
+      const many = computeAutoLayout(blocks, wires, { resizeBlocks: true, resizePasses: 12 })
+      expect(many.resizes.find(r => r.id === 'sub')!.height)
+        .toBe(few.resizes.find(r => r.id === 'sub')!.height)
+    })
+
+    it('is deterministic with resizing enabled', () => {
+      const { blocks, wires } = threePortSubsystem()
+      expect(computeAutoLayout(blocks, wires, { resizeBlocks: true }))
+        .toEqual(computeAutoLayout(blocks, wires, { resizeBlocks: true }))
+    })
+  })
+
   describe('robustness', () => {
     it('returns no moves for an empty sheet', () => {
-      expect(computeAutoLayout([], [])).toEqual([])
+      expect(computeAutoLayout([], [])).toEqual({ moves: [], resizes: [] })
     })
 
     it('leaves comment blocks out of the layout', () => {
       const blocks = [block('src', 'source'), block('note', 'comment')]
-      const moves = computeAutoLayout(blocks, [])
+      const moves = layout(blocks, [])
       expect(moves.map(m => m.id)).toEqual(['src'])
     })
 
     it('handles a disconnected block without throwing', () => {
       const blocks = [block('src', 'source'), block('lonely', 'scale')]
-      const moves = computeAutoLayout(blocks, [])
+      const moves = layout(blocks, [])
       expect(moves).toHaveLength(2)
       expect(moves.every(m => Number.isFinite(m.position.y))).toBe(true)
     })
@@ -276,7 +402,7 @@ describe('computeAutoLayout', () => {
         wire('w2', 'b', 0, 'c', 0),
         wire('w3', 'c', 0, 'a', 0),
       ]
-      const moves = computeAutoLayout(blocks, wires)
+      const moves = layout(blocks, wires)
       expect(moves).toHaveLength(3)
       expect(moves.every(m => Number.isFinite(m.position.x) && Number.isFinite(m.position.y))).toBe(true)
     })
@@ -288,7 +414,7 @@ describe('computeAutoLayout', () => {
         block('b', 'scale', {}, 10),
       ]
       const wires = [wire('w1', 'src', 0, 'a', 0), wire('w2', 'src', 0, 'b', 0)]
-      expect(computeAutoLayout(blocks, wires)).toEqual(computeAutoLayout(blocks, wires))
+      expect(layout(blocks, wires)).toEqual(layout(blocks, wires))
     })
   })
 })

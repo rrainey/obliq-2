@@ -546,6 +546,22 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   // Feature 4: Handle multi-block move when dragging a selection
+  // Auto-layout may resize subsystems so their ports line up with what they
+  // connect to. Dimensions live in block.parameters, so merge rather than
+  // replace to avoid dropping ports, sheets, or codegen settings.
+  const handleBlocksResize = (resizes: Array<{ id: string; width: number; height: number }>) => {
+    if (resizes.length === 0) return
+    const current = useModelStore.getState().blocks
+    const updates = resizes.flatMap(({ id, width, height }) => {
+      const block = current.find(b => b.id === id)
+      if (!block) return []
+      return [{ id, updates: { parameters: { ...(block.parameters || {}), width, height } } }]
+    })
+    if (updates.length === 0) return
+    updateBlocks(updates)
+    saveCurrentSheetData()
+  }
+
   const handleBlocksMove = (moves: Array<{ id: string; position: { x: number; y: number } }>) => {
     console.log('[handleBlocksMove] moves:', moves)
     console.log('[handleBlocksMove] blocks before:', blocks.map(b => ({ id: b.id, pos: b.position })))
@@ -1799,6 +1815,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onDrop={handleCanvasDrop}
               onBlockMove={handleBlockMove}
               onBlocksMove={handleBlocksMove}
+              onBlocksResize={handleBlocksResize}
               onBlockSelect={setSelectedBlockId}
               onBlocksSelect={setSelectedBlocks}
               onBlockDoubleClick={handleBlockDoubleClick}
