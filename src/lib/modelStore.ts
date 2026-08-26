@@ -1338,10 +1338,17 @@ export const useModelStore = create<ModelStore>()(
     // In modelStore.ts, update the switchToSheet function:
 
   switchToSheet: (sheetId: string) => {
-    const { saveCurrentSheetData, sheets, globalSimulationResults } = get()
-    
+    const { saveCurrentSheetData } = get()
+
     // Save current sheet data first
     saveCurrentSheetData()
+
+    // Re-read state AFTER the save. saveCurrentSheetData() replaces `sheets`
+    // with a new tree containing the edits just flushed from `blocks`/`wires`.
+    // Reading `sheets` before that call yields the pre-save tree, and loading
+    // `blocks` from it silently reverts the sheet we just left -- for a
+    // subsystem that means its entire contents are discarded on the next save.
+    const { sheets, globalSimulationResults } = get()
 
     // Find sheet at any level (including in subsystems)
     const findSheetRecursively = (searchSheets: Sheet[]): Sheet | null => {

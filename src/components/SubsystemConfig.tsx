@@ -53,9 +53,31 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
 
   const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+  /**
+   * True when a declared port has no matching port block in the subsystem's
+   * sheets. Such a subsystem cannot have its output types determined, so the
+   * save path rebuilds the missing blocks even if the port list is unchanged.
+   */
+  const needsPortBlockRepair = (
+    sheetList: Sheet[],
+    inputs: string[],
+    outputs: string[],
+  ): boolean => {
+    const found = { input_port: new Set<string>(), output_port: new Set<string>() }
+    for (const sheet of sheetList) {
+      for (const b of sheet.blocks || []) {
+        if (b.type === 'input_port' || b.type === 'output_port') {
+          found[b.type].add(b.parameters?.portName || b.name)
+        }
+      }
+    }
+    return inputs.some(n => !found.input_port.has(n))
+      || outputs.some(n => !found.output_port.has(n))
+  }
+
   const handleSave = () => {
     const nameChanged = blockName !== block.name
-    let updatedSheets = sheets
+    let updatedSheets: Sheet[] = sheets
     if (nameChanged) {
       updatedSheets = sheets.map(sheet => {
         const oldNamePattern = new RegExp(`^${escapeRegExp(block.name)}\\s+`)
@@ -101,14 +123,28 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
       inputDiff.renames.length + inputDiff.deletes.length + inputDiff.adds.length +
       outputDiff.renames.length + outputDiff.deletes.length + outputDiff.adds.length > 0
 
-    if (hasAnyChange) {
-      const mainSheetId = `${block.id}_main`
+    // A subsystem must always own at least one sheet: the schema requires it,
+    // and without one its output types cannot be determined. Recreate the Main
+    // sheet if it has gone missing so this dialog repairs the model rather
+    // than silently doing nothing.
+    const mainSheetId = `${block.id}_main`
+    if (updatedSheets.length === 0) {
+      updatedSheets = [{
+        id: mainSheetId,
+        name: `${blockName} Main`,
+        blocks: [],
+        connections: [],
+        extents: { width: 1000, height: 800 },
+      }]
+    }
+
+    if (hasAnyChange || needsPortBlockRepair(updatedSheets, cleanedInputs, cleanedOutputs)) {
       const targetSheetIndex = (() => {
         const byId = updatedSheets.findIndex(s => s.id === mainSheetId)
-        return byId >= 0 ? byId : (updatedSheets.length > 0 ? 0 : -1)
+        return byId >= 0 ? byId : 0
       })()
 
-      if (targetSheetIndex >= 0) {
+      {
         const targetSheet = updatedSheets[targetSheetIndex]
         let blocks: BlockData[] = targetSheet.blocks || []
         let connections = targetSheet.connections || []
@@ -174,6 +210,17 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
         applyDeletes('output_port', outputDiff.deletes)
         applyAdds('input_port', inputDiff.adds, 100)
         applyAdds('output_port', outputDiff.adds, 400)
+
+        // Reconcile: every declared port needs a matching block, or the
+        // subsystem's output types cannot be resolved. This repairs models
+        // whose port lists drifted from their sheet contents.
+        const present = (type: 'input_port' | 'output_port') =>
+          new Set(blocks.filter(b => b.type === type)
+            .map(b => b.parameters?.portName || b.name))
+        applyAdds('input_port',
+          cleanedInputs.filter((n: string) => !present('input_port').has(n)), 100)
+        applyAdds('output_port',
+          cleanedOutputs.filter((n: string) => !present('output_port').has(n)), 400)
 
         updatedSheets = updatedSheets.map((s, i) =>
           i === targetSheetIndex ? { ...s, blocks, connections } : s
