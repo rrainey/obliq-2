@@ -11,6 +11,7 @@ import { useComputedColorScheme } from '@mantine/core'
 import CommentNode from './CommentNode'
 import { useModelStore } from '@/lib/modelStore'
 import { isResizable, RESIZE_MIN_WIDTH, RESIZE_SNAP } from '@/lib/blocks/resizableBlocks'
+import * as BlockGeometry from '@/lib/layout/blockGeometry'
 
 export interface BlockData {
   id: string
@@ -49,24 +50,13 @@ export interface BlockNodeData extends Omit<BlockData, 'position'> {
   allBlocks?: BlockData[]
 }
 
-// Port spacing configuration
-const PORT_SPACING = 20
-const MIN_HEIGHT = 64
-const TERMINATOR_HEIGHT = 45 // Flatter height for terminator blocks
+// Port spacing configuration (shared with the auto-layout engine)
+const { PORT_SPACING, MIN_HEIGHT, TERMINATOR_HEIGHT } = BlockGeometry
 
-// Calculate port position helper.
-//
-// Evenly distributes `count` ports across `blockHeight` with equal padding at
-// top and bottom (each port at (i+1)/(count+1) of the height). For blocks at
-// their natural minimum size this matches the prior fixed-PORT_SPACING layout
-// almost exactly, but for resized (taller) subsystem blocks the ports now
-// spread out to use the available margin instead of clumping in the middle.
-const calculatePortPosition = (index: number, count: number, blockHeight: number = MIN_HEIGHT): number => {
-  if (count === 1) {
-    return blockHeight / 2 // Center single port
-  }
-  return (blockHeight * (index + 1)) / (count + 1)
-}
+// Calculate port position helper. Delegates to the shared geometry module so
+// auto-layout and the renderer can never disagree about where a port sits.
+const calculatePortPosition = (index: number, count: number, blockHeight: number = MIN_HEIGHT): number =>
+  BlockGeometry.portOffsetY(index, count, blockHeight)
 
 /**
  * Get the name of a connected Input/Output Port block for port label display
@@ -691,75 +681,9 @@ const renderDiscreteTransform = (parameters?: Record<string, any>) => {
   )
 }
 
-// Calculate block width based on type and content
-const getBlockWidth = (data: BlockNodeData): number => {
-  if (data.type === 'transfer_function') {
-    const numerator = data.parameters?.numerator || [1]
-    const denominator = data.parameters?.denominator || [1, 1]
-    const maxLength = Math.max(numerator.length, denominator.length)
-    return Math.max(80, 60 + maxLength * 15)
-  }
-  if (data.type === 'discrete_transform') {
-    const numerator = data.parameters?.numerator || [1]
-    const denominator = data.parameters?.denominator || [1, -0.5]
-    const maxLength = Math.max(numerator.length, denominator.length)
-    return Math.max(80, 60 + maxLength * 20)  // Slightly wider due to z^-n notation
-  }
-
-  if (data.type === 'source' && data.parameters?.value !== undefined) {
-    const value = String(data.parameters.value)
-    const estimatedWidth = value.length * 8 + 20
-    return Math.max(80, Math.min(200, estimatedWidth))
-  }
-
-  if (data.type === 'sheet_label_sink' || data.type === 'sheet_label_source') {
-    const signalName = data.parameters?.signalName || ''
-    if (signalName.length > 5) {
-      return Math.min(120, 80 + signalName.length * 4)
-    }
-  }
-  
-  // Input/Output port blocks need width based on port name
-  if (data.type === 'input_port' || data.type === 'output_port') {
-    const portName = data.parameters?.portName || data.parameters?.signalName || data.name || ''
-    const estimatedWidth = Math.max(100, portName.length * 8 + 40) // Extra padding for terminator shape
-    return Math.min(200, estimatedWidth)
-  }
-  
-  // Lookup blocks need space for the SVG diagram
-  if (data.type === 'lookup_1d' || data.type === 'lookup_2d') {
-    return 80 // Slightly wider to accommodate the 60px SVG
-  }
-  
-  // Matrix blocks might need extra width for dimension display
-  if (data.type === 'mux' || data.type === 'matrix_multiply') {
-    return 90 // Slightly wider for dimension info
-  }
-
-  // Handle evaluate block - adjust width based on expression length
-  if (data.type === 'evaluate') {
-    const expression = data.parameters?.expression || 'in(0)'
-    // Estimate width based on expression length
-    // Use monospace font metrics: ~7px per character at text-xs
-    const estimatedWidth = expression.length * 7 + 40 // Add padding
-    return Math.max(100, Math.min(300, estimatedWidth)) // Min 100px, max 300px
-  }
-
-  // Handle condition block similarly
-  if (data.type === 'condition') {
-    const condition = data.parameters?.condition || '> 0'
-    const fullText = `x1 ${condition}`
-    const estimatedWidth = fullText.length * 7 + 40
-    return Math.max(80, Math.min(200, estimatedWidth))
-  }
-
-  // No Connection block is half the default size
-  if (data.type === 'no_connection') {
-    return 40
-  }
-
-  return 80 // Default width
-}
+// Calculate block width based on type and content. Delegates to the shared
+// geometry module (see blockGeometry.ts) so auto-layout sees the same sizes.
+const getBlockWidth = (data: BlockNodeData): number => BlockGeometry.getBlockWidth(data)
 
 const truncateExpression = (expr: string, maxLength: number = 30): string => {
   if (expr.length <= maxLength) return expr
@@ -848,17 +772,9 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
   const isTerminator = data.type === 'input_port' || data.type === 'output_port'
   const isSubsystem = data.type === 'subsystem'
 
-  // For subsystems, use stored dimensions if available
-  const blockWidth = isSubsystem && data.parameters?.width
-    ? data.parameters.width
-    : getBlockWidth(data)
-  const minHeight = isTerminator
-    ? TERMINATOR_HEIGHT
-    : data.type === 'no_connection'
-      ? 32 // Half size for no_connection block
-      : isSubsystem && data.parameters?.height
-        ? data.parameters.height
-        : Math.max(MIN_HEIGHT, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
+  // Stored dimensions for resized subsystems are handled inside getBlockWidth.
+  const blockWidth = getBlockWidth(data)
+  const minHeight = BlockGeometry.getBlockHeight(data, inputCount, outputCount)
   const [updateTrigger, setUpdateTrigger] = useState(0);
 
   // --- Resize mode wiring ---------------------------------------------------
