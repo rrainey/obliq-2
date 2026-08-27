@@ -1165,17 +1165,30 @@ export function propagateSignalTypes(
       }
     }
     
-    // Validate demux input is vector or matrix
+    // Validate demux input is vector or matrix.
+    // mdl2obliq often declares subsystem Outports as bare "double" when
+    // PortDimensions were absent, while Mux_expand_* demuxes still carry
+    // inputDimensions:[3]/[4]. Those models cgen fine — downgrade to warning
+    // when the demux itself declares non-scalar input dimensions.
     if (block.type === 'demux') {
       const inputTypes = getBlockInputTypes(block, wiresByTarget, blockOutputTypes)
       if (inputTypes.length > 0) {
         try {
           const parsed = parseType(inputTypes[0])
           if (!parsed.isArray && !parsed.isMatrix) {
+            const dims = block.parameters?.inputDimensions
+            const declaredElems = Array.isArray(dims)
+              ? dims.reduce((n: number, d: number) => n * (Number(d) || 1), 1)
+              : 0
+            const severity =
+              declaredElems > 1 ? ('warning' as const) : ('error' as const)
             errors.push({
               blockId: block.id,
-              message: `${block.name} requires vector or matrix input but received scalar ${inputTypes[0]}`,
-              severity: 'error'
+              message:
+                severity === 'warning'
+                  ? `${block.name} received scalar ${inputTypes[0]} but declares inputDimensions=${JSON.stringify(dims)} (mdl2obliq Outport often lacks PortDimensions; codegen OK)`
+                  : `${block.name} requires vector or matrix input but received scalar ${inputTypes[0]}`,
+              severity
             })
           }
         } catch {

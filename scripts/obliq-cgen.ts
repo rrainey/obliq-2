@@ -286,17 +286,22 @@ void ${modelName}_rtw_step(
 `
 }
 
-function cmakeLists(modelName: string, profile: Profile): string {
+function cmakeLists(
+  modelName: string,
+  profile: Profile,
+  subsystemSources: string[] = []
+): string {
   const adapter =
     profile === 'saturn-ib-stack'
       ? `  ${modelName}_rtw_adapter.c\n`
       : ''
+  const subSrc = subsystemSources.map(s => `  ${s}\n`).join('')
   return `cmake_minimum_required(VERSION 3.16)
 project(${modelName}_cgen C)
 
 add_library(${modelName} STATIC
   ${modelName}.c
-${adapter})
+${adapter}${subSrc})
 target_include_directories(${modelName} PUBLIC \${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(${modelName} PRIVATE -Wall -Wextra -O2)
 
@@ -500,7 +505,6 @@ function main() {
   fs.mkdirSync(absOut, { recursive: true })
   fs.writeFileSync(path.join(absOut, `${modelName}.h`), result.header)
   fs.writeFileSync(path.join(absOut, `${modelName}.c`), result.source)
-  fs.writeFileSync(path.join(absOut, 'CMakeLists.txt'), cmakeLists(modelName, profile))
   fs.writeFileSync(path.join(absOut, 'smoke_main.c'), smokeMain(modelName, dt, profile))
 
   if (profile === 'saturn-ib-stack') {
@@ -514,10 +518,21 @@ function main() {
     )
   }
 
+  const subsystemSources: string[] = []
   for (const sub of result.subsystemFiles || []) {
-    fs.writeFileSync(path.join(absOut, sub.headerFileName), sub.header)
-    fs.writeFileSync(path.join(absOut, sub.sourceFileName), sub.source)
+    const base = sub.subsystemName
+    const headerName = `${base}.h`
+    const sourceName = `${base}.c`
+    fs.writeFileSync(path.join(absOut, headerName), sub.header)
+    fs.writeFileSync(path.join(absOut, sourceName), sub.source)
+    subsystemSources.push(sourceName)
+    console.log(`  segregated module: ${headerName} + ${sourceName}`)
   }
+
+  fs.writeFileSync(
+    path.join(absOut, 'CMakeLists.txt'),
+    cmakeLists(modelName, profile, subsystemSources)
+  )
 
   writeManifest(absOut, {
     modelName,

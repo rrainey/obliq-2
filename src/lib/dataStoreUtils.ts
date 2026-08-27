@@ -112,10 +112,19 @@ export function isValidStoreName(name: string): boolean {
   return /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)
 }
 
+/** Map legacy / Simulink integer store types onto Obliq-supported C types */
+export function normalizeDataStoreType(dataType: string | undefined): string {
+  const t = (dataType || 'double').trim()
+  if (!t) return 'double'
+  if (/^(u?int(8|16|32|64)|int)$/i.test(t)) return 'long'
+  if (/^bool$/i.test(t)) return 'bool'
+  return t
+}
+
 /** Generate C member declaration for a store */
 export function dataStoreMemberDecl(store: DataStoreDeclaration): string {
   const safe = BlockModuleUtils.sanitizeIdentifier(store.name)
-  const parsed = BlockModuleUtils.parseType(store.dataType || 'double')
+  const parsed = BlockModuleUtils.parseType(normalizeDataStoreType(store.dataType))
   if (parsed.isMatrix && parsed.rows && parsed.cols) {
     return `    ${parsed.baseType} ${safe}[${parsed.rows}][${parsed.cols}];`
   }

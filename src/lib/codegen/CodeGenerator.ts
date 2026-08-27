@@ -157,7 +157,13 @@ export class CodeGenerator {
       typeMap
     )
     
-    // Step 4: Generate segregated subsystem code files
+    // Step 4: Refine segregated port types from parent wires, re-propagate so
+    // consumers of Psi_deg / theta_deg etc. see per-port vector types, then emit.
+    let effectiveTypeMap = typeMap
+    if (model.segregatedSubsystems && model.segregatedSubsystems.length > 0) {
+      this.refineSegregatedPortTypes(model, typeMap)
+      effectiveTypeMap = new TypePropagator(model).propagate()
+    }
     const subsystemFiles: SubsystemCodeResult[] = []
     if (model.segregatedSubsystems && model.segregatedSubsystems.length > 0) {
       for (const subInfo of model.segregatedSubsystems) {
@@ -171,11 +177,11 @@ export class CodeGenerator {
     }
 
     // Step 5: Generate header file
-    const headerGenerator = new HeaderGenerator(model, typeMap)
+    const headerGenerator = new HeaderGenerator(model, effectiveTypeMap)
     const header = headerGenerator.generate()
 
     // Step 6: Generate source file
-    const source = this.generateSource(model, typeMap)
+    const source = this.generateSource(model, effectiveTypeMap)
 
     // Step 7: Collect statistics
     const stats = {
@@ -439,6 +445,63 @@ export class CodeGenerator {
     return code
   }
   
+  /**
+   * Fill segregated input/output port dataTypes from parent-side wires + typeMap,
+   * then re-propagate types inside the module so signal structs match (e.g. Sum
+   * becomes double[3] when V_m_bar_mps is upgraded from a vector parent wire).
+   */
+  private refineSegregatedPortTypes(
+    model: { connections: any[]; segregatedSubsystems?: any[] },
+    typeMap: Map<string, string>
+  ): void {
+    for (const sub of model.segregatedSubsystems || []) {
+      for (const port of sub.inputPorts || []) {
+        const wire = model.connections.find(
+          (c: any) =>
+            c.targetBlockId === sub.subsystemId &&
+            c.targetPortIndex === port.index
+        )
+        if (!wire) continue
+        const srcType = typeMap.get(wire.sourceBlockId)
+        if (srcType && srcType !== 'double') {
+          port.dataType = srcType
+        }
+
+        // Keep internal input_port blocks in sync for re-propagation
+        const inBlock = sub.flattenedModel?.blocks?.find(
+          (b: any) =>
+            b.block.type === 'input_port' &&
+            (b.block.parameters?.portName === port.name || b.block.name === port.name)
+        )
+        if (inBlock && port.dataType) {
+          inBlock.block.parameters = {
+            ...inBlock.block.parameters,
+            dataType: port.dataType
+          }
+        }
+      }
+
+      // Re-propagate so demux/sum/product inside see upgraded input types
+      if (sub.flattenedModel) {
+        const innerProp = new TypePropagator(sub.flattenedModel)
+        const innerMap = innerProp.propagate()
+        sub.typeMap = innerMap
+        for (const port of sub.outputPorts || []) {
+          const portBlock = sub.flattenedModel.blocks?.find(
+            (b: any) =>
+              b.block.type === 'output_port' &&
+              (b.block.parameters?.portName === port.name || b.block.name === port.name)
+          )
+          if (!portBlock) continue
+          const t = innerMap.get(portBlock.originalId)
+          if (t && t !== 'double') {
+            port.dataType = t
+          }
+        }
+      }
+    }
+  }
+
   /**
    * Count number of state variables in the model
    */

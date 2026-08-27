@@ -56,15 +56,14 @@ export class TypePropagator {
           continue // Already handled
         }
 
-        // Special handling for segregated subsystems
-        // Their output types are determined by internal type propagation, not by the block module
+        // Special handling for segregated subsystems — per-port types live on
+        // SubsystemInfo.outputPorts; keep a port-0 fallback on the block map for
+        // legacy single-output lookups. Multi-out consumers use resolveSourceType.
         if (block.isSegregated && block.block.type === 'subsystem') {
           const subInfo = this.model.segregatedSubsystems?.find(
             sub => sub.subsystemId === block.originalId
           )
           if (subInfo && subInfo.outputPorts.length > 0) {
-            // For subsystems with single output, use that type
-            // For multiple outputs, store first type (connections use port index)
             const outputType = subInfo.outputPorts[0].dataType
             if (isValidType(outputType)) {
               const next = normalizeType(outputType)
@@ -161,6 +160,28 @@ export class TypePropagator {
    * Indexed by target port index (sparse holes are empty string if unconnected/untyped).
    * Does NOT invent 'double' for unknown sources — that poisons matrix integrators in loops.
    */
+  /** Resolve type of a connection's source, honoring segregated multi-out ports. */
+  private resolveSourceType(connection: {
+    sourceBlockId: string
+    sourcePortIndex: number
+  }): string | undefined {
+    const sourceBlock = this.model.blocks.find(
+      b => b.originalId === connection.sourceBlockId
+    )
+    if (sourceBlock?.isSegregated) {
+      const subInfo = this.model.segregatedSubsystems?.find(
+        s => s.subsystemId === sourceBlock.originalId
+      )
+      const outPort = subInfo?.outputPorts.find(
+        p => p.index === connection.sourcePortIndex
+      )
+      if (outPort?.dataType && isValidType(outPort.dataType)) {
+        return normalizeType(outPort.dataType)
+      }
+    }
+    return this.blockOutputTypes.get(connection.sourceBlockId)
+  }
+
   private getBlockInputTypes(block: FlattenedBlock): string[] {
     // Data ports only (index >= 0). Control ports (-1 enable, -2 reset) are excluded.
     const connections = this.model.connections
@@ -175,7 +196,7 @@ export class TypePropagator {
     const types: string[] = Array.from({ length: maxPort + 1 }, () => '')
 
     for (const connection of connections) {
-      const sourceType = this.blockOutputTypes.get(connection.sourceBlockId)
+      const sourceType = this.resolveSourceType(connection)
       if (!sourceType) continue
       const port = connection.targetPortIndex
       const prev = types[port]

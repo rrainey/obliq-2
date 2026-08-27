@@ -250,7 +250,10 @@ export class HeaderGenerator {
         // Get the source block to determine output type
         const sourceBlock = this.model.blocks.find(b => b.originalId === inputWire.sourceBlockId)
         if (sourceBlock) {
-          const outputType = this.getBlockOutputType(sourceBlock)
+          const outputType = this.getBlockOutputType(
+            sourceBlock,
+            inputWire.sourcePortIndex
+          )
 
           // Parse type for array dimensions
           if (isValidType(outputType)) {
@@ -558,9 +561,20 @@ export class HeaderGenerator {
   }
   
   /**
-   * Helper to get block output type
+   * Helper to get block output type (portIndex for segregated multi-out).
    */
-  private getBlockOutputType(block: typeof this.model.blocks[0]): string {
+  private getBlockOutputType(
+    block: typeof this.model.blocks[0],
+    portIndex: number = 0
+  ): string {
+    if (block.isSegregated) {
+      const subInfo = this.model.segregatedSubsystems?.find(
+        s => s.subsystemId === block.originalId
+      )
+      const port = subInfo?.outputPorts.find(p => p.index === portIndex)
+      if (port?.dataType) return port.dataType
+    }
+
     // First check the type map
     const mappedType = this.typeMap.get(block.originalId)
     if (mappedType) {
@@ -595,8 +609,8 @@ export class HeaderGenerator {
       // Get the source block
       const sourceBlock = this.model.blocks.find(b => b.originalId === inputConnection.sourceBlockId)
       if (sourceBlock) {
-        // Return the output type of the source block
-        return this.getBlockOutputType(sourceBlock)
+        // Return the output type of the source block (honour source port index)
+        return this.getBlockOutputType(sourceBlock, inputConnection.sourcePortIndex)
       }
     }
 
@@ -704,7 +718,7 @@ export class HeaderGenerator {
     return code
   }
 
-  /** Sanitized identifiers that appear as signal/state struct members */
+  /** Sanitized identifiers that appear as signal/state/port struct members */
   private collectSignalIdentifiers(): Set<string> {
     const ids = new Set<string>()
     for (const block of this.model.blocks) {
@@ -712,6 +726,13 @@ export class HeaderGenerator {
       ids.add(n)
       // Common multi-out suffixes still include the base name as a prefix; base is enough
       // to catch #define K_q vs signals.K_q
+    }
+    // Segregated module port fields (e.g. inputs.i_deg) must not be clobbered by #define i_deg
+    for (const sub of this.model.segregatedSubsystems || []) {
+      ids.add(sub.sanitizedName)
+      for (const port of [...sub.inputPorts, ...sub.outputPorts]) {
+        ids.add(port.sanitizedName)
+      }
     }
     return ids
   }

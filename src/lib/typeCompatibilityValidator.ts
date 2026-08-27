@@ -141,12 +141,17 @@ export function validateModelTypeCompatibility(
     )
     
     if (validationError) {
-      errors.push({
+      const item = {
         ...validationError,
         wireId: wire.id,
         sourceBlockId: sourceBlock.id,
         targetBlockId: targetBlock.id
-      })
+      }
+      if (validationError.severity === 'warning') {
+        warnings.push(item)
+      } else {
+        errors.push(item)
+      }
     }
 
      // Validate multi-input blocks (Sum, Multiply)
@@ -260,14 +265,19 @@ export function validateModelTypeCompatibilityMultiSheet(
   // Use multi-sheet type propagation
   const typeResult = propagateSignalTypesMultiSheet(sheets)
 
-  // Process type propagation errors
+  // Process type propagation issues (respect warning vs error severity)
   for (const error of typeResult.errors) {
-    allErrors.push(stampSheetId({
+    const stamped = stampSheetId({
       message: error.message,
       blockId: error.blockId,
       wireId: error.wireId,
-      severity: 'error'
-    }))
+      severity: error.severity === 'warning' ? 'warning' : 'error'
+    })
+    if (stamped.severity === 'warning') {
+      allWarnings.push(stamped)
+    } else {
+      allErrors.push(stamped)
+    }
   }
 
   // Check each sheet's connections for type compatibility
@@ -622,20 +632,30 @@ function validateBlockInputType(
       }
       break
       
-    case 'demux':
-      // Demux requires vector or matrix input
+    case 'demux': {
+      // Demux requires vector or matrix input. mdl2obliq often leaves subsystem
+      // Outports typed as bare "double" while Mux_expand_* demuxes still declare
+      // inputDimensions — those translate to C fine, so prefer a warning there.
       if (!parsedInputType.isArray && !parsedInputType.isMatrix) {
+        const dims = block.parameters?.inputDimensions
+        const declaredElems = Array.isArray(dims)
+          ? dims.reduce((n: number, d: number) => n * (Number(d) || 1), 1)
+          : 0
+        const soft = declaredElems > 1
         return {
           blockId: block.id,
-          message: `${block.name} requires vector or matrix input but received scalar ${inputType} from ${sourceBlock.name}`,
-          severity: 'error',
+          message: soft
+            ? `${block.name} received scalar ${inputType} from ${sourceBlock.name} but declares inputDimensions=${JSON.stringify(dims)} (mdl2obliq Outport often lacks PortDimensions; codegen OK)`
+            : `${block.name} requires vector or matrix input but received scalar ${inputType} from ${sourceBlock.name}`,
+          severity: soft ? 'warning' : 'error',
           details: {
-            expectedType: 'vector or matrix',
+            expectedType: soft ? `vector/matrix (declared ${JSON.stringify(dims)})` : 'vector or matrix',
             actualType: inputType
           }
         }
       }
       break
+    }
       
     case 'scale':
     case 'transfer_function':

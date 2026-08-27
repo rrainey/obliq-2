@@ -34,25 +34,26 @@ export class SourceBlockModule implements IBlockModule {
       const parameterName = block.parameters?.parameterName
 
       if (useParameter && parameterName) {
-        // Use parameter reference instead of literal value
-        // Parameters may change, so we need to copy them each step
-        code += `    // Using parameter: ${parameterName}\n`
+        // HeaderGenerator always defines PARAM_<name> (aliases bare #define when
+        // there is no signal name collision; uses PARAM_ only when there is).
+        const paramIdent = `PARAM_${BlockModuleUtils.sanitizeIdentifier(String(parameterName))}`
+        code += `    // Using parameter: ${parameterName} → ${paramIdent}\n`
 
         if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
           // Matrix parameter - copy element by element
           for (let i = 0; i < typeInfo.rows; i++) {
             for (let j = 0; j < typeInfo.cols; j++) {
-              code += `    ${outputName}[${i}][${j}] = ${parameterName}[${i}][${j}];\n`
+              code += `    ${outputName}[${i}][${j}] = ${paramIdent}[${i}][${j}];\n`
             }
           }
         } else if (typeInfo.isArray && typeInfo.arraySize) {
           // Vector parameter - copy element by element
           for (let i = 0; i < typeInfo.arraySize; i++) {
-            code += `    ${outputName}[${i}] = ${parameterName}[${i}];\n`
+            code += `    ${outputName}[${i}] = ${paramIdent}[${i}];\n`
           }
         } else {
           // Scalar parameter
-          code += `    ${outputName} = ${parameterName};\n`
+          code += `    ${outputName} = ${paramIdent};\n`
         }
       } else {
         // Pure literal constant - already initialized in _init(), no need to reassign every step

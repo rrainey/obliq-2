@@ -72,6 +72,8 @@ export class IntegratorBlockModule implements IBlockModule {
     // RTW IcNeedsLoading: load live x(0) only while the enable scope is active.
     // Integrators publish state→signal even when disabled, so this must be gated
     // here (not via the usual algebra enable wrap).
+    // Topo: AlgebraicEvaluator adds a dep on the x(0) driver so Stage_Sep→
+    // Body_to_ECI_Sum runs before this load under segregated LVDC.
     if (showInitPort && initExpr) {
       const enableExpr = context?.enableExpr && context.enableExpr !== '1'
         ? context.enableExpr

@@ -217,6 +217,10 @@ export class InitFunctionGenerator {
 
     for (const sub of this.model.segregatedSubsystems) {
       code += `    ${sub.sanitizedName}_init(&model->${sub.sanitizedName});\n`
+      // Parent init already set model->dt; push into module for unit_delay/sample_time
+      code += `    model->${sub.sanitizedName}.dt = model->dt;\n`
+      code += `    model->${sub.sanitizedName}.time = model->time;\n`
+      code += `    model->${sub.sanitizedName}.sample_tick = model->sample_tick;\n`
     }
 
     // Sync subsystem states to parent states struct

@@ -2,7 +2,7 @@
 
 import { Sheet } from '@/lib/simulationTypes'
 import { ModelParameter } from '@/lib/modelSchema'
-import { FlattenedModel } from './ModelFlattener'
+import { FlattenedModel, SubsystemEnableInfo } from './ModelFlattener'
 
 /**
  * Port information for a subsystem's input or output
@@ -104,6 +104,12 @@ export interface SubsystemInfo {
    * Null if at root level or parent has no enable.
    */
   enableScope: string | null
+
+  /**
+   * Nested Action/Enable scopes *inside* this segregated module.
+   * Copied from the module's internal flatten; parent must not own these.
+   */
+  subsystemEnableInfo?: SubsystemEnableInfo[]
 }
 
 /**

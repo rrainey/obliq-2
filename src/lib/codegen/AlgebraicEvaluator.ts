@@ -7,6 +7,11 @@ import { SubsystemInfo } from './SubsystemInfo'
 import { CodeGenContext } from '../blocks/BlockModule'
 import { getSignalMemberName } from './signalMemberName'
 import { EnableEvaluator } from './EnableEvaluator'
+import {
+  needsIgmTerminalChiLatch,
+  generateIgmTerminalChiLatchStatics,
+  wrapIgmTerminalChiLatch
+} from './igmTerminalChiLatch'
 
 /**
  * Generates the algebraic evaluation function for a flattened model.
@@ -73,6 +78,11 @@ export class AlgebraicEvaluator {
     
     // Compute execution order
     const executionOrder = this.calculateExecutionOrder()
+
+    // Static state for IGM terminal Chi-angle latch (Add12/Add14) if present
+    if (needsIgmTerminalChiLatch(executionOrder)) {
+      code = generateIgmTerminalChiLatchStatics() + code
+    }
     
     // Generate block computations in order
     code += this.generateBlockComputations(executionOrder)
@@ -133,6 +143,35 @@ export class AlgebraicEvaluator {
 
       if (!targetBlock || !sourceBlock) continue
 
+      // Break Module↔enable cycles: if source is under an enable scope whose
+      // predicate reads this segregated module, the connection is a plant
+      // feedback sample, not algebraic (else topo forces enable_bool before
+      // the module and S_IVB ICs latch stale Body_to_ECI / Stage_Sep).
+      // Crossing-port producers (S_IVB_Xe / Ve) are still refreshed just before
+      // the segregated input memcpy — see generatePreSegregatedInputRefresh.
+      if (
+        targetBlock.isSegregated &&
+        this.isModuleEnableCycleSource(targetBlock, sourceBlock)
+      ) {
+        continue
+      }
+
+      // Integrators with showInitPort load live x(0) on first enable
+      // (IcNeedsLoading). Even though integrators have no DF on the derivative
+      // path, IC load must run *after* the x(0) driver (e.g. Body_to_ECI_Sum
+      // after Stage_Sep updates post-sep CG).
+      if (
+        targetBlock.block.type === 'integrator' &&
+        targetBlock.block.parameters?.showInitPort &&
+        connection.targetPortIndex === 1
+      ) {
+        const deps = dependencies.get(connection.targetBlockId)
+        if (deps && !deps.includes(connection.sourceBlockId)) {
+          deps.push(connection.sourceBlockId)
+        }
+        continue
+      }
+
       // Check if the target block has direct feedthrough
       if (this.hasDirectFeedthrough(targetBlock)) {
         const deps = dependencies.get(connection.targetBlockId)
@@ -141,6 +180,26 @@ export class AlgebraicEvaluator {
         }
       }
       // If no direct feedthrough, the connection doesn't create an algebraic dependency
+    }
+
+    // Enable-wire sources (If / epsilon_prime / Compare) must evaluate before
+    // blocks they gate so same-step enable refresh can arm ActionPort DSM
+    // writes in the same major hit (RTW rtAction semantics).
+    //
+    // Do NOT pull SwitchCase case_* early: those selectors must run *after*
+    // mode DSM writes in the same pass so live-DSM case conditions see the
+    // updated nIGMMode (otherwise mode→2 lags an extra major cycle).
+    for (const info of this.model.subsystemEnableInfo) {
+      const srcId = info.enableWire?.sourceBlockId
+      if (!srcId || !info.hasEnableInput) continue
+      const srcBlock = this.model.blocks.find(b => b.originalId === srcId)
+      if (srcBlock && this.isSwitchCaseCaseEvaluate(srcBlock)) continue
+      for (const controlledId of info.controlledBlockIds || []) {
+        const deps = dependencies.get(controlledId)
+        if (deps && !deps.includes(srcId) && dependencies.has(srcId)) {
+          deps.push(srcId)
+        }
+      }
     }
 
     // Topological sort with cycle detection
@@ -306,7 +365,22 @@ export class AlgebraicEvaluator {
           computation = generator.generateComputation(blockWithFlattenedName, inputs, inputTypes, context)
         }
 
+        // IGM terminal (Add8<=15): after first terminal major, latch Add12/Add14
+        // so atan(vigained) cannot slew Chi as vigained collapses (Chi dive).
+        const chiLatch = wrapIgmTerminalChiLatch(block, computation)
+        if (chiLatch) computation = chiLatch
+
         code += this.wrapWithExecutionGates(block, computation)
+
+        // Same-step ActionPort / SwitchCase enable: RTW runs action bodies in the
+        // same major hit the If/case condition becomes true. Obliq normally defers
+        // enable_states to end-of-step ("for next step"), which adds +1 major cycle
+        // of lag on mode DSM writes (mode→3/4, Chi freeze, etc.). When this block
+        // is an enable-wire source, refresh dependent enables now so later algebra
+        // in this same evaluate_algebraic pass sees the live enable.
+        if (this.enableSourceBlockIds.has(block.originalId)) {
+          code += this.generateSameStepEnableRefresh(block)
+        }
 
       } catch (error) {
         code += `    /* Error generating code for ${block.block.type}: ${error} */\n`
@@ -510,16 +584,30 @@ export class AlgebraicEvaluator {
     }
     const inputs: string[] = Array.from({ length: maxPort + 1 }, () => '0.0')
 
+    // SwitchCase case_* (enable sources) must see live DSM values. Data Store
+    // Reads that feed the selector are often evaluated earlier in the same
+    // algebra pass (before mode DSWs), so using the Read *signal* adds an
+    // extra ActionPort enable lag. Read model->data_stores.* directly instead.
+    const preferLiveDsm = this.enableSourceBlockIds.has(block.originalId)
+
     for (const connection of connections) {
       const sourceBlock = this.model.blocks.find(
         b => b.originalId === connection.sourceBlockId
       )
       if (!sourceBlock) continue
-      const expr = this.generateSignalExpression(
+      let expr = this.generateSignalExpression(
         sourceBlock,
         connection.sourcePortIndex,
         signalsVar
       )
+      if (preferLiveDsm && sourceBlock.block.type === 'data_store_read') {
+        const store =
+          sourceBlock.block.parameters?.storeName ||
+          sourceBlock.block.parameters?.dataStoreName ||
+          'store'
+        const safeStore = CCodeBuilder.sanitizeIdentifier(String(store))
+        expr = `model->data_stores.${safeStore}`
+      }
       const port = connection.targetPortIndex
       // Prefer first non-default; dimensional sources win on duplicates
       if (inputs[port] === '0.0') {
@@ -528,6 +616,96 @@ export class AlgebraicEvaluator {
     }
 
     return inputs
+  }
+
+  /** Synthetic SwitchCase case_N evaluate blocks from mdl2obliq emitObliq. */
+  private isSwitchCaseCaseEvaluate(block: FlattenedBlock): boolean {
+    const n = block.flattenedName || block.block.name || ''
+    return /Switch_Case_case_-?\d+$/i.test(n) || /_case_-?\d+$/i.test(block.block.name || '')
+  }
+
+  /**
+   * Same-step ActionPort enable when the action writes mode / Chi / terminal
+   * steering DSMs (RTW rtAction). Detected by **store names**, not Saturn
+   * block-name allowlists (avoids HSL-named codegen forks).
+   * Intentionally excludes First Phase Set nIGMMode=1 and nHSLActive-only
+   * actions (HSL arm is model-level with mode→4 — applyHslModelLevel).
+   */
+  private shouldSameStepRefreshTarget(info: {
+    subsystemName: string
+    controlledBlockIds?: string[]
+  }): boolean {
+    const n = info.subsystemName || ''
+    // Keep explicit Chi / terminal names as backup if DSW ids not yet linked
+    if (/IGM_Chi_Steering/i.test(n) || /Set_Terminal_Steering/i.test(n)) {
+      return true
+    }
+    if (/Set_nIGMMode_to_3/i.test(n)) return true
+
+    for (const id of info.controlledBlockIds || []) {
+      const block = this.model.blocks.find(b => b.originalId === id)
+      if (!block || block.block.type !== 'data_store_write') continue
+      const store = String(
+        block.block.parameters?.storeName ||
+          block.block.parameters?.logicalStoreName ||
+          ''
+      )
+      // mode→3/4 (incl. ActionPort still named Set_HSL_Mode that writes nIGMMode)
+      if (/nIGMMode$/i.test(store) || store === 'nIGMMode') {
+        // Exclude First Phase "set to 1" by requiring parent path not First_Phase
+        // when store write constant is 1 — hard without reading source.
+        // Exclude writes whose flattened path includes First_Phase / Set_nIGMMode_to_1
+        const path = block.flattenedName || ''
+        if (/First_Phase|Set_nIGMMode_to_1|_to_1_/i.test(path)) continue
+        if (/nIGMMode/i.test(store)) return true
+      }
+      if (/Chi_[YZ]_deg$/i.test(store) || /nTerminalSteeringMode$/i.test(store)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * After an enable-wire source (If / epsilon_prime) updates, refresh
+   * enable_states for allowlisted ActionPorts so DSM writes run same-step.
+   */
+  private generateSameStepEnableRefresh(sourceBlock: FlattenedBlock): string {
+    // SwitchCase case_* only update end-of-step enables (live DSM is enough).
+    if (this.isSwitchCaseCaseEvaluate(sourceBlock)) return ''
+
+    const dependents = this.model.subsystemEnableInfo.filter(
+      info =>
+        info.hasEnableInput &&
+        info.enableWire?.sourceBlockId === sourceBlock.originalId &&
+        info.enableEdge !== 'rising' &&
+        this.shouldSameStepRefreshTarget(info)
+    )
+    if (dependents.length === 0) return ''
+
+    const sourceExpr = this.generateSignalExpression(sourceBlock, 0, 'model')
+    const boolExpr = CCodeBuilder.generateBooleanExpression(sourceExpr)
+
+    let code = `    /* Same-step enable refresh (RTW ActionPort / SwitchCase) from ${sourceBlock.flattenedName} */\n`
+    for (const info of dependents) {
+      const safeSys = CCodeBuilder.sanitizeIdentifier(info.subsystemName)
+      if (info.parentSubsystemId) {
+        const parent = this.model.subsystemEnableInfo.find(
+          s => s.subsystemId === info.parentSubsystemId
+        )
+        if (parent?.hasEnableInput) {
+          const safeParent = CCodeBuilder.sanitizeIdentifier(parent.subsystemName)
+          code += `    if (!model->enable_states.${safeParent}_enabled) {\n`
+          code += `        model->enable_states.${safeSys}_enabled = 0;\n`
+          code += `    } else {\n`
+          code += `        model->enable_states.${safeSys}_enabled = ${boolExpr};\n`
+          code += `    }\n`
+          continue
+        }
+      }
+      code += `    model->enable_states.${safeSys}_enabled = ${boolExpr};\n`
+    }
+    return code
   }
   
   /**
@@ -612,8 +790,11 @@ export class AlgebraicEvaluator {
         if (sourceBlock) {
           const sourceExpr = this.generateSignalExpression(sourceBlock, inputWire.sourcePortIndex)
 
-          // Determine if it's an array type
-          const outputType = this.getBlockOutputType(sourceBlock)
+          // Segregated multi-out: type follows sourcePortIndex, not port-0
+          const outputType = this.getBlockOutputType(
+            sourceBlock,
+            inputWire.sourcePortIndex
+          )
 
           if (outputType.includes('[')) {
             // Array copy
@@ -646,7 +827,22 @@ export class AlgebraicEvaluator {
     const types: string[] = Array.from({ length: maxPort + 1 }, () => 'double')
 
     for (const connection of connections) {
-      const sourceType = this.typeMap.get(connection.sourceBlockId) || 'double'
+      let sourceType = this.typeMap.get(connection.sourceBlockId) || 'double'
+      // Segregated multi-out: type depends on sourcePortIndex, not block-level map
+      const sourceBlock = this.model.blocks.find(
+        b => b.originalId === connection.sourceBlockId
+      )
+      if (sourceBlock?.isSegregated) {
+        const subInfo = this.model.segregatedSubsystems?.find(
+          s => s.subsystemId === sourceBlock.originalId
+        )
+        const outPort = subInfo?.outputPorts.find(
+          p => p.index === connection.sourcePortIndex
+        )
+        if (outPort?.dataType) {
+          sourceType = outPort.dataType
+        }
+      }
       const port = connection.targetPortIndex
       const prev = types[port]
       if (
@@ -711,9 +907,16 @@ export class AlgebraicEvaluator {
   }
   
   /**
-   * Get output type for a block
+   * Get output type for a block (optional portIndex for segregated multi-out).
    */
-  private getBlockOutputType(block: FlattenedBlock): string {
+  private getBlockOutputType(block: FlattenedBlock, portIndex: number = 0): string {
+    if (block.isSegregated) {
+      const subInfo = this.model.segregatedSubsystems?.find(
+        s => s.subsystemId === block.originalId
+      )
+      const port = subInfo?.outputPorts.find(p => p.index === portIndex)
+      if (port?.dataType) return port.dataType
+    }
     return this.typeMap.get(block.originalId) || 'double'
   }
 
@@ -732,6 +935,30 @@ export class AlgebraicEvaluator {
 
     const safeName = subInfo.sanitizedName
     let code = `\n    /* Segregated subsystem: ${block.block.name} */\n`
+
+    // Sync timebase so unit_delay / sample_time / clock inside the module see parent values
+    code += `    model->${safeName}.time = model->time;\n`
+    code += `    model->${safeName}.dt = model->dt;\n`
+    code += `    model->${safeName}.sample_tick = model->sample_tick;\n`
+
+    // Sync shared data stores parent → module (intersection of names)
+    const parentStoreNames = new Set((this.model.dataStores || []).map(s => s.name))
+    const sharedStores = (subInfo.flattenedModel.dataStores || []).filter(s =>
+      parentStoreNames.has(s.name)
+    )
+    for (const store of sharedStores) {
+      const sn = CCodeBuilder.sanitizeIdentifier(store.name)
+      if ((store.dataType || '').includes('[')) {
+        code += `    memcpy(&model->${safeName}.data_stores.${sn}, &model->data_stores.${sn}, sizeof(model->${safeName}.data_stores.${sn}));\n`
+      } else {
+        code += `    model->${safeName}.data_stores.${sn} = model->data_stores.${sn};\n`
+      }
+    }
+
+    // Plant producers under Module↔enable cycle scopes are ordered *after* this
+    // call (cycle break). Publish integrator/unit_delay state and recompute DF
+    // transforms (e.g. S_IVB Xe / Ve) so crossing ports see the current step.
+    code += this.generatePreSegregatedInputRefresh(block)
 
     // Copy inputs to subsystem input struct
     for (const port of subInfo.inputPorts) {
@@ -756,9 +983,248 @@ export class AlgebraicEvaluator {
       code += `    ${safeName}_compute_outputs(&model->${safeName});\n`
     }
 
+    // Sync shared data stores module → parent (writes from inside must be visible)
+    for (const store of sharedStores) {
+      const sn = CCodeBuilder.sanitizeIdentifier(store.name)
+      if ((store.dataType || '').includes('[')) {
+        code += `    memcpy(&model->data_stores.${sn}, &model->${safeName}.data_stores.${sn}, sizeof(model->data_stores.${sn}));\n`
+      } else {
+        code += `    model->data_stores.${sn} = model->${safeName}.data_stores.${sn};\n`
+      }
+    }
+
     // Note: Subsystem outputs are accessed directly via model->SubsystemName.outputs.PortName
     // by downstream blocks (see generateSignalExpression), so no copy is needed here
 
+    // Topo may have evaluated enable predicates (e.g. S_IVB_Stage_enable_bool)
+    // *before* this call due to Module↔enable algebraic cycles, reading stale
+    // outputs. Refresh those predicates from live outs so end-of-step
+    // evaluate_enable_states matches flatten (Stage_Sep→enable same major hit).
+    code += this.generatePostSegregatedEnablePredicateRefresh(block)
+
+    return code
+  }
+
+  /**
+   * True when source sits under an enable scope whose predicate is fed by
+   * this segregated module (Module↔enable algebraic cycle).
+   */
+  private isModuleEnableCycleSource(
+    segregatedBlock: FlattenedBlock,
+    sourceBlock: FlattenedBlock
+  ): boolean {
+    if (!sourceBlock.enableScope) return false
+    const scopeInfo = this.model.subsystemEnableInfo.find(
+      s => s.subsystemId === sourceBlock.enableScope
+    )
+    const enableSrcId = scopeInfo?.enableWire?.sourceBlockId
+    if (!enableSrcId) return false
+    return this.model.connections.some(
+      c =>
+        c.sourceBlockId === segregatedBlock.originalId &&
+        c.targetBlockId === enableSrcId
+    )
+  }
+
+  /**
+   * Before copying segregated inputs, refresh plant signals that the topo
+   * cycle-break deferred past this call. Integrators / unit_delay publish
+   * frozen state only (no IcNeedsLoading — that stays in normal order after
+   * Body_to_ECI). DF producers in the cone are fully recomputed.
+   */
+  private generatePreSegregatedInputRefresh(
+    segregatedBlock: FlattenedBlock
+  ): string {
+    const roots: FlattenedBlock[] = []
+    for (const c of this.model.connections) {
+      if (c.targetBlockId !== segregatedBlock.originalId) continue
+      if (c.targetPortIndex < 0) continue
+      const source = this.model.blocks.find(b => b.originalId === c.sourceBlockId)
+      if (!source) continue
+      if (!this.isModuleEnableCycleSource(segregatedBlock, source)) continue
+      roots.push(source)
+    }
+    if (roots.length === 0) return ''
+
+    // Collect producer cone (ancestors first) among cycle-broken plant blocks.
+    // Stop at non-DF blocks (integrator / unit_delay): only publish frozen
+    // state — do NOT walk derivative/IC inputs or the whole plant is pulled in.
+    const ordered: FlattenedBlock[] = []
+    const visiting = new Set<string>()
+    const visited = new Set<string>()
+    const visit = (block: FlattenedBlock) => {
+      if (visited.has(block.originalId)) return
+      if (visiting.has(block.originalId)) return
+      visiting.add(block.originalId)
+      const t = block.block.type
+      if (t !== 'integrator' && t !== 'unit_delay') {
+        for (const c of this.model.connections) {
+          if (c.targetBlockId !== block.originalId) continue
+          const pred = this.model.blocks.find(b => b.originalId === c.sourceBlockId)
+          if (!pred) continue
+          if (pred.originalId === segregatedBlock.originalId) continue
+          if (!this.isModuleEnableCycleSource(segregatedBlock, pred)) continue
+          visit(pred)
+        }
+      }
+      visiting.delete(block.originalId)
+      visited.add(block.originalId)
+      ordered.push(block)
+    }
+    for (const root of roots) visit(root)
+    if (ordered.length === 0) return ''
+
+    let code = `\n    /* Pre-segregated input refresh: ${segregatedBlock.block.name} crossing ports */\n`
+    code += '    {\n'
+    for (const block of ordered) {
+      const t = block.block.type
+      if (t === 'integrator' || t === 'unit_delay') {
+        const publish = this.generateFrozenStatePublish(block)
+        if (publish.trim()) {
+          code += CCodeBuilder.indent(
+            `/* ${block.flattenedName} state→signal (no IC) */\n${publish}`,
+            2
+          )
+          if (!code.endsWith('\n')) code += '\n'
+        }
+        continue
+      }
+      if (!BlockModuleFactory.isSupported(t)) continue
+      if (!this.hasDirectFeedthrough(block)) continue
+      try {
+        const generator = BlockModuleFactory.getBlockModule(t)
+        const inputs = this.getBlockInputExpressions(block, 'model', 'model')
+        const inputTypes = this.getBlockInputTypes(block)
+        const named = withFlattenedSampleParams(block)
+        const outputType = generator.getOutputType(named, inputTypes)
+        this.typeMap.set(block.originalId, outputType)
+        const context: CodeGenContext = {
+          parameterNames: this.model.parameters.map(p => p.name),
+          debugMath: this.debugMath
+        }
+        const computation = generator.generateComputation(
+          named,
+          inputs,
+          inputTypes,
+          context
+        )
+        if (!computation.trim()) continue
+        code += CCodeBuilder.indent(
+          this.wrapWithExecutionGates(block, computation),
+          2
+        )
+        if (!code.endsWith('\n')) code += '\n'
+      } catch {
+        continue
+      }
+    }
+    code += '    }\n'
+    return code
+  }
+
+  /**
+   * Emit signals = states for integrator / unit_delay without IcNeedsLoading.
+   */
+  private generateFrozenStatePublish(block: FlattenedBlock): string {
+    const named = withFlattenedSampleParams(block)
+    const signalName = CCodeBuilder.sanitizeIdentifier(named.name)
+    const stateName = CCodeBuilder.sanitizeIdentifier(named.name)
+    let outputType = this.typeMap.get(block.originalId)
+    if (!outputType) {
+      try {
+        const mod = BlockModuleFactory.getBlockModule(block.block.type)
+        const inputTypes =
+          block.block.type === 'integrator'
+            ? this.getIntegratorInputTypes(block)
+            : this.getBlockInputTypes(block)
+        outputType = mod.getOutputType(named, inputTypes)
+        this.typeMap.set(block.originalId, outputType)
+      } catch {
+        outputType = 'double'
+      }
+    }
+
+    // Local parse to avoid importing BlockModuleUtils solely for this helper.
+    const matrixMatch = outputType.match(/^double\[(\d+)\]\[(\d+)\]$/)
+    const arrayMatch = outputType.match(/^double\[(\d+)\]$/)
+    const stateField =
+      block.block.type === 'unit_delay' ? `${stateName}_state` : `${stateName}_states`
+
+    let code = ''
+    if (matrixMatch) {
+      const rows = matrixMatch[1]
+      const cols = matrixMatch[2]
+      code += `    for (int i = 0; i < ${rows}; i++) {\n`
+      code += `        for (int j = 0; j < ${cols}; j++) {\n`
+      code += `            model->signals.${signalName}[i][j] = model->states.${stateField}[i][j];\n`
+      code += `        }\n`
+      code += `    }\n`
+    } else if (arrayMatch) {
+      const n = arrayMatch[1]
+      code += `    for (int i = 0; i < ${n}; i++) {\n`
+      code += `        model->signals.${signalName}[i] = model->states.${stateField}[i];\n`
+      code += `    }\n`
+    } else if (block.block.type === 'unit_delay') {
+      code += `    model->signals.${signalName} = model->states.${stateField};\n`
+    } else {
+      code += `    model->signals.${signalName} = model->states.${stateField}[0];\n`
+    }
+    return code
+  }
+
+  /**
+   * Re-emit enable-wire source blocks (evaluate/condition) that read this
+   * segregated module's outputs, so enable_bool sees live Stage_Sep / etc.
+   */
+  private generatePostSegregatedEnablePredicateRefresh(
+    segregatedBlock: FlattenedBlock
+  ): string {
+    const consumerIds = new Set<string>()
+    for (const c of this.model.connections) {
+      if (c.sourceBlockId !== segregatedBlock.originalId) continue
+      consumerIds.add(c.targetBlockId)
+    }
+    if (consumerIds.size === 0) return ''
+
+    let code = ''
+    for (const id of consumerIds) {
+      if (!this.enableSourceBlockIds.has(id)) continue
+      const consumer = this.model.blocks.find(b => b.originalId === id)
+      if (!consumer) continue
+      if (
+        consumer.block.type !== 'evaluate' &&
+        consumer.block.type !== 'condition'
+      ) {
+        continue
+      }
+      if (!BlockModuleFactory.isSupported(consumer.block.type)) continue
+
+      try {
+        const generator = BlockModuleFactory.getBlockModule(consumer.block.type)
+        const inputs = this.getBlockInputExpressions(consumer, 'model', 'model')
+        const inputTypes = this.getBlockInputTypes(consumer)
+        const named = withFlattenedSampleParams(consumer)
+        const context: CodeGenContext = {
+          parameterNames: this.model.parameters.map(p => p.name),
+          debugMath: this.debugMath
+        }
+        const computation = generator.generateComputation(
+          named,
+          inputs,
+          inputTypes,
+          context
+        )
+        if (!computation.trim()) continue
+        // Brace-scope so _eval_* temporaries from the earlier emit don't collide.
+        code += `\n    /* Post-segregated refresh: ${consumer.flattenedName} (live ${segregatedBlock.block.name} outs) */\n`
+        code += '    {\n'
+        code += CCodeBuilder.indent(computation, 2)
+        if (!code.endsWith('\n')) code += '\n'
+        code += '    }\n'
+      } catch {
+        continue
+      }
+    }
     return code
   }
 

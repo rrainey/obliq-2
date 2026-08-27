@@ -192,7 +192,10 @@ export class CCodeBuilder {
     start: string,
     end: string
   } {
-    const guard = filename.toUpperCase().replace(/[^A-Z0-9]/g, '_') /* + '_H'*/
+    // Always suffix _H so the guard cannot collide with the module identifier
+    // (e.g. #define LVDA_LVDC would break LVDA_LVDC_init / model->LVDA_LVDC).
+    const base = filename.toUpperCase().replace(/[^A-Z0-9]/g, '_')
+    const guard = base.endsWith('_H') ? base : `${base}_H`
     
     return {
       start: `#ifndef ${guard}\n#define ${guard}\n`,

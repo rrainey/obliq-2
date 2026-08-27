@@ -8,6 +8,13 @@ import { ModelParameter } from '@/lib/modelSchema'
 import { DataStoreDeclaration, collectDataStores } from '@/lib/dataStoreUtils'
 import { SubsystemInfo, SubsystemPort } from './SubsystemInfo'
 import { TypePropagator } from './TypePropagator'
+import {
+  SheetLabelRef,
+  collectSheetLabels,
+  computeCrossingTags,
+  promoteCrossingPortsOnSubsystem,
+  inferTagDataTypes
+} from './crossingTagPorts'
 /**
  * A flattened block includes the original block data plus hierarchy information
  */
@@ -250,6 +257,18 @@ export class ModelFlattener {
   private enableScopes = new Map<string, string | null>()
   private subsystemEnableInfo: SubsystemEnableInfo[] = []
   private segregatedSubsystems: SubsystemInfo[] = []
+  /** All Goto/From refs in the model (collected once per flatten). */
+  private allSheetLabels: SheetLabelRef[] = []
+  /** Host/model-level parameters (for PARAM_* emission inside segregated modules). */
+  private modelParameters: ModelParameter[] = []
+  /**
+   * Export tag name → segregated subsystem output (for parent From resolution
+   * when the Goto lives inside an opaque segregated module).
+   */
+  private segregatedExportBySignal = new Map<
+    string,
+    { subsystemId: string; portIndex: number }
+  >()
 
   constructor(options: ModelFlattenerOptions = {}) {
     this.options = {
@@ -289,8 +308,16 @@ export class ModelFlattener {
 
           this.subsystemEnableInfo.push(enableInfo)
 
-          // Process nested sheets with updated path
-          if (block.parameters?.sheets) {
+          // Nested enables inside a segregated/atomic module belong to that
+          // module's own flatten — do not register them on the parent.
+          const childStrategy =
+            (block.parameters?.codeGenStrategy as string) || 'flatten'
+          const childIsSegregated =
+            childStrategy === 'segregated' ||
+            childStrategy === 'segregated_atomic' ||
+            childStrategy === 'native'
+
+          if (block.parameters?.sheets && !childIsSegregated) {
             this.buildEnableScopes(
               block.parameters.sheets as Sheet[],
               block.id,
@@ -327,6 +354,9 @@ export class ModelFlattener {
   /**
    * Resolve discrete sample period for a block given parent subsystem period.
    * Explicit parameters.sampleTimeSec wins; else inherit parent; else null (every step).
+   *
+   * HSL 0.04 s must be set as an explicit sampleTimeSec on the Obliq model
+   * (see mdl2obliq applyHslModelLevel) — not inferred from subsystem name.
    */
   private resolveSampleScope(
     block: BlockData,
@@ -371,7 +401,9 @@ export class ModelFlattener {
     block: BlockData,
     subsystemSheets: Sheet[],
     parentPath: string[],
-    parentEnableScope: string | null
+    parentEnableScope: string | null,
+    /** Scoped id used in the parent flattened model (must match FlattenedBlock.originalId). */
+    scopedSubsystemId?: string
   ): SubsystemInfo {
     // Extract subsystem-level parameters (if any)
     const subsystemParameters: ModelParameter[] = block.parameters?.parameters || []
@@ -414,24 +446,35 @@ export class ModelFlattener {
     const typePropagator = new TypePropagator(subResult.model)
     const typeMap = typePropagator.propagate()
 
-    // Update output port types based on type propagation
-    // The output port type should match the signal connected to it
-    for (const port of outputPorts) {
-      // Find the output_port block
+    // Update port types based on type propagation (input + output)
+    for (const port of [...inputPorts, ...outputPorts]) {
       const portBlock = subResult.model.blocks.find(b =>
-        b.block.type === 'output_port' &&
-        b.block.parameters?.portName === port.name
+        (b.block.type === 'input_port' || b.block.type === 'output_port') &&
+        (b.block.parameters?.portName === port.name || b.block.name === port.name)
       )
       if (portBlock) {
         const propagatedType = typeMap.get(portBlock.originalId)
-        if (propagatedType) {
+        if (propagatedType && propagatedType !== 'double') {
           port.dataType = propagatedType
+        } else if (portBlock.block.parameters?.dataType) {
+          port.dataType = portBlock.block.parameters.dataType as string
         }
       }
     }
 
+    // Host model parameters are visible to Source blocks via PARAM_* macros;
+    // subsystem-local parameters override on name collision.
+    const hostParams = this.modelParameters || []
+    const mergedParams = [
+      ...hostParams,
+      ...subsystemParameters.filter(
+        sp => !hostParams.some(hp => hp.name === sp.name)
+      )
+    ]
+
     return {
-      subsystemId: block.id,
+      // Must match FlattenedBlock.originalId so parent call-site lookup succeeds
+      subsystemId: scopedSubsystemId || block.id,
       subsystemName: block.name,
       sanitizedName: CCodeBuilder.sanitizeIdentifier(block.name),
       sheets: subsystemSheets,
@@ -443,9 +486,11 @@ export class ModelFlattener {
       hasState,
       stateCount,
       typeMap,
-      parameters: subsystemParameters,
+      parameters: mergedParams,
       parentPath,
-      enableScope: parentEnableScope
+      enableScope: parentEnableScope,
+      // Nested Action/Enable scopes live in the module, not the parent
+      subsystemEnableInfo: subResult.model.subsystemEnableInfo || []
     }
   }
 
@@ -573,9 +618,53 @@ export class ModelFlattener {
 
           // Process subsystem's internal sheets
           if (block.parameters?.sheets) {
-            const subsystemSheets = block.parameters.sheets as Sheet[]
+            let subsystemSheets = block.parameters.sheets as Sheet[]
             const newPath = [...subsystemPath, block.name]
             const childPrefix = `${scopedBlockId}__`
+
+            // Declared port name lists (may be extended by crossing-tag promotion)
+            let declaredInputs: string[] = [...(block.parameters.inputPorts as string[] || [])]
+            let declaredOutputs: string[] = [...(block.parameters.outputPorts as string[] || [])]
+
+            // Crossing exports for this subsystem (Goto inside / From outside)
+            let crossingExports: string[] = []
+
+            // For segregated*: auto-promote crossing Goto/From tags to ports and
+            // rewrite sheets so internal Froms/Gotos bind to those ports.
+            if (codeGenStrategy === 'segregated' || codeGenStrategy === 'segregated_atomic') {
+              const crossing = computeCrossingTags(this.allSheetLabels, newPath)
+              crossingExports = crossing.exports
+              // Prefer structural inference (Goto driver types) over bare label params
+              const typeHints = inferTagDataTypes(sheets)
+              for (const lab of this.allSheetLabels) {
+                if (lab.dataType && !typeHints.has(lab.signalName)) {
+                  typeHints.set(lab.signalName, lab.dataType)
+                }
+              }
+              if (crossing.imports.length > 0 || crossing.exports.length > 0) {
+                const promoted = promoteCrossingPortsOnSubsystem(
+                  declaredInputs,
+                  declaredOutputs,
+                  subsystemSheets,
+                  crossing,
+                  typeHints
+                )
+                declaredInputs = promoted.inputPorts
+                declaredOutputs = promoted.outputPorts
+                subsystemSheets = promoted.sheets
+                if (promoted.addedInputs.length || promoted.addedOutputs.length) {
+                  this.addWarning(
+                    `[${block.name}] Auto-promoted crossing tags → ports` +
+                      (promoted.addedInputs.length
+                        ? ` in=[${promoted.addedInputs.join(',')}]`
+                        : '') +
+                      (promoted.addedOutputs.length
+                        ? ` out=[${promoted.addedOutputs.join(',')}]`
+                        : '')
+                  )
+                }
+              }
+            }
 
             // Find input/output port blocks inside subsystem (needed for both strategies)
             for (const subSheet of subsystemSheets) {
@@ -583,9 +672,9 @@ export class ModelFlattener {
                 if (subBlock.type === 'input_port') {
                   const portName = subBlock.parameters?.portName
                   // Match portName or uniquified block.name against inputPorts list
-                  let portIndex = block.parameters.inputPorts?.indexOf(portName) ?? -1
+                  let portIndex = declaredInputs.indexOf(portName)
                   if (portIndex < 0) {
-                    portIndex = block.parameters.inputPorts?.indexOf(subBlock.name) ?? -1
+                    portIndex = declaredInputs.indexOf(subBlock.name)
                   }
                   if (portIndex >= 0) {
                     portMapping.inputPorts.set(
@@ -595,9 +684,9 @@ export class ModelFlattener {
                   }
                 } else if (subBlock.type === 'output_port') {
                   const portName = subBlock.parameters?.portName
-                  let portIndex = block.parameters.outputPorts?.indexOf(portName) ?? -1
+                  let portIndex = declaredOutputs.indexOf(portName)
                   if (portIndex < 0) {
-                    portIndex = block.parameters.outputPorts?.indexOf(subBlock.name) ?? -1
+                    portIndex = declaredOutputs.indexOf(subBlock.name)
                   }
                   if (portIndex >= 0) {
                     portMapping.outputPorts.set(
@@ -613,18 +702,43 @@ export class ModelFlattener {
               // Mark as segregated so connection processing skips internal wire lookup
               portMapping.isSegregated = true
 
+              // Block view with promoted port lists (do not mutate caller's JSON)
+              const segregatedBlock: BlockData = {
+                ...block,
+                id: scopedBlockId,
+                parameters: {
+                  ...block.parameters,
+                  inputPorts: declaredInputs,
+                  outputPorts: declaredOutputs,
+                  sheets: subsystemSheets,
+                  showPortNames: true
+                }
+              }
+
               // SEGREGATED: Don't flatten - collect for separate code generation
               const subsystemInfo = this.analyzeSegregatedSubsystem(
-                block,
+                segregatedBlock,
                 subsystemSheets,
                 newPath,
-                currentEnableScope
+                currentEnableScope,
+                scopedBlockId
               )
               this.segregatedSubsystems.push(subsystemInfo)
 
+              // Register crossing exports so parent From(tag) → module.outputs.tag
+              for (const exportName of crossingExports) {
+                const port = subsystemInfo.outputPorts.find(p => p.name === exportName)
+                if (port && !this.segregatedExportBySignal.has(exportName)) {
+                  this.segregatedExportBySignal.set(exportName, {
+                    subsystemId: scopedBlockId,
+                    portIndex: port.index
+                  })
+                }
+              }
+
               // Add the subsystem as a placeholder block (not flattened)
               const flattenedBlock: FlattenedBlock = {
-                block: { ...block, id: scopedBlockId },
+                block: segregatedBlock,
                 flattenedName: this.generateFlattenedName(block.name, subsystemPath),
                 subsystemPath: [...subsystemPath],
                 enableScope: parentEnableScope,
@@ -1162,6 +1276,160 @@ export class ModelFlattener {
   }
   
   /**
+   * For segregated import ports that came from outside Gotos: copy the Goto's
+   * driver onto the subsystem input when no explicit wire exists yet.
+   *
+   * Self-feedback (Goto ultimately driven by this same segregated subsystem's
+   * output) is NOT wired as a parent input — that would latch last-step
+   * outputs and delay internal consumers by ≥1 major frame vs flatten.
+   * Instead, relink the module's promoted input_port consumers to the local
+   * driver of that output (live Stage_Sep_3 → From(bStageSep), etc.).
+   */
+  private wireSegregatedTagImports(
+    connections: FlattenedConnection[],
+    flattenedBlocks: FlattenedBlock[]
+  ): FlattenedConnection[] {
+    if (this.segregatedSubsystems.length === 0) {
+      return connections
+    }
+
+    const result = [...connections]
+
+    for (const sub of this.segregatedSubsystems) {
+      // Iterate a copy — relink may remove input ports
+      for (const port of [...sub.inputPorts]) {
+        const already = result.some(
+          c =>
+            c.targetBlockId === sub.subsystemId &&
+            c.targetPortIndex === port.index
+        )
+        if (already) continue
+
+        // Outside Goto with this tag (inside Gotos are not in flattenedBlocks).
+        // Promoted bridge ports may be named `${tag}__tag` when an explicit
+        // input_port already claimed `tag` (see ensureImportBridge).
+        const tagName = port.name.endsWith('__tag')
+          ? port.name.slice(0, -'__tag'.length)
+          : port.name
+        const gotoBlock = flattenedBlocks.find(
+          b =>
+            b.block.type === 'sheet_label_sink' &&
+            (b.block.parameters?.signalName as string) === tagName
+        )
+        if (!gotoBlock) continue
+
+        const feed = connections.find(
+          c =>
+            c.targetBlockId === gotoBlock.originalId && c.targetPortIndex === 0
+        )
+        if (!feed) continue
+
+        // Self-feedback: outside Goto is driven by this module's own output
+        if (feed.sourceBlockId === sub.subsystemId) {
+          const ok = this.relinkSelfFeedbackImport(sub, port, feed.sourcePortIndex)
+          if (ok) {
+            this.addWarning(
+              `[${sub.name}] Self-feedback import '${port.name}' relinked to local ` +
+                `driver of output port ${feed.sourcePortIndex} (avoid one-step latch)`
+            )
+            continue
+          }
+          this.addWarning(
+            `[${sub.name}] Self-feedback import '${port.name}' detected but relink ` +
+              `failed; leaving parent wire (may delay vs flatten)`
+          )
+        }
+
+        result.push({
+          id: `seg_import_${sub.sanitizedName}_${port.sanitizedName}`,
+          sourceBlockId: feed.sourceBlockId,
+          sourcePortIndex: feed.sourcePortIndex,
+          targetBlockId: sub.subsystemId,
+          targetPortIndex: port.index,
+          originalWireId: feed.originalWireId,
+          connectionType: 'sheet_label'
+        })
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * Replace a promoted import port inside a segregated module with the local
+   * block that drives the corresponding output (self-feedback collapse).
+   * Returns true if the module was rewritten.
+   */
+  private relinkSelfFeedbackImport(
+    sub: SubsystemInfo,
+    importPort: SubsystemPort,
+    outputPortIndex: number
+  ): boolean {
+    const fm = sub.flattenedModel
+    if (!fm) return false
+
+    const outPort = sub.outputPorts.find(p => p.index === outputPortIndex)
+    if (!outPort) return false
+
+    // Driver of the output port inside the module
+    const outPortBlock = fm.blocks.find(
+      b =>
+        b.block.type === 'output_port' &&
+        ((b.block.parameters?.portName as string) === outPort.name ||
+          b.block.name === outPort.name ||
+          b.flattenedName === outPort.name ||
+          b.flattenedName?.endsWith('_' + outPort.name))
+    )
+    // Prefer matching by port list order / name on any output_port
+    const outPortBlocks = fm.blocks.filter(b => b.block.type === 'output_port')
+    let outBlock = outPortBlock
+    if (!outBlock) {
+      outBlock = outPortBlocks.find(
+        b =>
+          (b.block.parameters?.portName as string) === outPort.name ||
+          b.block.name === outPort.name
+      )
+    }
+    if (!outBlock) return false
+
+    const driveConn = fm.connections.find(
+      c => c.targetBlockId === outBlock!.originalId && c.targetPortIndex === 0
+    )
+    if (!driveConn) return false
+    const localDriverId = driveConn.sourceBlockId
+    const localDriverPort = driveConn.sourcePortIndex
+
+    // Promoted input_port for this import tag
+    const inPortBlock = fm.blocks.find(
+      b =>
+        b.block.type === 'input_port' &&
+        ((b.block.parameters?.portName as string) === importPort.name ||
+          b.block.name === importPort.name)
+    )
+    if (!inPortBlock) return false
+    const inPortId = inPortBlock.originalId
+
+    // Rewire consumers of the input_port to the local driver
+    for (const c of fm.connections) {
+      if (c.sourceBlockId === inPortId) {
+        c.sourceBlockId = localDriverId
+        c.sourcePortIndex = localDriverPort
+      }
+    }
+    // Drop wires into the input_port and the port block itself
+    fm.connections = fm.connections.filter(
+      c => c.targetBlockId !== inPortId && c.sourceBlockId !== inPortId
+    )
+    fm.blocks = fm.blocks.filter(b => b.originalId !== inPortId)
+
+    // Remove from SubsystemInfo port list; keep remaining indices stable so
+    // already-recorded parent import wires stay valid.
+    sub.inputPorts = sub.inputPorts.filter(p => p.name !== importPort.name)
+
+    return true
+  }
+
+  /**
    * Resolve sheet label connections within scopes
    * @returns Object with resolved connections and count of labels resolved
    */
@@ -1297,6 +1565,21 @@ export class ModelFlattener {
         continue
       }
 
+      // Prefer an opaque segregated export when the Goto lives inside that module
+      const segregatedExport = this.segregatedExportBySignal.get(signalName)
+      if (segregatedExport) {
+        // Only use when From is outside that subsystem (Goto is hidden inside)
+        const labelInfo = findSinkForSource(sourceBlock, signalName)
+        if (!labelInfo || !labelInfo.sink) {
+          directResolve.set(sourceBlock.originalId, {
+            blockId: segregatedExport.subsystemId,
+            port: segregatedExport.portIndex,
+            sinkSignal: signalName
+          })
+          continue
+        }
+      }
+
       const labelInfo = findSinkForSource(sourceBlock, signalName)
       if (!labelInfo || !labelInfo.sink) {
         const scope =
@@ -1411,6 +1694,9 @@ export class ModelFlattener {
     this.enableScopes.clear()
     this.subsystemEnableInfo = []
     this.segregatedSubsystems = []
+    this.allSheetLabels = collectSheetLabels(sheets)
+    this.segregatedExportBySignal.clear()
+    this.modelParameters = parameters || []
     
     const diagnostics = {
       blocksFlattened: 0,
@@ -1434,9 +1720,16 @@ export class ModelFlattener {
     // Step 3: Remove subsystem ports and remap connections
     const flattenedConnections = this.removeSubsystemPorts(connections, portMappings, blocks)
     diagnostics.connectionsRemapped = flattenedConnections.length
+
+    // Step 3b: Wire outside Goto drivers into segregated import ports
+    // (Gotos still present on flattenedBlocks until labels are stripped)
+    const withImportWires = this.wireSegregatedTagImports(
+      flattenedConnections,
+      blocks
+    )
     
     // Step 4: Resolve sheet label connections
-    const sheetLabelResult = this.resolveSheetLabels(flattenedConnections, blocks)
+    const sheetLabelResult = this.resolveSheetLabels(withImportWires, blocks)
     const resolvedConnections = sheetLabelResult.connections
     diagnostics.sheetLabelsResolved = sheetLabelResult.resolvedCount
     
