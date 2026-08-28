@@ -48,6 +48,10 @@ export default function ExportPdfDialog({
   const [fitLargeSheets, setFitLargeSheets] = useState(false)
   const [scope, setScope] = useState<PrintScope>('model')
   const [includeSubsystemSummaries, setIncludeSubsystemSummaries] = useState(false)
+  // Truncation is off by default: shortened text cannot be found by a reader
+  // searching the produced PDF.
+  const [truncateBlockNames, setTruncateBlockNames] = useState(false)
+  const [truncateInBlockText, setTruncateInBlockText] = useState(false)
 
   const pageSizeData = useMemo(
     () =>
@@ -84,6 +88,10 @@ export default function ExportPdfDialog({
       fitLargeSheets,
       scope,
       includeSubsystemSummaries,
+      allowTruncation: {
+        blockNames: truncateBlockNames,
+        inBlockText: truncateInBlockText,
+      },
     })
   }
 
@@ -160,10 +168,32 @@ export default function ExportPdfDialog({
           onChange={e => setIncludeSubsystemSummaries(e.currentTarget.checked)}
         />
 
+        <Divider label="Allow Text Truncation" labelPosition="left" />
+
+        <Text size="xs" c="dimmed">
+          Disabled by default. Text left untruncated may overflow its block on a
+          scaled-down sheet, but stays findable when searching the PDF.
+        </Text>
+
+        <Checkbox
+          label="Block names"
+          description="Shorten long block names with an ellipsis"
+          checked={truncateBlockNames}
+          onChange={e => setTruncateBlockNames(e.currentTarget.checked)}
+        />
+
+        <Checkbox
+          label="In-block information"
+          description="Shorten port names and in-block expressions with an ellipsis"
+          checked={truncateInBlockText}
+          onChange={e => setTruncateInBlockText(e.currentTarget.checked)}
+        />
+
         <Alert variant="light" color="gray" icon={<IconInfoCircle />}>
           <Text size="sm">
             One page per sheet, drawn as vector output so blueprint sizes stay sharp.
-            Each page is footed with the model name, sheet path, page number, and print date.
+            Each page is footed with its subsystem path in full, then the model name,
+            sheet name, page number, and print date.
           </Text>
         </Alert>
 

@@ -28,6 +28,15 @@ export interface PdfExportOptions {
   fitLargeSheets: boolean
   scope: PrintScope
   includeSubsystemSummaries: boolean
+  /**
+   * Text the user permits to be shortened with an ellipsis. Both off by
+   * default: truncated text cannot be found by a reader searching the PDF.
+   */
+  allowTruncation: {
+    blockNames: boolean
+    /** Port-name labels and in-block expression/symbol text. */
+    inBlockText: boolean
+  }
 }
 
 export const DEFAULT_PDF_OPTIONS: Omit<PdfExportOptions, 'fileName'> = {
@@ -37,6 +46,7 @@ export const DEFAULT_PDF_OPTIONS: Omit<PdfExportOptions, 'fileName'> = {
   fitLargeSheets: false,
   scope: 'model',
   includeSubsystemSummaries: false,
+  allowTruncation: { blockNames: false, inBlockText: false },
 }
 
 export interface PdfRenderContext {
@@ -55,7 +65,11 @@ export interface PdfRenderContext {
 }
 
 const MARGIN = 36           // 0.5in page margin
+/** Footer height with only the single info line present. */
 const FOOTER_HEIGHT = 24
+const FOOTER_FONT_SIZE = 8
+/** Vertical advance between footer lines. */
+const FOOTER_LINE_HEIGHT = 11
 
 // Mirrors the canvas palette and stroke weights so print matches screen.
 const GRAY = rgb(0.45, 0.45, 0.45)
@@ -230,6 +244,47 @@ function fitText(text: string, font: PDFFont, size: number, maxWidth: number): s
   return text.slice(0, lo) + '...'
 }
 
+/**
+ * Break text onto as many lines as it needs, never shortening it. A single
+ * word wider than `maxWidth` is left to overflow rather than be cut -- the
+ * footer's subsystem path must stay searchable in the produced PDF.
+ */
+export function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const words = text.split(' ').filter(w => w.length > 0)
+  if (words.length === 0) return []
+  const lines: string[] = []
+  let line = words[0]
+  for (let i = 1; i < words.length; i++) {
+    const candidate = `${line} ${words[i]}`
+    if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+      line = candidate
+    } else {
+      lines.push(line)
+      line = words[i]
+    }
+  }
+  lines.push(line)
+  return lines
+}
+
+/**
+ * The owning subsystem's path, i.e. the page's breadcrumb without the sheet
+ * name on the end. Null for a top-level sheet, which has no subsystem above it
+ * and so gets a single-line footer.
+ */
+export function subsystemPathOf(path: string[]): string | null {
+  return path.length > 1 ? path.slice(0, -1).join(' / ') : null
+}
+
+export function sheetNameOf(path: string[]): string {
+  return path.length > 0 ? path[path.length - 1] : ''
+}
+
+/** Footer grows upward as the subsystem path wraps onto more lines. */
+export function footerHeightForLines(pathLineCount: number): number {
+  return FOOTER_HEIGHT + pathLineCount * FOOTER_LINE_HEIGHT
+}
+
 export async function renderModelToPdf(
   plan: ExportPlan,
   options: PdfExportOptions,
@@ -244,12 +299,70 @@ export async function renderModelToPdf(
   const helvBold = await doc.embedFont(StandardFonts.HelveticaBold)
   const mono = await doc.embedFont(StandardFonts.Courier)
 
+  // Truncation is opt-in per category: shortened text cannot be found by a
+  // reader searching the PDF, so by default everything renders in full and is
+  // simply allowed to overflow its block. Callers may re-enable it to keep
+  // dense sheets legible without zooming.
+  const allowTruncation = options.allowTruncation ?? { blockNames: false, inBlockText: false }
+  const fitIf = (allowed: boolean) =>
+    (text: string, font: PDFFont, size: number, maxWidth: number) =>
+      allowed ? fitText(text, font, size, maxWidth) : text
+  const fitBlockName = fitIf(allowTruncation.blockNames)
+  const fitInBlock = fitIf(allowTruncation.inBlockText)
+
   const page = resolvePageSize(options.pageSizeId, options.orientation)
-  const printable = {
-    x: MARGIN,
-    y: MARGIN + FOOTER_HEIGHT,
-    width: page.width - MARGIN * 2,
-    height: page.height - MARGIN * 2 - FOOTER_HEIGHT,
+  const contentWidth = page.width - MARGIN * 2
+
+  const footerDate = ctx.printedAt.toLocaleString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+  // Page numbering is not known while pages are still being drawn, so reserve
+  // a worst-case width. Over-reserving a few points is harmless; letting the
+  // footer height change once the count is known would not be.
+  const footerRightSample = `${footerDate}    Page 9999 of 9999`
+
+  /**
+   * Resolves the whole footer for a page: the wrapped subsystem path, and
+   * whether the sheet name fits between the model name and the date or needs a
+   * line of its own. Both the drawing area and addFooter read this, so they
+   * cannot disagree about how tall the footer is.
+   */
+  const footerLayoutFor = (path: string[]) => {
+    const sub = subsystemPathOf(path)
+    const pathLines = sub ? wrapText(sub, helvBold, FOOTER_FONT_SIZE, contentWidth) : []
+
+    const leftWidth = helv.widthOfTextAtSize(
+      fitText(ctx.modelName, helv, FOOTER_FONT_SIZE, contentWidth * 0.3), FOOTER_FONT_SIZE)
+    const rightWidth = helv.widthOfTextAtSize(footerRightSample, FOOTER_FONT_SIZE)
+    const gap = contentWidth - leftWidth - rightWidth - 16
+    const sheetWidth = helv.widthOfTextAtSize(sheetNameOf(path), FOOTER_FONT_SIZE)
+    // Never squeeze or clip the sheet name; give it its own line instead.
+    const sheetOnOwnLine = sheetWidth > gap
+
+    const extraLines = pathLines.length + (sheetOnOwnLine ? 1 : 0)
+    return {
+      pathLines,
+      sheetOnOwnLine,
+      gapStart: MARGIN + leftWidth + 8,
+      gapWidth: Math.max(0, gap),
+      height: footerHeightForLines(extraLines),
+    }
+  }
+
+  /**
+   * Drawing area for a page. The footer grows as the subsystem path wraps, so
+   * this has to be resolved per page rather than once for the document.
+   */
+  const printableFor = (path: string[]) => {
+    const footerHeight = footerLayoutFor(path).height
+    return {
+      x: MARGIN,
+      y: MARGIN + footerHeight,
+      width: contentWidth,
+      height: page.height - MARGIN * 2 - footerHeight,
+      footerHeight,
+    }
   }
 
   // Cache rasterised glyphs; the same symbol recurs across a model.
@@ -276,35 +389,54 @@ export async function renderModelToPdf(
   const pages: Array<{ page: PDFPage; path: string[] }> = []
 
   const addFooter = (p: PDFPage, path: string[], pageNo: number, total: number) => {
-    const size = 8
-    const y = MARGIN - 4
-    const date = ctx.printedAt.toLocaleString(undefined, {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    })
+    const size = FOOTER_FONT_SIZE
+    const infoBaseline = MARGIN - 4
+    const layout = footerLayoutFor(path)
+    const { pathLines, sheetOnOwnLine } = layout
 
     p.drawLine({
-      start: { x: MARGIN, y: MARGIN + FOOTER_HEIGHT - 10 },
-      end: { x: page.width - MARGIN, y: MARGIN + FOOTER_HEIGHT - 10 },
+      start: { x: MARGIN, y: MARGIN + layout.height - 10 },
+      end: { x: page.width - MARGIN, y: MARGIN + layout.height - 10 },
       thickness: 0.5,
       color: GRAY,
     })
 
-    const left = fitText(ctx.modelName, helvBold, size, printable.width * 0.3)
-    p.drawText(left, { x: MARGIN, y, size, font: helvBold, color: BLACK })
+    // Lines above the info line, top-most first.
+    const above: Array<{ text: string; font: PDFFont; color: typeof BLACK; centered: boolean }> = []
+    // The owning subsystem's path, in bold and never shortened: an ellipsis
+    // here would make the page impossible to find by searching the PDF.
+    for (const line of pathLines) {
+      above.push({ text: line, font: helvBold, color: BLACK, centered: false })
+    }
+    if (sheetOnOwnLine) {
+      above.push({ text: sheetNameOf(path), font: helv, color: GRAY, centered: true })
+    }
 
-    const middle = fitText(path.join(' / '), helv, size, printable.width * 0.4)
-    const midWidth = helv.widthOfTextAtSize(middle, size)
-    p.drawText(middle, {
-      x: MARGIN + (printable.width - midWidth) / 2,
-      y, size, font: helv, color: GRAY,
+    above.forEach((line, i) => {
+      const y = infoBaseline + (above.length - i) * FOOTER_LINE_HEIGHT
+      const w = line.font.widthOfTextAtSize(line.text, size)
+      const x = line.centered ? MARGIN + (contentWidth - w) / 2 : MARGIN
+      p.drawText(line.text, { x, y, size, font: line.font, color: line.color })
     })
 
-    const right = `${date}    Page ${pageNo} of ${total}`
+    // Info line: model name, sheet name (when it fits), date and page number.
+    const left = fitText(ctx.modelName, helv, size, contentWidth * 0.3)
+    p.drawText(left, { x: MARGIN, y: infoBaseline, size, font: helv, color: GRAY })
+
+    if (!sheetOnOwnLine) {
+      const sheet = sheetNameOf(path)
+      const sheetWidth = helv.widthOfTextAtSize(sheet, size)
+      p.drawText(sheet, {
+        x: layout.gapStart + (layout.gapWidth - sheetWidth) / 2,
+        y: infoBaseline, size, font: helv, color: GRAY,
+      })
+    }
+
+    const right = `${footerDate}    Page ${pageNo} of ${total}`
     const rightWidth = helv.widthOfTextAtSize(right, size)
     p.drawText(right, {
       x: page.width - MARGIN - rightWidth,
-      y, size, font: helv, color: GRAY,
+      y: infoBaseline, size, font: helv, color: GRAY,
     })
   }
 
@@ -313,6 +445,7 @@ export async function renderModelToPdf(
   const drawSheet = async (sheet: ExportSheet) => {
     const p = doc.addPage([page.width, page.height])
     pages.push({ page: p, path: sheet.path })
+    const printable = printableFor(sheet.path)
 
     const metrics = new Map(sheet.blocks.map(b => [b.id, measure(b)]))
     const bounds = sheetBounds(sheet.blocks, metrics)
@@ -419,7 +552,13 @@ export async function renderModelToPdf(
 
       // Body outline: Input/Output Port blocks use the stadium terminator
       // shape; everything else is a rounded rectangle, matching the canvas.
-      const borderWidth = Math.max(0.4, BLOCK_BORDER_WIDTH * scale)
+      //
+      // drawSvgPath multiplies borderWidth by its `scale` option, so the width
+      // handed to it must be divided by the scale to land on the page at the
+      // intended thickness. Passing an already-scaled width squares it, which
+      // at large scales produced a stroke wide enough to overhang the footer.
+      const onPageBorder = Math.max(0.4, BLOCK_BORDER_WIDTH * scale)
+      const borderWidth = onPageBorder / scale
       const shape = TERMINATOR_TYPES.has(block.type)
         ? terminatorPath(m.width, m.height)
         : roundedRectPath(m.width, m.height, BLOCK_CORNER_RADIUS)
@@ -435,7 +574,7 @@ export async function renderModelToPdf(
       // Block name above the body.
       const nameSize = Math.max(4, NAME_FONT_SIZE * scale)
       if (nameSize >= 3.5) {
-        const name = fitText(block.name || '', helv, nameSize, w * 1.4)
+        const name = fitBlockName(block.name || '', helv, nameSize, w * 1.4)
         const nameW = helv.widthOfTextAtSize(name, nameSize)
         p.drawText(name, {
           x: x + (w - nameW) / 2, y: yTop + 2,
@@ -460,7 +599,7 @@ export async function renderModelToPdf(
               height: drawH,
             })
           } else {
-            const fallback = fitText(transliterate(spec.text), font, symSize, w * 0.9)
+            const fallback = fitInBlock(transliterate(spec.text), font, symSize, w * 0.9)
             const fw = font.widthOfTextAtSize(fallback, symSize)
             p.drawText(fallback, {
               x: x + (w - fw) / 2, y: yTop - h / 2 - symSize * 0.35,
@@ -468,7 +607,7 @@ export async function renderModelToPdf(
             })
           }
         } else {
-          const text = fitText(spec.text, font, symSize, w * 0.9)
+          const text = fitInBlock(spec.text, font, symSize, w * 0.9)
           const tw = font.widthOfTextAtSize(text, symSize)
           p.drawText(text, {
             x: x + (w - tw) / 2, y: yTop - h / 2 - symSize * 0.35,
@@ -505,7 +644,7 @@ export async function renderModelToPdf(
           for (let i = 0; i < m.inputs; i++) {
             const raw = portLabel(block, i, true, sheet.blocks, sheet.connections)
             if (!raw) continue
-            const text = fitText(
+            const text = fitInBlock(
               needsRaster(raw) ? transliterate(raw) : raw, helv, labelSize, maxLabelWidth)
             const tw = helv.widthOfTextAtSize(text, labelSize)
             const py = ty(by + portOffsetY(i, m.inputs, m.height))
@@ -521,7 +660,7 @@ export async function renderModelToPdf(
           for (let i = 0; i < m.outputs; i++) {
             const raw = portLabel(block, i, false, sheet.blocks, sheet.connections)
             if (!raw) continue
-            const text = fitText(
+            const text = fitInBlock(
               needsRaster(raw) ? transliterate(raw) : raw, helv, labelSize, maxLabelWidth)
             const py = ty(by + portOffsetY(i, m.outputs, m.height))
             // Left-aligned, starting a gap past the block's right edge.
@@ -540,7 +679,9 @@ export async function renderModelToPdf(
 
   const drawSummary = (sub: ExportSubsystem) => {
     const p = doc.addPage([page.width, page.height])
-    pages.push({ page: p, path: [...sub.path, 'Summary'] })
+    const summaryPath = [...sub.path, 'Summary']
+    pages.push({ page: p, path: summaryPath })
+    const printable = printableFor(summaryPath)
 
     let y = printable.y + printable.height - 24
 

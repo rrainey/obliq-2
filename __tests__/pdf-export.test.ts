@@ -3,6 +3,7 @@ import { buildFullPlan, buildExportPlan, applyScope } from '@/lib/export/sheetTr
 import {
   renderModelToPdf, DEFAULT_PDF_OPTIONS,
   roundedRectPath, terminatorPath, arrowHeadPath, showsPortNames, portLabel,
+  wrapText, subsystemPathOf, sheetNameOf, footerHeightForLines,
 } from '@/lib/export/pdfRenderer'
 import { resolvePageSize, getPageSize, PAGE_SIZES } from '@/lib/export/pageSizes'
 import { getGlyphSpec, glyphWorkList, needsRaster } from '@/lib/export/blockGlyphs'
@@ -228,6 +229,95 @@ describe('port name labels', () => {
     expect(portLabel(b, 0, true, [b], [])).toBe('q')
     expect(portLabel(b, 3, true, [b], [])).toBe('R')
     expect(portLabel(b, 0, false, [b], [])).toBe('q̇')
+  })
+})
+
+describe('footer layout', () => {
+  const helv = { widthOfTextAtSize: (t: string, size: number) => t.length * size * 0.5 } as any
+
+  test('wrapText breaks on spaces without shortening anything', () => {
+    const lines = wrapText('alpha beta gamma delta', helv, 10, 60)
+    expect(lines.join(' ')).toBe('alpha beta gamma delta')
+    expect(lines.length).toBeGreaterThan(1)
+    expect(lines.join('')).not.toContain('...')
+  })
+
+  test('a word wider than the column overflows rather than being cut', () => {
+    // Searchability depends on this: an ellipsis would make the text unfindable.
+    const long = 'Saturn_Instrument_Unit_LVDA_LVDC_Iterative_Guidance_Mode'
+    const lines = wrapText(long, helv, 10, 20)
+    expect(lines).toEqual([long])
+  })
+
+  test('empty text yields no lines', () => {
+    expect(wrapText('', helv, 10, 100)).toEqual([])
+  })
+
+  test('subsystem path is the breadcrumb without the sheet name', () => {
+    expect(subsystemPathOf(['Main', 'Controller', 'Inner'])).toBe('Main / Controller')
+  })
+
+  test('a top-level sheet has no subsystem path', () => {
+    expect(subsystemPathOf(['Main'])).toBeNull()
+    expect(subsystemPathOf([])).toBeNull()
+  })
+
+  test('sheet name is the last breadcrumb element', () => {
+    expect(sheetNameOf(['Main', 'Controller', 'Inner'])).toBe('Inner')
+    expect(sheetNameOf([])).toBe('')
+  })
+
+  test('footer grows one line height per wrapped line', () => {
+    const base = footerHeightForLines(0)
+    expect(footerHeightForLines(1)).toBeGreaterThan(base)
+    expect(footerHeightForLines(2) - footerHeightForLines(1))
+      .toBe(footerHeightForLines(1) - base)
+  })
+})
+
+describe('text truncation options', () => {
+  test('truncation is off by default', () => {
+    expect(DEFAULT_PDF_OPTIONS.allowTruncation).toEqual({
+      blockNames: false, inBlockText: false,
+    })
+  })
+
+  test('a long block name renders without truncation by default', async () => {
+    const long = 'Saturn_Instrument_Unit_LVDC_Iterative_Guidance_Mode_Gain3'
+    const mk = (allow: boolean) => buildFullPlan([{
+      id: 'm', name: 'M',
+      blocks: [{ ...block('b', 'scale', { gain: 1 }), name: long }],
+      connections: [],
+    }])
+    const full = await renderModelToPdf(mk(false), opts(), ctx)
+    const cut = await renderModelToPdf(
+      mk(true), opts({ allowTruncation: { blockNames: true, inBlockText: false } }), ctx)
+    // The untruncated name carries more glyphs, so more content.
+    expect(full.length).toBeGreaterThan(cut.length)
+  })
+
+  test('an evaluate expression is no longer shortened at the glyph layer', () => {
+    const longExpr = 'in(0)*2.0 + in(1)/3.14159265358979 - in(2) + in(3)*1.5'
+    const spec = getGlyphSpec(block('e', 'evaluate', { expression: longExpr }))
+    expect(spec.text).toBe(longExpr)
+    expect(spec.text).not.toContain('\u2026')
+  })
+
+  test('a condition expression is no longer shortened at the glyph layer', () => {
+    const spec = getGlyphSpec(block('c', 'condition', { condition: '> 0.000000001234' }))
+    expect(spec.text).toBe('x1 > 0.000000001234')
+  })
+
+  test('both truncation modes still render valid PDFs', async () => {
+    const plan = buildFullPlan([subsystemSheet()])
+    for (const allow of [
+      { blockNames: false, inBlockText: false },
+      { blockNames: true, inBlockText: true },
+    ]) {
+      const bytes = await renderModelToPdf(plan, opts({ allowTruncation: allow }), ctx)
+      const doc = await PDFDocument.load(bytes)
+      expect(doc.getPageCount()).toBe(3)
+    }
   })
 })
 
