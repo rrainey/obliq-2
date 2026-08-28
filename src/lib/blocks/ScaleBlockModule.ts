@@ -7,7 +7,8 @@ import { IBlockModule, BlockModuleUtils } from './BlockModule'
 export class ScaleBlockModule implements IBlockModule {
   generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
-    const gain = block.parameters?.gain || 1
+    // Use ?? so an explicit gain of 0 is honored (|| 1 would treat 0 as missing).
+    const gain = block.parameters?.gain ?? 1
     
     if (inputs.length === 0) {
       return `    ${outputName} = 0.0; // No input\n`
