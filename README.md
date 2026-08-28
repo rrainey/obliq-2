@@ -96,12 +96,28 @@ Simulink round-trip correctly:
 | `inertia_diag_pack` | Packs principal-axis inertia and its derivative into `[Ixx, Iyy, Izz, İxx, İyy, İzz]` for aerolib mass properties |
 
 ### Diagram Layout
-- **Automatic arrangement** — right-click empty canvas and choose **Reorganize Block Arrangement** to lay the current sheet out left to right
+Right-click empty canvas and choose **Tune Model Layout...** to open a dialog of
+independent adjustments, each of which can be left alone:
+
+| Adjustment | Effect |
+|------------|--------|
+| **Clean up block layout** | Arranges blocks so data flows left to right |
+| **Resize Subsystems** | Sizes subsystem blocks so their ports fit what they connect to |
+| **Subsystem Ports Labeling** | Shows or hides port-name labels on subsystem blocks |
+| **Hide unnecessary block names** | Hides names on everything except subsystems |
+| **Scope** | Current sheet (default), current subsystem, or the entire model |
+
 - Sources are placed on the left and sinks (output ports, displays, loggers) on the right, with the columns between them ordered by signal flow
 - Feedback loops are detected and properly handled
 - Layout is **port-aware**: the vertical order of a block's output ports drives the vertical order of the blocks it feeds, and each block is pulled toward the port that feeds it so wires run straight wherever the geometry allows
-- **Reorganize and Resize Block Arrangement** does the same, and additionally sizes subsystem blocks so their ports spread far enough apart for neighboring blocks to line up with them. This one writes block dimensions into the model, which is why it is a separate action
-- Subsystem blocks can also be resized by hand: right-click the block, choose **Resize...**, and drag any corner handle. Dimensions are stored as optional `width` / `height` parameters
+- Resizing grows a subsystem until its ports are far enough apart for neighboring blocks to line up with them, and writes the result into the model as `width` / `height`
+- Scope may reach sheets nested inside subsystems that are not currently open, so the dialog reports how many sheets a scope covers and warns when that is more than one. Tuning cannot be undone
+- Subsystem blocks can also be resized by hand: right-click the block, choose **Resize...**, and drag any corner handle
+
+### Block Name Visibility
+- A newly added block **hides its name**; a Subsystem is the exception and shows it, since the name is what distinguishes one subsystem from another
+- Toggle an individual block with **Hide Name** / **Show Name** on its right-click menu, or a whole scope at once from **Tune Model Layout...**
+- Blocks saved before this setting existed carry no value and keep showing their names, so existing models look exactly as they did
 
 ### Printing and PDF Export
 - **Export as PDF...** in the toolbar renders the model as a printable document, one page per sheet
@@ -110,7 +126,8 @@ Simulink round-trip correctly:
 - Page sizes cover US (Letter, Legal, Tabloid), ISO (A0–A5), and blueprint sizes (ANSI C–E, ARCH A–E, ARCH E1)
 - Print scope selects the entire model, the current subsystem, or just the current sheet
 - Optional **subsystem summary pages** list a subsystem's input and output ports, its parameters with types and values, and its sheet hierarchy
-- Every page carries a footer with the model name, sheet path, page number, and print date
+- Every page carries a footer: the owning subsystem's full path in bold on its own wrapping line, then the model name, sheet name, page number, and print date
+- Text is **never shortened by default**, so everything in the document stays findable by search. An **Allow Text Truncation** group re-enables ellipses separately for block names and for in-block information (port labels, expressions)
 
 ### Simulation Engine
 - **Client-side simulation** - Models are compiled dynamically and executed as [Web Assemblies](https://webassembly.org/)
@@ -474,6 +491,7 @@ obliq-2/
 │   │   │
 │   │   ├── layout/                   # Auto-layout and shared block geometry
 │   │   │   ├── autoLayout.ts         # Layered left-to-right arrangement
+│   │   │   ├── tuneModelLayout.ts    # Scoped layout / resize / name tuning
 │   │   │   └── blockGeometry.ts      # Block sizes / port offsets (shared with the canvas)
 │   │   │
 │   │   ├── export/                   # PDF export
@@ -648,7 +666,7 @@ If tests fail:
 2. **Build Your Diagram**: Drag blocks from the library and connect them with wires
 3. **Configure Blocks**: Click blocks to set parameters (e.g., transfer function coefficients)
 4. **Run Simulation**: Click "Run Simulation" to see signals propagate in real-time
-5. **Tidy the Layout**: Right-click empty canvas and choose **Reorganize Block Arrangement**
+5. **Tidy the Layout**: Right-click empty canvas and choose **Tune Model Layout...**
 6. **Generate Code**: Click "Generate C Code" to download a PlatformIO-compatible library
 7. **Export Data**: Use Signal Logger blocks to capture and export simulation data
 8. **Print or Share**: Click **Export as PDF...** for a printable document, one page per sheet

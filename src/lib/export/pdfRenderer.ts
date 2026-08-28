@@ -571,9 +571,11 @@ export async function renderModelToPdf(
         borderWidth,
       })
 
-      // Block name above the body.
+      // Block name above the body, when the block shows one. A missing
+      // showName means "show", matching the canvas: blocks saved before the
+      // setting existed keep printing their names.
       const nameSize = Math.max(4, NAME_FONT_SIZE * scale)
-      if (nameSize >= 3.5) {
+      if (nameSize >= 3.5 && block.parameters?.showName !== false) {
         const name = fitBlockName(block.name || '', helv, nameSize, w * 1.4)
         const nameW = helv.widthOfTextAtSize(name, nameSize)
         p.drawText(name, {

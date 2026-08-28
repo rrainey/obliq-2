@@ -84,7 +84,31 @@ export interface SubsystemCreationResult {
  * @param blockType - The type of block
  * @returns Default parameters for the block type
  */
+/**
+ * Whether a newly created block of this type shows its name on the canvas.
+ *
+ * Names are off by default so a fresh diagram stays uncluttered; a Subsystem
+ * is the exception, since its name is the only thing distinguishing it from
+ * any other subsystem on the sheet.
+ *
+ * Note the asymmetry with rendering: blocks saved before this setting existed
+ * carry no `showName` at all, and those keep showing their names. Only blocks
+ * created from here get an explicit value.
+ */
+export function defaultShowName(blockType: string): boolean {
+  return blockType === BlockTypes.SUBSYSTEM
+}
+
 export function getDefaultBlockParameters(blockType: string): Record<string, any> {
+  // Applied to every type, so new block types pick it up automatically. A
+  // type-specific default below would win, but none currently sets it.
+  return {
+    showName: defaultShowName(blockType),
+    ...getTypeSpecificDefaultParameters(blockType),
+  }
+}
+
+function getTypeSpecificDefaultParameters(blockType: string): Record<string, any> {
   switch (blockType) {
     case BlockTypes.SOURCE:
       return {

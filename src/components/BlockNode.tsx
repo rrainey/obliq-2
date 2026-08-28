@@ -1074,8 +1074,11 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           {portSignStyles}
         </style>
 
-        {/* Block Name - positioned above the block (hidden for no_connection blocks) */}
-        {data.type !== 'no_connection' && (
+        {/* Block Name - positioned above the block (hidden for no_connection
+            blocks, and for any block whose showName is explicitly off).
+            A missing showName means "show": blocks saved before the setting
+            existed must keep looking the way they always have. */}
+        {data.type !== 'no_connection' && data.parameters?.showName !== false && (
           <div
             className={`absolute left-0 right-0 text-center font-medium pointer-events-none ${isDark ? 'text-gray-200' : 'text-gray-800'}`}
             style={{

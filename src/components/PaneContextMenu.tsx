@@ -10,8 +10,7 @@ export interface PaneContextMenuProps {
   right?: number
   bottom?: number
   onClose: () => void
-  onReorganize: () => void
-  onReorganizeAndResize?: () => void
+  onTuneLayout: () => void
 }
 
 export default function PaneContextMenu({
@@ -20,8 +19,7 @@ export default function PaneContextMenu({
   right,
   bottom,
   onClose,
-  onReorganize,
-  onReorganizeAndResize,
+  onTuneLayout,
 }: PaneContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -50,20 +48,11 @@ export default function PaneContextMenu({
     >
       <button
         className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-        onClick={onReorganize}
+        onClick={onTuneLayout}
+        title="Arrange blocks, resize subsystems, and hide redundant names"
       >
-        Reorganize Block Arrangement
+        Tune Model Layout...
       </button>
-
-      {onReorganizeAndResize && (
-        <button
-          className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
-          onClick={onReorganizeAndResize}
-          title="Also resizes subsystem blocks so their ports line up with the blocks they connect to"
-        >
-          Reorganize and Resize Block Arrangement
-        </button>
-      )}
     </div>
   )
 }

@@ -40,8 +40,9 @@ import { validateWireConnection, TypeCompatibilityError } from '@/lib/typeCompat
 import BlockContextMenu from './BlockContextMenu'
 import WireContextMenu from './WireContextMenu'
 import PaneContextMenu from './PaneContextMenu'
-import { computeAutoLayout } from '@/lib/layout/autoLayout'
+import TuneLayoutDialog from './TuneLayoutDialog'
 import { expandNetViaSheetLabels } from '@/lib/sheetLabelUtils'
+import { countSheetsInScope, type TuneLayoutOptions, type TuneScope } from '@/lib/layout/tuneModelLayout'
 
 interface CanvasReactFlowProps {
   blocks?: BlockData[]
@@ -55,6 +56,9 @@ interface CanvasReactFlowProps {
   onBlockMove?: (id: string, position: { x: number; y: number }) => void
   onBlocksMove?: (moves: Array<{ id: string; position: { x: number; y: number } }>) => void  // Feature 4: Multi-block move
   onBlocksResize?: (resizes: Array<{ id: string; width: number; height: number }>) => void   // Auto-layout subsystem resizing
+  onTuneLayout?: (options: TuneLayoutOptions) => void   // Tune Model Layout dialog
+  /** True when the active sheet sits inside a subsystem. */
+  insideSubsystem?: boolean
   onBlockSelect?: (id: string | null) => void
   onBlocksSelect?: (ids: string[]) => void  // Feature 4: Multi-selection callback
   onBlockDoubleClick?: (id: string) => void
@@ -122,6 +126,8 @@ function CanvasReactFlowInner({
   onBlockMove,
   onBlocksMove,           // Feature 4: Multi-block move
   onBlocksResize,         // Auto-layout subsystem resizing
+  onTuneLayout,
+  insideSubsystem = false,
   onBlockSelect,
   onBlocksSelect,         // Feature 4
   onBlockDoubleClick,
@@ -148,10 +154,13 @@ function CanvasReactFlowInner({
 
   // Get all sheets from model store for multi-sheet type propagation
   const modelSheets = useModelStore(state => state.sheets)
+  const activeSheetId = useModelStore(state => state.activeSheetId)
 
   // Resize mode state (which block, if any, is showing corner resize handles)
   const resizingBlockId = useModelStore(state => state.resizingBlockId)
   const setResizingBlockId = useModelStore(state => state.setResizingBlockId)
+  const updateBlock = useModelStore(state => state.updateBlock)
+  const saveCurrentSheetData = useModelStore(state => state.saveCurrentSheetData)
 
   // Focus request: pan the viewport to a specific block or wire when the
   // validation modal (or anything else) pushes a request.
@@ -608,22 +617,10 @@ const handleEdgesChange = useCallback((changes: any[]) => {
     }
   }, [onWireRoutingChange])
 
-  // Auto-layout: reorganize blocks on the current sheet. With `resizeBlocks`
-  // the layout may also grow subsystems so their ports line up with the blocks
-  // they connect to; sizes are committed before positions so the saved sheet
-  // reflects both.
-  const handleReorganize = useCallback((resizeBlocks: boolean) => {
-    const { moves, resizes } = computeAutoLayout(blocks, wires, { resizeBlocks })
-    if (resizes.length > 0 && onBlocksResize) {
-      onBlocksResize(resizes)
-    }
-    if (moves.length === 0) return
-    if (onBlocksMove) {
-      onBlocksMove(moves)
-    } else if (onBlockMove) {
-      for (const m of moves) onBlockMove(m.id, m.position)
-    }
-  }, [blocks, wires, onBlocksMove, onBlockMove, onBlocksResize])
+  // Layout tuning is driven by the Tune Model Layout dialog; the page owns
+  // the store mutation because the chosen scope can reach sheets that are not
+  // currently mounted on the canvas.
+  const [tuneDialogOpen, setTuneDialogOpen] = useState(false)
 
   // Close context menu when clicking on the pane - Feature 4: Clear all selection
   const onPaneClick = useCallback(() => {
@@ -1013,6 +1010,21 @@ const handleEdgesChange = useCallback((changes: any[]) => {
             setResizingBlockId(blockId)
             setContextMenu(null)
           }}
+          onToggleShowName={(blockId) => {
+            const target = blocks.find(b => b.id === blockId)
+            if (target) {
+              // Merge, so toggling the name cannot drop a subsystem's sheets
+              // or any other parameters the block carries.
+              updateBlock(blockId, {
+                parameters: {
+                  ...(target.parameters || {}),
+                  showName: target.parameters?.showName === false,
+                },
+              })
+              saveCurrentSheetData()
+            }
+            setContextMenu(null)
+          }}
           onSheetNavigate={(sheetId) => {
             if (onSheetNavigate) {
               onSheetNavigate(sheetId)
@@ -1066,13 +1078,22 @@ const handleEdgesChange = useCallback((changes: any[]) => {
           right={paneContextMenu.right}
           bottom={paneContextMenu.bottom}
           onClose={() => setPaneContextMenu(null)}
-          onReorganize={() => {
-            handleReorganize(false)
+          onTuneLayout={() => {
             setPaneContextMenu(null)
+            setTuneDialogOpen(true)
           }}
-          onReorganizeAndResize={() => {
-            handleReorganize(true)
-            setPaneContextMenu(null)
+        />
+      )}
+
+      {/* Tune Model Layout dialog - a sibling of the menu, since it outlives it */}
+      {tuneDialogOpen && (
+        <TuneLayoutDialog
+          opened={tuneDialogOpen}
+          insideSubsystem={insideSubsystem}
+          onClose={() => setTuneDialogOpen(false)}
+          onTune={(tuneOptions) => {
+            setTuneDialogOpen(false)
+            onTuneLayout?.(tuneOptions)
           }}
         />
       )}

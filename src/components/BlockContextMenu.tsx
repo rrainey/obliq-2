@@ -19,6 +19,7 @@ interface BlockContextMenuProps {
   onPropertiesClick: (blockId: string) => void
   onRenameClick?: (blockId: string) => void
   onResizeClick?: (blockId: string) => void
+  onToggleShowName?: (blockId: string) => void
   onSheetNavigate: (sheetId: string) => void
 }
 
@@ -34,6 +35,7 @@ export default function BlockContextMenu({
   onPropertiesClick,
   onRenameClick,
   onResizeClick,
+  onToggleShowName,
   onSheetNavigate,
   ...props
 }: BlockContextMenuProps) {
@@ -92,6 +94,17 @@ export default function BlockContextMenu({
           onClick={() => onRenameClick(block.id)}
         >
           Rename...
+        </button>
+      )}
+
+      {/* Show/hide the block's name on the canvas. A missing showName means
+          "show", so blocks predating the setting read as visible. */}
+      {onToggleShowName && block.type !== 'no_connection' && (
+        <button
+          className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+          onClick={() => onToggleShowName(block.id)}
+        >
+          {block.parameters?.showName !== false ? 'Hide Name' : 'Show Name'}
         </button>
       )}
 

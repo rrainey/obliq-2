@@ -58,6 +58,7 @@ import CommentConfig from '@/components/CommentConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
 import ExportPdfDialog from '@/components/ExportPdfDialog'
+import { tuneModelLayout, type TuneLayoutOptions } from '@/lib/layout/tuneModelLayout'
 import { buildExportPlan } from '@/lib/export/sheetTree'
 import { renderModelToPdf, type PdfExportOptions } from '@/lib/export/pdfRenderer'
 import { createGlyphRasterizer, downloadPdf, defaultPdfFileName } from '@/lib/export/browserGlyphs'
@@ -1579,6 +1580,58 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     return !isRootSheet
   }
 
+  const handleTuneLayout = (options: TuneLayoutOptions) => {
+    // Flush the sheet on screen first: tuning reads the sheet tree, and the
+    // active sheet's edits live in `blocks`/`wires` until they are written back.
+    saveCurrentSheetData()
+    const store = useModelStore.getState()
+
+    const { sheets: tuned, summary } = tuneModelLayout(
+      store.sheets, store.activeSheetId, options)
+
+    if (summary.sheetsAffected === 0) {
+      notifications.show({
+        title: 'Nothing to tune',
+        message: 'No blocks in the selected scope needed adjusting.',
+        color: 'gray',
+      })
+      return
+    }
+
+    setSheets(tuned)
+
+    // Reload the active sheet so the canvas reflects its tuned contents.
+    const findSheet = (list: any[]): any => {
+      for (const sheet of list) {
+        if (sheet.id === store.activeSheetId) return sheet
+        for (const block of sheet.blocks || []) {
+          if (block.type === 'subsystem' && Array.isArray(block.parameters?.sheets)) {
+            const found = findSheet(block.parameters.sheets)
+            if (found) return found
+          }
+        }
+      }
+      return null
+    }
+    const active = findSheet(tuned)
+    if (active) {
+      setBlocks(active.blocks || [])
+      setWires(active.connections || [])
+    }
+    setIsDirty(true)
+
+    const parts: string[] = []
+    if (summary.blocksMoved) parts.push(`${summary.blocksMoved} moved`)
+    if (summary.blocksResized) parts.push(`${summary.blocksResized} resized`)
+    if (summary.namesHidden) parts.push(`${summary.namesHidden} name${summary.namesHidden === 1 ? '' : 's'} hidden`)
+    if (summary.portLabelsChanged) parts.push(`${summary.portLabelsChanged} port label${summary.portLabelsChanged === 1 ? '' : 's'} updated`)
+    notifications.show({
+      title: 'Layout tuned',
+      message: `${parts.join(', ')} across ${summary.sheetsAffected} sheet${summary.sheetsAffected === 1 ? '' : 's'}.`,
+      color: 'green',
+    })
+  }
+
   const handleExportPdf = async (options: PdfExportOptions) => {
     setExportingPdf(true)
     try {
@@ -1875,6 +1928,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onBlockMove={handleBlockMove}
               onBlocksMove={handleBlocksMove}
               onBlocksResize={handleBlocksResize}
+              onTuneLayout={handleTuneLayout}
+              insideSubsystem={isCurrentSheetInSubsystem()}
               onBlockSelect={setSelectedBlockId}
               onBlocksSelect={setSelectedBlocks}
               onBlockDoubleClick={handleBlockDoubleClick}
