@@ -14,6 +14,7 @@ import type { WireData } from '@/components/Wire'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { getBlockWidth, getBlockHeight, portOffsetY } from '@/lib/layout/blockGeometry'
 import { getGlyphSpec, needsRaster } from './blockGlyphs'
+import { parseType } from '@/lib/typeValidator'
 import { resolvePageSize, type PageOrientation } from './pageSizes'
 import type { ExportPlan, ExportSheet, ExportSubsystem, PrintScope } from './sheetTree'
 
@@ -53,6 +54,13 @@ export interface PdfRenderContext {
   modelName: string
   printedAt: Date
   /**
+   * Wire signal types, keyed by wire id. Wires whose type is known are drawn
+   * as bundles: single line for scalars, double for vectors/1D arrays, triple
+   * for matrices. Wires without an entry render as scalars. Callers should
+   * populate this with propagateSignalTypesMultiSheet's output.
+   */
+  signalTypes?: Map<string, { type: string }>
+  /**
    * Rasterises a string that Helvetica cannot draw, returning PNG bytes plus
    * pixel dimensions. Supplied by the browser (canvas-backed); omit in tests
    * and such glyphs fall back to a WinAnsi transliteration.
@@ -84,6 +92,28 @@ const LABEL = rgb(0.22, 0.25, 0.32)
 const BLOCK_BORDER_WIDTH = 2   // Tailwind border-2
 const BLOCK_CORNER_RADIUS = 8  // Tailwind rounded-lg
 const WIRE_WIDTH = 2           // CustomEdge default strokeWidth
+/**
+ * How far apart parallel wire copies sit, in multiples of the line thickness.
+ * 1.75x thickness reads as clearly distinct lines rather than one thick line.
+ */
+const WIRE_BUNDLE_SPACING = 1.75
+
+/**
+ * How many parallel lines a wire's data type gets on the page. Anything not
+ * matched -- unknown type, error type, control ports -- degrades to a single
+ * scalar line so failure never blocks the export.
+ */
+export function wireLineCount(rawType: string | undefined): 1 | 2 | 3 {
+  if (!rawType) return 1
+  try {
+    const t = parseType(rawType)
+    if (t.isMatrix) return 3
+    if (t.isArray) return 2
+    return 1
+  } catch {
+    return 1
+  }
+}
 const PORT_LABEL_GAP = 12      // canvas margin between block edge and label
 const NAME_FONT_SIZE = 8       // canvas block name is 0.5rem
 const PORT_LABEL_FONT_SIZE = 8 // canvas .port-name-label is 0.5rem
@@ -503,33 +533,80 @@ export async function renderModelToPdf(
       // The arrowhead occupies the last stretch, so stop the final segment
       // short of the port rather than drawing under the head.
       const headLength = Math.max(3, 7 * scale)
-      const headHalfWidth = Math.max(1.5, 3 * scale)
+      const baseHeadHalfWidth = Math.max(1.5, 3 * scale)
 
-      for (let i = 0; i < pts.length - 1; i++) {
-        const from = { x: tx(pts[i].x), y: ty(pts[i].y) }
-        const to = { x: tx(pts[i + 1].x), y: ty(pts[i + 1].y) }
-        const isLast = i === pts.length - 2
+      // A vector/matrix wire is drawn as parallel copies of the same polyline.
+      // Look-up degrades to scalar when the type is not known, so unresolved
+      // signals never block the export.
+      const lineCount = wireLineCount(ctx.signalTypes?.get(wire.id)?.type)
+      const spacing = wireThickness * WIRE_BUNDLE_SPACING
+      // Offsets centred on zero so the middle line coincides with the original
+      // path. Double lines straddle it symmetrically.
+      const offsets: number[] = lineCount === 1
+        ? [0]
+        : lineCount === 2
+          ? [-spacing / 2, spacing / 2]
+          : [-spacing, 0, spacing]
 
-        let end = to
-        if (isLast) {
-          const dx = to.x - from.x
-          const dy = to.y - from.y
-          const len = Math.hypot(dx, dy)
-          if (len > headLength) {
-            end = {
-              x: to.x - (dx / len) * headLength,
-              y: to.y - (dy / len) * headLength,
+      // Transform to PDF space first, then compute offsets there. Doing it in
+      // canvas space would need to account for ty()'s y-flip.
+      const page: Array<{ x: number; y: number }> =
+        pts.map(pt => ({ x: tx(pt.x), y: ty(pt.y) }))
+
+      // Right-hand perpendicular of a directed segment; zero vector for degenerate.
+      const perp = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+        const dx = b.x - a.x, dy = b.y - a.y
+        const len = Math.hypot(dx, dy)
+        return len < 1e-9 ? { x: 0, y: 0 } : { x: dy / len, y: -dx / len }
+      }
+
+      /**
+       * Offset a polyline by d perpendicular to itself. At a corner both incident
+       * perpendiculars are summed rather than averaged: for orthogonal turns that
+       * places the meeting point exactly at the intersection of the two shifted
+       * segments, so the offset polyline stays parallel to the original throughout.
+       */
+      const offsetPolyline = (pts: typeof page, d: number) => pts.map((pt, i) => {
+        const prevPt = i > 0 ? pts[i - 1] : null
+        const nextPt = i < pts.length - 1 ? pts[i + 1] : null
+        let nx = 0, ny = 0
+        if (prevPt) { const q = perp(prevPt, pt); nx += q.x; ny += q.y }
+        if (nextPt) { const q = perp(pt, nextPt); nx += q.x; ny += q.y }
+        return { x: pt.x + d * nx, y: pt.y + d * ny }
+      })
+
+      for (const d of offsets) {
+        const line = offsetPolyline(page, d)
+        for (let i = 0; i < line.length - 1; i++) {
+          const from = line[i]
+          const to = line[i + 1]
+          const isLast = i === line.length - 2
+
+          let end = to
+          if (isLast) {
+            const dx = to.x - from.x
+            const dy = to.y - from.y
+            const len = Math.hypot(dx, dy)
+            if (len > headLength) {
+              end = {
+                x: to.x - (dx / len) * headLength,
+                y: to.y - (dy / len) * headLength,
+              }
             }
           }
-        }
 
-        p.drawLine({ start: from, end, thickness: wireThickness, color: WIRE })
+          p.drawLine({ start: from, end, thickness: wireThickness, color: WIRE })
+        }
       }
 
       // Arrowhead at the destination, oriented along the incoming segment.
+      // Grow the head to visually cap the whole bundle without any tips
+      // poking out either side.
       const last = { x: tx(pts[pts.length - 1].x), y: ty(pts[pts.length - 1].y) }
       const prev = { x: tx(pts[pts.length - 2].x), y: ty(pts[pts.length - 2].y) }
       const angle = Math.atan2(last.y - prev.y, last.x - prev.x)
+      const bundleHalfSpan = ((lineCount - 1) * spacing) / 2
+      const headHalfWidth = Math.max(baseHeadHalfWidth, bundleHalfSpan + baseHeadHalfWidth * 0.8)
       p.drawSvgPath(arrowHeadPath(headLength, headHalfWidth), {
         x: last.x,
         y: last.y,

@@ -61,6 +61,7 @@ import ExportPdfDialog from '@/components/ExportPdfDialog'
 import { tuneModelLayout, type TuneLayoutOptions } from '@/lib/layout/tuneModelLayout'
 import { buildExportPlan } from '@/lib/export/sheetTree'
 import { renderModelToPdf, type PdfExportOptions } from '@/lib/export/pdfRenderer'
+import { propagateSignalTypesMultiSheet } from '@/lib/signalTypePropagation'
 import { createGlyphRasterizer, downloadPdf, defaultPdfFileName } from '@/lib/export/browserGlyphs'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
 import { getSheetPath } from '@/lib/navigationUtils'
@@ -1650,10 +1651,18 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         return
       }
 
+      // Type propagation runs on the whole model, not the scoped plan: an
+      // in-scope wire can be typed by a source that lives outside the scope.
+      // The call is memoised, so repeat exports pay nothing.
+      const typeResult = propagateSignalTypesMultiSheet(
+        currentSheets.map(s => ({ blocks: s.blocks, connections: s.connections }))
+      )
+
       const bytes = await renderModelToPdf(plan, options, {
         modelName: model?.name || 'Untitled Model',
         printedAt: new Date(),
         rasterizeGlyph: createGlyphRasterizer(),
+        signalTypes: typeResult.signalTypes,
       })
 
       downloadPdf(bytes, options.fileName)

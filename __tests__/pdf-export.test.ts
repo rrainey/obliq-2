@@ -4,6 +4,7 @@ import {
   renderModelToPdf, DEFAULT_PDF_OPTIONS,
   roundedRectPath, terminatorPath, arrowHeadPath, showsPortNames, portLabel,
   wrapText, subsystemPathOf, sheetNameOf, footerHeightForLines,
+  wireLineCount,
 } from '@/lib/export/pdfRenderer'
 import { resolvePageSize, getPageSize, PAGE_SIZES } from '@/lib/export/pageSizes'
 import { getGlyphSpec, glyphWorkList, needsRaster } from '@/lib/export/blockGlyphs'
@@ -445,6 +446,78 @@ describe('pdf rendering', () => {
       connections: [wire('w', 'a', 0, 'ghost', 0)],
     }])
     const bytes = await renderModelToPdf(plan, opts(), ctx)
+    expect(bytes.length).toBeGreaterThan(0)
+  })
+})
+
+describe('wire bundles', () => {
+  test('scalar types get one line', () => {
+    expect(wireLineCount('double')).toBe(1)
+    expect(wireLineCount('float')).toBe(1)
+    expect(wireLineCount('long')).toBe(1)
+    expect(wireLineCount('bool')).toBe(1)
+  })
+
+  test('1D arrays get two lines', () => {
+    expect(wireLineCount('double[3]')).toBe(2)
+    expect(wireLineCount('float[7]')).toBe(2)
+    expect(wireLineCount('long[16]')).toBe(2)
+  })
+
+  test('matrices get three lines', () => {
+    expect(wireLineCount('double[3][3]')).toBe(3)
+    expect(wireLineCount('float[4][1]')).toBe(3)
+    expect(wireLineCount('double[2][6]')).toBe(3)
+  })
+
+  test('unknown or missing types fall back to a single line', () => {
+    // A wire whose type could not be resolved must not block the export.
+    expect(wireLineCount(undefined)).toBe(1)
+    expect(wireLineCount('')).toBe(1)
+    expect(wireLineCount('not a real type')).toBe(1)
+  })
+
+  test('vector wires produce a larger PDF than scalar wires', async () => {
+    // Byte-count is a coarse but honest signal that extra segments are being
+    // emitted; testing pixel positions would need a raster comparison.
+    const plan = buildFullPlan([simpleSheet()])
+    const scalar = await renderModelToPdf(plan, opts(), ctx)
+    const vector = await renderModelToPdf(plan, opts(), {
+      ...ctx,
+      signalTypes: new Map([
+        ['w1', { type: 'double[3]' }],
+        ['w2', { type: 'double[3]' }],
+      ]),
+    })
+    expect(vector.length).toBeGreaterThan(scalar.length)
+  })
+
+  test('matrix wires produce a larger PDF than vector wires', async () => {
+    const plan = buildFullPlan([simpleSheet()])
+    const vector = await renderModelToPdf(plan, opts(), {
+      ...ctx,
+      signalTypes: new Map([
+        ['w1', { type: 'double[3]' }],
+        ['w2', { type: 'double[3]' }],
+      ]),
+    })
+    const matrix = await renderModelToPdf(plan, opts(), {
+      ...ctx,
+      signalTypes: new Map([
+        ['w1', { type: 'double[3][3]' }],
+        ['w2', { type: 'double[3][3]' }],
+      ]),
+    })
+    expect(matrix.length).toBeGreaterThan(vector.length)
+  })
+
+  test('a wire missing from signalTypes still renders (scalar fallback)', async () => {
+    const plan = buildFullPlan([simpleSheet()])
+    const bytes = await renderModelToPdf(plan, opts(), {
+      ...ctx,
+      // Deliberately empty: nothing looks up any wire.
+      signalTypes: new Map(),
+    })
     expect(bytes.length).toBeGreaterThan(0)
   })
 })
