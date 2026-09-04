@@ -159,7 +159,16 @@ export const DefaultEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-              pointerEvents: 'all',
+              // Non-interactive so the popup cannot intercept mouse events.
+              // Without this, moving toward the popup takes the pointer off the
+              // wire's interaction path -- `isHovered` clears -- but the popup
+              // was intercepting the transition, leaving hover state occasionally
+              // stuck until the wire was hovered again. The popup carries no
+              // clickable content, so nothing is lost.
+              pointerEvents: 'none',
+              // Float above nodes: EdgeLabelRenderer sits below node z-index by
+              // default, so a label passing near a node can be visually clipped.
+              zIndex: 1000,
             }}
             className="flex items-center"
           >
@@ -171,19 +180,21 @@ export const DefaultEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
               </div>
             )}
             
-            {/* Type label for matrix or on hover */}
+            {/* Type label for matrix or on hover. Port name goes above the
+                type, and each row is centre-justified so a long name does not
+                push the type off-centre. */}
             {!hasError && data?.sourceType && (isMatrix || isHovered) && (
               <div className={`
                 ${isMatrix ? 'bg-purple-100 border-purple-300' : 'bg-white border-gray-200'}
-                px-2 py-1 rounded shadow-md border text-xs font-mono
+                px-2 py-1 rounded shadow-md border text-xs font-mono text-center
                 ${isMatrix && !isHovered ? 'opacity-90' : ''}
               `}>
+                {data.signalName && (
+                  <div className="text-gray-500 text-xs mb-0.5">{data.signalName}</div>
+                )}
                 <div className={`${isMatrix ? 'text-purple-700 font-medium' : 'text-gray-700'}`}>
                   {formatTypeForDisplay(data.sourceType)}
                 </div>
-                {data.signalName && (
-                  <div className="text-gray-500 text-xs mt-0.5">{data.signalName}</div>
-                )}
               </div>
             )}
 
@@ -311,19 +322,27 @@ export const StepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
         markerEnd={customMarkerEnd}
       />
       
-      {/* Type label for matrix types */}
+      {/* Type label for matrix types. Port name above, centred. */}
       <EdgeLabelRenderer>
         {(isMatrix || isHovered) && data?.sourceType && !hasError && (
           <div
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${midX}px,${(sourceY + targetY) / 2}px)`,
+              // See the DefaultEdge popup: non-interactive so the mouse cannot
+              // be captured by the label, and lifted above nodes so it is not
+              // clipped when the wire passes near one.
+              pointerEvents: 'none',
+              zIndex: 1000,
             }}
             className={`
               ${isMatrix ? 'bg-purple-100 border-purple-300' : 'bg-white border-gray-200'}
-              px-2 py-1 rounded shadow-md border text-xs font-mono
+              px-2 py-1 rounded shadow-md border text-xs font-mono text-center
             `}
           >
+            {data.signalName && (
+              <div className="text-gray-500 text-xs mb-0.5">{data.signalName}</div>
+            )}
             <div className={`${isMatrix ? 'text-purple-700 font-medium' : 'text-gray-700'}`}>
               {formatTypeForDisplay(data.sourceType)}
             </div>
@@ -732,19 +751,28 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
         </g>
       )}
 
-      {/* Type label for matrix types */}
+      {/* Type label for matrix types. Port name goes above the type, and each
+          row is centre-justified so a long name does not push the type
+          off-centre. */}
       <EdgeLabelRenderer>
         {(isMatrix || isHovered) && data?.sourceType && !hasError && (
           <div
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              // See the DefaultEdge popup: non-interactive to eliminate
+              // hover-race stickiness, and above nodes in z-order.
+              pointerEvents: 'none',
+              zIndex: 1000,
             }}
             className={`
               ${isMatrix ? 'bg-purple-100 border-purple-300' : 'bg-white border-gray-200'}
-              px-2 py-1 rounded shadow-md border text-xs font-mono
+              px-2 py-1 rounded shadow-md border text-xs font-mono text-center
             `}
           >
+            {data.signalName && (
+              <div className="text-gray-500 text-xs mb-0.5">{data.signalName}</div>
+            )}
             <div className={`${isMatrix ? 'text-purple-700 font-medium' : 'text-gray-700'}`}>
               {formatTypeForDisplay(data.sourceType)}
             </div>

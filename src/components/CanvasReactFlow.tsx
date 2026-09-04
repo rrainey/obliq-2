@@ -345,10 +345,24 @@ function CanvasReactFlowInner({
         edgeData.sourceType = signalType.type
         edgeData.targetType = signalType.type
 
-        // Add signal name if it's from a named port
+        // A wire's "port name" for the hover popup is the label the reader
+        // needs to identify what the signal *is*. For subsystems that's the
+        // specific output port the wire leaves from; for Input/Output Port
+        // blocks it's the port's own name; for sources it's the block name
+        // (a source has no separate port identity).
         const sourceBlock = blockById.get(wire.sourceBlockId)
-        if (sourceBlock?.type === 'input_port' || sourceBlock?.type === 'output_port') {
-          edgeData.signalName = sourceBlock.parameters?.signalName || sourceBlock.name
+        if (sourceBlock) {
+          if (sourceBlock.type === 'subsystem') {
+            const ports = sourceBlock.parameters?.outputPorts
+            const idx = Math.max(0, wire.sourcePortIndex)
+            edgeData.signalName = (Array.isArray(ports) && ports[idx]) || sourceBlock.name
+          } else if (sourceBlock.type === 'input_port' || sourceBlock.type === 'output_port') {
+            edgeData.signalName = sourceBlock.parameters?.portName
+              || sourceBlock.parameters?.signalName
+              || sourceBlock.name
+          } else if (sourceBlock.type === 'source') {
+            edgeData.signalName = sourceBlock.name
+          }
         }
       }
 
