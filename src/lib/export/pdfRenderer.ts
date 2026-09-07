@@ -176,6 +176,233 @@ function transliterate(text: string): string {
   return [...text].map(ch => TRANSLITERATE[ch] ?? (needsRaster(ch) ? '?' : ch)).join('')
 }
 
+/**
+ * Draws the 1D / 2D lookup-table plot inside a block body, mirroring the SVG
+ * BlockNode renders on the canvas: light-gray L-shaped axes with the curve(s)
+ * plotted in a darker gray. For 2D, one polyline per row of the output table,
+ * all sharing a common y-scale so they can be compared. Coordinates come in as
+ * unscaled block dimensions and PDF anchor; the function applies the page
+ * scale itself so the plot tracks the block outline.
+ */
+export function drawLookupPlot(
+  p: PDFPage,
+  block: BlockData,
+  x: number,
+  yTop: number,
+  bodyWidth: number,
+  bodyHeight: number,
+  scale: number,
+): void {
+  // Canvas SVG is 60x40 with 4px padding inside an 80x60 body. Reuse those
+  // numbers when there is room; otherwise shrink to fit a resized block.
+  const plotW = Math.min(60, Math.max(0, bodyWidth - 8))
+  const plotH = Math.min(40, Math.max(0, bodyHeight - 8))
+  if (plotW < 12 || plotH < 12) return
+
+  const parameters = block.parameters || {}
+  const originX = x + ((bodyWidth - plotW) / 2) * scale
+  const originYTop = yTop - ((bodyHeight - plotH) / 2) * scale
+
+  const pxAt = (v: number) => originX + v * scale
+  const pyFromTop = (v: number) => originYTop - v * scale
+
+  const AXIS = rgb(0.615, 0.639, 0.686)  // #9ca3af
+  const CURVE = rgb(0.42, 0.44, 0.50)    // #6b7280
+  const axisThickness = Math.max(0.25, 1 * scale)
+  const curveThickness = Math.max(0.4, 1.5 * scale)
+
+  const pad = 4
+  const innerW = plotW - 2 * pad
+  const innerH = plotH - 2 * pad
+
+  // L-shaped axes at the left/bottom of the plot.
+  p.drawLine({
+    start: { x: pxAt(pad), y: pyFromTop(pad) },
+    end:   { x: pxAt(pad), y: pyFromTop(plotH - pad) },
+    thickness: axisThickness, color: AXIS,
+  })
+  p.drawLine({
+    start: { x: pxAt(pad), y: pyFromTop(plotH - pad) },
+    end:   { x: pxAt(plotW - pad), y: pyFromTop(plotH - pad) },
+    thickness: axisThickness, color: AXIS,
+  })
+
+  const plotPolyline = (
+    xs: number[], ys: number[],
+    xMin: number, xMax: number, yMin: number, yMax: number,
+  ) => {
+    if (xs.length < 2) return
+    const xR = xMax - xMin || 1
+    const yR = yMax - yMin || 1
+    let prev: { x: number; y: number } | null = null
+    for (let i = 0; i < xs.length; i++) {
+      const yv = ys[i] ?? 0
+      const localX = pad + ((xs[i] - xMin) / xR) * innerW
+      const localY = pad + innerH - ((yv - yMin) / yR) * innerH
+      const pt = { x: pxAt(localX), y: pyFromTop(localY) }
+      if (prev) {
+        p.drawLine({ start: prev, end: pt, thickness: curveThickness, color: CURVE })
+      }
+      prev = pt
+    }
+  }
+
+  if (block.type === 'lookup_1d') {
+    const inputValues = Array.isArray(parameters.inputValues)
+      ? (parameters.inputValues as number[]) : [0, 1, 2]
+    const outputValues = Array.isArray(parameters.outputValues)
+      ? (parameters.outputValues as number[]) : [0, 1, 4]
+    if (inputValues.length < 2) return
+    plotPolyline(
+      inputValues, outputValues,
+      Math.min(...inputValues), Math.max(...inputValues),
+      Math.min(...outputValues), Math.max(...outputValues),
+    )
+    return
+  }
+
+  if (block.type === 'lookup_2d') {
+    const input1Values = Array.isArray(parameters.input1Values)
+      ? (parameters.input1Values as number[]) : [0, 1, 2]
+    const input2Values = Array.isArray(parameters.input2Values)
+      ? (parameters.input2Values as number[]) : [0, 1]
+    const outputTable = Array.isArray(parameters.outputTable)
+      ? (parameters.outputTable as number[][]) : [[0, 1, 4], [1, 2, 5]]
+    if (input1Values.length < 2) return
+    // Curves share a y-scale so they can be compared, matching the canvas.
+    let yMin = Infinity, yMax = -Infinity
+    for (const row of outputTable) {
+      if (!Array.isArray(row)) continue
+      for (const v of row) {
+        if (typeof v !== 'number' || !Number.isFinite(v)) continue
+        if (v < yMin) yMin = v
+        if (v > yMax) yMax = v
+      }
+    }
+    if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) return
+    const xMin = Math.min(...input1Values), xMax = Math.max(...input1Values)
+    for (let rowIdx = 0; rowIdx < input2Values.length; rowIdx++) {
+      const row = outputTable[rowIdx]
+      if (!Array.isArray(row)) continue
+      plotPolyline(input1Values, row, xMin, xMax, yMin, yMax)
+    }
+  }
+}
+
+/**
+ * Coefficient list -> flat sequence of text chunks in the same order and form
+ * that BlockNode's renderTransferFunction / renderDiscreteTransform lays out
+ * on the canvas: coefficient (with sign) plus variable, followed by an
+ * exponent chunk drawn smaller and lifted. Unit coefficients drop the "1"
+ * except at power 0. An all-zero polynomial becomes a single "0".
+ */
+interface PolyChunk {
+  text: string
+  /** Font size in points (superscripts are smaller). */
+  size: number
+  /** Baseline offset in points above the row baseline (0 for regular). */
+  rise: number
+}
+
+export function polynomialChunks(
+  coeffs: number[], variable: 's' | 'z', size: number,
+): PolyChunk[] {
+  const chunks: PolyChunk[] = []
+  const degree = coeffs.length - 1
+  let placed = 0
+
+  coeffs.forEach((coeff, index) => {
+    if (coeff === 0) return
+    const power = degree - index
+    const isFirst = placed === 0
+    placed++
+
+    const absCoeff = Math.abs(coeff)
+    // Hide a unit coefficient except when it is the whole term.
+    const coeffStr = (absCoeff === 1 && power > 0) ? '' : String(absCoeff)
+
+    // Sign / leading minus. Negatives always get a '-', positives get '+' only
+    // when they follow another term. (BlockNode's canvas version drops the '-'
+    // on a non-first negative, which is a rendering bug we deliberately fix
+    // here — an unsigned mid-term negative reads as a positive.)
+    let prefix = ''
+    if (coeff < 0) prefix = '-'
+    else if (!isFirst) prefix = '+'
+
+    const mainText = prefix + coeffStr + (power >= 1 ? variable : '')
+    if (mainText) chunks.push({ text: mainText, size, rise: 0 })
+    if (power >= 2) {
+      chunks.push({ text: String(power), size: size * 0.65, rise: size * 0.45 })
+    }
+  })
+
+  if (chunks.length === 0) chunks.push({ text: '0', size, rise: 0 })
+  return chunks
+}
+
+/**
+ * Renders a transfer-function or discrete-transform block: numerator over
+ * denominator polynomials with a fraction bar between them, mirroring what
+ * BlockNode draws on the canvas. Uses `s` for `transfer_function`, `z` for
+ * `discrete_transform`.
+ */
+export function drawTransferFunction(
+  p: PDFPage, block: BlockData, font: PDFFont,
+  x: number, yTop: number, bodyWidth: number, bodyHeight: number, scale: number,
+): void {
+  const params = block.parameters || {}
+  const isDiscrete = block.type === 'discrete_transform'
+  const numerator = Array.isArray(params.numerator)
+    ? (params.numerator as number[]) : [1]
+  const denominator = Array.isArray(params.denominator)
+    ? (params.denominator as number[]) : (isDiscrete ? [1, -0.5] : [1, 1])
+  const variable: 's' | 'z' = isDiscrete ? 'z' : 's'
+
+  // Base text size chosen to match the canvas' text-xs feel at 100% scale
+  // (~8pt inside an 80x60 block); shrinks with page scaling.
+  const size = 8 * scale
+  if (size < 3.5) return
+
+  const numChunks = polynomialChunks(numerator, variable, size)
+  const denChunks = polynomialChunks(denominator, variable, size)
+
+  const centerX = x + (bodyWidth * scale) / 2
+  const midY = yTop - (bodyHeight * scale) / 2
+
+  const widthOf = (chunks: PolyChunk[]) =>
+    chunks.reduce((sum, c) => sum + font.widthOfTextAtSize(c.text, c.size), 0)
+
+  const drawRow = (chunks: PolyChunk[], baselineY: number) => {
+    const total = widthOf(chunks)
+    let cursor = centerX - total / 2
+    for (const c of chunks) {
+      p.drawText(c.text, {
+        x: cursor,
+        y: baselineY + c.rise,
+        size: c.size,
+        font,
+        color: BLACK,
+      })
+      cursor += font.widthOfTextAtSize(c.text, c.size)
+    }
+  }
+
+  // Numerator sits just above midY, denominator just below, each cleared of
+  // the bar by a small fraction of the text size.
+  drawRow(numChunks, midY + size * 0.28)
+  drawRow(denChunks, midY - size * 0.9)
+
+  const numWidth = widthOf(numChunks)
+  const denWidth = widthOf(denChunks)
+  const barWidth = Math.max(numWidth, denWidth) + 4 * scale
+  p.drawLine({
+    start: { x: centerX - barWidth / 2, y: midY },
+    end:   { x: centerX + barWidth / 2, y: midY },
+    thickness: Math.max(0.4, 0.8 * scale),
+    color: BLACK,
+  })
+}
+
 interface Metrics {
   width: number
   height: number
@@ -663,6 +890,13 @@ export async function renderModelToPdf(
 
       // Symbol inside the body.
       const spec = getGlyphSpec(block)
+      if (spec.kind === 'draw') {
+        if (block.type === 'lookup_1d' || block.type === 'lookup_2d') {
+          drawLookupPlot(p, block, x, yTop, m.width, m.height, scale)
+        } else if (block.type === 'transfer_function' || block.type === 'discrete_transform') {
+          drawTransferFunction(p, block, helv, x, yTop, m.width, m.height, scale)
+        }
+      }
       const symSize = Math.max(3, (spec.fontSize ?? 10) * scale)
       if (spec.text && symSize >= 3) {
         const font = spec.mono ? mono : helv
