@@ -4,7 +4,7 @@ import {
   renderModelToPdf, DEFAULT_PDF_OPTIONS,
   roundedRectPath, terminatorPath, arrowHeadPath, showsPortNames, portLabel,
   wrapText, subsystemPathOf, sheetNameOf, footerHeightForLines,
-  wireLineCount,
+  wireLineCount, drawLookupPlot, drawTransferFunction, polynomialChunks,
 } from '@/lib/export/pdfRenderer'
 import { resolvePageSize, getPageSize, PAGE_SIZES } from '@/lib/export/pageSizes'
 import { getGlyphSpec, glyphWorkList, needsRaster } from '@/lib/export/blockGlyphs'
@@ -519,5 +519,222 @@ describe('wire bundles', () => {
       signalTypes: new Map(),
     })
     expect(bytes.length).toBeGreaterThan(0)
+  })
+})
+
+describe('lookup-table plots', () => {
+  const emptyBlock = (type: 'lookup_1d' | 'lookup_2d', params: Record<string, any> = {}) =>
+    block('lk', type, params)
+
+  // drawLookupPlot delegates every stroke to PDFPage; capturing those gives us
+  // a deterministic view of what the plot emits without relying on byte counts.
+  const capture = () => {
+    const lines: any[] = []
+    const page: any = {
+      drawLine: (arg: any) => lines.push(arg),
+    }
+    return { page, lines }
+  }
+
+  test('emits two axis strokes plus one segment per interval for 1D', () => {
+    const { page, lines } = capture()
+    drawLookupPlot(
+      page, emptyBlock('lookup_1d', { inputValues: [0, 1, 2, 3], outputValues: [0, 1, 4, 9] }),
+      0, 0, 80, 60, 1,
+    )
+    // Two axes + three segments joining four points.
+    expect(lines.length).toBe(5)
+  })
+
+  test('draws one polyline per row of the 2D table', () => {
+    const { page, lines } = capture()
+    drawLookupPlot(
+      page, emptyBlock('lookup_2d', {
+        input1Values: [0, 1, 2],
+        input2Values: [0, 1, 2],
+        outputTable: [[0, 1, 2], [1, 2, 3], [2, 3, 4]],
+      }),
+      0, 0, 80, 60, 1,
+    )
+    // Two axes + three rows x two segments = 8 strokes.
+    expect(lines.length).toBe(8)
+  })
+
+  test('does not draw when there is no room in a shrunken block', () => {
+    const { page, lines } = capture()
+    drawLookupPlot(
+      page, emptyBlock('lookup_1d', { inputValues: [0, 1], outputValues: [0, 1] }),
+      0, 0, 10, 10, 1,
+    )
+    expect(lines.length).toBe(0)
+  })
+
+  test('tolerates degenerate flat output ranges without dividing by zero', () => {
+    const { page, lines } = capture()
+    // All outputs equal -> yRange 0. Should still draw axes and a horizontal line.
+    drawLookupPlot(
+      page, emptyBlock('lookup_1d', { inputValues: [0, 1, 2], outputValues: [3, 3, 3] }),
+      0, 0, 80, 60, 1,
+    )
+    expect(lines.length).toBe(4)
+    for (const l of lines) {
+      expect(Number.isFinite(l.start.x)).toBe(true)
+      expect(Number.isFinite(l.start.y)).toBe(true)
+      expect(Number.isFinite(l.end.x)).toBe(true)
+      expect(Number.isFinite(l.end.y)).toBe(true)
+    }
+  })
+
+  test('renders a full model containing lookup blocks without throwing', async () => {
+    const plan = buildFullPlan([{
+      id: 'm', name: 'M',
+      blocks: [
+        block('l1', 'lookup_1d', { inputValues: [0, 1, 2], outputValues: [0, 1, 4] }),
+        block('l2', 'lookup_2d', {
+          input1Values: [0, 1, 2],
+          input2Values: [0, 1],
+          outputTable: [[0, 1, 2], [1, 2, 3]],
+        }, 200, 0),
+      ],
+      connections: [],
+    }])
+    const bytes = await renderModelToPdf(plan, opts(), ctx)
+    expect(bytes.length).toBeGreaterThan(0)
+  })
+
+  test('polynomial chunks omit unit coefficient for powers >= 1', () => {
+    // 1*s^2 + 0*s + 3  ->  "s", sup "2", "+3"
+    const chunks = polynomialChunks([1, 0, 3], 's', 10)
+    expect(chunks.map(c => c.text)).toEqual(['s', '2', '+3'])
+    expect(chunks[1].rise).toBeGreaterThan(0)   // "2" is a superscript
+    expect(chunks[1].size).toBeLessThan(10)
+    expect(chunks[0].rise).toBe(0)              // "s" sits on the baseline
+  })
+
+  test('polynomial chunks keep a leading unit constant', () => {
+    // Constant term never drops its "1".
+    expect(polynomialChunks([1], 's', 10).map(c => c.text)).toEqual(['1'])
+  })
+
+  test('polynomial chunks emit a leading minus for a negative first term', () => {
+    // -2*s + 3
+    expect(polynomialChunks([-2, 3], 's', 10).map(c => c.text)).toEqual(['-2s', '+3'])
+  })
+
+  test('polynomial chunks drop zero coefficients entirely', () => {
+    // 0*s^2 + 4*s + 0 -> just "4s"
+    expect(polynomialChunks([0, 4, 0], 's', 10).map(c => c.text)).toEqual(['4s'])
+  })
+
+  test('polynomial chunks yield a single "0" for an all-zero polynomial', () => {
+    expect(polynomialChunks([0, 0, 0], 's', 10).map(c => c.text)).toEqual(['0'])
+  })
+
+  test('discrete transform uses z as the variable', () => {
+    const chunks = polynomialChunks([1, -0.5], 'z', 10)
+    expect(chunks.map(c => c.text)).toEqual(['z', '-0.5'])
+  })
+
+  test('drawTransferFunction emits fraction bar plus a chunk per term', async () => {
+    const lines: any[] = []
+    const texts: any[] = []
+    const page: any = {
+      drawLine: (arg: any) => lines.push(arg),
+      drawText: (text: string, opts: any) => texts.push({ text, ...opts }),
+    }
+    // Real Helvetica so widthOfTextAtSize works.
+    const doc = await PDFDocument.create()
+    const helv = await doc.embedFont('Helvetica' as any)
+    drawTransferFunction(
+      page,
+      block('tf', 'transfer_function', { numerator: [1, 2], denominator: [1, 3, 5] }),
+      helv, 0, 60, 80, 60, 1,
+    )
+    // Exactly one fraction bar.
+    expect(lines.length).toBe(1)
+    // "s" and "+2" for the numerator; "s", sup "2", "+3s", "+5" for the denominator.
+    const drawn = texts.map(t => t.text)
+    expect(drawn).toEqual(['s', '+2', 's', '2', '+3s', '+5'])
+  })
+
+  test('drawTransferFunction picks z for discrete_transform blocks', async () => {
+    const texts: any[] = []
+    const page: any = {
+      drawLine: () => {},
+      drawText: (text: string, opts: any) => texts.push({ text, ...opts }),
+    }
+    const doc = await PDFDocument.create()
+    const helv = await doc.embedFont('Helvetica' as any)
+    drawTransferFunction(
+      page,
+      block('dt', 'discrete_transform', { numerator: [1], denominator: [1, -0.5] }),
+      helv, 0, 60, 80, 60, 1,
+    )
+    expect(texts.map(t => t.text)).toEqual(['1', 'z', '-0.5'])
+  })
+
+  test('drawTransferFunction skips drawing at tiny scales', async () => {
+    const lines: any[] = []
+    const texts: any[] = []
+    const page: any = {
+      drawLine: (arg: any) => lines.push(arg),
+      drawText: (text: string, opts: any) => texts.push({ text, ...opts }),
+    }
+    const doc = await PDFDocument.create()
+    const helv = await doc.embedFont('Helvetica' as any)
+    // scale so small the text would be unreadable
+    drawTransferFunction(
+      page,
+      block('tf', 'transfer_function', { numerator: [1, 2], denominator: [1, 3] }),
+      helv, 0, 60, 80, 60, 0.2,
+    )
+    expect(lines.length).toBe(0)
+    expect(texts.length).toBe(0)
+  })
+
+  test('renders transfer function and discrete transform blocks in a full model', async () => {
+    const plan = buildFullPlan([{
+      id: 'm', name: 'M',
+      blocks: [
+        block('tf', 'transfer_function', { numerator: [1, 2], denominator: [1, 3, 5] }),
+        block('dt', 'discrete_transform', { numerator: [1, 0.5], denominator: [1, -0.7] }, 200, 0),
+      ],
+      connections: [],
+    }])
+    const bytes = await renderModelToPdf(plan, opts(), ctx)
+    expect(bytes.length).toBeGreaterThan(0)
+  })
+
+  test('transfer function blocks add content vs an empty block of the same size', async () => {
+    const mk = (type: string) => buildFullPlan([{
+      id: 'm', name: 'M',
+      blocks: [block('b', type, { numerator: [1, 2, 3], denominator: [1, 4, 5, 6] })],
+      connections: [],
+    }])
+    const empty = await renderModelToPdf(mk('scale'), opts(), ctx)
+    const tf = await renderModelToPdf(mk('transfer_function'), opts(), ctx)
+    const dt = await renderModelToPdf(mk('discrete_transform'), opts(), ctx)
+    expect(tf.length).toBeGreaterThan(empty.length)
+    expect(dt.length).toBeGreaterThan(empty.length)
+  })
+
+  test('lookup blocks make the PDF larger than empty blocks of the same size', async () => {
+    // Sanity: the plot really is putting extra content into the page stream.
+    const mk = (type: string) => buildFullPlan([{
+      id: 'm', name: 'M',
+      blocks: [block('b', type, {
+        inputValues: [0, 1, 2, 3, 4],
+        outputValues: [0, 1, 4, 9, 16],
+        input1Values: [0, 1, 2, 3, 4],
+        input2Values: [0, 1, 2],
+        outputTable: [[0, 1, 2, 3, 4], [1, 2, 3, 4, 5], [2, 3, 4, 5, 6]],
+      })],
+      connections: [],
+    }])
+    const empty = await renderModelToPdf(mk('scale'), opts(), ctx)
+    const lookup1 = await renderModelToPdf(mk('lookup_1d'), opts(), ctx)
+    const lookup2 = await renderModelToPdf(mk('lookup_2d'), opts(), ctx)
+    expect(lookup1.length).toBeGreaterThan(empty.length)
+    expect(lookup2.length).toBeGreaterThan(lookup1.length)
   })
 })
