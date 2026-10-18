@@ -1,6 +1,6 @@
 # Migrating off Supabase: SQLite + flat-file storage
 
-Status: phases 1–4, 6 and 7 are done on branch `sqlite-storage`. Phase 5 (watcher/SSE, conflict banner, link UI) remains. Decisions recorded 2026-10-18.
+Status: all phases are done on branch `sqlite-storage`. Decisions recorded 2026-10-18.
 
 ## Decisions
 
@@ -43,6 +43,6 @@ Status: phases 1–4, 6 and 7 are done on branch `sqlite-storage`. Phase 5 (watc
 2. **Server consumers** (done): model-builder handlers (`ctx.storage`), generate-code, compile-wasm(-stream), automations, ServerWasmExecutor, tokens, cache-maintenance.
 3. **`/api/models` REST layer** (done): `src/lib/modelApi.ts` replaces every browser-side `supabase.from(...)` in modelStore, `models/page.tsx` and `models/[id]/page.tsx`.
 4. **Auth replacement** (done): local session cookie, Host-header check, `AuthProvider` shim, removal of the login page, bind to 127.0.0.1.
-5. **Linked files and change detection** (todo). Already working: linking at the storage/API level, capture of external edits as versions, 409 on stale saves, and `GET /api/models/:id/status`. Still to do: directory watcher, SSE, conflict banner, "linked" and "missing" badges, `obliq:link` script.
+5. **Linked files and change detection** (done): `src/lib/server/modelWatcher.ts` watches directories, not files, so atomic renames are seen. `GET /api/models/:id/events` streams the file status over SSE, and the client hook `useModelFileStatus` also re-checks on window focus. In the editor (`ExternalChangeBanner`), a clean editor reloads silently; a dirty one gets Reload / Keep mine / Save as new. The editor compares the disk hash with the hash it loaded, so edits made through the Model Builder API or MCP are also caught. My Models has Link File, Copy into Obliq storage, and a "missing" badge; the command-line equivalent is `npm run obliq:link`.
 6. **Migration script** (done): `scripts/migrate-from-supabase.ts` (`--dry-run`, idempotent).
 7. **Removal** (done; `@supabase/supabase-js` stays as a devDependency for the migration script only): `@supabase/*` packages, env vars, `database-scripts/` moved to `docs/archive`, README updates.

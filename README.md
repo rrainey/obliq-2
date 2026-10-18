@@ -229,8 +229,13 @@ The server binds to `127.0.0.1` and refuses requests whose `Host` is not a loopb
 ```
 
 - **model.json is the current state.** **Save** writes it and records a new snapshot under `versions/`. Model Builder API/MCP mutations update it in place; pass `checkpoint: true` to also record a snapshot.
-- **External edits are safe.** Scripts may edit or regenerate a model file directly. The next time the app reads the file, it records the changed content as a version with note `external`. If you then save from an editor that loaded an older copy, the save is rejected (HTTP 409) instead of overwriting the file.
-- **Linked models.** `POST /api/models/link {"path": "/abs/path/model.json"}` registers a file that lives elsewhere, such as a generated plant model in another repo. The file stays where it is and saves write back to it in the same shape (`{name, data}` or bare ModelData). Its versions and autosave live under `models/<id>/`. Deleting a linked model never deletes the external file.
+- **External edits are safe.** Scripts may edit or regenerate a model file directly. The editor watches the open model's file:
+  - With no unsaved edits, it reloads automatically.
+  - With unsaved edits, it shows a banner: **Reload from disk**, **Keep mine (overwrite)**, or **Save mine as new model**.
+  - If the file disappears, it says so and offers Save As.
+
+  The disk content is always recorded as a version with note `external` before anything overwrites it. A save based on a stale copy is rejected (HTTP 409) rather than silently overwriting.
+- **Linked models.** **My Models → Link File** (or `npm run obliq:link -- /abs/path/model.json [--name "Name"]`, which works without the server running) registers a file that lives elsewhere, such as a generated plant model in another repo. `npm run obliq:link -- --list` lists models and their file locations. The file stays where it is and saves write back to it in the same shape (`{name, data}` or bare ModelData). Its versions and autosave live under `models/<id>/`. Deleting a linked model never deletes the external file. **Copy into Obliq storage** (model menu, or `obliq:link -- --unlink <id>`) detaches it. A linked file that has gone missing is flagged on My Models.
 
 ### Migrating from the previous Supabase backend
 

@@ -95,6 +95,8 @@ export interface ModelState {
   // Auto-save state
   autoSaveEnabled: boolean
   lastAutoSave: string | null
+  /** Edits were autosaved but not yet saved to the model file (isDirty is reset by autosave). */
+  hasAutosavedEdits: boolean
 
   // Dirty state tracking
   isDirty: boolean
@@ -301,6 +303,7 @@ export const useModelStore = create<ModelStore>()(
     saveConflict: false,
     autoSaveEnabled: true,
     lastAutoSave: null,
+    hasAutosavedEdits: false,
     globalSimulationResults: null,
     currentSheetSimulationResults: null,
     isDirty: false,
@@ -383,6 +386,7 @@ export const useModelStore = create<ModelStore>()(
           isOlderVersion: false,
           fileHash: result.hash,
           saveConflict: false,
+          hasAutosavedEdits: false,
           saving: false,
           error: null
         })
@@ -529,7 +533,7 @@ export const useModelStore = create<ModelStore>()(
 
         const savedAt = await modelApi.putAutosave(updatedState.model.id, modelData)
 
-        set({ lastAutoSave: savedAt })
+        set({ lastAutoSave: savedAt, hasAutosavedEdits: true })
         console.log('Auto-save completed')
         get().markAsClean() // Mark as clean after successful auto-save
         return true
@@ -1637,6 +1641,7 @@ export const useModelStore = create<ModelStore>()(
           simulationResults: null,
           error: null,
           saveConflict: false,
+          hasAutosavedEdits: false,
           modelLoading: false
         })
 

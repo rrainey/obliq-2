@@ -2,8 +2,8 @@
 'use client'
 
 import { useUser } from '@/lib/auth'
-import { modelApi } from '@/lib/modelApi'
-import { Model, ModelWithVersion } from '@/lib/types'
+import { modelApi, type ModelListItem } from '@/lib/modelApi'
+import { Model } from '@/lib/types'
 import { createDefaultModel } from '@/lib/defaultModel'
 import {
   parseModelImportFile,
@@ -46,7 +46,9 @@ import {
   IconCopy,
   IconSun,
   IconMoon,
-  IconFileImport
+  IconFileImport,
+  IconLink,
+  IconLinkOff
 } from '@tabler/icons-react'
 
 export default function ModelsPage() {
@@ -54,7 +56,7 @@ export default function ModelsPage() {
   const router = useRouter()
   const { setColorScheme } = useMantineColorScheme()
   const computedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true })
-  const [models, setModels] = useState<ModelWithVersion[]>([])
+  const [models, setModels] = useState<ModelListItem[]>([])
   const [modelsLoading, setModelsLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [selectedVersions, setSelectedVersions] = useState<Record<string, number>>({})
@@ -75,6 +77,11 @@ export default function ModelsPage() {
   const [importing, setImporting] = useState(false)
   const [importParseError, setImportParseError] = useState<string | null>(null)
   const importFileInputRef = useRef<HTMLInputElement>(null)
+  const [showLinkDialog, setShowLinkDialog] = useState(false)
+  const [linkPath, setLinkPath] = useState('')
+  const [linkName, setLinkName] = useState('')
+  const [linking, setLinking] = useState(false)
+  const [linkError, setLinkError] = useState<string | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -85,7 +92,7 @@ export default function ModelsPage() {
   const fetchModels = async () => {
     try {
       // Models come back ordered by updated_at desc, with availableVersions (desc)
-      const modelsWithVersions: ModelWithVersion[] = await modelApi.list()
+      const modelsWithVersions = await modelApi.list()
 
       setModels(modelsWithVersions)
       
@@ -187,7 +194,7 @@ export default function ModelsPage() {
     setDuplicating(true)
     try {
       // Get the selected version (or latest) for the model to duplicate
-      const selectedVersion = selectedVersions[selectedModel.id] || (selectedModel as ModelWithVersion).latest_version || 1
+      const selectedVersion = selectedVersions[selectedModel.id] || selectedModel.latest_version || 1
 
       // Duplicate the current model file, or the selected snapshot if an older version is selected
       await modelApi.duplicate(
@@ -286,7 +293,55 @@ export default function ModelsPage() {
     }
   }
 
-  const handleModelOpen = async (model: ModelWithVersion) => {
+  const resetLinkDialog = () => {
+    setShowLinkDialog(false)
+    setLinkPath('')
+    setLinkName('')
+    setLinkError(null)
+  }
+
+  // Register an existing model JSON file in place (it is read and saved where it lives)
+  const handleLinkFile = async () => {
+    if (linking || !linkPath.trim()) return
+
+    setLinking(true)
+    setLinkError(null)
+    try {
+      const model = await modelApi.link(linkPath.trim(), linkName.trim() || undefined)
+      notifications.show({
+        title: 'File linked',
+        message: `"${model.name}" opens and saves ${model.file_path}`,
+        color: 'green',
+      })
+      resetLinkDialog()
+      router.push(`/models/${model.id}`)
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : 'Failed to link file')
+    } finally {
+      setLinking(false)
+    }
+  }
+
+  // Detach a linked model: copy its current content into Obliq storage
+  const handleUnlink = async (model: ModelListItem) => {
+    try {
+      await modelApi.unlink(model.id)
+      notifications.show({
+        title: 'Copied into Obliq storage',
+        message: `"${model.name}" no longer reads or writes ${model.file_path}`,
+        color: 'green',
+      })
+      await fetchModels()
+    } catch (error) {
+      notifications.show({
+        title: 'Unlink failed',
+        message: error instanceof Error ? error.message : 'Failed to unlink model',
+        color: 'red',
+      })
+    }
+  }
+
+  const handleModelOpen = async (model: ModelListItem) => {
     const selectedVersion = selectedVersions[model.id] || model.latest_version || 1
     
     // If selected version is different from latest, pass it as a query param
@@ -350,6 +405,13 @@ export default function ModelsPage() {
               Import
             </Button>
             <Button
+              variant="default"
+              leftSection={<IconLink size={16} />}
+              onClick={() => setShowLinkDialog(true)}
+            >
+              Link File
+            </Button>
+            <Button
               component={Link}
               href="/tokens"
               variant="default"
@@ -407,6 +469,13 @@ export default function ModelsPage() {
                               </Badge>
                             </Tooltip>
                           )}
+                          {model.file_missing && (
+                            <Tooltip label={`File not found: ${model.file_path}`} withinPortal>
+                              <Badge size="xs" variant="filled" color="red" style={{ flexShrink: 0 }}>
+                                missing
+                              </Badge>
+                            </Tooltip>
+                          )}
                         </Group>
                         <Text size="sm" c="dimmed">
                           Updated {new Date(model.updated_at).toLocaleDateString()}
@@ -431,6 +500,15 @@ export default function ModelsPage() {
                           >
                             Duplicate...
                           </Menu.Item>
+                          {model.storage_kind === 'linked' && (
+                            <Menu.Item
+                              leftSection={<IconLinkOff size={16} />}
+                              onClick={() => handleUnlink(model)}
+                              disabled={model.file_missing}
+                            >
+                              Copy into Obliq storage
+                            </Menu.Item>
+                          )}
                           <Menu.Divider />
                           <Menu.Item
                             leftSection={<IconTrash size={16} />}
@@ -559,6 +637,42 @@ export default function ModelsPage() {
         </Stack>
       </Modal>
 
+      {/* Link File Modal */}
+      <Modal opened={showLinkDialog} onClose={resetLinkDialog} title="Link Model File" centered>
+        <Stack>
+          <Text size="sm" c="dimmed">
+            Register a model JSON file that lives elsewhere on this machine (for example, one generated
+            by a script). Obliq opens and saves it in place, keeping its format; version history and
+            autosave are stored under ~/.config/obliq-2.
+          </Text>
+          <TextInput
+            label="Absolute file path"
+            placeholder="/home/you/src/project/model.json"
+            value={linkPath}
+            onChange={(e) => setLinkPath(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleLinkFile()
+            }}
+            error={linkError}
+            data-autofocus
+          />
+          <TextInput
+            label="Name (optional)"
+            description="Defaults to the name in the file, or the file name"
+            value={linkName}
+            onChange={(e) => setLinkName(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={resetLinkDialog}>
+              Cancel
+            </Button>
+            <Button onClick={handleLinkFile} loading={linking} disabled={!linkPath.trim()}>
+              Link
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       {/* Delete Confirmation Modal */}
       <Modal
         opened={showDeleteDialog && !!selectedModel}
@@ -573,6 +687,12 @@ export default function ModelsPage() {
           <Text>
             Are you sure you want to delete &quot;{selectedModel?.name}&quot;? This action cannot be undone.
           </Text>
+          {selectedModel?.storage_kind === 'linked' && (
+            <Text size="sm" c="dimmed">
+              The linked file <code>{selectedModel.file_path}</code> is not deleted; only its Obliq
+              version history and autosave are removed.
+            </Text>
+          )}
           <Group justify="flex-end">
             <Button
               variant="default"

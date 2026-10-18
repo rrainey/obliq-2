@@ -18,6 +18,8 @@ import {
 import SaveAsDialog from '@/components/SaveAsDialog'
 import AutoSaveRecoveryDialog from '@/components/AutoSaveRecoveryDialog'
 import AutoSaveStatusIndicator from '@/components/AutoSaveStatusIndicator'
+import ExternalChangeBanner, { type ExternalChangeKind } from '@/components/ExternalChangeBanner'
+import { useModelFileStatus } from '@/hooks/useModelFileStatus'
 import ModelParametersDialog from '@/components/ModelParametersDialog'
 import CanvasReactFlow from '@/components/CanvasReactFlow'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
@@ -115,6 +117,7 @@ import {
   IconAlertCircle,
   IconCircleCheck,
   IconAlertTriangle,
+  IconInfoCircle,
   IconDownload,
   IconClock,
   IconCheck,
@@ -214,6 +217,40 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   // Enable auto-save only for latest version and when model is fully loaded
   useAutoSave(!isOlderVersion && !modelLoading && !!model)
 
+  // Watch the model file on disk. Edits from scripts, the Model Builder API/MCP,
+  // or another tab change its hash; compare with the hash this editor loaded.
+  const fileHash = useModelStore(state => state.fileHash)
+  const hasAutosavedEdits = useModelStore(state => state.hasAutosavedEdits)
+  const fileStatus = useModelFileStatus(
+    model?.id ?? null,
+    !!model && !modelLoading && !isOlderVersion && !showAutoSaveDialog
+  )
+  const [externalChange, setExternalChange] = useState<ExternalChangeKind | null>(null)
+  const [resolvingExternal, setResolvingExternal] = useState(false)
+
+  useEffect(() => {
+    if (!fileStatus || saving || resolvingExternal) return
+    if (fileStatus.status === 'missing') {
+      setExternalChange('missing')
+      return
+    }
+    if (!fileHash || fileStatus.hash === fileHash) {
+      if (!saveConflict) setExternalChange(null)
+      return
+    }
+    // The file on disk differs from what this editor loaded.
+    if (isDirty || hasAutosavedEdits) {
+      setExternalChange('changed')
+    } else {
+      reloadFromDisk(true)
+    }
+  }, [fileStatus, fileHash, saving, resolvingExternal, isDirty, hasAutosavedEdits, saveConflict])
+
+  // A save rejected with 409 (file changed since load) gets the same banner.
+  useEffect(() => {
+    if (saveConflict) setExternalChange('changed')
+  }, [saveConflict])
+
   // Detect and enable Web Worker support if available
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -295,6 +332,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
       // No auto-save dialog needed, load the current model file as the latest version
       applyLoadedData(modelData, toModelVersion(modelData, modelData.latest_version || 1, current.data, modelData.updated_at), current.hash)
+      notifyIfExternalChange(current)
       
     } catch (error) {
       console.error('Error fetching model:', error)
@@ -335,6 +373,84 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     } finally {
       setModelLoading(false)
     }
+  }
+
+  const notifyIfExternalChange = (current: CurrentModelResponse) => {
+    if (!current.externalChange) return
+    notifications.show({
+      title: 'Picked up changes made outside Obliq',
+      message: `The model file was modified outside the editor; that content was recorded as version ${current.model.latest_version}.`,
+      color: 'blue',
+      icon: <IconInfoCircle size={20} />
+    })
+  }
+
+  /**
+   * Replace the editor contents with the current model file. Used silently when
+   * the file changes and there are no unsaved edits, or from the change banner.
+   */
+  const reloadFromDisk = async (silent: boolean) => {
+    if (!model) return
+    setResolvingExternal(true)
+    const previousSheetId = useModelStore.getState().activeSheetId
+    try {
+      const current = await modelApi.getCurrent(model.id)
+      applyLoadedData(current.model, toModelVersion(current.model, current.model.latest_version || 1, current.data, current.model.updated_at), current.hash)
+      // initializeFromModel resets to the first sheet; stay where the user was if it still exists
+      if (previousSheetId && previousSheetId !== useModelStore.getState().activeSheetId) {
+        try {
+          switchToSheet(previousSheetId)
+        } catch {
+          // sheet no longer exists in the reloaded model
+        }
+      }
+      if (!silent) {
+        // The autosave held the edits that were just discarded
+        await modelApi.deleteAutosave(model.id).catch(() => {})
+      }
+      setExternalChange(null)
+      notifications.show({
+        title: silent ? 'Model updated from disk' : 'Reloaded from disk',
+        message: silent
+          ? 'The model file changed outside the editor and has been reloaded.'
+          : 'Your unsaved edits were discarded.',
+        color: 'blue',
+        icon: <IconInfoCircle size={20} />
+      })
+    } catch (error) {
+      console.error('Error reloading model from disk:', error)
+      notifications.show({
+        title: 'Reload failed',
+        message: error instanceof Error ? error.message : 'Failed to reload the model file',
+        color: 'red',
+        icon: <IconAlertCircle size={20} />
+      })
+    } finally {
+      setResolvingExternal(false)
+    }
+  }
+
+  /** Overwrite the changed file with the editor contents (the disk version stays in history). */
+  const handleOverwriteWithMine = async () => {
+    if (!model) return
+    setResolvingExternal(true)
+    try {
+      const status = await modelApi.status(model.id)
+      if (status.status === 'missing') {
+        setExternalChange('missing')
+        return
+      }
+      // Rebase onto the disk version; the server records it as an 'external' version first
+      setFileHash(status.hash)
+      useModelStore.setState({ saveConflict: false, error: null })
+      setExternalChange(null)
+    } catch (error) {
+      console.error('Error checking model file status:', error)
+      return
+    } finally {
+      setResolvingExternal(false)
+    }
+    await handleSave()
   }
 
   // Helper function to load a specific saved version (snapshot)
@@ -379,8 +495,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         setIsOlderVersion(false)
         setFileHash(autoSaveInfo.current.hash)
         // Older autosaves carried no parameters; fall back to the current file's.
+        // The recovered content differs from the model file until the next Save.
         useModelStore.setState({
-          parameters: autoSaveData.data.parameters ?? autoSaveInfo.current.data?.parameters ?? []
+          parameters: autoSaveData.data.parameters ?? autoSaveInfo.current.data?.parameters ?? [],
+          hasAutosavedEdits: true
         })
 
         // Reset selection state
@@ -503,16 +621,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       debugMath: simulationSettings.debugMath
     }
 
+    // A 409 conflict sets saveConflict, which raises the ExternalChangeBanner
     const success = await saveModel(globalSettings)
-    if (!success && useModelStore.getState().saveConflict) {
-      notifications.show({
-        title: 'Save conflict',
-        message: useModelStore.getState().error,
-        color: 'red',
-        icon: <IconAlertTriangle size={20} />,
-        autoClose: false
-      })
-    }
     if (success && isOlderVersion) {
       // If we saved an older version as a new model, we should have navigated away
       // This is handled in the saveModel function
@@ -1771,7 +1881,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                 Version {currentVersion} of {model.latest_version}
               </Badge>
             )}
-            {error && (
+            {error && !saveConflict && (
               <Badge color="red" variant="filled">
                 {error}
               </Badge>
@@ -1910,6 +2020,16 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
       <AppShell.Main>
         <Box h="100vh" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {externalChange && (
+            <ExternalChangeBanner
+              kind={externalChange}
+              filePath={model.storage_kind === 'linked' ? model.file_path : null}
+              busy={resolvingExternal || saving}
+              onReload={() => reloadFromDisk(false)}
+              onOverwrite={handleOverwriteWithMine}
+              onSaveAs={() => setShowSaveAsDialog(true)}
+            />
+          )}
           {/* Sheet Tabs */}
           <SheetTabs
             sheets={sheets}

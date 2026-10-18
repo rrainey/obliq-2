@@ -34,7 +34,8 @@
     "ic:dual-path": "tsx scripts/ic-dual-path-compare.ts",
     "onpad:dual-path": "tsx scripts/onpad-dual-path-compare.ts",
     "test:mdl2obliq": "npm --prefix ../mdl2obliq test",
-    "migrate:supabase": "tsx scripts/migrate-from-supabase.ts"
+    "migrate:supabase": "tsx scripts/migrate-from-supabase.ts",
+    "obliq:link": "tsx scripts/obliq-link.ts"
   },
   "dependencies": {
     "@mantine/core": "^8.1.3",

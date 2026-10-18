@@ -7,7 +7,11 @@ import type { Model } from '@/lib/types'
 
 export interface ModelListItem extends Model {
   availableVersions: number[]
+  /** True for a linked model whose external file no longer exists. */
+  file_missing: boolean
 }
+
+export type FileStatus = { status: 'ok' | 'changed'; hash: string; mtimeMs: number } | { status: 'missing' }
 
 export interface CurrentModelResponse {
   model: Model
@@ -109,6 +113,8 @@ export const modelApi = {
 
   deleteAutosave: (id: string) => request<{ ok: true }>('DELETE', `${base(id)}/autosave`),
 
-  status: (id: string) =>
-    request<{ status: 'ok' | 'changed' | 'missing'; hash?: string; mtimeMs?: number }>('GET', `${base(id)}/status`),
+  status: (id: string) => request<FileStatus>('GET', `${base(id)}/status`),
+
+  /** URL of the Server-Sent Events stream of file status changes (use with EventSource). */
+  eventsUrl: (id: string) => `${base(id)}/events`,
 }

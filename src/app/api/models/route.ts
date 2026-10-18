@@ -1,7 +1,8 @@
 /**
- * GET  /api/models          → { models: [...record, availableVersions] }
+ * GET  /api/models          → { models: [...record, availableVersions, file_missing] }
  * POST /api/models {name, data} → { model }
  */
+import * as fs from 'fs'
 import { modelsRoute, readJsonBody, requireObject, requireString } from '@/lib/server/modelsApi'
 
 export const runtime = 'nodejs'
@@ -14,6 +15,8 @@ export const GET = modelsRoute(({ storage }) => {
       .listVersions(model.id)
       .map(v => v.version)
       .reverse(),
+    // Linked files can vanish or move outside the app.
+    file_missing: model.storage_kind === 'linked' && !!model.file_path && !fs.existsSync(model.file_path),
   }))
   return { models }
 })
