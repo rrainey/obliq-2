@@ -260,3 +260,28 @@ describe('storage error matching', () => {
     expect(new Error('plain') instanceof ModelConflictError).toBe(false)
   })
 })
+
+describe('autosave identical to the saved model', () => {
+  it('is not stored, and clears an existing autosave', () => {
+    const rec = storage.models.create({ name: 'M', data: modelData('a') })
+    storage.models.putAutosave(rec.id, modelData('draft'))
+    // e.g. an autosave that raced a Save: same content as model.json
+    storage.models.putAutosave(rec.id, modelData('a'))
+    expect(fs.existsSync(storage.paths.autosaveFile(rec.id))).toBe(false)
+    expect(storage.models.get(rec.id)!.autosave_at).toBeNull()
+  })
+
+  it('found on load is discarded instead of offered for recovery', () => {
+    const rec = storage.models.create({ name: 'M', data: modelData('a') })
+    // Written directly, as an older build could have left it
+    fs.writeFileSync(
+      storage.paths.autosaveFile(rec.id),
+      JSON.stringify({ name: 'M', savedAt: '2026-01-01T00:00:00.000Z', data: modelData('a') })
+    )
+    expect(storage.models.getAutosave(rec.id)).toBeNull()
+    expect(fs.existsSync(storage.paths.autosaveFile(rec.id))).toBe(false)
+    // A real difference is still kept
+    storage.models.putAutosave(rec.id, modelData('b'))
+    expect(storage.models.getAutosave(rec.id)?.data).toEqual(modelData('b'))
+  })
+})

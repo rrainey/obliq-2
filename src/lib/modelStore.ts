@@ -474,6 +474,13 @@ export const useModelStore = create<ModelStore>()(
         return false
       }
 
+      // A full save in progress already persists these edits; an autosave racing it
+      // would land after the save and resurrect autosave.json.
+      if (state.saving) {
+        console.log('Skipping auto-save: save in progress')
+        return true
+      }
+
       // Check if the model is dirty before saving
       const isDirty = get().checkIfDirty()
       if (!isDirty) {

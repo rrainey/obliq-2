@@ -367,17 +367,31 @@ export class ModelRepository {
   // ---------------------------------------------------------------------------
   // Autosave
 
+  /**
+   * The autosave, or null. An autosave identical to the current model file
+   * (e.g. one that raced a Save) is stale: it is removed and null returned, so
+   * the editor doesn't offer a pointless recovery.
+   */
   getAutosave(id: string): { data: ModelData; savedAt: string } | null {
     this.require(id)
     const snap = readFileSnapshot(this.paths.autosaveFile(id))
     if (!snap) return null
     const doc = JSON.parse(snap.content)
+    if (this.matchesCurrentFile(id, doc.data)) {
+      this.deleteAutosave(id)
+      return null
+    }
     return { data: doc.data, savedAt: doc.savedAt }
   }
 
+  /** Store an autosave; one identical to the current model file just clears any existing autosave. */
   putAutosave(id: string, data: ModelData): string {
     const record = this.require(id)
     const savedAt = now()
+    if (this.matchesCurrentFile(id, data)) {
+      this.deleteAutosave(id)
+      return savedAt
+    }
     writeFileAtomic(this.paths.autosaveFile(id), serializeJson({ name: record.name, savedAt, data }))
     this.db.prepare('UPDATE models SET autosave_at = ? WHERE id = ?').run(savedAt, id)
     return savedAt
@@ -443,6 +457,15 @@ export class ModelRepository {
 
   // ---------------------------------------------------------------------------
   // Internals
+
+  /** True if `data` serializes identically to the current model file's data. */
+  private matchesCurrentFile(id: string, data: ModelData): boolean {
+    try {
+      return JSON.stringify(this.readCurrent(id).data) === JSON.stringify(data)
+    } catch {
+      return false // missing/invalid model file: keep the autosave
+    }
+  }
 
   /**
    * Write the current model file after reconciling with disk: any unobserved
