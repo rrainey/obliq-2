@@ -104,8 +104,10 @@ import {
   Tooltip,
   Space,
   Card,
-  Anchor
+  Anchor,
+  Menu
 } from '@mantine/core'
+import { useMediaQuery } from '@mantine/hooks'
 import {
   IconArrowLeft,
   IconDeviceFloppy,
@@ -121,7 +123,9 @@ import {
   IconDownload,
   IconClock,
   IconCheck,
-  IconSettings
+  IconSettings,
+  IconChevronDown,
+  IconCopy
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
 
@@ -166,6 +170,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   } = useModelStore()
 
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false)
+  // Below ~1200px the header switches to icon buttons so it stays on one row
+  const compactHeader = useMediaQuery('(max-width: 75em)') ?? false
   const [showParametersDialog, setShowParametersDialog] = useState(false)
   const [showExportPdfDialog, setShowExportPdfDialog] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
@@ -1867,75 +1873,93 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       aside={{ width: 400, breakpoint: 'md' }}
     >
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group>
-            <Anchor component={Link} href="/models" c="blue">
-              <Group gap="xs">
-                <IconArrowLeft size={16} />
-                <Text size="sm">Back to Models</Text>
-              </Group>
-            </Anchor>
-            <Title order={3}>{model.name}</Title>
+        {/* One row that never wraps: the title truncates and secondary actions live in menus. */}
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap" gap="md">
+          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0, flex: 1 }}>
+            <Tooltip label="Back to Models" disabled={!compactHeader}>
+              <Anchor component={Link} href="/models" c="blue" style={{ flexShrink: 0 }}>
+                <Group gap={4} wrap="nowrap">
+                  <IconArrowLeft size={16} />
+                  {!compactHeader && <Text size="sm">Models</Text>}
+                </Group>
+              </Anchor>
+            </Tooltip>
+            <Tooltip label={model.name} openDelay={400}>
+              <Title order={3} lineClamp={1} style={{ minWidth: 0, wordBreak: 'break-all' }}>
+                {model.name}
+              </Title>
+            </Tooltip>
             {isOlderVersion && (
-              <Badge color="yellow" variant="filled">
+              <Badge color="yellow" variant="filled" style={{ flexShrink: 0 }}>
                 Version {currentVersion} of {model.latest_version}
               </Badge>
             )}
             {error && !saveConflict && (
-              <Badge color="red" variant="filled">
-                {error}
-              </Badge>
+              <Tooltip label={error} multiline maw={400}>
+                <Badge color="red" variant="filled" maw={260} style={{ flexShrink: 1, minWidth: 60 }}>
+                  {error}
+                </Badge>
+              </Tooltip>
             )}
           </Group>
-          
-          <Group>
-            <AutoSaveStatusIndicator />
 
-            {/* WASM Status Indicator */}
-            {getWasmPreference() && (
-              <Tooltip label="WebAssembly acceleration enabled">
-                <Badge
-                  variant="light"
-                  color="blue"
-                  leftSection={
-                    <Box component="span" style={{ display: 'flex', alignItems: 'center' }}>
-                      ⚡
-                    </Box>
-                  }
-                >
-                  WASM
+          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+            <AutoSaveStatusIndicator compact={compactHeader} />
+
+            {(getWasmPreference() || compilationTime !== null) && (
+              <Tooltip
+                label={[
+                  getWasmPreference() ? 'WebAssembly acceleration enabled' : null,
+                  compilationTime !== null ? `Last compilation: ${compilationTime}ms` : null
+                ].filter(Boolean).join(' · ')}
+              >
+                <Badge variant="light" color="blue" leftSection={compilationTime !== null ? <IconClock size={12} /> : '⚡'}>
+                  {compilationTime !== null ? `${compilationTime}ms` : 'WASM'}
                 </Badge>
               </Tooltip>
             )}
 
-            {compilationTime !== null && (
-              <Tooltip label={`Last compilation: ${compilationTime}ms`}>
-                <Badge variant="light" color="gray" leftSection={<IconClock size={12} />}>
-                  {compilationTime}ms
-                </Badge>
-              </Tooltip>
-            )}
+            {/* Save split button: Save, with Save as… in the dropdown */}
+            <Group gap={0} wrap="nowrap">
+              <Button
+                onClick={handleSave}
+                loading={saving}
+                leftSection={<IconDeviceFloppy size={16} />}
+                color="green"
+                style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+              >
+                {isOlderVersion ? 'Save as New Model' : 'Save'}
+              </Button>
+              <Menu position="bottom-end" withinPortal>
+                <Menu.Target>
+                  <ActionIcon
+                    color="green"
+                    variant="filled"
+                    size={36}
+                    aria-label="More save options"
+                    style={{
+                      borderTopLeftRadius: 0,
+                      borderBottomLeftRadius: 0,
+                      borderLeft: '1px solid var(--mantine-color-green-8)'
+                    }}
+                  >
+                    <IconChevronDown size={16} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item leftSection={<IconCopy size={16} />} onClick={() => setShowSaveAsDialog(true)}>
+                    Save as…
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            </Group>
 
-            <Button
-              onClick={handleSave}
-              loading={saving}
-              leftSection={<IconDeviceFloppy size={16} />}
-              color="green"
-            >
-              {isOlderVersion ? 'Save as New Model' : 'Save'}
-            </Button>
-            
-            <Button
-              onClick={() => setShowSaveAsDialog(true)}
-              variant="outline"
-              color="green"
-            >
-              Save as...
-            </Button>
-            
             <ModelValidationButton
               blocks={blocks}
               wires={wires}
+              label="Validate"
+              iconOnly={compactHeader}
+              showSummaryBadges={false}
               onNavigate={(item) => {
                 // Switch sheets first if the item lives on a different one.
                 if (item.sheetId && item.sheetId !== activeSheetId) {
@@ -1956,60 +1980,70 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               }}
             />
 
-            <Button
-              onClick={() => setShowParametersDialog(true)}
-              leftSection={<IconSettings size={16} />}
-              variant="outline"
-              color="blue"
-            >
-              Parameters
-            </Button>
+            {compactHeader ? (
+              <Tooltip label="Parameters">
+                <ActionIcon
+                  onClick={() => setShowParametersDialog(true)}
+                  variant="outline"
+                  color="blue"
+                  size={36}
+                  aria-label="Parameters"
+                >
+                  <IconSettings size={16} />
+                </ActionIcon>
+              </Tooltip>
+            ) : (
+              <Button
+                onClick={() => setShowParametersDialog(true)}
+                leftSection={<IconSettings size={16} />}
+                variant="outline"
+                color="blue"
+              >
+                Parameters
+              </Button>
+            )}
 
             {/* Run/Stop Simulation buttons with progress indicator */}
             {isSimulating && simulationProgress && workerManager ? (
-              <Group gap="xs">
-                <Button
-                  onClick={handleStopSimulation}
-                  color="red"
-                  leftSection={<IconPlayerStop size={16} />}
-                >
-                  Stop ({simulationProgress.progress.toFixed(0)}%)
-                </Button>
-              </Group>
+              <Button
+                onClick={handleStopSimulation}
+                color="red"
+                leftSection={<IconPlayerStop size={16} />}
+              >
+                Stop ({simulationProgress.progress.toFixed(0)}%)
+              </Button>
             ) : (
               <Button
                 onClick={handleRunSimulation}
                 loading={isSimulating || isCompiling}
                 leftSection={<IconPlayerPlay size={16} />}
               >
-                {isCompiling ? 'Compiling...' : isSimulating ? 'Running...' : 'Run Simulation'}
+                {isCompiling ? 'Compiling...' : isSimulating ? 'Running...' : compactHeader ? 'Run' : 'Run Simulation'}
               </Button>
             )}
-            
-            <Button
-              onClick={handleGenerateCode}
-              leftSection={<IconCode size={16} />}
-              color="violet"
-            >
-              Generate Code
-            </Button>
-            
-            <Button
-              onClick={handleExportModel}
-              leftSection={<IconFileExport size={16} />}
-              color="violet"
-            >
-              Export
-            </Button>
 
-            <Button
-              onClick={() => setShowExportPdfDialog(true)}
-              leftSection={<IconFileTypePdf size={16} />}
-              color="violet"
-              variant="outline"
-            >
-              Export as PDF...
-            </Button>
+            <Menu position="bottom-end" withinPortal>
+              <Menu.Target>
+                <Button
+                  color="violet"
+                  leftSection={<IconFileExport size={16} />}
+                  rightSection={<IconChevronDown size={14} />}
+                >
+                  Export
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item leftSection={<IconCode size={16} />} onClick={handleGenerateCode}>
+                  Generate Code (C library)
+                </Menu.Item>
+                <Menu.Item leftSection={<IconFileExport size={16} />} onClick={handleExportModel}>
+                  Export model JSON
+                </Menu.Item>
+                <Menu.Item leftSection={<IconFileTypePdf size={16} />} onClick={() => setShowExportPdfDialog(true)}>
+                  Export as PDF…
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
           </Group>
         </Group>
       </AppShell.Header>

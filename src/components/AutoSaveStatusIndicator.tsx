@@ -3,10 +3,10 @@
 
 import { useEffect, useState } from 'react'
 import { useModelStore } from '@/lib/modelStore'
-import { Group, Text, Transition } from '@mantine/core'
+import { Group, Text, Tooltip, Transition } from '@mantine/core'
 import { IconClock, IconCircleCheck } from '@tabler/icons-react'
 
-export default function AutoSaveStatusIndicator() {
+export default function AutoSaveStatusIndicator({ compact = false }: { compact?: boolean }) {
   const { autoSaveEnabled, lastAutoSave } = useModelStore()
   const [showSaved, setShowSaved] = useState(false)
 
@@ -40,8 +40,20 @@ export default function AutoSaveStatusIndicator() {
     return date.toLocaleDateString()
   }
 
+  if (compact) {
+    return (
+      <Tooltip label={showSaved ? 'Auto-saved' : `Auto-save: ${formatTime(lastAutoSave)}`}>
+        {showSaved ? (
+          <IconCircleCheck size={18} color="var(--mantine-color-green-6)" aria-label="Auto-saved" />
+        ) : (
+          <IconClock size={18} color="var(--mantine-color-gray-6)" aria-label="Auto-save status" />
+        )}
+      </Tooltip>
+    )
+  }
+
   return (
-    <div style={{ position: 'relative', width: 120 }}>
+    <div style={{ position: 'relative', width: 120, flexShrink: 0 }}>
       <Transition
         mounted={showSaved}
         transition="fade"

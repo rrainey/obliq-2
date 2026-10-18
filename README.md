@@ -120,7 +120,7 @@ independent adjustments, each of which can be left alone:
 - Blocks saved before this setting existed carry no value and keep showing their names, so existing models look exactly as they did
 
 ### Printing and PDF Export
-- **Export as PDF...** in the toolbar renders the model as a printable document, one page per sheet
+- **Export → Export as PDF…** in the toolbar renders the model as a printable document, one page per sheet
 - Output is **true vector** — drawn from model data rather than captured from the screen — so large-format plots stay sharp and files stay small
 - Options: file name, orientation, page size, scaling (100%, 50%, or scale to fit), large-sheet fitting, and print scope
 - Page sizes cover US (Letter, Legal, Tabloid), ISO (A0–A5), and blueprint sizes (ANSI C–E, ARCH A–E, ARCH E1)
@@ -530,9 +530,9 @@ If tests fail:
 3. **Configure Blocks**: Click blocks to set parameters (e.g., transfer function coefficients)
 4. **Run Simulation**: Click "Run Simulation" to see signals propagate in real-time
 5. **Tidy the Layout**: Right-click empty canvas and choose **Tune Model Layout...**
-6. **Generate Code**: Click "Generate C Code" to download a PlatformIO-compatible library
+6. **Generate Code**: Choose **Export → Generate Code (C library)** to download a PlatformIO-compatible library
 7. **Export Data**: Use Signal Logger blocks to capture and export simulation data
-8. **Print or Share**: Click **Export as PDF...** for a printable document, one page per sheet
+8. **Print or Share**: Choose **Export → Export as PDF…** for a printable document, one page per sheet
 
 ## License
 

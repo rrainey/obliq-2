@@ -8,7 +8,7 @@ import ModelValidationModal from './ModelValidationModal'
 import { BlockData } from './BlockNode'
 import { WireData } from './Wire'
 import { TypeCompatibilityError } from '@/lib/typeCompatibilityValidator'
-import { Button, Badge, Group, Text, Indicator } from '@mantine/core'
+import { ActionIcon, Button, Badge, Group, Text, Indicator, Tooltip } from '@mantine/core'
 import { IconCircleCheck, IconAlertCircle, IconAlertTriangle, IconRefresh } from '@tabler/icons-react'
 
 interface ModelValidationButtonProps {
@@ -16,13 +16,22 @@ interface ModelValidationButtonProps {
   wires: WireData[]
   onNavigate?: (item: TypeCompatibilityError) => void
   className?: string
+  /** Button text (default "Validate Model"). */
+  label?: string
+  /** Render as an icon button with a tooltip (narrow toolbars). */
+  iconOnly?: boolean
+  /** Show the separate error/warning count badges beside the button (default true). */
+  showSummaryBadges?: boolean
 }
 
 export default function ModelValidationButton({
   blocks,
   wires,
   onNavigate,
-  className = ''
+  className = '',
+  label = 'Validate Model',
+  iconOnly = false,
+  showSummaryBadges = true
 }: ModelValidationButtonProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const { allErrors, allWarnings, isValidating, revalidate } = useWireValidation(blocks, wires)
@@ -51,6 +60,10 @@ export default function ModelValidationButton({
   }
 
   const totalIssues = allErrors.length + allWarnings.length
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+  const issueSummary = hasIssues
+    ? `Validate model (${[hasErrors && plural(allErrors.length, 'error'), hasWarnings && plural(allWarnings.length, 'warning')].filter(Boolean).join(', ')})`
+    : 'Validate model for type compatibility issues'
 
   return (
     <>
@@ -63,21 +76,37 @@ export default function ModelValidationButton({
         color={hasErrors ? 'red' : 'yellow'}
         disabled={!hasIssues || isValidating}
       >
-        <Button
-          onClick={handleClick}
-          loading={isValidating}
-          leftSection={getIcon()}
-          color={getButtonColor()}
-          variant="filled"
-          data-testid="validation-button"
-          title="Validate model for type compatibility issues"
-        >
-          Validate Model
-        </Button>
+        {iconOnly ? (
+          <Tooltip label={issueSummary}>
+            <ActionIcon
+              onClick={handleClick}
+              loading={isValidating}
+              color={getButtonColor()}
+              variant="filled"
+              size={36}
+              data-testid="validation-button"
+              aria-label={issueSummary}
+            >
+              {getIcon()}
+            </ActionIcon>
+          </Tooltip>
+        ) : (
+          <Button
+            onClick={handleClick}
+            loading={isValidating}
+            leftSection={getIcon()}
+            color={getButtonColor()}
+            variant="filled"
+            data-testid="validation-button"
+            title={issueSummary}
+          >
+            {label}
+          </Button>
+        )}
       </Indicator>
       
       {/* Inline indicator for toolbar */}
-      {hasIssues && (
+      {showSummaryBadges && hasIssues && (
         <Group gap="sm" ml="sm">
           {hasErrors && (
             <Badge 
