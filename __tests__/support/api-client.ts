@@ -236,7 +236,7 @@ export class TestApiClient {
       position?: { x: number; y: number };
       parameters?: Record<string, any>;
     }
-  ): Promise<ApiResponse<{ block: BlockResponse; newVersion: number; subsystemSheet?: any }>> {
+  ): Promise<ApiResponse<{ block: BlockResponse; newVersion: number | null; hash: string; subsystemSheet?: any }>> {
     return this.post({
       action: 'addBlock',
       modelId,
@@ -322,7 +322,7 @@ export class TestApiClient {
       targetPortIndex?: number;
       targetPort?: string;
     }
-  ): Promise<ApiResponse<{ connection: ConnectionResponse; newVersion: number }>> {
+  ): Promise<ApiResponse<{ connection: ConnectionResponse; newVersion: number | null; hash: string }>> {
     return this.post({
       action: 'addConnection',
       modelId,

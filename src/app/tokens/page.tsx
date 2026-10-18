@@ -2,12 +2,9 @@
 'use client'
 
 import { useUser } from '@/lib/auth'
-import { supabase } from '@/lib/supabaseClient'
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Plus, Key, Trash2 } from 'lucide-react'
-import { ApiTokenService } from '@/lib/apiTokenService'
 
 interface ApiToken {
   id: string
@@ -20,8 +17,7 @@ interface ApiToken {
 }
 
 export default function TokensPage() {
-  const { user, loading } = useUser()
-  const router = useRouter()
+  const { user, loading, error: authError } = useUser()
   const [tokens, setTokens] = useState<ApiToken[]>([])
   const [tokensLoading, setTokensLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -36,12 +32,6 @@ export default function TokensPage() {
   const [copySuccess, setCopySuccess] = useState(false)
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login')
-    }
-  }, [user, loading, router])
-
-  useEffect(() => {
     if (user) {
       fetchTokens()
     }
@@ -49,22 +39,13 @@ export default function TokensPage() {
 
   const fetchTokens = async () => {
     try {
-      const { data: tokens, error } = await supabase
-        .from('api_tokens')
-        .select('id, name, created_at, expires_at, last_used_at')
-        .eq('user_id', user!.id)
-        .order('created_at', { ascending: false })
+      const response = await fetch('/api/tokens', { credentials: 'same-origin' })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(body.error || `Request failed (${response.status})`)
+      }
 
-      if (error) throw error
-
-      // Add computed fields
-      const enrichedTokens = (tokens || []).map(token => ({
-        ...token,
-        isExpired: ApiTokenService.isTokenExpired(token.expires_at),
-        expiresInDays: token.expires_at ? calculateDaysUntilExpiry(token.expires_at) : null
-      }))
-
-      setTokens(enrichedTokens)
+      setTokens(body.tokens || [])
     } catch (error) {
       console.error('Error fetching tokens:', error)
       setError('Failed to load API tokens')
@@ -85,13 +66,14 @@ export default function TokensPage() {
     setError(null)
     
     try {
-      const { error } = await supabase
-        .from('api_tokens')
-        .delete()
-        .eq('id', tokenToDelete.id)
-        .eq('user_id', user!.id) // Extra safety check
-
-      if (error) throw error
+      const response = await fetch(`/api/tokens/${tokenToDelete.id}`, {
+        method: 'DELETE',
+        credentials: 'same-origin'
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        throw new Error(body.error || `Request failed (${response.status})`)
+      }
 
       // Remove token from list
       setTokens(tokens.filter(token => token.id !== tokenToDelete.id))
@@ -148,39 +130,22 @@ export default function TokensPage() {
     setError(null)
     
     try {
-      const sanitizedName = ApiTokenService.sanitizeTokenName(newTokenName.trim())
-      if (!sanitizedName) {
-        throw new Error('Invalid token name')
+      const response = await fetch('/api/tokens', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newTokenName.trim(), expiresInDays: newTokenExpiry })
+      })
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(body.error || 'Failed to create token')
       }
-
-      // Validate expiry
-      const validExpiryOptions = [30, 90, 180, null]
-      if (newTokenExpiry !== undefined && !validExpiryOptions.includes(newTokenExpiry)) {
-        throw new Error('Invalid expiry option')
-      }
-
-      // Generate token and hash
-      const { token, tokenHash } = ApiTokenService.createToken()
-      const expiresAt = ApiTokenService.calculateExpiryDate(newTokenExpiry)
-
-      // Insert into database
-      const { data: newToken, error: insertError } = await supabase
-        .from('api_tokens')
-        .insert({
-          user_id: user.id,
-          name: sanitizedName,
-          token_hash: tokenHash,
-          expires_at: expiresAt ? expiresAt.toISOString() : null
-        })
-        .select()
-        .single()
-
-      if (insertError) {
-        // Check for duplicate name
-        if (insertError.code === '23505') {
-          throw new Error('A token with this name already exists')
-        }
-        throw insertError
+      const { token, ...newToken } = body as {
+        id: string
+        name: string
+        token: string
+        created_at: string
+        expires_at: string | null
       }
 
       // Store the created token for display
@@ -262,6 +227,16 @@ export default function TokensPage() {
     const diffMs = expiry.getTime() - now.getTime()
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
     return Math.max(0, diffDays)
+  }
+
+  if (authError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="bg-red-50 border border-red-200 rounded-md p-4">
+          <p className="text-sm text-red-600">{authError}</p>
+        </div>
+      </div>
+    )
   }
 
   if (loading || !user) {

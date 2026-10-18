@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-support/responses';
 import { findSheetRecursively, getAllSheets } from '@/lib/api-support/sheet-search';
-import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
+import { loadModelData } from '@/lib/api-support/auth';
 
 /**
  * Find a block by ID across all sheets (including nested subsystem sheets)
@@ -26,7 +26,7 @@ function findBlockById(sheets: any[], blockId: string): { block: any; sheet: any
  * LIST_BLOCK_PARAMETERS - List all parameters for a subsystem block
  */
 export async function handleListBlockParameters(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, searchParams, body } = ctx;
+  const { storage, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const blockId = searchParams?.get('blockId') || body?.blockId;
 
@@ -38,13 +38,13 @@ export async function handleListBlockParameters(ctx: HandlerContext): Promise<Ne
     return ErrorResponses.missingParameter('blockId');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const modelData = authResult.versionData.data;
+  const modelData = authResult.versionData!.data;
   const sheets = modelData.sheets || [];
 
   // Find the block
@@ -84,7 +84,7 @@ export async function handleListBlockParameters(ctx: HandlerContext): Promise<Ne
  * GET_BLOCK_PARAMETER - Get a specific parameter from a subsystem block
  */
 export async function handleGetBlockParameter(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, searchParams, body } = ctx;
+  const { storage, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const blockId = searchParams?.get('blockId') || body?.blockId;
   const paramName = searchParams?.get('paramName') || body?.paramName;
@@ -100,13 +100,13 @@ export async function handleGetBlockParameter(ctx: HandlerContext): Promise<Next
     return ErrorResponses.missingParameter('paramName');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const modelData = authResult.versionData.data;
+  const modelData = authResult.versionData!.data;
   const sheets = modelData.sheets || [];
 
   // Find the block

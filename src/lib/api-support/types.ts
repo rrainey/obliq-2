@@ -1,6 +1,7 @@
 // lib/api-support/types.ts
 // Shared types for the Model Builder API
 
+import type { Storage } from '@/lib/server/storage';
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -91,7 +92,7 @@ export interface RateLimitResult {
  */
 export interface HandlerContext {
   request: NextRequest;
-  supabase: any;  // SupabaseClient
+  storage: Storage;
   userId: string;
   token: string;
   startTime: number;

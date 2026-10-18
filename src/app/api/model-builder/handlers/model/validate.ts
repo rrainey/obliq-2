@@ -4,7 +4,7 @@
 import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, ErrorResponses } from '@/lib/api-support/responses';
-import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
+import { loadModelData } from '@/lib/api-support/auth';
 import { BlockTypes, isValidBlockType } from '@/lib/blockTypeRegistry';
 import { validateBlockParameters } from '@/lib/blockParameterValidator';
 
@@ -12,20 +12,20 @@ import { validateBlockParameters } from '@/lib/blockParameterValidator';
  * VALIDATE_MODEL - Validate a model's structure and connections
  */
 export async function handleValidateModel(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, body } = ctx;
+  const { storage, body } = ctx;
   const modelId = body?.modelId || ctx.modelId;
 
   if (!modelId) {
     return ErrorResponses.missingParameter('modelId');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const versionData = authResult.versionData;
+  const versionData = authResult.versionData!;
 
   // Extract model data
   const modelData = versionData.data;

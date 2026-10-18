@@ -72,7 +72,21 @@ export interface SaveResult {
   hash: string
 }
 
+/**
+ * Storage errors are matched by name rather than prototype identity. In Next.js
+ * dev each route is a separate bundle with its own copy of these classes, while
+ * the storage singleton (cached on globalThis) may come from another bundle, so
+ * a plain prototype-based `instanceof` would miss errors thrown by it.
+ */
+export function matchesErrorName(value: unknown, name: string): boolean {
+  return value instanceof Error && value.name === name
+}
+
 export class ModelNotFoundError extends Error {
+  static [Symbol.hasInstance](value: unknown) {
+    return matchesErrorName(value, 'ModelNotFoundError')
+  }
+
   constructor(public readonly modelId: string) {
     super(`Model not found: ${modelId}`)
     this.name = 'ModelNotFoundError'
@@ -80,6 +94,10 @@ export class ModelNotFoundError extends Error {
 }
 
 export class ModelFileMissingError extends Error {
+  static [Symbol.hasInstance](value: unknown) {
+    return matchesErrorName(value, 'ModelFileMissingError')
+  }
+
   constructor(public readonly modelId: string, public readonly filePath: string) {
     super(`Model file is missing: ${filePath}`)
     this.name = 'ModelFileMissingError'
@@ -87,6 +105,10 @@ export class ModelFileMissingError extends Error {
 }
 
 export class ModelConflictError extends Error {
+  static [Symbol.hasInstance](value: unknown) {
+    return matchesErrorName(value, 'ModelConflictError')
+  }
+
   constructor(public readonly modelId: string, public readonly currentHash: string) {
     super(`Model ${modelId} was modified on disk since it was loaded`)
     this.name = 'ModelConflictError'
@@ -94,6 +116,10 @@ export class ModelConflictError extends Error {
 }
 
 export class InvalidModelFileError extends Error {
+  static [Symbol.hasInstance](value: unknown) {
+    return matchesErrorName(value, 'InvalidModelFileError')
+  }
+
   constructor(message: string) {
     super(message)
     this.name = 'InvalidModelFileError'

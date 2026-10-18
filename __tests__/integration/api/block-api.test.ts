@@ -45,7 +45,8 @@ describeIntegration('Block API Integration Tests', () => {
       expect(result.data.block.id).toBeDefined();
       // Parameters may be returned as strings from the API
       expect(result.data.block.parameters.value).toBeDefined();
-      expect(result.data.newVersion).toBeGreaterThan(1);
+      // Mutations write the model file in place; versions are only recorded on checkpoint.
+      expect(result.data.hash).toMatch(/^[0-9a-f]{64}$/);
     });
 
     it('should add a block with custom name and position', async () => {

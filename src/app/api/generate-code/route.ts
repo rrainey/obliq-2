@@ -1,21 +1,19 @@
 // app/api/generate-code/route.ts - With versioning support and authentication
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { ModelCodeGenerator } from '@/lib/codeGenerationNew'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
 import { authenticateRequest } from '@/lib/apiAuthMiddleware'
+import {
+  getStorage,
+  ModelNotFoundError,
+  ModelFileMissingError,
+  InvalidModelFileError,
+  type ModelData
+} from '@/lib/server/storage'
 import JSZip from 'jszip'
 
-// Create a server-side Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false
-  }
-})
+export const runtime = 'nodejs'
 
 async function generateCodeHandler(request: NextRequest): Promise<NextResponse> {
   console.log('Generate code API called')
@@ -29,8 +27,6 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
       ErrorTypes.UNAUTHORIZED
     )
   }
-
-  const userId = authResult.userId!
 
   // Parse and validate request body
   let requestBody: any
@@ -63,74 +59,14 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   console.log('Fetching model:', modelId)
 
-  // Fetch the model metadata - scoped to authenticated user
-  const { data: model, error: dbError } = await supabaseServer
-    .from('models')
-    .select('*')
-    .eq('id', modelId)
-    .eq('user_id', userId)
-    .single()
-
-  if (dbError || !model) {
-    // Check if model exists but belongs to another user
-    const { data: existingModel } = await supabaseServer
-      .from('models')
-      .select('id')
-      .eq('id', modelId)
-      .single()
-
-    if (existingModel) {
-      throw new AppError(
-        'Access denied: You do not have permission to access this model',
-        403,
-        ErrorTypes.FORBIDDEN,
-        { modelId }
-      )
-    }
-
-    throw new AppError(
-      'Model not found',
-      404,
-      ErrorTypes.NOT_FOUND,
-      { modelId }
-    )
-  }
+  const { modelName, versionToUse, data: modelData } = loadModelSource(modelId, version)
+  const model = { name: modelName }
 
   console.log('Model found:', model.name)
-
-  // Determine which version to use
-  const versionToUse = version || model.latest_version || 1
   console.log('Using version:', versionToUse)
 
-  // Fetch the specific version data
-  const { data: versionData, error: versionError } = await supabaseServer
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .eq('version', versionToUse)
-    .single()
-
-  if (versionError) {
-    console.error('Version fetch error:', versionError)
-    throw new AppError(
-      `Version ${versionToUse} not found for this model`,
-      404,
-      ErrorTypes.NOT_FOUND,
-      { modelId, requestedVersion: versionToUse, availableVersion: model.latest_version }
-    )
-  }
-
-  if (!versionData) {
-    throw new AppError(
-      `Version ${versionToUse} data not found`,
-      404,
-      ErrorTypes.NOT_FOUND,
-      { modelId, requestedVersion: versionToUse }
-    )
-  }
-
   // Validate version data structure
-  if (!versionData.data || !versionData.data.sheets || !Array.isArray(versionData.data.sheets)) {
+  if (!modelData || !modelData.sheets || !Array.isArray(modelData.sheets)) {
     throw new AppError(
       'Invalid model structure: missing or invalid sheets data',
       400,
@@ -140,9 +76,9 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
   }
 
   // Extract the main sheet, parameters, and global settings
-  const sheets = versionData.data.sheets
-  const parameters = versionData.data.parameters || [] // Feature 3
-  const globalSettings = versionData.data.globalSettings || {}
+  const sheets = modelData.sheets
+  const parameters = modelData.parameters || [] // Feature 3
+  const globalSettings = modelData.globalSettings || {}
   const integrationAlgorithm = globalSettings.integrationAlgorithm || 'rk4'
   const mainSheet = sheets.find((s: any) => s.id === 'main') || sheets[0]
 
@@ -334,6 +270,50 @@ void loop() {
 }
 \`\`\`
 `
+}
+
+/**
+ * Load model content from local storage. A specific version reads that saved
+ * snapshot; version 0 reads the autosave; otherwise the current model file
+ * (authoritative, possibly newer than the latest snapshot) is used.
+ */
+function loadModelSource(
+  modelId: string,
+  version?: number | null
+): { modelName: string; versionToUse: number; data: ModelData } {
+  const storage = getStorage()
+  try {
+    if (version === 0) {
+      const autosave = storage.models.getAutosave(modelId)
+      if (autosave) {
+        return { modelName: storage.models.require(modelId).name, versionToUse: 0, data: autosave.data }
+      }
+    } else if (version != null) {
+      const record = storage.models.require(modelId)
+      return { modelName: record.name, versionToUse: version, data: storage.models.getVersion(modelId, version) }
+    }
+    const current = storage.models.readCurrent(modelId)
+    return { modelName: current.record.name, versionToUse: current.record.latest_version, data: current.data }
+  } catch (error) {
+    if (error instanceof ModelNotFoundError) {
+      if (version != null && storage.models.get(modelId)) {
+        throw new AppError(
+          `Version ${version} not found for this model`,
+          404,
+          ErrorTypes.NOT_FOUND,
+          { modelId, requestedVersion: version }
+        )
+      }
+      throw new AppError('Model not found', 404, ErrorTypes.NOT_FOUND, { modelId })
+    }
+    if (error instanceof ModelFileMissingError) {
+      throw new AppError(error.message, 404, ErrorTypes.NOT_FOUND, { modelId, filePath: error.filePath })
+    }
+    if (error instanceof InvalidModelFileError) {
+      throw new AppError(error.message, 422, ErrorTypes.VALIDATION_ERROR, { modelId })
+    }
+    throw error
+  }
 }
 
 function sanitizeFilename(filename: string): string {

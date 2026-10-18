@@ -9,7 +9,6 @@
 import { useState, useEffect } from 'react'
 import { Progress, Text, Stack, Paper, Group, Badge, Loader } from '@mantine/core'
 import { IconCheck, IconClock, IconRocket } from '@tabler/icons-react'
-import { useUser } from '@/lib/auth'
 
 interface CompilationProgressProps {
   modelId: string
@@ -47,7 +46,6 @@ export default function CompilationProgress({
   onComplete,
   onError
 }: CompilationProgressProps) {
-  const { session } = useUser()
   const [progress, setProgress] = useState(0)
   const [currentStep, setCurrentStep] = useState<string>('')
   const [message, setMessage] = useState<string>('Starting compilation...')
@@ -74,9 +72,6 @@ export default function CompilationProgress({
       try {
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
-        }
-        if (session?.access_token) {
-          headers['Authorization'] = `Bearer ${session.access_token}`
         }
 
         const response = await fetch('/api/compile-wasm-stream', {
@@ -189,7 +184,7 @@ export default function CompilationProgress({
     return () => {
       controller.abort()
     }
-  }, [modelId, version, optimizationLevel, onComplete, onError, session?.access_token])
+  }, [modelId, version, optimizationLevel, onComplete, onError])
 
   const formatTime = (ms: number) => {
     if (ms < 1000) {

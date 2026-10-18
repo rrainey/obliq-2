@@ -23,7 +23,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { SupabaseCacheManager } from '@/lib/wasm/cache'
+import { FileCacheManager } from '@/lib/wasm/cache'
+
+export const runtime = 'nodejs'
 
 // Simple API key authentication for cron jobs
 // In production, use a proper secret management system
@@ -57,7 +59,7 @@ export async function POST(request: NextRequest) {
     console.log(`[cache-maintenance] Starting maintenance...`)
     console.log(`[cache-maintenance] Parameters: maxEntries=${maxEntries}, maxSizeMB=${maxSizeMB}, daysOld=${daysOld}`)
 
-    const cacheManager = new SupabaseCacheManager()
+    const cacheManager = new FileCacheManager()
 
     // 1. Run LRU eviction
     console.log(`[cache-maintenance] Running LRU eviction...`)

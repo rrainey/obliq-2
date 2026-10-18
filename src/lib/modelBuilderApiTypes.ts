@@ -213,7 +213,6 @@ export interface DeleteConnectionRequest {
 export interface GetModelResponse {
   id: string;
   name: string;
-  user_id: string;
   data: any;
   created_at: string;
   updated_at: string;
@@ -222,7 +221,6 @@ export interface GetModelResponse {
 export interface CreateModelResponse {
   id: string;
   name: string;
-  user_id: string;
   latest_version: number;
   created_at: string;
   updated_at: string;
@@ -237,7 +235,8 @@ export interface ListSheetsResponse {
 
 export interface CreateSheetResponse {
   modelId: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   sheet: SheetSummary;
 }
 
@@ -263,7 +262,8 @@ export interface GetBlockResponse {
 export interface AddBlockResponse {
   modelId: string;
   sheetId: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   block: BlockSummary;
 }
 
@@ -300,7 +300,8 @@ export interface GetConnectionResponse {
 export interface AddConnectionResponse {
   modelId: string;
   sheetId: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   connection: ConnectionSummary;
 }
 
@@ -381,7 +382,8 @@ export interface UpdateBlockPositionResponse {
   modelId: string;
   sheetId: string;
   blockId: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   position: Position;
 }
 
@@ -389,7 +391,8 @@ export interface UpdateBlockNameResponse {
   modelId: string;
   sheetId: string;
   blockId: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   name: string;
   previousName?: string;
 }
@@ -399,7 +402,8 @@ export interface UpdateBlockParametersResponse {
   sheetId: string;
   blockId: string;
   blockType: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   oldParameters: Record<string, any>;
   newParameters: Record<string, any>;
   ports: {
@@ -410,7 +414,8 @@ export interface UpdateBlockParametersResponse {
 
 export interface RenameSheetResponse {
   modelId: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   sheet: {
     id: string;
     name: string;
@@ -426,7 +431,8 @@ export interface DeleteModelResponse {
 
 export interface DeleteSheetResponse {
   modelId: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   deletedSheet: {
     id: string;
     name: string;
@@ -439,7 +445,8 @@ export interface DeleteSheetResponse {
 export interface DeleteBlockResponse {
   modelId: string;
   sheetId: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   deletedBlock: {
     id: string;
     type: string;
@@ -452,7 +459,8 @@ export interface DeleteBlockResponse {
 export interface DeleteConnectionResponse {
   modelId: string;
   sheetId: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   deletedConnection: ConnectionSummary;
   remainingConnectionCount: number;
 }
@@ -485,7 +493,8 @@ export interface SetParameterRequest {
 
 export interface SetParameterResponse {
   modelId: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   parameter: ModelParameterSummary;
   created: boolean;  // true if parameter was created, false if updated
 }
@@ -498,7 +507,8 @@ export interface DeleteParameterRequest {
 
 export interface DeleteParameterResponse {
   modelId: string;
-  newVersion: number;
+  newVersion: number | null;  // null unless the request set checkpoint: true
+  hash: string;
   deletedParameter: {
     name: string;
   };

@@ -2,7 +2,8 @@
 'use client'
 
 import { useUser } from '@/lib/auth'
-import { supabase } from '@/lib/supabaseClient'
+import { modelApi, ModelApiError, type CurrentModelResponse } from '@/lib/modelApi'
+import type { Model, ModelVersion } from '@/lib/types'
 import { BlockData, PortInfo } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
@@ -128,7 +129,7 @@ interface ModelEditorPageProps {
 }
 
 export default function ModelEditorPage({ params }: ModelEditorPageProps) {
-  const { user, session, loading } = useUser()
+  const { user, loading, error: sessionError } = useUser()
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -137,11 +138,11 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     model, sheets, activeSheetId, blocks, wires, parameters,
     selectedBlockId, selectedBlockIds, selectedWireId, selectedWireIds, configBlock,
     simulationResults, currentSheetSimulationResults, isSimulating, simulationEngine, outputPortValues,
-    modelLoading, saving, error, currentVersion, isOlderVersion,
+    modelLoading, saving, error, saveConflict, currentVersion, isOlderVersion,
     globalSimulationResults,
 
     // Actions
-    setModel, setError, setModelLoading, saveModel,
+    setModel, setError, setModelLoading, setFileHash, saveModel,
     switchToSheet, addSheet, renameSheet, deleteSheet,
     addBlock, updateBlock, updateBlocks, deleteBlock, syncSubsystemReferences, addWire, deleteWire, updateWireRouting, renameBlock,
     setSelectedBlockId, setSelectedBlocks, setSelectedWireId, setConfigBlock, clearSelection,
@@ -201,6 +202,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     autoSaveDate: string
     lastSavedVersion: number
     lastSavedDate: string
+    autoSaveData: any
+    current: CurrentModelResponse
   } | null>(null)
 
   
@@ -226,12 +229,6 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       }
     }
   }, [])
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login')
-    }
-  }, [user, loading, router])
 
   useEffect(() => {
     if (user && id) {
@@ -267,94 +264,61 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     try {
       setModelLoading(true)
       
-      // Fetch model metadata
-      const { data: modelData, error: modelError } = await supabase
-        .from('models')
-        .select('*')
-        .eq('id', id)
-        .single()
-
-      if (modelError) {
-        if (modelError.code === 'PGRST116') {
-          setError('Model not found')
-        } else {
-          throw modelError
-        }
-        setModelLoading(false)
-        return
-      }
+      // Fetch model metadata and the current model file
+      const current = await modelApi.getCurrent(id)
+      const modelData = current.model
 
       // Store the model data in state first
       setModel(modelData)
 
-      // Determine which version to load
-      const versionToLoad = requestedVersion 
-        ? parseInt(requestedVersion) 
-        : modelData.latest_version || 1
-
-      // Check for auto-save (version 0) only if we're loading the latest version
-      // and no specific version was requested
-      if (!requestedVersion && versionToLoad === (modelData.latest_version || 1)) {
-        const { data: autoSaveData, error: autoSaveError } = await supabase
-          .from('model_versions')
-          .select('*')
-          .eq('model_id', id)
-          .eq('version', 0)
-          .maybeSingle()
-
-        if (autoSaveData && !autoSaveError) {
-          // Get the last saved version info for comparison
-          const { data: lastSavedVersion, error: lastSavedError } = await supabase
-            .from('model_versions')
-            .select('*')
-            .eq('model_id', id)
-            .eq('version', versionToLoad)
-            .single()
-
-          if (!lastSavedError && lastSavedVersion) {
-            // Show auto-save recovery dialog
-            setAutoSaveInfo({
-              autoSaveDate: autoSaveData.created_at,
-              lastSavedVersion: versionToLoad,
-              lastSavedDate: lastSavedVersion.created_at
-            })
-            setShowAutoSaveDialog(true)
-            setModelLoading(false)
-            return // Don't load any version yet - wait for user choice
-          }
-        }
+      if (requestedVersion) {
+        // Explicit snapshot requested
+        await loadModelVersion(modelData, parseInt(requestedVersion), current.hash)
+        return
       }
 
-      // No auto-save dialog needed, proceed to load the requested version
-      await loadModelVersion(modelData, versionToLoad)
+      // Check for an auto-save only when opening the current model
+      const autoSave = await modelApi.getAutosave(id)
+      if (autoSave) {
+        // Show auto-save recovery dialog
+        setAutoSaveInfo({
+          autoSaveDate: autoSave.savedAt,
+          lastSavedVersion: modelData.latest_version || 1,
+          lastSavedDate: modelData.updated_at,
+          autoSaveData: autoSave.data,
+          current
+        })
+        setShowAutoSaveDialog(true)
+        setModelLoading(false)
+        return // Don't load any version yet - wait for user choice
+      }
+
+      // No auto-save dialog needed, load the current model file as the latest version
+      applyLoadedData(modelData, toModelVersion(modelData, modelData.latest_version || 1, current.data, modelData.updated_at), current.hash)
       
     } catch (error) {
       console.error('Error fetching model:', error)
-      setError('Failed to load model')
+      setError(error instanceof ModelApiError && error.isNotFound ? 'Model not found' : 'Failed to load model')
       setModelLoading(false)
     }
   }
 
-  // Helper function to load a specific version
-  const loadModelVersion = async (modelData: any, versionToLoad: number) => {
+  // Build a ModelVersion-shaped object for initializeFromModel
+  const toModelVersion = (modelData: Model, version: number, data: any, createdAt: string | null): ModelVersion => ({
+    id: `${modelData.id}@${version}`,
+    model_id: modelData.id,
+    version,
+    data,
+    created_at: createdAt || modelData.updated_at
+  })
+
+  // Initialize the store from loaded data. `hash` is the model file's hash, used as the
+  // base hash on the next save (null when viewing an older version).
+  const applyLoadedData = (modelData: Model, versionData: ModelVersion, hash: string | null) => {
     try {
-      // Fetch the specific version
-      const { data: versionData, error: versionError } = await supabase
-        .from('model_versions')
-        .select('*')
-        .eq('model_id', modelData.id)
-        .eq('version', versionToLoad)
-        .single()
-
-      if (versionError) {
-        console.error('Error fetching version:', versionError)
-        setError(`Version ${versionToLoad} not found`)
-        setModelLoading(false)
-        return
-      }
-
       // Initialize the model with the version data
       initializeFromModel(modelData, versionData)
+      setFileHash(versionData.version < modelData.latest_version ? null : hash)
       
       // Load simulation settings if present
       if (versionData.data?.globalSettings) {
@@ -368,11 +332,19 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       
       // Enable auto-save for this session
       enableAutoSave()
-      
+    } finally {
+      setModelLoading(false)
+    }
+  }
+
+  // Helper function to load a specific saved version (snapshot)
+  const loadModelVersion = async (modelData: Model, versionToLoad: number, currentHash: string | null) => {
+    try {
+      const snapshot = await modelApi.getVersion(modelData.id, versionToLoad)
+      applyLoadedData(modelData, toModelVersion(modelData, snapshot.version, snapshot.data, snapshot.created_at), currentHash)
     } catch (error) {
       console.error('Error loading model version:', error)
-      setError('Failed to load model version')
-    } finally {
+      setError(error instanceof ModelApiError && error.isNotFound ? `Version ${versionToLoad} not found` : 'Failed to load model version')
       setModelLoading(false)
     }
   }
@@ -381,15 +353,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     if (!model || !autoSaveInfo) return
 
     try {
-      // Fetch the auto-save version
-      const { data: autoSaveData, error } = await supabase
-        .from('model_versions')
-        .select('*')
-        .eq('model_id', id)
-        .eq('version', 0)
-        .single()
-
-      if (error) throw error
+      const autoSaveData = { data: autoSaveInfo.autoSaveData }
 
       // Key difference: We're recovering auto-save but treating it as the current version
       // This is fundamentally different from opening an older version
@@ -413,7 +377,12 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         // Critical: Set version tracking to indicate we're on the latest version
         setCurrentVersion(model.latest_version || 1)
         setIsOlderVersion(false)
-        
+        setFileHash(autoSaveInfo.current.hash)
+        // Older autosaves carried no parameters; fall back to the current file's.
+        useModelStore.setState({
+          parameters: autoSaveData.data.parameters ?? autoSaveInfo.current.data?.parameters ?? []
+        })
+
         // Reset selection state
         setSelectedBlockId(null)
         setSelectedWireId(null)
@@ -475,8 +444,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       // Delete the auto-save
       await deleteAutoSave()
       
-      // Load the last saved version
-      await loadModelVersion(model, autoSaveInfo.lastSavedVersion)
+      // Load the current model file
+      const { current } = autoSaveInfo
+      applyLoadedData(current.model, toModelVersion(current.model, current.model.latest_version || 1, current.data, current.model.updated_at), current.hash)
       
       setShowAutoSaveDialog(false)
       setAutoSaveInfo(null)
@@ -534,6 +504,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
 
     const success = await saveModel(globalSettings)
+    if (!success && useModelStore.getState().saveConflict) {
+      notifications.show({
+        title: 'Save conflict',
+        message: useModelStore.getState().error,
+        color: 'red',
+        icon: <IconAlertTriangle size={20} />,
+        autoClose: false
+      })
+    }
     if (success && isOlderVersion) {
       // If we saved an older version as a new model, we should have navigated away
       // This is handled in the saveModel function
@@ -1006,10 +985,6 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           const compileHeaders: Record<string, string> = {
             'Content-Type': 'application/json',
           }
-          // Prefer explicit session JWT; cookie session is a server-side fallback
-          if (session?.access_token) {
-            compileHeaders['Authorization'] = `Bearer ${session.access_token}`
-          }
 
           const response = await fetch('/api/compile-wasm-stream', {
             method: 'POST',
@@ -1394,16 +1369,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       const genHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
       }
-      if (session?.access_token) {
-        genHeaders['Authorization'] = `Bearer ${session.access_token}`
-      }
 
       const response = await fetch('/api/generate-code', {
         method: 'POST',
         headers: genHeaders,
         body: JSON.stringify({
           modelId: model.id,
-          version: currentVersion
+          // Omit version for the latest so the server uses the current model file,
+          // which may be newer than the latest snapshot (API/MCP edits write in place).
+          version: isOlderVersion ? currentVersion : undefined
         }),
       })
 
@@ -1721,6 +1695,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     }
   }
 
+  if (!loading && !user) {
+    return (
+      <Center h="100vh">
+        <Text c="red">{sessionError || 'Could not start local session'}</Text>
+      </Center>
+    )
+  }
+
   if (loading || !user) {
     return (
       <Center h="100vh">
@@ -1729,7 +1711,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     )
   }
 
-  if (error) {
+  // A save conflict keeps the editor open (with the user's edits) and shows the error in the header
+  if (error && !saveConflict) {
     return (
       <Center h="100vh">
         <Stack align="center">

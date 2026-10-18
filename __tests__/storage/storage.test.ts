@@ -249,3 +249,14 @@ describe('FileCacheManager', () => {
     await expect(cache.store('../evil', 'm', Buffer.from(''), Buffer.from(''), meta)).rejects.toThrow(/Invalid cache key/)
   })
 })
+
+describe('storage error matching', () => {
+  it('matches errors by name, so copies of the class from another bundle still match', () => {
+    const foreign = new Error('x')
+    foreign.name = 'ModelConflictError'
+    expect(foreign instanceof ModelConflictError).toBe(true)
+    expect(foreign instanceof ModelFileMissingError).toBe(false)
+    expect(new ModelConflictError('id', 'h') instanceof ModelConflictError).toBe(true)
+    expect(new Error('plain') instanceof ModelConflictError).toBe(false)
+  })
+})

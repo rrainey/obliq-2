@@ -6,7 +6,7 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 
 export default function Home() {
-  const { user, loading } = useUser()
+  const { user, loading, error } = useUser()
   const router = useRouter()
 
   useEffect(() => {
@@ -36,8 +36,11 @@ export default function Home() {
           Build, test, and simulate block diagram models in your browser, 
           then generate C code for embedded deployment.
         </p>
+        {error && (
+          <p className="text-base text-red-600 mb-8">{error}</p>
+        )}
         <Link
-          href="/login"
+          href="/models"
           className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
         >
           Get Started

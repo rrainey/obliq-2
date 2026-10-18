@@ -4,12 +4,13 @@
 import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-support/responses';
+import { loadModel, storageErrorResponse } from '@/lib/api-support/auth';
 
 /**
  * CREATE_MODEL - Create a new model with initial structure
  */
 export async function handleCreateModel(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, body } = ctx;
+  const { storage, userId, body } = ctx;
   const { name } = body || {};
 
   if (!userId) {
@@ -23,22 +24,6 @@ export async function handleCreateModel(ctx: HandlerContext): Promise<NextRespon
 
   if (!name) {
     return ErrorResponses.missingParameter('name');
-  }
-
-  // Create the model metadata
-  const { data: newModel, error: modelError } = await supabase
-    .from('models')
-    .insert({
-      user_id: userId,
-      name: name,
-      latest_version: 1
-    })
-    .select()
-    .single();
-
-  if (modelError) {
-    console.error('Error creating model:', modelError);
-    return errorResponse('Failed to create model', 'CREATE_FAILED', 500);
   }
 
   // Create the initial model data structure
@@ -67,31 +52,19 @@ export async function handleCreateModel(ctx: HandlerContext): Promise<NextRespon
     }
   };
 
-  // Create version 1 with the initial data
-  const { error: versionError } = await supabase
-    .from('model_versions')
-    .insert({
-      model_id: newModel.id,
-      version: 1,
-      data: initialModelData
-    });
-
-  if (versionError) {
-    // Rollback: delete the model if version creation fails
-    await supabase
-      .from('models')
-      .delete()
-      .eq('id', newModel.id);
-
-    console.error('Error creating model version:', versionError);
-    return errorResponse('Failed to create model version', 'VERSION_CREATE_FAILED', 500);
+  // Create the model; this writes model.json and records version 1
+  let newModel;
+  try {
+    newModel = storage.models.create({ name, data: initialModelData });
+  } catch (error) {
+    console.error('Error creating model:', error);
+    return storageErrorResponse(error) ?? errorResponse('Failed to create model', 'CREATE_FAILED', 500);
   }
 
   // Return the created model with explicit main sheet info for MCP guidance
   return successResponse({
     id: newModel.id,
     name: newModel.name,
-    user_id: newModel.user_id,
     latest_version: newModel.latest_version,
     created_at: newModel.created_at,
     updated_at: newModel.updated_at,
@@ -108,7 +81,7 @@ export async function handleCreateModel(ctx: HandlerContext): Promise<NextRespon
  * UPDATE_MODEL_NAME - Update a model's name
  */
 export async function handleUpdateModelName(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, body } = ctx;
+  const { storage, body } = ctx;
   const { modelId, name } = body || {};
 
   if (!modelId) {
@@ -119,40 +92,22 @@ export async function handleUpdateModelName(ctx: HandlerContext): Promise<NextRe
     return ErrorResponses.missingParameter('name');
   }
 
-  // Verify model exists and user owns it
-  const { data: model, error: fetchError } = await supabase
-    .from('models')
-    .select('id, name, user_id')
-    .eq('id', modelId)
-    .single();
-
-  if (fetchError || !model) {
-    return ErrorResponses.modelNotFound(modelId);
-  }
-
-  if (model.user_id !== userId) {
-    return NextResponse.json({
-      success: false,
-      timestamp: new Date().toISOString(),
-      error: 'Access denied: You can only modify your own models',
-      code: 'FORBIDDEN'
-    }, { status: 403 });
+  // Verify model exists
+  const authResult = loadModel(storage, modelId);
+  if (!authResult.authorized) {
+    return authResult.errorResponse!;
   }
 
   // Store previous name before updating
-  const previousName = model.name;
+  const previousName = authResult.model!.name;
 
   // Update the model name
-  const { data: updatedModel, error: updateError } = await supabase
-    .from('models')
-    .update({ name, updated_at: new Date().toISOString() })
-    .eq('id', modelId)
-    .select()
-    .single();
-
-  if (updateError) {
-    console.error('Error updating model name:', updateError);
-    return errorResponse('Failed to update model name', 'UPDATE_FAILED', 500);
+  let updatedModel;
+  try {
+    updatedModel = storage.models.rename(modelId, name);
+  } catch (error) {
+    console.error('Error updating model name:', error);
+    return storageErrorResponse(error) ?? errorResponse('Failed to update model name', 'UPDATE_FAILED', 500);
   }
 
   return successResponse({

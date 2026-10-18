@@ -4,13 +4,13 @@
 import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-support/responses';
-import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
+import { loadModelData, persistModelData } from '@/lib/api-support/auth';
 
 /**
  * RENAME_SHEET - Rename an existing sheet
  */
 export async function handleRenameSheet(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, body } = ctx;
+  const { storage, body } = ctx;
   const { modelId, sheetId, newName } = body || {};
 
   // Validate required parameters
@@ -24,13 +24,13 @@ export async function handleRenameSheet(ctx: HandlerContext): Promise<NextRespon
     return ErrorResponses.missingParameter('newName');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const versionData = authResult.versionData;
+  const versionData = authResult.versionData!;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -49,40 +49,17 @@ export async function handleRenameSheet(ctx: HandlerContext): Promise<NextRespon
   // Update the sheet name
   sheets[sheetIndex].name = newName;
 
-  // Create a new version with the updated data
-  const nextVersion = versionData.version + 1;
-
-  const { error: insertError } = await supabase
-    .from('model_versions')
-    .insert({
-      model_id: modelId,
-      version: nextVersion,
-      data: modelData
-    });
-
-  if (insertError) {
-    console.error('Error creating new version:', insertError);
-    return errorResponse('Failed to rename sheet', 'RENAME_SHEET_FAILED', 500);
-  }
-
-  // Update model's latest version
-  const { error: updateError } = await supabase
-    .from('models')
-    .update({
-      latest_version: nextVersion,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', modelId);
-
-  if (updateError) {
-    console.error('Error updating model:', updateError);
-    return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
+  // Persist in place (a version snapshot is recorded only on checkpoint)
+  const saved = persistModelData(ctx, modelId, modelData, versionData.hash);
+  if (!saved.ok) {
+    return saved.errorResponse;
   }
 
   // Return success response
   return successResponse({
     modelId,
-    newVersion: nextVersion,
+    newVersion: saved.version,
+    hash: saved.hash,
     sheet: {
       id: sheetId,
       name: newName,

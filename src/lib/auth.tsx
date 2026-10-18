@@ -1,57 +1,51 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
-import { User, Session } from '@supabase/supabase-js'
-import { supabase } from './supabaseClient'
+
+/** The single local user. Obliq runs on localhost as the OS user. */
+export interface LocalUser {
+  id: string
+  username: string
+  home: string
+}
 
 interface AuthContextType {
-  user: User | null
-  session: Session | null
+  user: LocalUser | null
   loading: boolean
+  error: string | null
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
-  session: null,
   loading: true,
+  error: null,
 })
 
+/**
+ * Establishes the local session cookie (GET /api/session) before rendering
+ * authenticated pages. API calls made after `loading` is false carry the
+ * cookie automatically.
+ */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [state, setState] = useState<AuthContextType>({ user: null, loading: true, error: null })
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
-
-    return () => subscription.unsubscribe()
+    let cancelled = false
+    fetch('/api/session', { credentials: 'same-origin' })
+      .then(async res => {
+        if (!res.ok) throw new Error(`Session request failed (${res.status})`)
+        const body = await res.json()
+        if (!cancelled) setState({ user: body.user, loading: false, error: null })
+      })
+      .catch(err => {
+        if (!cancelled) setState({ user: null, loading: false, error: String(err?.message || err) })
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  return (
-    <AuthContext.Provider value={{ user, session, loading }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>
 }
 
-export const useUser = () => {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useUser must be used within an AuthProvider')
-  }
-  return context
-}
+export const useUser = () => useContext(AuthContext)

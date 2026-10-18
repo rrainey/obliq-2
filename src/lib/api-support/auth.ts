@@ -2,7 +2,15 @@
 // Authentication and rate limiting utilities for the Model Builder API
 
 import { NextRequest, NextResponse } from 'next/server';
-import { RateLimitResult } from './types';
+import { HandlerContext, RateLimitResult } from './types';
+import {
+  InvalidModelFileError,
+  ModelConflictError,
+  ModelFileMissingError,
+  ModelNotFoundError,
+  type ModelRecord,
+  type Storage,
+} from '@/lib/server/storage';
 
 // Rate limiting configuration
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
@@ -43,7 +51,7 @@ export function checkRateLimit(token: string): RateLimitResult {
  * Call this once at module initialization
  */
 export function startRateLimitCleanup(): NodeJS.Timeout {
-  return setInterval(() => {
+  const timer = setInterval(() => {
     const now = Date.now();
     for (const [token, limiter] of rateLimitStore.entries()) {
       if (now > limiter.resetTime + RATE_LIMIT_WINDOW_MS) {
@@ -51,6 +59,9 @@ export function startRateLimitCleanup(): NodeJS.Timeout {
       }
     }
   }, 5 * 60 * 1000); // Every 5 minutes
+  // Don't keep the process alive just for cleanup (scripts, tests).
+  timer.unref?.();
+  return timer;
 }
 
 /**
@@ -158,132 +169,119 @@ export function logRequest(
 startRateLimitCleanup();
 
 /**
- * Result of model ownership verification
+ * Result of loading a model for an API handler
  */
-export interface ModelOwnershipResult {
+export interface ModelAccessResult {
   authorized: boolean;
-  model?: any;
-  versionData?: any;
+  model?: ModelRecord;
+  /** Current model content. `version` is the latest recorded snapshot number. */
+  versionData?: { model_id: string; version: number; data: any; hash: string; created_at: string };
   errorResponse?: NextResponse;
 }
 
 /**
- * Verify that the requesting user owns the specified model.
- * This is the central authorization check for all model operations.
- *
- * @param supabase - Supabase client instance
- * @param modelId - The model ID to check
- * @param userId - The authenticated user's ID
- * @returns ModelOwnershipResult with authorization status and model data if authorized
+ * Map storage-layer errors to API responses. Returns null for unknown errors.
  */
-export async function verifyModelOwnership(
-  supabase: any,
-  modelId: string,
-  userId: string
-): Promise<ModelOwnershipResult> {
-  // Fetch the model and verify ownership in a single query
-  const { data: model, error } = await supabase
-    .from('models')
-    .select('*')
-    .eq('id', modelId)
-    .eq('user_id', userId)
-    .single();
-
-  if (error || !model) {
-    // Check if model exists but belongs to another user
-    const { data: existingModel } = await supabase
-      .from('models')
-      .select('id')
-      .eq('id', modelId)
-      .single();
-
-    if (existingModel) {
-      // Model exists but user doesn't own it - return 403
-      return {
-        authorized: false,
-        errorResponse: NextResponse.json(
-          {
-            success: false,
-            timestamp: new Date().toISOString(),
-            error: 'Access denied: You do not have permission to access this model',
-            code: 'FORBIDDEN'
-          },
-          { status: 403 }
-        )
-      };
-    } else {
-      // Model doesn't exist - return 404
-      return {
-        authorized: false,
-        errorResponse: NextResponse.json(
-          {
-            success: false,
-            timestamp: new Date().toISOString(),
-            error: 'Model not found',
-            code: 'MODEL_NOT_FOUND',
-            details: { modelId }
-          },
-          { status: 404 }
-        )
-      };
-    }
+export function storageErrorResponse(error: unknown): NextResponse | null {
+  const respond = (status: number, code: string, message: string, details?: Record<string, any>) =>
+    NextResponse.json(
+      { success: false, timestamp: new Date().toISOString(), error: message, code, ...(details && { details }) },
+      { status }
+    );
+  if (error instanceof ModelNotFoundError) {
+    return respond(404, 'MODEL_NOT_FOUND', 'Model not found', { modelId: error.modelId });
   }
+  if (error instanceof ModelFileMissingError) {
+    return respond(404, 'MODEL_FILE_MISSING', error.message, { modelId: error.modelId, filePath: error.filePath });
+  }
+  if (error instanceof ModelConflictError) {
+    return respond(409, 'MODEL_CONFLICT', error.message, { modelId: error.modelId, currentHash: error.currentHash });
+  }
+  if (error instanceof InvalidModelFileError) {
+    return respond(422, 'INVALID_MODEL_FILE', error.message);
+  }
+  return null;
+}
 
-  return {
-    authorized: true,
-    model
-  };
+function accessFailure(error: unknown): ModelAccessResult {
+  const response = storageErrorResponse(error);
+  if (!response) throw error;
+  return { authorized: false, errorResponse: response };
 }
 
 /**
- * Verify model ownership and fetch the latest version data.
- * Combines ownership check with version data retrieval for efficiency.
- *
- * @param supabase - Supabase client instance
- * @param modelId - The model ID to check
- * @param userId - The authenticated user's ID
- * @returns ModelOwnershipResult with model and version data if authorized
+ * Load a model's index record (no file read). Single-user: existence is the
+ * only access check.
  */
-export async function verifyModelOwnershipWithVersion(
-  supabase: any,
-  modelId: string,
-  userId: string
-): Promise<ModelOwnershipResult> {
-  // First verify ownership
-  const ownershipResult = await verifyModelOwnership(supabase, modelId, userId);
-
-  if (!ownershipResult.authorized) {
-    return ownershipResult;
+export function loadModel(storage: Storage, modelId: string): ModelAccessResult {
+  try {
+    return { authorized: true, model: storage.models.require(modelId) };
+  } catch (error) {
+    return accessFailure(error);
   }
+}
 
-  // Fetch the latest version data
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single();
-
-  if (versionError || !versionData) {
+/**
+ * Load a model's record and current content from its model file.
+ */
+export function loadModelData(storage: Storage, modelId: string): ModelAccessResult {
+  try {
+    const current = storage.models.readCurrent(modelId);
     return {
-      authorized: false,
-      errorResponse: NextResponse.json(
-        {
-          success: false,
-          timestamp: new Date().toISOString(),
-          error: 'Model version data not found',
-          code: 'VERSION_NOT_FOUND',
-          details: { modelId }
-        },
-        { status: 404 }
-      )
+      authorized: true,
+      model: current.record,
+      versionData: {
+        model_id: modelId,
+        version: current.record.latest_version,
+        data: current.data,
+        hash: current.hash,
+        created_at: current.record.updated_at,
+      },
     };
+  } catch (error) {
+    return accessFailure(error);
   }
+}
 
-  return {
-    authorized: true,
-    model: ownershipResult.model,
-    versionData
-  };
+export type PersistResult =
+  | { ok: true; version: number | null; latestVersion: number; hash: string }
+  | { ok: false; errorResponse: NextResponse };
+
+/**
+ * Persist a mutated model from a Model Builder handler.
+ *
+ * Writes model.json in place. A version snapshot is recorded only when the
+ * caller asks for one with `checkpoint: true` (JSON body) or
+ * `?checkpoint=true` (query string). `baseHash` should be the hash returned
+ * by loadModelData so concurrent edits surface as 409 instead of being lost.
+ */
+export function persistModelData(
+  ctx: HandlerContext,
+  modelId: string,
+  data: any,
+  baseHash: string | undefined
+): PersistResult {
+  const checkpoint =
+    ctx.body?.checkpoint === true || ctx.searchParams?.get('checkpoint') === 'true';
+  try {
+    const result = ctx.storage.models.writeInPlace(modelId, data, {
+      baseHash,
+      checkpoint,
+      note: checkpoint ? 'api checkpoint' : undefined,
+    });
+    return { ok: true, version: result.version, latestVersion: result.record.latest_version, hash: result.hash };
+  } catch (error) {
+    const response = storageErrorResponse(error);
+    if (!response) {
+      console.error('Failed to persist model:', error);
+      return {
+        ok: false,
+        errorResponse: NextResponse.json(
+          { success: false, timestamp: new Date().toISOString(), error: 'Failed to save model', code: 'SAVE_FAILED' },
+          { status: 500 }
+        ),
+      };
+    }
+    return { ok: false, errorResponse: response };
+  }
 }

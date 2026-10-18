@@ -2,7 +2,7 @@
 'use client'
 
 import { useUser } from '@/lib/auth'
-import { supabase } from '@/lib/supabaseClient'
+import { modelApi } from '@/lib/modelApi'
 import { Model, ModelWithVersion } from '@/lib/types'
 import { createDefaultModel } from '@/lib/defaultModel'
 import {
@@ -30,6 +30,8 @@ import {
   Center,
   Loader,
   Box,
+  Badge,
+  Tooltip,
   useMantineColorScheme,
   useComputedColorScheme
 } from '@mantine/core'
@@ -48,7 +50,7 @@ import {
 } from '@tabler/icons-react'
 
 export default function ModelsPage() {
-  const { user, loading } = useUser()
+  const { user, loading, error: sessionError } = useUser()
   const router = useRouter()
   const { setColorScheme } = useMantineColorScheme()
   const computedColorScheme = useComputedColorScheme('light', { getInitialValueInEffect: true })
@@ -75,12 +77,6 @@ export default function ModelsPage() {
   const importFileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login')
-    }
-  }, [user, loading, router])
-
-  useEffect(() => {
     if (user) {
       fetchModels()
     }
@@ -88,41 +84,8 @@ export default function ModelsPage() {
 
   const fetchModels = async () => {
     try {
-      // Fetch models metadata
-      const { data: modelsData, error: modelsError } = await supabase
-        .from('models')
-        .select('*')
-        .order('updated_at', { ascending: false })
-
-      if (modelsError) throw modelsError
-
-      if (!modelsData || modelsData.length === 0) {
-        setModels([])
-        setModelsLoading(false)
-        return
-      }
-
-      // Fetch available versions for each model
-      const modelsWithVersions: ModelWithVersion[] = await Promise.all(
-        modelsData.map(async (model) => {
-          const { data: versions, error: versionsError } = await supabase
-            .from('model_versions')
-            .select('version')
-            .eq('model_id', model.id)
-            .gt('version', 0) // Exclude auto-save (version 0)
-            .order('version', { ascending: false })
-
-          if (versionsError) {
-            console.error(`Error fetching versions for model ${model.id}:`, versionsError)
-            return { ...model, availableVersions: [] }
-          }
-
-          return {
-            ...model,
-            availableVersions: versions?.map(v => v.version) || []
-          }
-        })
-      )
+      // Models come back ordered by updated_at desc, with availableVersions (desc)
+      const modelsWithVersions: ModelWithVersion[] = await modelApi.list()
 
       setModels(modelsWithVersions)
       
@@ -147,29 +110,8 @@ export default function ModelsPage() {
     try {
       const defaultData = createDefaultModel()
 
-      // Create model metadata
-      const { data: modelData, error: modelError } = await supabase
-        .from('models')
-        .insert({
-          user_id: user.id,
-          name: newModelName.trim(),
-          latest_version: 1
-        })
-        .select()
-        .single()
-
-      if (modelError) throw modelError
-
-      // Create version 1 with the default data
-      const { error: versionError } = await supabase
-        .from('model_versions')
-        .insert({
-          model_id: modelData.id,
-          version: 1,
-          data: defaultData
-        })
-
-      if (versionError) throw versionError
+      // Create the model (writes its file and version 1)
+      const modelData = await modelApi.create(newModelName.trim(), defaultData)
 
       // Navigate to the new model editor
       router.push(`/models/${modelData.id}`)
@@ -187,12 +129,7 @@ export default function ModelsPage() {
     if (!selectedModel || !renameValue.trim()) return
 
     try {
-      const { error } = await supabase
-        .from('models')
-        .update({ name: renameValue.trim() })
-        .eq('id', selectedModel.id)
-
-      if (error) throw error
+      await modelApi.rename(selectedModel.id, renameValue.trim())
 
       // Update local state
       setModels(models.map(model => 
@@ -214,12 +151,7 @@ export default function ModelsPage() {
     if (!selectedModel) return
 
     try {
-      const { error } = await supabase
-        .from('models')
-        .delete()
-        .eq('id', selectedModel.id)
-
-      if (error) throw error
+      await modelApi.remove(selectedModel.id)
 
       // Update local state
       setModels(models.filter(model => model.id !== selectedModel.id))
@@ -257,39 +189,12 @@ export default function ModelsPage() {
       // Get the selected version (or latest) for the model to duplicate
       const selectedVersion = selectedVersions[selectedModel.id] || (selectedModel as ModelWithVersion).latest_version || 1
 
-      // Fetch the model version data to duplicate
-      const { data: versionData, error: versionError } = await supabase
-        .from('model_versions')
-        .select('data')
-        .eq('model_id', selectedModel.id)
-        .eq('version', selectedVersion)
-        .single()
-
-      if (versionError) throw versionError
-
-      // Create new model metadata
-      const { data: newModelData, error: modelError } = await supabase
-        .from('models')
-        .insert({
-          user_id: user.id,
-          name: duplicateName.trim(),
-          latest_version: 1
-        })
-        .select()
-        .single()
-
-      if (modelError) throw modelError
-
-      // Create version 1 with the duplicated data
-      const { error: newVersionError } = await supabase
-        .from('model_versions')
-        .insert({
-          model_id: newModelData.id,
-          version: 1,
-          data: versionData.data
-        })
-
-      if (newVersionError) throw newVersionError
+      // Duplicate the current model file, or the selected snapshot if an older version is selected
+      await modelApi.duplicate(
+        selectedModel.id,
+        duplicateName.trim(),
+        selectedVersion !== selectedModel.latest_version ? selectedVersion : undefined
+      )
 
       // Refresh the models list
       await fetchModels()
@@ -359,27 +264,7 @@ export default function ModelsPage() {
 
     setImporting(true)
     try {
-      const { data: modelData, error: modelError } = await supabase
-        .from('models')
-        .insert({
-          user_id: user.id,
-          name: importName.trim(),
-          latest_version: 1,
-        })
-        .select()
-        .single()
-
-      if (modelError) throw modelError
-
-      const { error: versionError } = await supabase
-        .from('model_versions')
-        .insert({
-          model_id: modelData.id,
-          version: 1,
-          data: importPayload.data,
-        })
-
-      if (versionError) throw versionError
+      const modelData = await modelApi.create(importName.trim(), importPayload.data)
 
       notifications.show({
         title: 'Model imported',
@@ -410,6 +295,14 @@ export default function ModelsPage() {
     } else {
       router.push(`/models/${model.id}`)
     }
+  }
+
+  if (!loading && !user) {
+    return (
+      <Center h="100vh">
+        <Text c="red">{sessionError || 'Could not start local session'}</Text>
+      </Center>
+    )
   }
 
   if (loading || !user) {
@@ -503,9 +396,18 @@ export default function ModelsPage() {
                   <Stack gap="xs" h="100%">
                     <Group justify="space-between" align="flex-start">
                       <div style={{ flex: 1 }}>
-                        <Text fw={500} size="lg" lineClamp={1}>
-                          {model.name}
-                        </Text>
+                        <Group gap={6} wrap="nowrap">
+                          <Text fw={500} size="lg" lineClamp={1}>
+                            {model.name}
+                          </Text>
+                          {model.storage_kind === 'linked' && (
+                            <Tooltip label={model.file_path || 'Linked file'} withinPortal>
+                              <Badge size="xs" variant="light" color="gray" style={{ flexShrink: 0 }}>
+                                linked
+                              </Badge>
+                            </Tooltip>
+                          )}
+                        </Group>
                         <Text size="sm" c="dimmed">
                           Updated {new Date(model.updated_at).toLocaleDateString()}
                         </Text>

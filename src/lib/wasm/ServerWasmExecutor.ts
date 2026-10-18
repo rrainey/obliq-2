@@ -11,8 +11,8 @@
  * - Designed for single-use execution (compile, run, return results)
  */
 
-import { createClient } from '@supabase/supabase-js'
 import { generateCacheKey } from './cache/cacheKey'
+import { getStorage, type ModelData, type ModelRecord } from '../server/storage'
 
 /**
  * Result of a server-side simulation
@@ -72,6 +72,12 @@ export interface SimulationConfig {
 
   /** Sample rate for time series (every N steps, default: 1) */
   timeSeriesSampleRate?: number
+
+  /**
+   * Headers (Authorization and/or Cookie) forwarded to the internal
+   * /api/compile-wasm call, which requires authentication.
+   */
+  authHeaders?: Record<string, string>
 }
 
 /**
@@ -105,7 +111,7 @@ interface WasmModule {
  * Execute a WASM simulation on the server
  *
  * This function handles the complete flow:
- * 1. Fetch model from database
+ * 1. Load the current model file from local storage
  * 2. Check cache or compile to WASM
  * 3. Load and instantiate WASM module
  * 4. Run simulation
@@ -125,45 +131,18 @@ export async function executeServerSimulation(
   const sampleRate = config.timeSeriesSampleRate ?? 1
 
   try {
-    // Initialize Supabase client
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-
-    // Fetch model data
-    const { data: model, error: modelError } = await supabase
-      .from('models')
-      .select('id, name, latest_version')
-      .eq('id', modelId)
-      .single()
-
-    if (modelError || !model) {
+    // Load the current model file (authoritative)
+    const loaded = loadCurrentModel(modelId)
+    if ('error' in loaded) {
       return {
         success: false,
-        error: `Model not found: ${modelId}`,
+        error: loaded.error,
         totalTimeMs: Date.now() - startTime
       }
     }
+    const { model, data: modelData } = loaded
 
-    // Fetch latest version data
-    const { data: versionData, error: versionError } = await supabase
-      .from('model_versions')
-      .select('data, version')
-      .eq('model_id', modelId)
-      .order('version', { ascending: false })
-      .limit(1)
-      .single()
-
-    if (versionError || !versionData) {
-      return {
-        success: false,
-        error: `Model version not found for: ${modelId}`,
-        totalTimeMs: Date.now() - startTime
-      }
-    }
-
-    const sheets = versionData.data?.sheets || []
+    const sheets = modelData?.sheets || []
     if (sheets.length === 0) {
       return {
         success: false,
@@ -186,7 +165,7 @@ export async function executeServerSimulation(
 
     // Compile or retrieve from cache
     const compileStart = Date.now()
-    const compileResult = await compileModel(modelId, optimizationLevel)
+    const compileResult = await compileModel(modelId, optimizationLevel, config.authHeaders)
     const compileTime = Date.now() - compileStart
 
     if (!compileResult.success) {
@@ -337,7 +316,8 @@ export async function executeServerSimulation(
  */
 async function compileModel(
   modelId: string,
-  optimizationLevel: string
+  optimizationLevel: string,
+  authHeaders: Record<string, string> = {}
 ): Promise<{
   success: boolean
   error?: string
@@ -354,6 +334,7 @@ async function compileModel(
     const response = await fetch(`${baseUrl}/api/compile-wasm`, {
       method: 'POST',
       headers: {
+        ...authHeaders,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -441,36 +422,12 @@ async function loadWasmModule(
 export async function validateForSimulation(
   modelId: string
 ): Promise<{ valid: boolean; error?: string }> {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
-  // Fetch model
-  const { data: model, error: modelError } = await supabase
-    .from('models')
-    .select('id')
-    .eq('id', modelId)
-    .single()
-
-  if (modelError || !model) {
-    return { valid: false, error: 'Model not found' }
+  const loaded = loadCurrentModel(modelId)
+  if ('error' in loaded) {
+    return { valid: false, error: loaded.error }
   }
 
-  // Fetch latest version
-  const { data: versionData, error: versionError } = await supabase
-    .from('model_versions')
-    .select('data')
-    .eq('model_id', modelId)
-    .order('version', { ascending: false })
-    .limit(1)
-    .single()
-
-  if (versionError || !versionData) {
-    return { valid: false, error: 'No model version found' }
-  }
-
-  const sheets = versionData.data?.sheets || []
+  const sheets = loaded.data?.sheets || []
   if (sheets.length === 0) {
     return { valid: false, error: 'Model has no sheets' }
   }
@@ -491,4 +448,17 @@ export async function validateForSimulation(
   }
 
   return { valid: true }
+}
+
+/**
+ * Load a model's record and current file content from local storage.
+ */
+function loadCurrentModel(modelId: string): { model: ModelRecord; data: ModelData } | { error: string } {
+  try {
+    const current = getStorage().models.readCurrent(modelId)
+    return { model: current.record, data: current.data }
+  } catch (error) {
+    // Storage errors (ModelNotFoundError etc.) carry user-facing messages
+    return { error: error instanceof Error ? error.message : `Failed to load model: ${modelId}` }
+  }
 }

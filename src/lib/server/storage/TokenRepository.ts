@@ -5,6 +5,7 @@
 
 import * as crypto from 'crypto'
 import type { Db } from './db'
+import { matchesErrorName } from './ModelRepository'
 
 export interface ApiTokenRecord {
   id: string
@@ -18,6 +19,11 @@ export interface ApiTokenRecord {
 export type ApiTokenSummary = Omit<ApiTokenRecord, 'token_hash'>
 
 export class TokenNameConflictError extends Error {
+  // Name-based so it matches across Next.js route bundles (see matchesErrorName).
+  static [Symbol.hasInstance](value: unknown) {
+    return matchesErrorName(value, 'TokenNameConflictError')
+  }
+
   constructor(name: string) {
     super(`A token named "${name}" already exists`)
     this.name = 'TokenNameConflictError'

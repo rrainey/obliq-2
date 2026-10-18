@@ -5,13 +5,13 @@ import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, ErrorResponses } from '@/lib/api-support/responses';
 import { findSheetRecursively } from '@/lib/api-support/sheet-search';
-import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
+import { loadModelData } from '@/lib/api-support/auth';
 
 /**
  * LIST_CONNECTIONS - List all connections in a sheet
  */
 export async function handleListConnections(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, searchParams, body } = ctx;
+  const { storage, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const sheetId = searchParams?.get('sheetId') || body?.sheetId;
 
@@ -23,14 +23,14 @@ export async function handleListConnections(ctx: HandlerContext): Promise<NextRe
     return ErrorResponses.missingParameter('sheetId');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
   // Find the specific sheet (searching both top-level and subsystem sheets)
-  const sheets = authResult.versionData.data?.sheets || [];
+  const sheets = authResult.versionData!.data?.sheets || [];
   const sheetResult = findSheetRecursively(sheets, sheetId);
 
   if (!sheetResult) {
@@ -72,7 +72,7 @@ export async function handleListConnections(ctx: HandlerContext): Promise<NextRe
  * GET_CONNECTION - Get details of a specific connection
  */
 export async function handleGetConnection(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, searchParams, body } = ctx;
+  const { storage, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const sheetId = searchParams?.get('sheetId') || body?.sheetId;
   const connectionId = searchParams?.get('connectionId') || body?.connectionId;
@@ -88,14 +88,14 @@ export async function handleGetConnection(ctx: HandlerContext): Promise<NextResp
     return ErrorResponses.missingParameter('connectionId');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
   // Find the specific sheet
-  const sheets = authResult.versionData.data?.sheets || [];
+  const sheets = authResult.versionData!.data?.sheets || [];
   const sheet = sheets.find((s: any) => s.id === sheetId);
 
   if (!sheet) {

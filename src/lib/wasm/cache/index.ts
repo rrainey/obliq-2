@@ -5,8 +5,7 @@
  */
 
 export { FileCacheManager } from './FileCacheManager'
-export { SupabaseCacheManager } from './SupabaseCacheManager'
-export type { CacheMetadata, CachedWasmModule, CacheStats } from './SupabaseCacheManager'
+export type { CacheMetadata, CachedWasmModule, CacheStats } from './FileCacheManager'
 
 export {
   generateCacheKey,

@@ -4,7 +4,7 @@
 import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-support/responses';
-import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
+import { loadModelData, persistModelData } from '@/lib/api-support/auth';
 
 /**
  * Helper function to find a block recursively in all sheets (including nested subsystems)
@@ -32,7 +32,7 @@ function findBlockRecursively(
  * CREATE_SHEET - Create a new sheet in a model
  */
 export async function handleCreateSheet(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, body } = ctx;
+  const { storage, body } = ctx;
   const { modelId, name, subsystemBlockId } = body || {};
 
   // Validate required parameters
@@ -40,13 +40,13 @@ export async function handleCreateSheet(ctx: HandlerContext): Promise<NextRespon
     return ErrorResponses.missingParameter('modelId');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const versionData = authResult.versionData;
+  const versionData = authResult.versionData!;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -107,40 +107,17 @@ export async function handleCreateSheet(ctx: HandlerContext): Promise<NextRespon
   // Add sheet to target array
   targetSheetsArray.push(newSheet);
 
-  // Create a new version with the updated data
-  const nextVersion = versionData.version + 1;
-
-  const { error: insertError } = await supabase
-    .from('model_versions')
-    .insert({
-      model_id: modelId,
-      version: nextVersion,
-      data: modelData
-    });
-
-  if (insertError) {
-    console.error('Error creating new version:', insertError);
-    return errorResponse('Failed to create sheet', 'CREATE_SHEET_FAILED', 500);
-  }
-
-  // Update model's latest version
-  const { error: updateError } = await supabase
-    .from('models')
-    .update({
-      latest_version: nextVersion,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', modelId);
-
-  if (updateError) {
-    console.error('Error updating model:', updateError);
-    return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
+  // Persist in place (a version snapshot is recorded only on checkpoint)
+  const saved = persistModelData(ctx, modelId, modelData, versionData.hash);
+  if (!saved.ok) {
+    return saved.errorResponse;
   }
 
   // Build response
   const response: any = {
     modelId,
-    newVersion: nextVersion,
+    newVersion: saved.version,
+    hash: saved.hash,
     sheet: {
       id: newSheet.id,
       name: newSheet.name,
@@ -164,7 +141,7 @@ export async function handleCreateSheet(ctx: HandlerContext): Promise<NextRespon
  * IMPORT_SHEET - Import a sheet from external data
  */
 export async function handleImportSheet(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, body } = ctx;
+  const { storage, body } = ctx;
   // Support both 'overrideName' and 'name' for convenience
   const { modelId, sheetData, overrideId, overrideName, name } = body || {};
   const effectiveOverrideName = overrideName || name;
@@ -182,13 +159,13 @@ export async function handleImportSheet(ctx: HandlerContext): Promise<NextRespon
     return errorResponse('Sheet data must have id and name properties', 'INVALID_SHEET_STRUCTURE', 400);
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const versionData = authResult.versionData;
+  const versionData = authResult.versionData!;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -254,40 +231,17 @@ export async function handleImportSheet(ctx: HandlerContext): Promise<NextRespon
   // Add imported sheet to model
   modelData.sheets.push(importedSheet);
 
-  // Create a new version with the updated data
-  const nextVersion = versionData.version + 1;
-
-  const { error: insertError } = await supabase
-    .from('model_versions')
-    .insert({
-      model_id: modelId,
-      version: nextVersion,
-      data: modelData
-    });
-
-  if (insertError) {
-    console.error('Error creating new version:', insertError);
-    return errorResponse('Failed to import sheet', 'IMPORT_SHEET_FAILED', 500);
-  }
-
-  // Update model's latest version
-  const { error: updateError } = await supabase
-    .from('models')
-    .update({
-      latest_version: nextVersion,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', modelId);
-
-  if (updateError) {
-    console.error('Error updating model:', updateError);
-    return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
+  // Persist in place (a version snapshot is recorded only on checkpoint)
+  const saved = persistModelData(ctx, modelId, modelData, versionData.hash);
+  if (!saved.ok) {
+    return saved.errorResponse;
   }
 
   // Return the imported sheet info
   return successResponse({
     modelId,
-    newVersion: nextVersion,
+    newVersion: saved.version,
+    hash: saved.hash,
     importedSheet: {
       id: importedSheet.id,
       name: importedSheet.name,
@@ -307,7 +261,7 @@ export async function handleImportSheet(ctx: HandlerContext): Promise<NextRespon
  * CLONE_SHEET - Clone an existing sheet
  */
 export async function handleCloneSheet(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, body } = ctx;
+  const { storage, body } = ctx;
   // Support both 'sheetId' and 'sourceSheetId' for convenience
   const { modelId, sheetId, sourceSheetId, newName } = body || {};
   const effectiveSheetId = sheetId || sourceSheetId;
@@ -320,13 +274,13 @@ export async function handleCloneSheet(ctx: HandlerContext): Promise<NextRespons
     return ErrorResponses.missingParameter('sheetId or sourceSheetId');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const versionData = authResult.versionData;
+  const versionData = authResult.versionData!;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -384,40 +338,17 @@ export async function handleCloneSheet(ctx: HandlerContext): Promise<NextRespons
   // Add cloned sheet to model
   modelData.sheets.push(clonedSheet);
 
-  // Create a new version with the updated data
-  const nextVersion = versionData.version + 1;
-
-  const { error: insertError } = await supabase
-    .from('model_versions')
-    .insert({
-      model_id: modelId,
-      version: nextVersion,
-      data: modelData
-    });
-
-  if (insertError) {
-    console.error('Error creating new version:', insertError);
-    return errorResponse('Failed to clone sheet', 'CLONE_SHEET_FAILED', 500);
-  }
-
-  // Update model's latest version
-  const { error: updateError } = await supabase
-    .from('models')
-    .update({
-      latest_version: nextVersion,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', modelId);
-
-  if (updateError) {
-    console.error('Error updating model:', updateError);
-    return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
+  // Persist in place (a version snapshot is recorded only on checkpoint)
+  const saved = persistModelData(ctx, modelId, modelData, versionData.hash);
+  if (!saved.ok) {
+    return saved.errorResponse;
   }
 
   // Return the cloned sheet info
   return successResponse({
     modelId,
-    newVersion: nextVersion,
+    newVersion: saved.version,
+    hash: saved.hash,
     sourceSheetId: effectiveSheetId,
     clonedSheet: {
       id: clonedSheet.id,

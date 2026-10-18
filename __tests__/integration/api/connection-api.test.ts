@@ -89,7 +89,8 @@ describeIntegration('Connection API Integration Tests', () => {
       expect(result.data.connection.targetBlockId).toBe(scaleBlockId);
       expect(result.data.connection.sourcePortIndex).toBe(0);
       expect(result.data.connection.targetPortIndex).toBe(0);
-      expect(result.data.newVersion).toBeGreaterThan(1);
+      // Mutations write the model file in place; versions are only recorded on checkpoint.
+      expect(result.data.hash).toMatch(/^[0-9a-f]{64}$/);
     });
 
     // Skip: Connection by port names is not currently supported by the API

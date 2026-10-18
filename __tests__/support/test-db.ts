@@ -1,30 +1,21 @@
 // __tests__/support/test-db.ts
-// Test database management for integration tests
+// Direct access to the local Obliq store for integration-test cleanup.
+//
+// Integration tests drive a running server via the HTTP API; this helper opens
+// the same store ($OBLIQ_HOME, default ~/.config/obliq-2) to remove the models
+// they created. Run the server and the tests with the same OBLIQ_HOME.
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { openStorage, type Storage } from '@/lib/server/storage';
 
 export class TestDatabase {
-  private supabase: SupabaseClient | null = null;
+  private storage: Storage | null = null;
   private createdModelIds: string[] = [];
-  private initialized: boolean = false;
 
   /**
-   * Initialize the test database connection
+   * Open the local store
    */
   async init(): Promise<void> {
-    if (this.initialized) return;
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      console.warn('Supabase credentials not configured - direct DB cleanup unavailable');
-      this.initialized = true;
-      return;
-    }
-
-    this.supabase = createClient(supabaseUrl, supabaseKey);
-    this.initialized = true;
+    if (!this.storage) this.storage = openStorage();
   }
 
   /**
@@ -49,46 +40,16 @@ export class TestDatabase {
   async cleanup(): Promise<{ deleted: string[]; errors: string[] }> {
     const deleted: string[] = [];
     const errors: string[] = [];
-
-    if (!this.supabase) {
-      // If no direct DB access, models must be deleted via API
-      console.warn('No direct DB access - cleanup must be done via API');
-      return { deleted, errors };
-    }
-
     for (const modelId of this.createdModelIds) {
-      try {
-        // Delete model versions first (foreign key constraint)
-        const { error: versionsError } = await this.supabase
-          .from('model_versions')
-          .delete()
-          .eq('model_id', modelId);
-
-        if (versionsError) {
-          errors.push(`Failed to delete versions for ${modelId}: ${versionsError.message}`);
-          continue;
-        }
-
-        // Delete the model
-        const { error: modelError } = await this.supabase
-          .from('models')
-          .delete()
-          .eq('id', modelId);
-
-        if (modelError) {
-          errors.push(`Failed to delete model ${modelId}: ${modelError.message}`);
-          continue;
-        }
-
+      if (await this.deleteModel(modelId)) {
         deleted.push(modelId);
-      } catch (err) {
-        errors.push(`Exception deleting ${modelId}: ${err}`);
+      } else if (await this.modelExists(modelId)) {
+        errors.push(`Failed to delete model ${modelId}`);
       }
     }
-
-    // Clear tracked models
     this.createdModelIds = [];
-
+    this.storage?.db.close();
+    this.storage = null;
     return { deleted, errors };
   }
 
@@ -96,28 +57,11 @@ export class TestDatabase {
    * Delete a specific model by ID
    */
   async deleteModel(modelId: string): Promise<boolean> {
-    if (!this.supabase) {
-      console.warn('No direct DB access - cannot delete model directly');
-      return false;
-    }
-
+    await this.init();
+    this.createdModelIds = this.createdModelIds.filter(id => id !== modelId);
     try {
-      // Delete model versions first
-      await this.supabase
-        .from('model_versions')
-        .delete()
-        .eq('model_id', modelId);
-
-      // Delete the model
-      const { error } = await this.supabase
-        .from('models')
-        .delete()
-        .eq('id', modelId);
-
-      // Remove from tracked list
-      this.createdModelIds = this.createdModelIds.filter(id => id !== modelId);
-
-      return !error;
+      this.storage!.models.delete(modelId);
+      return true;
     } catch {
       return false;
     }
@@ -127,34 +71,20 @@ export class TestDatabase {
    * Check if a model exists
    */
   async modelExists(modelId: string): Promise<boolean> {
-    if (!this.supabase) {
-      console.warn('No direct DB access - cannot check model existence');
-      return false;
-    }
-
-    const { data, error } = await this.supabase
-      .from('models')
-      .select('id')
-      .eq('id', modelId)
-      .single();
-
-    return !error && !!data;
+    await this.init();
+    return this.storage!.models.get(modelId) !== null;
   }
 
   /**
-   * Get model version count
+   * Get model version (snapshot) count
    */
   async getVersionCount(modelId: string): Promise<number> {
-    if (!this.supabase) {
+    await this.init();
+    try {
+      return this.storage!.models.listVersions(modelId).length;
+    } catch {
       return -1;
     }
-
-    const { count, error } = await this.supabase
-      .from('model_versions')
-      .select('*', { count: 'exact', head: true })
-      .eq('model_id', modelId);
-
-    return error ? -1 : (count || 0);
   }
 }
 

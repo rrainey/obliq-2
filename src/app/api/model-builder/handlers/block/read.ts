@@ -5,13 +5,13 @@ import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, ErrorResponses } from '@/lib/api-support/responses';
 import { findSheetRecursively } from '@/lib/api-support/sheet-search';
-import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
+import { loadModelData } from '@/lib/api-support/auth';
 
 /**
  * LIST_BLOCKS - List all blocks in a sheet
  */
 export async function handleListBlocks(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, searchParams, body } = ctx;
+  const { storage, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const sheetId = searchParams?.get('sheetId') || body?.sheetId;
 
@@ -23,14 +23,14 @@ export async function handleListBlocks(ctx: HandlerContext): Promise<NextRespons
     return ErrorResponses.missingParameter('sheetId');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
   // Find the specific sheet (searching both top-level and subsystem sheets)
-  const sheets = authResult.versionData.data?.sheets || [];
+  const sheets = authResult.versionData!.data?.sheets || [];
   const sheetResult = findSheetRecursively(sheets, sheetId);
 
   if (!sheetResult) {
@@ -65,7 +65,7 @@ export async function handleListBlocks(ctx: HandlerContext): Promise<NextRespons
  * GET_BLOCK - Get details of a specific block
  */
 export async function handleGetBlock(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, searchParams, body } = ctx;
+  const { storage, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const sheetId = searchParams?.get('sheetId') || body?.sheetId;
   const blockId = searchParams?.get('blockId') || body?.blockId;
@@ -81,14 +81,14 @@ export async function handleGetBlock(ctx: HandlerContext): Promise<NextResponse>
     return ErrorResponses.missingParameter('blockId');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
   // Find the specific sheet
-  const sheets = authResult.versionData.data?.sheets || [];
+  const sheets = authResult.versionData!.data?.sheets || [];
   const sheet = sheets.find((s: any) => s.id === sheetId);
 
   if (!sheet) {
@@ -130,7 +130,7 @@ export async function handleGetBlock(ctx: HandlerContext): Promise<NextResponse>
  * GET_BLOCK_PORTS - Get port information for a specific block
  */
 export async function handleGetBlockPorts(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, searchParams, body } = ctx;
+  const { storage, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const sheetId = searchParams?.get('sheetId') || body?.sheetId;
   const blockId = searchParams?.get('blockId') || body?.blockId;
@@ -146,14 +146,14 @@ export async function handleGetBlockPorts(ctx: HandlerContext): Promise<NextResp
     return ErrorResponses.missingParameter('blockId');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
   // Find the specific sheet
-  const sheets = authResult.versionData.data?.sheets || [];
+  const sheets = authResult.versionData!.data?.sheets || [];
   const sheet = sheets.find((s: any) => s.id === sheetId);
 
   if (!sheet) {

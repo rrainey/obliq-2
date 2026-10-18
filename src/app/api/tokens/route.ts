@@ -1,70 +1,26 @@
 // app/api/tokens/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { ApiTokenService, ApiToken } from '@/lib/apiTokenService'
-import { cookies } from 'next/headers'
+import { ApiTokenService } from '@/lib/apiTokenService'
+import { authenticateRequest } from '@/lib/apiAuthMiddleware'
+import { getStorage, TokenNameConflictError } from '@/lib/server/storage'
 
-// GET /api/tokens - List user's tokens
+export const runtime = 'nodejs'
+
+// GET /api/tokens - List tokens
 export async function GET(request: NextRequest) {
   try {
-    // Get cookies - await is required in Next.js 14+
-    const cookieStore = await cookies()
-
-    console.log('GET')
-    
-    // Create Supabase client with user's session
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet: Array<{ name: string; value: string; options?: CookieOptions }>) {
-            try {
-              console.log('Setting cookies:', JSON.stringify(cookiesToSet))
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {
-              // The `set` method was called from a Server Component.
-              // This can be ignored if you have middleware refreshing
-              // user sessions.
-              console.log('in server')
-            }
-          },
-        },
-      }
-    )
-
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
+    const authResult = await authenticateRequest(request)
+    if (!authResult.authenticated) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
       )
     }
 
-    // Fetch user's tokens
-    const { data: tokens, error } = await supabase
-      .from('api_tokens')
-      .select('id, name, created_at, expires_at, last_used_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Error fetching tokens:', error)
-      return NextResponse.json(
-        { error: 'Failed to fetch tokens' },
-        { status: 500 }
-      )
-    }
+    const tokens = getStorage().tokens.list()
 
     // Add computed fields
-    const enrichedTokens = (tokens || []).map(token => ({
+    const enrichedTokens = tokens.map(token => ({
       ...token,
       isExpired: ApiTokenService.isTokenExpired(token.expires_at),
       expiresInDays: token.expires_at ? calculateDaysUntilExpiry(token.expires_at) : null
@@ -87,37 +43,8 @@ export async function GET(request: NextRequest) {
 // POST /api/tokens - Create a new token
 export async function POST(request: NextRequest) {
   try {
-    // Get cookies - await is required in Next.js 14+
-    const cookieStore = await cookies()
-    
-    // Create Supabase client with user's session
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet: Array<{ name: string; value: string; options?: CookieOptions }>) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              )
-            } catch {
-              // The `set` method was called from a Server Component.
-              // This can be ignored if you have middleware refreshing
-              // user sessions.
-            }
-          },
-        },
-      }
-    )
-
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !user) {
+    const authResult = await authenticateRequest(request)
+    if (!authResult.authenticated) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -125,8 +52,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse request body
-    const body = await request.json()
-    const { name, expiresInDays } = body
+    let body: any
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      )
+    }
+    const { name, expiresInDays } = body ?? {}
 
     // Validate input
     if (!name || typeof name !== 'string') {
@@ -157,32 +92,21 @@ export async function POST(request: NextRequest) {
     const { token, tokenHash } = ApiTokenService.createToken()
     const expiresAt = ApiTokenService.calculateExpiryDate(expiresInDays || null)
 
-    // Insert into database
-    const { data: newToken, error: insertError } = await supabase
-      .from('api_tokens')
-      .insert({
-        user_id: user.id,
+    let newToken
+    try {
+      newToken = getStorage().tokens.create({
         name: sanitizedName,
-        token_hash: tokenHash,
-        expires_at: expiresAt ? expiresAt.toISOString() : null
+        tokenHash,
+        expiresAt: expiresAt ? expiresAt.toISOString() : null
       })
-      .select()
-      .single()
-
-    if (insertError) {
-      // Check for duplicate name
-      if (insertError.code === '23505') {
+    } catch (error) {
+      if (error instanceof TokenNameConflictError) {
         return NextResponse.json(
           { error: 'A token with this name already exists' },
           { status: 409 }
         )
       }
-      
-      console.error('Error creating token:', insertError)
-      return NextResponse.json(
-        { error: 'Failed to create token' },
-        { status: 500 }
-      )
+      throw error
     }
 
     // Return the token data with the raw token (only time it's visible)

@@ -1,296 +1,168 @@
-// __tests__/modelBuilderApi.unit.test.ts
-
 /**
  * @jest-environment node
  */
 
-// Helper to create mock request with Authorization header
-const createMockRequest = (method: string, url: string, body?: any, token?: string) => {
-  const urlObj = new URL(url);
-  const headersMap = new Map<string, string>([['content-type', 'application/json']]);
-  if (token) {
-    headersMap.set('authorization', `Bearer ${token}`);
-  }
+// __tests__/modelBuilderApi.unit.test.ts
 
-  return {
-    url,
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { NextRequest } from 'next/server';
+import { getStorage, resetStorage } from '@/lib/server/storage';
+import { SESSION_COOKIE, sessionCookieValue, LOCAL_USER_ID } from '@/lib/server/session';
+import { ApiTokenService } from '@/lib/apiTokenService';
+import { authenticateRequest } from '@/lib/apiAuthMiddleware';
+import { GET, POST } from '@/app/api/model-builder/route';
+
+const baseUrl = 'http://localhost:3000/api/model-builder';
+
+// Helper to create a request with an Authorization header (or extra headers)
+const createRequest = (method: string, url: string, body?: any, token?: string, extraHeaders: Record<string, string> = {}) => {
+  const headers: Record<string, string> = { 'content-type': 'application/json', ...extraHeaders };
+  if (token) {
+    headers.authorization = `Bearer ${token}`;
+  }
+  return new NextRequest(url, {
     method,
-    headers: {
-      get: (key: string) => headersMap.get(key.toLowerCase()) || null
-    },
-    text: async () => body ? JSON.stringify(body) : '',
-    json: async () => body || {},
-    nextUrl: urlObj
-  };
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined
+  });
+};
+
+// Register a real API token in the current storage and return the raw token
+const createApiToken = (): string => {
+  const { token, tokenHash } = ApiTokenService.createToken();
+  getStorage().tokens.create({ name: 'unit-test', tokenHash, expiresAt: null });
+  return token;
 };
 
 describe('Model Builder API Basic Tests', () => {
+  let home: string;
+
+  const originalConsoleLog = console.log;
+  const originalConsoleError = console.error;
+
+  beforeAll(() => {
+    console.log = jest.fn();
+    console.error = jest.fn();
+  });
+
+  afterAll(() => {
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
+  });
+
   beforeEach(() => {
-    // Clear all mocks and modules before each test
-    jest.clearAllMocks();
-    jest.resetModules();
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'obliq-model-builder-unit-'));
+    process.env.OBLIQ_HOME = home;
+    resetStorage();
+  });
+
+  afterEach(() => {
+    resetStorage();
+    delete process.env.OBLIQ_HOME;
+    fs.rmSync(home, { recursive: true, force: true });
   });
 
   it('should validate authentication - reject invalid token', async () => {
-    // Set environment variables
-    process.env.MODEL_BUILDER_API_TOKEN = 'test-token-123';
-    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
+    // Well-formed but unregistered token, and a malformed token
+    const unknown = ApiTokenService.createToken().token;
+    for (const token of [unknown, 'invalid-token']) {
+      const request = createRequest('GET', `${baseUrl}?modelId=123`, undefined, token);
 
-    // Mock Supabase
-    jest.doMock('@supabase/supabase-js', () => ({
-      createClient: jest.fn(() => ({
-        from: jest.fn(() => ({
-          select: jest.fn(() => ({
-            eq: jest.fn(() => ({
-              single: jest.fn().mockResolvedValue({ data: null, error: { message: 'Not found' } })
-            }))
-          }))
-        }))
-      }))
-    }));
+      const response = await GET(request);
+      const data = await response.json();
 
-    // Mock Next.js
-    jest.doMock('next/server', () => ({
-      NextRequest: jest.fn(),
-      NextResponse: {
-        json: jest.fn((data, init) => ({
-          status: init?.status || 200,
-          headers: init?.headers || {},
-          json: async () => data
-        }))
-      }
-    }));
-
-    // Import after mocks
-    const { GET } = await import('@/app/api/model-builder/route');
-
-    // Test invalid token
-    const request = createMockRequest('GET', 'http://localhost:3000/api/model-builder?modelId=123', undefined, 'invalid-token');
-
-    const response = await GET(request as any);
-    const data = await response.json();
-
-    expect(response.status).toBe(401);
-    expect(data.success).toBe(false);
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+    }
   });
 
   it('should handle missing parameters with user token', async () => {
-    // Set environment variables
-    process.env.MODEL_BUILDER_API_TOKEN = 'env-token-123';
-    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
-
-    // Mock modules
-    jest.doMock('@supabase/supabase-js', () => ({
-      createClient: jest.fn(() => ({}))
-    }));
-
-    jest.doMock('next/server', () => ({
-      NextRequest: jest.fn(),
-      NextResponse: {
-        json: jest.fn((data, init) => ({
-          status: init?.status || 200,
-          headers: init?.headers || {},
-          json: async () => data
-        }))
-      }
-    }));
-
-    // Mock auth middleware to return a valid user token
-    // This simulates a valid user API token that has an associated userId
-    jest.doMock('../src/lib/apiAuthMiddleware', () => ({
-      authenticateApiRequest: jest.fn(async (token: string) => {
-        if (token === 'user-api-token-123') {
-          // User token - userId is derived from the token
-          return {
-            authenticated: true,
-            userId: 'test-user-id-456'
-          };
-        }
-        return { authenticated: false, error: 'Invalid or missing API token' };
-      })
-    }));
-
-    const { POST } = await import('@/app/api/model-builder/route');
+    const token = createApiToken();
 
     // Create request with user token but missing 'name' parameter
-    const request = createMockRequest('POST', 'http://localhost:3000/api/model-builder', { action: 'createModel' }, 'user-api-token-123');
+    const request = createRequest('POST', baseUrl, { action: 'createModel' }, token);
 
-    const response = await POST(request as any);
+    const response = await POST(request);
     const data = await response.json();
 
-    // Should get MISSING_PARAMETER for 'name' since userId comes from token
+    // Should get MISSING_PARAMETER for 'name'
     expect(response.status).toBe(400);
     expect(data.code).toBe('MISSING_PARAMETER');
   });
 
-  it('should reject tokens without userId', async () => {
-    // Set environment variables
-    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
+  // Previously 'should reject tokens without userId': there is now a single
+  // local user, so every valid credential resolves to LOCAL_USER_ID.
+  it('should resolve API tokens and the session cookie to the local user', async () => {
+    const token = createApiToken();
 
-    // Mock modules
-    jest.doMock('@supabase/supabase-js', () => ({
-      createClient: jest.fn(() => ({}))
-    }));
+    const viaToken = await authenticateRequest(createRequest('GET', baseUrl, undefined, token));
+    expect(viaToken).toMatchObject({ authenticated: true, userId: LOCAL_USER_ID, authMethod: 'api_token' });
 
-    jest.doMock('next/server', () => ({
-      NextRequest: jest.fn(),
-      NextResponse: {
-        json: jest.fn((data, init) => ({
-          status: init?.status || 200,
-          headers: init?.headers || {},
-          json: async () => data
-        }))
-      }
-    }));
+    const viaCookie = await authenticateRequest(
+      createRequest('GET', baseUrl, undefined, undefined, { cookie: `${SESSION_COOKIE}=${sessionCookieValue()}` })
+    );
+    expect(viaCookie).toMatchObject({ authenticated: true, userId: LOCAL_USER_ID, authMethod: 'session' });
 
-    // Mock auth middleware to return authenticated but without userId
-    // This simulates a malformed token response
-    jest.doMock('../src/lib/apiAuthMiddleware', () => ({
-      authenticateApiRequest: jest.fn(async (token: string) => {
-        if (token === 'malformed-token') {
-          return { authenticated: true }; // Missing userId
-        }
-        return { authenticated: false, error: 'Invalid or missing API token' };
-      })
-    }));
-
-    const { POST } = await import('@/app/api/model-builder/route');
-
-    // Create request with malformed token
-    const request = createMockRequest('POST', 'http://localhost:3000/api/model-builder', { action: 'createModel', name: 'Test Model' }, 'malformed-token');
-
-    const response = await POST(request as any);
-    const data = await response.json();
-
-    // Should get INVALID_TOKEN because we couldn't determine user from token
-    expect(response.status).toBe(401);
-    expect(data.code).toBe('INVALID_TOKEN');
+    const badCookie = await authenticateRequest(
+      createRequest('GET', baseUrl, undefined, undefined, { cookie: `${SESSION_COOKIE}=nope` })
+    );
+    expect(badCookie.authenticated).toBe(false);
   });
 
-  it('should derive userId from user token for createModel', async () => {
-    // Set environment variables
-    process.env.MODEL_BUILDER_API_TOKEN = 'env-token-123';
-    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
+  it('should accept the session cookie on the model-builder route', async () => {
+    const request = createRequest('POST', baseUrl, { action: 'createModel', name: 'Cookie Model' }, undefined, {
+      cookie: `${SESSION_COOKIE}=${sessionCookieValue()}`
+    });
 
-    // Create a mock Supabase that tracks what userId is used
-    let capturedUserId: string | null = null;
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+  });
 
-    jest.doMock('@supabase/supabase-js', () => ({
-      createClient: jest.fn(() => ({
-        from: jest.fn((table: string) => ({
-          insert: jest.fn((data: any) => {
-            if (table === 'models') {
-              capturedUserId = data.user_id;
-            }
-            return {
-              select: jest.fn(() => ({
-                single: jest.fn().mockResolvedValue({
-                  data: { id: 'new-model-id', name: data.name, user_id: data.user_id, latest_version: 1 },
-                  error: null
-                })
-              }))
-            };
-          }),
-          select: jest.fn(() => ({
-            eq: jest.fn(() => ({
-              single: jest.fn().mockResolvedValue({ data: null, error: null })
-            }))
-          }))
-        }))
-      }))
-    }));
+  // Previously asserted the token's userId reached the hosted DB insert; now
+  // verify the model actually lands in local storage.
+  it('should persist createModel to storage', async () => {
+    const token = createApiToken();
 
-    jest.doMock('next/server', () => ({
-      NextRequest: jest.fn(),
-      NextResponse: {
-        json: jest.fn((data, init) => ({
-          status: init?.status || 200,
-          headers: init?.headers || {},
-          json: async () => data
-        }))
-      }
-    }));
-
-    // Mock auth middleware to return a user token with specific userId
-    const expectedUserId = 'user-from-token-789';
-    jest.doMock('../src/lib/apiAuthMiddleware', () => ({
-      authenticateApiRequest: jest.fn(async (token: string) => {
-        if (token === 'user-api-token-xyz') {
-          return {
-            authenticated: true,
-            userId: expectedUserId
-          };
-        }
-        return { authenticated: false, error: 'Invalid or missing API token' };
-      })
-    }));
-
-    const { POST } = await import('@/app/api/model-builder/route');
-
-    // Create model with user token - NO userId in body (should come from token)
-    const request = createMockRequest('POST', 'http://localhost:3000/api/model-builder', {
+    const request = createRequest('POST', baseUrl, {
       action: 'createModel',
       name: 'My New Model'
-    }, 'user-api-token-xyz');
+    }, token);
 
-    const response = await POST(request as any);
+    const response = await POST(request);
     const data = await response.json();
 
-    // Verify the userId from the token was used
-    expect(capturedUserId).toBe(expectedUserId);
+    expect(response.status).toBe(201);
+    expect(data.data.latest_version).toBe(1);
+
+    const record = getStorage().models.require(data.data.id);
+    expect(record.name).toBe('My New Model');
+    const current = getStorage().models.readCurrent(data.data.id);
+    expect(current.data.sheets[0].id).toBe('main');
+
+    // And the token's last-used timestamp was touched
+    const tokens = getStorage().tokens.list();
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0].last_used_at).toBeTruthy();
   });
 
   it('should validate batch operations', async () => {
-    // Set environment variables
-    process.env.MODEL_BUILDER_API_TOKEN = 'test-token-123';
-    process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
-
-    // Mock modules
-    jest.doMock('@supabase/supabase-js', () => ({
-      createClient: jest.fn(() => ({}))
-    }));
-
-    jest.doMock('next/server', () => ({
-      NextRequest: jest.fn(),
-      NextResponse: {
-        json: jest.fn((data, init) => ({
-          status: init?.status || 200,
-          headers: init?.headers || {},
-          json: async () => data
-        }))
-      }
-    }));
-
-    // Mock auth middleware - use user token for batch operations
-    jest.doMock('../src/lib/apiAuthMiddleware', () => ({
-      authenticateApiRequest: jest.fn(async (token: string) => {
-        if (token === 'test-token-123') {
-          return { authenticated: true, userId: 'test-user-id' };
-        }
-        return { authenticated: false, error: 'Invalid or missing API token' };
-      })
-    }));
-
-    const { POST } = await import('@/app/api/model-builder/route');
+    const token = createApiToken();
 
     // Test invalid operations type
-    const request1 = createMockRequest('POST', 'http://localhost:3000/api/model-builder', { action: 'batchOperations', operations: 'not-an-array' }, 'test-token-123');
+    const request1 = createRequest('POST', baseUrl, { action: 'batchOperations', operations: 'not-an-array' }, token);
 
-    const response1 = await POST(request1 as any);
+    const response1 = await POST(request1);
     const data1 = await response1.json();
 
     expect(response1.status).toBe(400);
     expect(data1.code).toBe('INVALID_OPERATIONS');
 
     // Test empty operations
-    const request2 = createMockRequest('POST', 'http://localhost:3000/api/model-builder', { action: 'batchOperations', operations: [] }, 'test-token-123');
+    const request2 = createRequest('POST', baseUrl, { action: 'batchOperations', operations: [] }, token);
 
-    const response2 = await POST(request2 as any);
+    const response2 = await POST(request2);
     const data2 = await response2.json();
 
     expect(response2.status).toBe(400);
@@ -298,9 +170,9 @@ describe('Model Builder API Basic Tests', () => {
 
     // Test too many operations
     const operations = Array(51).fill({ action: 'getModel', modelId: '123' });
-    const request3 = createMockRequest('POST', 'http://localhost:3000/api/model-builder', { action: 'batchOperations', operations }, 'test-token-123');
+    const request3 = createRequest('POST', baseUrl, { action: 'batchOperations', operations }, token);
 
-    const response3 = await POST(request3 as any);
+    const response3 = await POST(request3);
     const data3 = await response3.json();
 
     expect(response3.status).toBe(400);

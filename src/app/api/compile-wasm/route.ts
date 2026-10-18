@@ -10,7 +10,7 @@
  * Request body:
  * {
  *   modelId: string,          // UUID of the model
- *   version?: number,          // Optional version (defaults to latest)
+ *   version?: number,          // Optional saved version (defaults to the current model file)
  *   optimizationLevel?: string // 'O0' | 'O1' | 'O2' | 'O3' (default: 'O2')
  *   noCache?: boolean          // Skip cache lookup and force recompilation (default: false)
  * }
@@ -19,17 +19,22 @@
  * - 200: JSON with { wasmData, jsData, metadata, cacheHit }
  * - 400: Validation error
  * - 401: Unauthorized
- * - 403: Forbidden (not owner of model)
  * - 404: Model not found
  * - 500: Compilation error
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { WasmCodeGenerator } from '@/lib/wasm/codegen/WasmCodeGenerator'
-import { SupabaseCacheManager, generateCacheKey, hashModel } from '@/lib/wasm/cache'
+import { FileCacheManager, generateCacheKey, hashModel } from '@/lib/wasm/cache'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
 import { authenticateRequest } from '@/lib/apiAuthMiddleware'
+import {
+  getStorage,
+  ModelNotFoundError,
+  ModelFileMissingError,
+  InvalidModelFileError,
+  type ModelData
+} from '@/lib/server/storage'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import * as fs from 'fs/promises'
@@ -38,15 +43,7 @@ import * as os from 'os'
 
 const execAsync = promisify(exec)
 
-// Create server-side Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false
-  }
-})
+export const runtime = 'nodejs'
 
 // Docker image for Emscripten compilation
 const DOCKER_IMAGE = 'obliq-emscripten:latest'
@@ -67,8 +64,6 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
       ErrorTypes.UNAUTHORIZED
     )
   }
-
-  const userId = authResult.userId!
 
   // Parse and validate request body
   let requestBody: any
@@ -110,63 +105,13 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
 
   console.log(`[compile-wasm] Fetching model: ${modelId}`)
 
-  // Fetch model metadata - scoped to authenticated user
-  const { data: model, error: dbError } = await supabaseServer
-    .from('models')
-    .select('*')
-    .eq('id', modelId)
-    .eq('user_id', userId)
-    .single()
-
-  if (dbError || !model) {
-    // Check if model exists but belongs to another user
-    const { data: existingModel } = await supabaseServer
-      .from('models')
-      .select('id')
-      .eq('id', modelId)
-      .single()
-
-    if (existingModel) {
-      throw new AppError(
-        'Access denied: You do not have permission to access this model',
-        403,
-        ErrorTypes.FORBIDDEN,
-        { modelId }
-      )
-    }
-
-    throw new AppError(
-      'Model not found',
-      404,
-      ErrorTypes.NOT_FOUND,
-      { modelId }
-    )
-  }
+  const { modelName, versionToUse, data: modelData } = loadModelSource(modelId, version)
+  const model = { name: modelName }
 
   console.log(`[compile-wasm] Model found: ${model.name}`)
 
-  // Determine version to use
-  const versionToUse = version || model.latest_version || 1
-
-  // Fetch version data
-  const { data: versionData, error: versionError } = await supabaseServer
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', modelId)
-    .eq('version', versionToUse)
-    .single()
-
-  if (versionError || !versionData) {
-    throw new AppError(
-      `Version ${versionToUse} not found for this model`,
-      404,
-      ErrorTypes.NOT_FOUND,
-      { modelId, requestedVersion: versionToUse }
-    )
-  }
-
   // Validate model structure
-  if (!versionData.data || !versionData.data.sheets || !Array.isArray(versionData.data.sheets)) {
+  if (!modelData || !modelData.sheets || !Array.isArray(modelData.sheets)) {
     throw new AppError(
       'Invalid model structure: missing or invalid sheets data',
       400,
@@ -175,8 +120,8 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
     )
   }
 
-  const sheets = versionData.data.sheets
-  const debugMath = !!versionData.data.globalSettings?.debugMath
+  const sheets = modelData.sheets
+  const debugMath = !!modelData.globalSettings?.debugMath
 
   // Generate cache key (debugMath changes codegen → separate cache entry)
   const cacheKey = generateCacheKey(modelId, { sheets }, {
@@ -186,7 +131,7 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
   console.log(`[compile-wasm] Cache key: ${cacheKey}${debugMath ? ' (debugMath)' : ''}`)
 
   // Check cache (unless noCache is set)
-  const cacheManager = new SupabaseCacheManager()
+  const cacheManager = new FileCacheManager()
 
   if (!noCache) {
     const cachedResult = await cacheManager.get(cacheKey)
@@ -243,7 +188,7 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
       includeDebugFunctions: false,
       debugMath,
       integrationAlgorithm:
-        versionData.data.globalSettings?.integrationAlgorithm === 'euler'
+        modelData.globalSettings?.integrationAlgorithm === 'euler'
           ? 'euler'
           : 'rk4'
     })
@@ -434,6 +379,50 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
         originalError: error instanceof Error ? error.message : 'Unknown error'
       }
     )
+  }
+}
+
+/**
+ * Load model content from local storage. A specific version reads that saved
+ * snapshot; version 0 reads the autosave; otherwise the current model file
+ * (authoritative, possibly newer than the latest snapshot) is used.
+ */
+function loadModelSource(
+  modelId: string,
+  version?: number | null
+): { modelName: string; versionToUse: number; data: ModelData } {
+  const storage = getStorage()
+  try {
+    if (version === 0) {
+      const autosave = storage.models.getAutosave(modelId)
+      if (autosave) {
+        return { modelName: storage.models.require(modelId).name, versionToUse: 0, data: autosave.data }
+      }
+    } else if (version != null) {
+      const record = storage.models.require(modelId)
+      return { modelName: record.name, versionToUse: version, data: storage.models.getVersion(modelId, version) }
+    }
+    const current = storage.models.readCurrent(modelId)
+    return { modelName: current.record.name, versionToUse: current.record.latest_version, data: current.data }
+  } catch (error) {
+    if (error instanceof ModelNotFoundError) {
+      if (version != null && storage.models.get(modelId)) {
+        throw new AppError(
+          `Version ${version} not found for this model`,
+          404,
+          ErrorTypes.NOT_FOUND,
+          { modelId, requestedVersion: version }
+        )
+      }
+      throw new AppError('Model not found', 404, ErrorTypes.NOT_FOUND, { modelId })
+    }
+    if (error instanceof ModelFileMissingError) {
+      throw new AppError(error.message, 404, ErrorTypes.NOT_FOUND, { modelId, filePath: error.filePath })
+    }
+    if (error instanceof InvalidModelFileError) {
+      throw new AppError(error.message, 422, ErrorTypes.VALIDATION_ERROR, { modelId })
+    }
+    throw error
   }
 }
 

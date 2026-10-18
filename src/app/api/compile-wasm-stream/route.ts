@@ -10,7 +10,7 @@
  * Request body:
  * {
  *   modelId: string,          // UUID of the model
- *   version?: number,          // Optional version (defaults to latest)
+ *   version?: number,          // Optional saved version; 0 = autosave (defaults to the current model file)
  *   optimizationLevel?: string // 'O0' | 'O1' | 'O2' | 'O3' (default: 'O2')
  *   noCache?: boolean          // Skip cache lookup and force recompilation (default: false)
  * }
@@ -23,11 +23,17 @@
  */
 
 import { NextRequest } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { WasmCodeGenerator } from '@/lib/wasm/codegen/WasmCodeGenerator'
-import { SupabaseCacheManager, generateCacheKey, hashModel } from '@/lib/wasm/cache'
+import { FileCacheManager, generateCacheKey, hashModel } from '@/lib/wasm/cache'
 import { validateRequiredFields } from '@/lib/apiErrorHandler'
 import { authenticateRequest } from '@/lib/apiAuthMiddleware'
+import {
+  getStorage,
+  ModelNotFoundError,
+  ModelFileMissingError,
+  InvalidModelFileError,
+  type ModelData
+} from '@/lib/server/storage'
 import { exec } from 'child_process'
 import { promisify } from 'util'
 import * as fs from 'fs/promises'
@@ -36,15 +42,7 @@ import * as os from 'os'
 
 const execAsync = promisify(exec)
 
-// Create server-side Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false
-  }
-})
+export const runtime = 'nodejs'
 
 // Docker image for Emscripten compilation
 const DOCKER_IMAGE = 'obliq-emscripten:latest'
@@ -85,8 +83,6 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'application/json' }
     })
   }
-
-  const userId = authResult.userId!
 
   // Create a ReadableStream for Server-Sent Events
   const stream = new ReadableStream({
@@ -142,65 +138,49 @@ export async function POST(request: NextRequest) {
         sendEvent(controller, 'progress', {
           step: 'fetch',
           progress: 10,
-          message: 'Fetching model from database...'
+          message: 'Loading model...'
         })
 
-        // Fetch model - scoped to authenticated user
-        const { data: model, error: dbError } = await supabaseServer
-          .from('models')
-          .select('*')
-          .eq('id', modelId)
-          .eq('user_id', userId)
-          .single()
-
-        if (dbError || !model) {
-          // Check if model exists but belongs to another user
-          const { data: existingModel } = await supabaseServer
-            .from('models')
-            .select('id')
-            .eq('id', modelId)
-            .single()
-
-          if (existingModel) {
-            sendEvent(controller, 'error', {
-              error: 'Access denied: You do not have permission to access this model',
-              code: 'FORBIDDEN'
-            })
+        // Load model content. Explicit version: that saved snapshot; version 0:
+        // the autosave (falls back to the model file); otherwise the current
+        // model file, which is authoritative.
+        const storage = getStorage()
+        let model: { name: string }
+        let modelData: ModelData
+        let versionToUse: number
+        try {
+          const autosave = version === 0 ? storage.models.getAutosave(modelId) : null
+          if (autosave) {
+            model = storage.models.require(modelId)
+            modelData = autosave.data
+            versionToUse = 0
+          } else if (version != null && version !== 0) {
+            model = storage.models.require(modelId)
+            modelData = storage.models.getVersion(modelId, version)
+            versionToUse = version
           } else {
-            sendEvent(controller, 'error', {
-              error: 'Model not found',
-              modelId
-            })
+            const current = storage.models.readCurrent(modelId)
+            model = current.record
+            modelData = current.data
+            versionToUse = current.record.latest_version
+          }
+        } catch (error) {
+          if (error instanceof ModelNotFoundError) {
+            sendEvent(controller, 'error', version != null && storage.models.get(modelId)
+              ? { error: `Version ${version} not found for this model` }
+              : { error: 'Model not found', modelId })
+          } else if (error instanceof ModelFileMissingError || error instanceof InvalidModelFileError) {
+            sendEvent(controller, 'error', { error: error.message, modelId })
+          } else {
+            throw error
           }
           controller.close()
           return
         }
-
-        // Determine version to use
-        // If version is explicitly 0, use auto-save; if undefined/null, use latest saved version
-        const versionToUse = version !== undefined ? version : (model.latest_version || 1)
         console.log(`[compile-wasm-stream] Requested version: ${version}, using version: ${versionToUse}`)
 
-        // Fetch version data
-        const { data: versionData, error: versionError } = await supabaseServer
-          .from('model_versions')
-          .select('*')
-          .eq('model_id', modelId)
-          .eq('version', versionToUse)
-          .single()
-
-        console.log(`[compile-wasm-stream] Fetched version data:`, versionError ? `Error: ${versionError.message}` : `Found version ${versionToUse}`)
-
-        if (versionError || !versionData) {
-          sendEvent(controller, 'error', {
-            error: `Version ${versionToUse} not found for this model`
-          })
-          controller.close()
-          return
-        }
-
         // Validate model structure
-        if (!versionData.data || !versionData.data.sheets || !Array.isArray(versionData.data.sheets)) {
+        if (!modelData || !modelData.sheets || !Array.isArray(modelData.sheets)) {
           sendEvent(controller, 'error', {
             error: 'Invalid model structure: missing or invalid sheets data'
           })
@@ -208,9 +188,9 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        const sheets = versionData.data.sheets
-        const parameters = versionData.data.parameters || [] // Feature 3
-        const debugMath = !!versionData.data.globalSettings?.debugMath
+        const sheets = modelData.sheets
+        const parameters = modelData.parameters || [] // Feature 3
+        const debugMath = !!modelData.globalSettings?.debugMath
 
         const cacheKey = generateCacheKey(modelId, { sheets, parameters }, {
           optimizationLevel,
@@ -219,7 +199,7 @@ export async function POST(request: NextRequest) {
         })
         console.log(`[compile-wasm-stream] Generated cache key: ${cacheKey}`)
 
-        const cacheManager = new SupabaseCacheManager()
+        const cacheManager = new FileCacheManager()
 
         // Step 2: Checking cache (unless noCache is set)
         if (!noCache) {
@@ -308,7 +288,7 @@ export async function POST(request: NextRequest) {
             includeDebugFunctions: false,
             debugMath,
             integrationAlgorithm:
-              versionData.data.globalSettings?.integrationAlgorithm === 'euler'
+              modelData.globalSettings?.integrationAlgorithm === 'euler'
                 ? 'euler'
                 : 'rk4'
           })

@@ -5,13 +5,13 @@ import { NextResponse } from 'next/server';
 import { HandlerContext } from '@/lib/api-support/types';
 import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-support/responses';
 import { findSheetRecursively } from '@/lib/api-support/sheet-search';
-import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
+import { loadModelData, persistModelData } from '@/lib/api-support/auth';
 
 /**
  * DELETE_CONNECTION - Delete a connection from a sheet
  */
 export async function handleDeleteConnection(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, searchParams, body } = ctx;
+  const { storage, searchParams, body } = ctx;
   const modelId = searchParams?.get('modelId') || body?.modelId;
   const sheetId = searchParams?.get('sheetId') || body?.sheetId;
   const connectionId = searchParams?.get('connectionId') || body?.connectionId;
@@ -27,13 +27,13 @@ export async function handleDeleteConnection(ctx: HandlerContext): Promise<NextR
     return ErrorResponses.missingParameter('connectionId');
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const versionData = authResult.versionData;
+  const versionData = authResult.versionData!;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -65,41 +65,18 @@ export async function handleDeleteConnection(ctx: HandlerContext): Promise<NextR
   // Remove the connection
   connections.splice(connectionIndex, 1);
 
-  // Create a new version with the updated data
-  const nextVersion = versionData.version + 1;
-
-  const { error: insertError } = await supabase
-    .from('model_versions')
-    .insert({
-      model_id: modelId,
-      version: nextVersion,
-      data: modelData
-    });
-
-  if (insertError) {
-    console.error('Error creating new version:', insertError);
-    return errorResponse('Failed to delete connection', 'DELETE_CONNECTION_FAILED', 500);
-  }
-
-  // Update model's latest version
-  const { error: updateError } = await supabase
-    .from('models')
-    .update({
-      latest_version: nextVersion,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', modelId);
-
-  if (updateError) {
-    console.error('Error updating model:', updateError);
-    return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
+  // Persist in place (a version snapshot is recorded only on checkpoint)
+  const saved = persistModelData(ctx, modelId, modelData, versionData.hash);
+  if (!saved.ok) {
+    return saved.errorResponse;
   }
 
   // Return success response
   return successResponse({
     modelId,
     sheetId,
-    newVersion: nextVersion,
+    newVersion: saved.version,
+    hash: saved.hash,
     deletedConnection: {
       id: deletedConnection.id,
       sourceBlockId: deletedConnection.sourceBlockId,

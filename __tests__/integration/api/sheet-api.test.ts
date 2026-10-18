@@ -59,7 +59,8 @@ describeIntegration('Sheet API Integration Tests', () => {
       expect(result.data.sheet.name).toBe('NewSheet');
       expect(result.data.sheet.id).toBeDefined();
       expect(result.data.sheet.blockCount).toBe(0);
-      expect(result.data.newVersion).toBeGreaterThan(1);
+      // Mutations write the model file in place; versions are only recorded on checkpoint.
+      expect(result.data.hash).toMatch(/^[0-9a-f]{64}$/);
     });
 
     it('should create a sheet with auto-generated name', async () => {

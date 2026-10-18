@@ -1,20 +1,19 @@
 //app/api/automations/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { CodeGenerator } from '@/lib/codeGenerationNew'
 import { executeServerSimulation, type SimulationConfig } from '@/lib/wasm/ServerWasmExecutor'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
-import { authenticateApiRequest } from '@/lib/apiAuthMiddleware'
+import { authenticateRequest } from '@/lib/apiAuthMiddleware'
+import {
+  getStorage,
+  ModelNotFoundError,
+  ModelFileMissingError,
+  InvalidModelFileError,
+  type ModelData,
+  type ModelRecord
+} from '@/lib/server/storage'
 
-// Create a server-side Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-const supabaseServer = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false
-  }
-})
+export const runtime = 'nodejs'
 
 interface AutomationRequest {
   action: 'generateCode' | 'simulate' | 'validateModel' | 'listModels'
@@ -34,46 +33,33 @@ interface AutomationResponse {
 }
 
 /**
- * Extract Bearer token from Authorization header
+ * Collect the caller's credentials so internal calls (e.g. /api/compile-wasm
+ * from the simulation executor) are authenticated the same way.
  */
-function extractBearerToken(request: NextRequest): string | null {
-  const authHeader = request.headers.get('Authorization')
-  if (!authHeader) return null
-
-  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i)
-  if (bearerMatch) return bearerMatch[1]
-
-  // Allow raw token in Authorization header as fallback
-  return authHeader
+function forwardedAuthHeaders(request: NextRequest): Record<string, string> {
+  const headers: Record<string, string> = {}
+  const authorization = request.headers.get('Authorization')
+  if (authorization) headers['Authorization'] = authorization
+  const cookie = request.headers.get('Cookie')
+  if (cookie) headers['Cookie'] = cookie
+  return headers
 }
 
 async function automationHandler(
   request: NextRequest
 ): Promise<NextResponse> {
-  // Extract token from Authorization header
-  const token = extractBearerToken(request)
-
-  if (!token) {
-    throw new AppError(
-      'Missing Authorization header. Use: Authorization: Bearer <token>',
-      401,
-      ErrorTypes.UNAUTHORIZED
-    )
-  }
-
-  // Authenticate using the API token middleware
-  const authResult = await authenticateApiRequest(token)
+  // API token (Authorization: Bearer <token>) or local session cookie
+  const authResult = await authenticateRequest(request)
 
   if (!authResult.authenticated) {
     throw new AppError(
-      authResult.error || 'Invalid or expired API token',
+      request.headers.get('Authorization')
+        ? authResult.error || 'Invalid or expired API token'
+        : 'Missing Authorization header. Use: Authorization: Bearer <token>',
       401,
       ErrorTypes.UNAUTHORIZED
     )
   }
-
-  // userId is always available now (no environment tokens)
-  const userId = authResult.userId!
 
   // Parse and validate request body
   let body: AutomationRequest
@@ -103,7 +89,7 @@ async function automationHandler(
 
   // Handle listModels action separately (doesn't require modelId)
   if (body.action === 'listModels') {
-    const result = await handleListModels(userId)
+    const result = await handleListModels()
     return NextResponse.json(result)
   }
 
@@ -127,46 +113,47 @@ async function automationHandler(
     )
   }
 
-  // Fetch the model metadata - scoped to the authenticated user
-  const { data: model, error: dbError } = await supabaseServer
-    .from('models')
-    .select('*')
-    .eq('id', body.modelId)
-    .eq('user_id', userId)  // User can only access their own models
-    .single()
-
-  if (dbError && dbError.code !== 'PGRST116') {
-    throw dbError // Will be handled by the error handler
+  // Load the model: a specific saved version if requested, otherwise the
+  // current model file (authoritative, possibly newer than the latest snapshot)
+  const storage = getStorage()
+  let model: ModelRecord
+  let versionData: { version: number; data: ModelData }
+  try {
+    if (body.version) {
+      model = storage.models.require(body.modelId)
+      versionData = { version: body.version, data: storage.models.getVersion(body.modelId, body.version) }
+    } else {
+      const current = storage.models.readCurrent(body.modelId)
+      model = current.record
+      versionData = { version: current.record.latest_version, data: current.data }
+    }
+  } catch (error) {
+    if (error instanceof ModelNotFoundError) {
+      const existing = storage.models.get(body.modelId)
+      if (body.version && existing) {
+        throw new AppError(
+          `Version ${body.version} not found for this model`,
+          404,
+          ErrorTypes.NOT_FOUND,
+          { modelId: body.modelId, requestedVersion: body.version, latestVersion: existing.latest_version }
+        )
+      }
+      throw new AppError(
+        'Model not found or access denied',
+        404,
+        ErrorTypes.NOT_FOUND,
+        { modelId: body.modelId }
+      )
+    }
+    if (error instanceof ModelFileMissingError) {
+      throw new AppError(error.message, 404, ErrorTypes.NOT_FOUND, { modelId: body.modelId, filePath: error.filePath })
+    }
+    if (error instanceof InvalidModelFileError) {
+      throw new AppError(error.message, 422, ErrorTypes.VALIDATION_ERROR, { modelId: body.modelId })
+    }
+    throw error
   }
-
-  if (!model) {
-    throw new AppError(
-      'Model not found or access denied',
-      404,
-      ErrorTypes.NOT_FOUND,
-      { modelId: body.modelId }
-    )
-  }
-
-  // Determine which version to use
-  const versionToUse = body.version || model.latest_version || 1
-
-  // Fetch the specific version data
-  const { data: versionData, error: versionError } = await supabaseServer
-    .from('model_versions')
-    .select('*')
-    .eq('model_id', body.modelId)
-    .eq('version', versionToUse)
-    .single()
-
-  if (versionError || !versionData) {
-    throw new AppError(
-      `Version ${versionToUse} not found for this model`,
-      404,
-      ErrorTypes.NOT_FOUND,
-      { modelId: body.modelId, requestedVersion: versionToUse, latestVersion: model.latest_version }
-    )
-  }
+  const versionToUse = versionData.version
 
   // Validate version data structure
   if (!versionData.data || !versionData.data.sheets || !Array.isArray(versionData.data.sheets)) {
@@ -179,7 +166,7 @@ async function automationHandler(
   }
 
   // Execute the requested action
-  const result = await executeAction(body.action, model, versionData, body.parameters)
+  const result = await executeAction(body.action, model, versionData, body.parameters, forwardedAuthHeaders(request))
 
   return NextResponse.json(result)
 }
@@ -188,7 +175,8 @@ async function executeAction(
   action: string,
   model: any,
   versionData: any,
-  parameters?: Record<string, any>
+  parameters?: Record<string, any>,
+  authHeaders?: Record<string, string>
 ): Promise<AutomationResponse> {
   const baseResponse: AutomationResponse = {
     success: false,
@@ -204,7 +192,7 @@ async function executeAction(
         return await handleGenerateCode(model, versionData, baseResponse)
 
       case 'simulate':
-        return await handleSimulate(model, versionData, baseResponse, parameters)
+        return await handleSimulate(model, versionData, baseResponse, parameters, authHeaders)
 
       case 'validateModel':
         return await handleValidateModel(model, versionData, baseResponse)
@@ -292,13 +280,15 @@ async function handleSimulate(
   model: any,
   versionData: any,
   baseResponse: AutomationResponse,
-  parameters?: Record<string, any>
+  parameters?: Record<string, any>,
+  authHeaders?: Record<string, string>
 ): Promise<AutomationResponse> {
   // Build simulation configuration
   const simConfig: SimulationConfig = {
     timeStep: 0.01,
     duration: 10.0,
-    optimizationLevel: 'O2'
+    optimizationLevel: 'O2',
+    authHeaders
   }
 
   // Validate and apply user-provided parameters
@@ -510,7 +500,7 @@ async function handleValidateModel(model: any, versionData: any, baseResponse: A
   }
 }
 
-async function handleListModels(userId: string): Promise<AutomationResponse> {
+async function handleListModels(): Promise<AutomationResponse> {
   const baseResponse: AutomationResponse = {
     success: false,
     action: 'listModels',
@@ -519,26 +509,17 @@ async function handleListModels(userId: string): Promise<AutomationResponse> {
   }
 
   try {
-    // Fetch all models for the authenticated user
-    const { data: models, error: dbError } = await supabaseServer
-      .from('models')
-      .select('id, name, latest_version, created_at, updated_at')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-
-    if (dbError) {
-      return {
-        ...baseResponse,
-        errors: [`Database error: ${dbError.message}`]
-      }
-    }
+    // Already ordered by updated_at DESC
+    const models = getStorage()
+      .models.list()
+      .map(({ id, name, latest_version, created_at, updated_at }) => ({ id, name, latest_version, created_at, updated_at }))
 
     return {
       ...baseResponse,
       success: true,
       data: {
-        models: models || [],
-        count: models?.length || 0
+        models,
+        count: models.length
       }
     }
   } catch (error) {

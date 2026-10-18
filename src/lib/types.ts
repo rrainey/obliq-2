@@ -1,16 +1,23 @@
 // lib/types.ts
 
-// Model metadata (stored in models table)
+// Model metadata (SQLite `models` index; content lives in the model file)
 export interface Model {
   id: string
-  user_id: string
   name: string
+  /** 'managed' → ~/.config/obliq-2/models/<id>/model.json; 'linked' → file_path */
+  storage_kind: 'managed' | 'linked'
+  file_path: string | null
+  file_format: 'wrapper' | 'bare'
+  file_hash: string | null
+  file_mtime_ms: number | null
+  /** Highest recorded snapshot version (the model file itself may be newer). */
   latest_version: number
+  autosave_at: string | null
   created_at: string
   updated_at: string
 }
 
-// Model version data (stored in model_versions table)
+// Model version data (a snapshot under versions/, or the current file)
 export interface ModelVersion {
   id: string
   model_id: string

@@ -1,319 +1,52 @@
-// __tests__/modelBuilderApi.integration.test.ts
-
 /**
  * @jest-environment node
  */
 
-// Mock Next.js modules before imports
-jest.mock('next/server', () => ({
-  NextRequest: jest.fn().mockImplementation((url, init) => {
-    const urlObj = new URL(url);
-    // Handle Headers object properly - Headers has a forEach method we can use
-    let headersObj: Headers;
-    if (init?.headers instanceof Headers) {
-      headersObj = init.headers;
-    } else if (init?.headers) {
-      headersObj = new Headers(init.headers as Record<string, string>);
-    } else {
-      headersObj = new Headers();
-    }
-    return {
-      url,
-      method: init?.method || 'GET',
-      headers: headersObj,
-      text: async () => init?.body || '',
-      json: async () => init?.body ? JSON.parse(init.body) : {},
-      nextUrl: urlObj
-    };
-  }),
-  NextResponse: {
-    json: jest.fn((data, init) => ({
-      status: init?.status || 200,
-      headers: init?.headers || {},
-      json: async () => data,
-      ok: (init?.status || 200) >= 200 && (init?.status || 200) < 300
-    }))
-  }
-}));
+// __tests__/signalTypeIntegration.test.ts
+// End-to-end Model Builder API workflows against the real local storage layer.
 
-// Mock API auth middleware - all access requires user tokens with userId
-jest.mock('../src/lib/apiAuthMiddleware', () => ({
-  authenticateApiRequest: jest.fn(async (token: string) => {
-    if (token === 'test-token-123') {
-      return { authenticated: true, userId: 'test-user-123' };
-    }
-    return { authenticated: false, error: 'Invalid or missing API token' };
-  })
-}));
-
-// Set up environment variables
-process.env.MODEL_BUILDER_API_TOKEN = 'test-token-123';
-process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
-process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key';
-
-// Import after mocks
-import { GET, POST, PUT, DELETE } from '@/app/api/model-builder/route';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { NextRequest } from 'next/server';
+import { getStorage, resetStorage } from '@/lib/server/storage';
+import { ApiTokenService } from '@/lib/apiTokenService';
+import { GET, POST } from '@/app/api/model-builder/route';
 import { BlockTypes } from '@/lib/blockTypeRegistry';
 
-// Mock data storage for integration tests
-const mockDatabase = {
-  models: new Map(),
-  modelVersions: new Map(),
-  
-  reset() {
-    this.models.clear();
-    this.modelVersions.clear();
-  },
-  
-  createModel(modelData: any, userId: string = 'test-user-123') {
-    const id = `model_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-    const model = {
-      id,
-      ...modelData,
-      user_id: userId,
-      latest_version: 1,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    this.models.set(id, model);
-    
-    // Create initial version
-    const versionId = `version_${Date.now()}`;
-    const version = {
-      id: versionId,
-      model_id: id,
-      version: 1,
-      data: {
-        version: "1.0",
-        metadata: { created: new Date().toISOString(), description: `Model ${modelData.name}` },
-        sheets: [{
-          id: 'main',
-          name: 'Main',
-          blocks: [],
-          connections: [],
-          extents: { width: 2000, height: 2000 }
-        }],
-        globalSettings: {
-          simulationTimeStep: 0.01,
-          simulationDuration: 10.0
-        }
-      },
-      created_at: new Date().toISOString()
-    };
-    this.modelVersions.set(`${id}_${version.version}`, version);
-    
-    return { model, version };
-  },
-  
-  getLatestVersion(modelId: string) {
-    const versions = Array.from(this.modelVersions.values())
-      .filter(v => v.model_id === modelId);
-    return versions.sort((a, b) => b.version - a.version)[0];
-  },
-  
-  createNewVersion(modelId: string, data: any) {
-    const model = this.models.get(modelId);
-    if (!model) return null;
-    
-    const newVersion = model.latest_version + 1;
-    model.latest_version = newVersion;
-    model.updated_at = new Date().toISOString();
-    
-    const versionId = `version_${Date.now()}`;
-    const version = {
-      id: versionId,
-      model_id: modelId,
-      version: newVersion,
-      data,
-      created_at: new Date().toISOString()
-    };
-    this.modelVersions.set(`${modelId}_${newVersion}`, version);
-    
-    return version;
-  }
-};
-
-// Enhanced Supabase mock that better mimics the real implementation
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
-    from: jest.fn((table) => ({
-      select: jest.fn(() => {
-        // Track filter conditions through chained eq() calls
-        const filters: Record<string, any> = {};
-
-        const createSingleFn = () => jest.fn(async () => {
-          if (table === 'models') {
-            const modelId = filters['id'];
-            const userId = filters['user_id'];
-
-            if (modelId) {
-              const model = mockDatabase.models.get(modelId);
-              if (!model) {
-                return { data: null, error: { message: 'Not found' } };
-              }
-              if (userId && model.user_id !== userId) {
-                return { data: null, error: { message: 'Not found' } };
-              }
-              const latestVersion = mockDatabase.getLatestVersion(modelId);
-              return {
-                data: {
-                  ...model,
-                  data: latestVersion ? latestVersion.data : null
-                },
-                error: null
-              };
-            }
-          }
-          return { data: null, error: { message: 'Not found' } };
-        });
-
-        const createOrderFn = () => jest.fn(() => ({
-          limit: jest.fn(() => ({
-            single: jest.fn(async () => {
-              if (table === 'model_versions' && filters['model_id']) {
-                const version = mockDatabase.getLatestVersion(filters['model_id']);
-                return { data: version || null, error: version ? null : { message: 'Not found' } };
-              }
-              return { data: null, error: { message: 'Not found' } };
-            })
-          }))
-        }));
-
-        const eqFn: any = jest.fn((field: string, value: any) => {
-          filters[field] = value;
-          return {
-            eq: eqFn,
-            single: createSingleFn(),
-            order: createOrderFn()
-          };
-        });
-
-        return {
-          eq: eqFn,
-          single: createSingleFn(),
-          order: createOrderFn()
-        };
-      }),
-      insert: jest.fn((data) => {
-        if (table === 'models') {
-          return {
-            select: jest.fn(() => ({
-              single: jest.fn(async () => {
-                // Don't use createModel here as it would create a version
-                const id = `model_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-                const model = {
-                  id,
-                  ...data,
-                  user_id: data.user_id || 'test-user-123',
-                  latest_version: 1,
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                };
-                mockDatabase.models.set(id, model);
-                return { data: model, error: null };
-              })
-            }))
-          };
-        }
-        if (table === 'model_versions') {
-          return {
-            then: (fn: any) => {
-              // When inserting a new version, don't create another version
-              const versionId = `version_${Date.now()}`;
-              const version = { 
-                id: versionId, 
-                ...data, 
-                created_at: new Date().toISOString() 
-              };
-              mockDatabase.modelVersions.set(`${data.model_id}_${data.version}`, version);
-              return fn({ error: null });
-            }
-          };
-        }
-        return {
-          select: jest.fn(() => ({
-            single: jest.fn(async () => ({ data: null, error: { message: 'Insert failed' } }))
-          })),
-          then: (fn: any) => fn({ error: { message: 'Insert failed' } })
-        };
-      }),
-      update: jest.fn((data) => ({
-        eq: jest.fn((field, value) => {
-          if (table === 'models') {
-            return {
-              then: (fn: any) => {
-                const model = mockDatabase.models.get(value);
-                if (model) {
-                  Object.assign(model, data);
-                  return fn({ error: null });
-                }
-                return fn({ error: { message: 'Update failed' } });
-              }
-            };
-          }
-          return {
-            then: (fn: any) => fn({ error: { message: 'Update failed' } })
-          };
-        })
-      })),
-      delete: jest.fn(() => ({
-        eq: jest.fn((field, value) => {
-          if (table === 'models' && field === 'id') {
-            return {
-              then: (fn: any) => {
-                const exists = mockDatabase.models.has(value);
-                if (exists) {
-                  mockDatabase.models.delete(value);
-                  // Delete all versions
-                  const toDelete = Array.from(mockDatabase.modelVersions.keys())
-                    .filter(key => key.startsWith(`${value}_`));
-                  toDelete.forEach(key => mockDatabase.modelVersions.delete(key));
-                  return fn({ error: null });
-                }
-                return fn({ error: { message: 'Not found' } });
-              }
-            };
-          }
-          if (table === 'model_versions' && field === 'model_id') {
-            return {
-              then: (fn: any) => {
-                const toDelete = Array.from(mockDatabase.modelVersions.keys())
-                  .filter(key => key.startsWith(`${value}_`));
-                toDelete.forEach(key => mockDatabase.modelVersions.delete(key));
-                return fn({ error: null });
-              }
-            };
-          }
-          return {
-            then: (fn: any) => fn({ error: { message: 'Delete failed' } })
-          };
-        })
-      }))
-    }))
-  }))
-}));
-
 describe('Model Builder API Integration Tests', () => {
-  const validToken = 'test-token-123';
   const baseUrl = 'http://localhost:3000/api/model-builder';
-  
-  // Helper to create mock request with Authorization header
+  let home: string;
+  let validToken: string;
+
+  // One fresh storage directory (and a real API token) for the whole suite;
+  // the workflow tests below build on each other's state.
+  beforeAll(() => {
+    home = fs.mkdtempSync(path.join(os.tmpdir(), 'obliq-signal-type-'));
+    process.env.OBLIQ_HOME = home;
+    resetStorage();
+    const { token, tokenHash } = ApiTokenService.createToken();
+    getStorage().tokens.create({ name: 'integration-test', tokenHash, expiresAt: null });
+    validToken = token;
+  });
+
+  afterAll(() => {
+    resetStorage();
+    delete process.env.OBLIQ_HOME;
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  // Helper to create a request with an Authorization header
   const createMockRequest = (method: string, url: string, body?: any, token?: string) => {
-    const urlObj = new URL(url);
-    // Use a real Headers object so it works with NextRequest constructor in batch operations
-    const headers = new Headers();
-    headers.set('content-type', 'application/json');
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (token) {
-      headers.set('authorization', `Bearer ${token}`);
+      headers.authorization = `Bearer ${token}`;
     }
-    return {
-      url,
+    return new NextRequest(url, {
       method,
       headers,
-      text: async () => body ? JSON.stringify(body) : '',
-      json: async () => body || {},
-      nextUrl: urlObj
-    };
+      body: body !== undefined ? JSON.stringify(body) : undefined
+    });
   };
 
   // Mock console methods to suppress expected error logs during tests
@@ -335,16 +68,25 @@ describe('Model Builder API Integration Tests', () => {
     let sheetId: string = 'main';
     let blockIds: string[] = [];
     let connectionId: string;
+    let lastHash: string;
+
+    // API mutations write model.json in place: no new version, but a new content hash
+    const expectInPlaceWrite = (data: any) => {
+      expect(data.data.newVersion).toBeNull();
+      expect(data.data.hash).toMatch(/^[0-9a-f]{64}$/);
+      expect(data.data.hash).not.toBe(lastHash);
+      expect(getStorage().models.readCurrent(modelId).hash).toBe(data.data.hash);
+      lastHash = data.data.hash;
+    };
 
     it('should create a new model', async () => {
       const body = {
         action: 'createModel',
-        name: 'Integration Test Model',
-        userId: 'test-user-123'
+        name: 'Integration Test Model'
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -355,6 +97,8 @@ describe('Model Builder API Integration Tests', () => {
       expect(data.data.latest_version).toBe(1);
       
       modelId = data.data.id;
+      expect(getStorage().models.listVersions(modelId)).toHaveLength(1);
+      lastHash = getStorage().models.readCurrent(modelId).hash;
     });
 
     it('should add a source block', async () => {
@@ -369,7 +113,7 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -377,7 +121,7 @@ describe('Model Builder API Integration Tests', () => {
       expect(data.data.block.type).toBe(BlockTypes.SOURCE);
       expect(data.data.block.name).toBe('TestSource');
       expect(data.data.block.parameters.value).toBe('5.0');
-      expect(data.data.newVersion).toBe(2);
+      expectInPlaceWrite(data);
       
       blockIds.push(data.data.block.id);
     });
@@ -394,13 +138,13 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(201);
       expect(data.data.block.type).toBe(BlockTypes.SCALE);
       expect(data.data.block.parameters.factor).toBe(2.5);
-      expect(data.data.newVersion).toBe(3);
+      expectInPlaceWrite(data);
       
       blockIds.push(data.data.block.id);
     });
@@ -417,12 +161,12 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(201);
       expect(data.data.block.type).toBe(BlockTypes.OUTPUT_PORT);
-      expect(data.data.newVersion).toBe(4);
+      expectInPlaceWrite(data);
       
       blockIds.push(data.data.block.id);
     });
@@ -439,13 +183,13 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(201);
       expect(data.data.connection.sourceBlockId).toBe(blockIds[0]);
       expect(data.data.connection.targetBlockId).toBe(blockIds[1]);
-      expect(data.data.newVersion).toBe(5);
+      expectInPlaceWrite(data);
       
       connectionId = data.data.connection.id;
     });
@@ -458,15 +202,18 @@ describe('Model Builder API Integration Tests', () => {
         sourceBlockId: blockIds[1], // Scale
         sourcePortIndex: 0,
         targetBlockId: blockIds[2], // Output
-        targetPortIndex: 0
+        targetPortIndex: 0,
+        checkpoint: true // Record a version snapshot for the finished model
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(201);
-      expect(data.data.newVersion).toBe(6);
+      // Only checkpointed writes record a version; createModel recorded version 1
+      expect(data.data.newVersion).toBe(2);
+      expect(getStorage().models.listVersions(modelId)).toHaveLength(2);
     });
 
     it('should validate the completed model', async () => {
@@ -476,19 +223,20 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(200);
-      expect(data.data.valid).toBe(true);
-      expect(data.data.errors).toHaveLength(0);
+      // Handler reports `isValid` (this test previously read a nonexistent `valid` field)
+      expect(data.data.errors).toEqual([]);
+      expect(data.data.isValid).toBe(true);
       expect(data.data.summary.totalBlocks).toBe(3);
       expect(data.data.summary.totalConnections).toBe(2);
     });
 
     it('should retrieve the complete model', async () => {
       const request = createMockRequest('GET', `${baseUrl}?modelId=${modelId}`, undefined, validToken);
-      const response = await GET(request as any);
+      const response = await GET(request);
       const data = await response.json();
       
       expect(response.status).toBe(200);
@@ -507,12 +255,11 @@ describe('Model Builder API Integration Tests', () => {
       // Create a base model for batch operations
       const body = {
         action: 'createModel',
-        name: 'Batch Test Model',
-        userId: 'test-user'
+        name: 'Batch Test Model'
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       modelId = data.data.id;
     });
@@ -551,13 +298,14 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
 
       expect(response.status).toBe(200);
       expect(data.data.successCount).toBe(3);
       expect(data.data.failureCount).toBe(0);
       expect(data.data.results).toHaveLength(3);
+      expect(getStorage().models.readCurrent(modelId).data.sheets[0].blocks).toHaveLength(3);
     });
 
     it('should handle mixed success/failure in non-transactional batch', async () => {
@@ -592,7 +340,7 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(200);
@@ -600,6 +348,9 @@ describe('Model Builder API Integration Tests', () => {
       expect(data.data.failureCount).toBe(1);
       expect(data.data.errors).toHaveLength(1);
       expect(data.data.errors[0].operationId).toBe('op2');
+      // Non-transactional: the successful operations are kept
+      const blocks = getStorage().models.readCurrent(modelId).data.sheets[0].blocks;
+      expect(blocks.map((b: any) => b.type)).toEqual([BlockTypes.MULTIPLY, BlockTypes.OUTPUT_PORT]);
     });
   });
 
@@ -613,12 +364,11 @@ describe('Model Builder API Integration Tests', () => {
     beforeEach(async () => {
       const body = {
         action: 'createModel',
-        name: 'Sheet Label Test Model',
-        userId: 'test-user'
+        name: 'Sheet Label Test Model'
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       modelId = data.data.id;
     });
@@ -631,7 +381,7 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -651,30 +401,27 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(201);
       sinkBlockId = data.data.block.id;
     });
 
-    // TODO: This test depends on complex mock database state that needs updating
-    it.skip('should add sheet label source on second sheet', async () => {
-      // First need to ensure sheet2Id exists
-      if (!sheet2Id) {
-        const createSheetBody = {
-          action: 'createSheet',
-          modelId,
-          name: 'Second Sheet'
-        };
-        
-        const createSheetReq = createMockRequest('POST', `${baseUrl}`, createSheetBody, validToken);
-        const createSheetRes = await POST(createSheetReq as any);
-        const createSheetData = await createSheetRes.json();
-        expect(createSheetRes.status).toBe(201);
-        sheet2Id = createSheetData.data.sheet.id;
-      }
-      
+    it('should add sheet label source on second sheet', async () => {
+      // Each test gets a fresh model (beforeEach), so create the second sheet here
+      const createSheetBody = {
+        action: 'createSheet',
+        modelId,
+        name: 'Second Sheet'
+      };
+
+      const createSheetReq = createMockRequest('POST', `${baseUrl}`, createSheetBody, validToken);
+      const createSheetRes = await POST(createSheetReq);
+      const createSheetData = await createSheetRes.json();
+      expect(createSheetRes.status).toBe(201);
+      sheet2Id = createSheetData.data.sheet.id;
+
       const body = {
         action: 'addBlock',
         modelId,
@@ -686,7 +433,7 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(201);
@@ -700,7 +447,7 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const request = createMockRequest('POST', `${baseUrl}`, body, validToken);
-      const response = await POST(request as any);
+      const response = await POST(request);
       const data = await response.json();
       
       expect(response.status).toBe(200);
@@ -715,12 +462,11 @@ describe('Model Builder API Integration Tests', () => {
       // Create model
       const createModelBody = {
         action: 'createModel',
-        name: 'Duplicate Test Model',
-        userId: 'test-user'
+        name: 'Duplicate Test Model'
       };
       
       const createModelReq = createMockRequest('POST', `${baseUrl}`, createModelBody, validToken);
-      const createModelRes = await POST(createModelReq as any);
+      const createModelRes = await POST(createModelReq);
       const modelData = await createModelRes.json();
       const modelId = modelData.data.id;
       
@@ -744,8 +490,8 @@ describe('Model Builder API Integration Tests', () => {
       const req1 = createMockRequest('POST', `${baseUrl}`, block1Body, validToken);
       const req2 = createMockRequest('POST', `${baseUrl}`, block2Body, validToken);
       
-      const res1 = await POST(req1 as any);
-      const res2 = await POST(req2 as any);
+      const res1 = await POST(req1);
+      const res2 = await POST(req2);
       
       const block1Id = (await res1.json()).data.block.id;
       const block2Id = (await res2.json()).data.block.id;
@@ -762,7 +508,7 @@ describe('Model Builder API Integration Tests', () => {
       };
 
       const connReq1 = createMockRequest('POST', `${baseUrl}`, conn1Body, validToken);
-      const connRes1 = await POST(connReq1 as any);
+      const connRes1 = await POST(connReq1);
 
       expect(connRes1.status).toBe(201);
 
@@ -778,7 +524,7 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const connReq2 = createMockRequest('POST', `${baseUrl}`, conn2Body, validToken);
-      const connRes2 = await POST(connReq2 as any);
+      const connRes2 = await POST(connReq2);
       const connData2 = await connRes2.json();
       
       expect(connRes2.status).toBe(400);
@@ -790,12 +536,11 @@ describe('Model Builder API Integration Tests', () => {
       // Create model
       const createModelBody = {
         action: 'createModel',
-        name: 'Self Connection Test',
-        userId: 'test-user'
+        name: 'Self Connection Test'
       };
       
       const createModelReq = createMockRequest('POST', `${baseUrl}`, createModelBody, validToken);
-      const createModelRes = await POST(createModelReq as any);
+      const createModelRes = await POST(createModelReq);
       const modelData = await createModelRes.json();
       const modelId = modelData.data.id;
       
@@ -809,7 +554,7 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const blockReq = createMockRequest('POST', `${baseUrl}`, blockBody, validToken);
-      const blockRes = await POST(blockReq as any);
+      const blockRes = await POST(blockReq);
       const blockId = (await blockRes.json()).data.block.id;
       
       // Try to connect block to itself
@@ -824,24 +569,22 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const connReq = createMockRequest('POST', `${baseUrl}`, connBody, validToken);
-      const connRes = await POST(connReq as any);
+      const connRes = await POST(connReq);
       const connData = await connRes.json();
       
       expect(connRes.status).toBe(400);
       expect(connData.code).toBe('SELF_CONNECTION');
     });
 
-    // TODO: This test depends on complex mock database state that needs updating
-    it.skip('should handle parameter validation for different block types', async () => {
+    it('should handle parameter validation for different block types', async () => {
       // Create model
       const createModelBody = {
         action: 'createModel',
-        name: 'Parameter Validation Test',
-        userId: 'test-user'
+        name: 'Parameter Validation Test'
       };
       
       const createModelReq = createMockRequest('POST', `${baseUrl}`, createModelBody, validToken);
-      const createModelRes = await POST(createModelReq as any);
+      const createModelRes = await POST(createModelReq);
       const modelData = await createModelRes.json();
       const modelId = modelData.data.id;
       
@@ -859,7 +602,7 @@ describe('Model Builder API Integration Tests', () => {
       };
       
       const tfReq = createMockRequest('POST', `${baseUrl}`, tfBody, validToken);
-      const tfRes = await POST(tfReq as any);
+      const tfRes = await POST(tfReq);
       const tfData = await tfRes.json();
       
       expect(tfRes.status).toBe(400);

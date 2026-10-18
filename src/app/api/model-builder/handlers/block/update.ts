@@ -8,13 +8,13 @@ import { findSheetRecursively, findBlockRecursively } from '@/lib/api-support/sh
 import { BlockTypes, generateDynamicPorts } from '@/lib/blockTypeRegistry';
 import { validateBlockParameters } from '@/lib/blockParameterValidator';
 import { syncSubsystemPortsFromSheets } from '@/lib/blockFactory';
-import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
+import { loadModelData, persistModelData } from '@/lib/api-support/auth';
 
 /**
  * UPDATE_BLOCK_POSITION - Update a block's position on the canvas
  */
 export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, body } = ctx;
+  const { storage, body } = ctx;
   const { modelId, blockId, position } = body || {};
   let { sheetId } = body || {};
 
@@ -29,13 +29,13 @@ export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<Ne
     return errorResponse('Invalid position: must have numeric x and y properties', 'INVALID_POSITION', 400);
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const versionData = authResult.versionData;
+  const versionData = authResult.versionData!;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -79,34 +79,10 @@ export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<Ne
     y: Math.round(position.y)
   };
 
-  // Create a new version with the updated data
-  const nextVersion = versionData.version + 1;
-
-  const { error: insertError } = await supabase
-    .from('model_versions')
-    .insert({
-      model_id: modelId,
-      version: nextVersion,
-      data: modelData
-    });
-
-  if (insertError) {
-    console.error('Error creating new version:', insertError);
-    return errorResponse('Failed to update block position', 'UPDATE_POSITION_FAILED', 500);
-  }
-
-  // Update model's latest version
-  const { error: updateError } = await supabase
-    .from('models')
-    .update({
-      latest_version: nextVersion,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', modelId);
-
-  if (updateError) {
-    console.error('Error updating model:', updateError);
-    return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
+  // Persist in place (a version snapshot is recorded only on checkpoint)
+  const saved = persistModelData(ctx, modelId, modelData, versionData.hash);
+  if (!saved.ok) {
+    return saved.errorResponse;
   }
 
   // Return success response with block object for consistency
@@ -114,7 +90,8 @@ export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<Ne
     modelId,
     sheetId,
     blockId,
-    newVersion: nextVersion,
+    newVersion: saved.version,
+    hash: saved.hash,
     position: block.position,
     // Include full block object for test compatibility
     block: {
@@ -133,7 +110,7 @@ export async function handleUpdateBlockPosition(ctx: HandlerContext): Promise<Ne
  * UPDATE_BLOCK_NAME - Update a block's name
  */
 export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, body } = ctx;
+  const { storage, body } = ctx;
   const { modelId, blockId, name } = body || {};
   let { sheetId } = body || {};
 
@@ -158,13 +135,13 @@ export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextRe
     );
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const versionData = authResult.versionData;
+  const versionData = authResult.versionData!;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -243,34 +220,10 @@ export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextRe
     }
   }
 
-  // Create a new version with the updated data
-  const nextVersion = versionData.version + 1;
-
-  const { error: insertError } = await supabase
-    .from('model_versions')
-    .insert({
-      model_id: modelId,
-      version: nextVersion,
-      data: modelData
-    });
-
-  if (insertError) {
-    console.error('Error creating new version:', insertError);
-    return errorResponse('Failed to update block name', 'UPDATE_NAME_FAILED', 500);
-  }
-
-  // Update model's latest version
-  const { error: updateError } = await supabase
-    .from('models')
-    .update({
-      latest_version: nextVersion,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', modelId);
-
-  if (updateError) {
-    console.error('Error updating model:', updateError);
-    return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
+  // Persist in place (a version snapshot is recorded only on checkpoint)
+  const saved = persistModelData(ctx, modelId, modelData, versionData.hash);
+  if (!saved.ok) {
+    return saved.errorResponse;
   }
 
   // Return success response with block object for consistency
@@ -278,7 +231,8 @@ export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextRe
     modelId,
     sheetId,
     blockId,
-    newVersion: nextVersion,
+    newVersion: saved.version,
+    hash: saved.hash,
     name: name,
     previousName: previousName,
     // Include full block object for test compatibility
@@ -300,7 +254,7 @@ export async function handleUpdateBlockName(ctx: HandlerContext): Promise<NextRe
 export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<NextResponse> {
   console.log('[UPDATE_BLOCK_PARAMETERS] Handler invoked (v2 with pre-merge)');
 
-  const { supabase, userId, body } = ctx;
+  const { storage, body } = ctx;
   const { modelId, blockId } = body || {};
   let { sheetId, parameters } = body || {};
 
@@ -320,13 +274,13 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
   // We need to know the block type first, so we defer this normalization until after finding the block.
   const rawParametersIsArray = Array.isArray(parameters);
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const versionData = authResult.versionData;
+  const versionData = authResult.versionData!;
 
   // Extract current model data
   const modelData = versionData.data;
@@ -475,34 +429,10 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
     syncSubsystemPortsFromSheets(sheetResult.parentBlock);
   }
 
-  // Create a new version with the updated data
-  const nextVersion = versionData.version + 1;
-
-  const { error: insertError } = await supabase
-    .from('model_versions')
-    .insert({
-      model_id: modelId,
-      version: nextVersion,
-      data: modelData
-    });
-
-  if (insertError) {
-    console.error('Error creating new version:', insertError);
-    return errorResponse('Failed to update block parameters', 'UPDATE_PARAMETERS_FAILED', 500);
-  }
-
-  // Update model's latest version
-  const { error: updateError } = await supabase
-    .from('models')
-    .update({
-      latest_version: nextVersion,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', modelId);
-
-  if (updateError) {
-    console.error('Error updating model:', updateError);
-    return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
+  // Persist in place (a version snapshot is recorded only on checkpoint)
+  const saved = persistModelData(ctx, modelId, modelData, versionData.hash);
+  if (!saved.ok) {
+    return saved.errorResponse;
   }
 
   // Return success response with block object for consistency
@@ -511,7 +441,8 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
     sheetId,
     blockId,
     blockType,
-    newVersion: nextVersion,
+    newVersion: saved.version,
+    hash: saved.hash,
     oldParameters,
     newParameters: block.parameters,
     // Include full block object for test compatibility

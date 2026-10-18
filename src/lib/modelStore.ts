@@ -5,7 +5,7 @@ import { WireData } from '@/components/Wire'
 import { SimulationResults } from '@/lib/simulationTypes'
 import { WasmSimulationEngine } from './simulation/WasmSimulationEngine'
 import { Model, ModelVersion } from '@/lib/types'
-import { supabase } from '@/lib/supabaseClient'
+import { modelApi, ModelApiError } from '@/lib/modelApi'
 import { SignalValue, ModelParameter } from '@/lib/modelSchema'
 import {
   ClipboardData,
@@ -85,6 +85,12 @@ export interface ModelState {
   modelLoading: boolean
   saving: boolean
   error: string | null
+
+  // File state: sha256 of the model file as last loaded/saved (null when viewing an older version).
+  // Sent as baseHash on save so the server can detect edits made on disk in the meantime.
+  fileHash: string | null
+  // True when the last save was rejected because the model file changed on disk.
+  saveConflict: boolean
   
   // Auto-save state
   autoSaveEnabled: boolean
@@ -102,6 +108,7 @@ export interface ModelActions {
   setIsOlderVersion: (isOlder: boolean) => void
   setError: (error: string | null) => void
   setModelLoading: (loading: boolean) => void
+  setFileHash: (hash: string | null) => void
   saveModel: (globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4'; debugMath?: boolean }) => Promise<boolean>
   saveAsNewModel: (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4'; debugMath?: boolean }) => Promise<string | null>
   saveAutoSave: () => Promise<boolean>
@@ -290,6 +297,8 @@ export const useModelStore = create<ModelStore>()(
     modelLoading: true,
     saving: false,
     error: null,
+    fileHash: null,
+    saveConflict: false,
     autoSaveEnabled: true,
     lastAutoSave: null,
     globalSimulationResults: null,
@@ -303,6 +312,7 @@ export const useModelStore = create<ModelStore>()(
     setIsOlderVersion: (isOlderVersion) => set({ isOlderVersion }),
     setError: (error) => set({ error }),
     setModelLoading: (modelLoading) => set({ modelLoading }),
+    setFileHash: (fileHash) => set({ fileHash }),
     
     saveModel: async (globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4'; debugMath?: boolean }) => {
       const state = get()
@@ -359,62 +369,20 @@ export const useModelStore = create<ModelStore>()(
           dataStores: (updatedState as any).dataStores || []
         }
 
-        // Get the next version number
-        const { data: nextVersionData, error: versionError } = await supabase
-          .rpc('get_next_version_number', { p_model_id: updatedState.model.id })
-
-        if (versionError) {
-          console.error('Error getting next version:', versionError)
-          set({ error: 'Failed to get next version number', saving: false })
-          return false
-        }
-
-        const nextVersion = nextVersionData || 1
-
-        // Create new version
-        const { error: insertError } = await supabase
-          .from('model_versions')
-          .insert({
-            model_id: updatedState.model.id,
-            version: nextVersion,
-            data: modelData
-          })
-
-        if (insertError) {
-          console.error('Save error:', insertError)
-          set({ error: `Failed to save model: ${insertError.message}`, saving: false })
-          return false
-        }
-
-        // Update model metadata
-        const { error: updateError } = await supabase
-          .from('models')
-          .update({ 
-            latest_version: nextVersion,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', updatedState.model.id)
-
-        if (updateError) {
-          console.error('Update error:', updateError)
-          set({ error: `Failed to update model: ${updateError.message}`, saving: false })
-          return false
-        }
-
-        // Delete auto-save after successful save
-        await get().deleteAutoSave()
+        // Write the model file and record a version snapshot.
+        // The server also clears any auto-save for this model.
+        const result = await modelApi.save(updatedState.model.id, modelData, { baseHash: updatedState.fileHash })
+        const nextVersion = result.version
 
         get().markAsClean()
 
         // Update the model with the new version
         set({ 
-          model: {
-            ...updatedState.model,
-            latest_version: nextVersion,
-            updated_at: new Date().toISOString()
-          },
+          model: result.model,
           currentVersion: nextVersion,
           isOlderVersion: false,
+          fileHash: result.hash,
+          saveConflict: false,
           saving: false,
           error: null
         })
@@ -423,6 +391,15 @@ export const useModelStore = create<ModelStore>()(
         return true
 
       } catch (error) {
+        if (error instanceof ModelApiError && error.isConflict) {
+          // Keep the user's in-memory edits; they can reload or Save As.
+          set({
+            error: "This model's file changed on disk since you opened it. Reload to get the disk version, or Save As to keep your edits.",
+            saveConflict: true,
+            saving: false
+          })
+          return false
+        }
         console.error('Save error:', error)
         set({ 
           error: `Failed to save model: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -468,29 +445,8 @@ export const useModelStore = create<ModelStore>()(
           parameters: updatedState.parameters  // Feature 1: Include parameters
         }
 
-        // Create new model metadata
-        const { data: newModel, error: modelError } = await supabase
-          .from('models')
-          .insert({
-            user_id: updatedState.model.user_id,
-            name: newName,
-            latest_version: 1
-          })
-          .select()
-          .single()
-
-        if (modelError) throw modelError
-
-        // Create version 1 for the new model
-        const { error: versionError } = await supabase
-          .from('model_versions')
-          .insert({
-            model_id: newModel.id,
-            version: 1,
-            data: modelData
-          })
-
-        if (versionError) throw versionError
+        // Create the new model (its file and version 1)
+        const newModel = await modelApi.create(newName, modelData)
 
         set({ saving: false, error: null })
         
@@ -556,7 +512,7 @@ export const useModelStore = create<ModelStore>()(
         })
 
         const modelData = {
-          version: "1.0",
+          version: "2.1",
           metadata: {
             created: updatedState.model.created_at,
             description: `Model ${updatedState.model.name} (auto-save)`
@@ -566,53 +522,14 @@ export const useModelStore = create<ModelStore>()(
             simulationTimeStep: 0.01,
             simulationDuration: 10.0,
             integrationAlgorithm: 'rk4'
-          }
+          },
+          parameters: updatedState.parameters,
+          dataStores: (updatedState as any).dataStores || []
         }
 
-        // Check if auto-save (version 0) already exists
-        const { data: existingAutoSave, error: checkError } = await supabase
-          .from('model_versions')
-          .select('id')
-          .eq('model_id', updatedState.model.id)
-          .eq('version', 0)
-          .maybeSingle() // Use maybeSingle instead of single to handle no results gracefully
+        const savedAt = await modelApi.putAutosave(updatedState.model.id, modelData)
 
-        if (checkError) {
-          console.error('Error checking for existing auto-save:', checkError)
-          return false
-        }
-
-        if (existingAutoSave) {
-          // Update existing auto-save
-          const { error } = await supabase
-            .from('model_versions')
-            .update({ 
-              data: modelData,
-              created_at: new Date().toISOString()
-            })
-            .eq('id', existingAutoSave.id)
-
-          if (error) {
-            console.error('Auto-save update error:', error)
-            return false
-          }
-        } else {
-          // Create new auto-save
-          const { error } = await supabase
-            .from('model_versions')
-            .insert({
-              model_id: updatedState.model.id,
-              version: 0,
-              data: modelData
-            })
-
-          if (error) {
-            console.error('Auto-save create error:', error)
-            return false
-          }
-        }
-
-        set({ lastAutoSave: new Date().toISOString() })
+        set({ lastAutoSave: savedAt })
         console.log('Auto-save completed')
         get().markAsClean() // Mark as clean after successful auto-save
         return true
@@ -633,19 +550,6 @@ export const useModelStore = create<ModelStore>()(
       set({ saving: true, error: null })
 
       try {
-        // Create a new model with the new name
-        const { data: newModel, error: modelError } = await supabase
-          .from('models')
-          .insert({
-            user_id: model.user_id,
-            name: newName,
-            latest_version: 1
-          })
-          .select()
-          .single()
-
-        if (modelError) throw modelError
-
         // Create the model data for version 1
         const modelData = {
           version: '2.0',
@@ -661,18 +565,15 @@ export const useModelStore = create<ModelStore>()(
           }
         }
 
-        // Save as version 1 of the new model
-        const { data: versionData, error: versionError } = await supabase
-          .from('model_versions')
-          .insert({
-            model_id: newModel.id,
-            version: 1,
-            data: modelData
-          })
-          .select()
-          .single()
-
-        if (versionError) throw versionError
+        // Create the new model (its file and version 1)
+        const newModel = await modelApi.create(newName, modelData)
+        const versionData: ModelVersion = {
+          id: `${newModel.id}@1`,
+          model_id: newModel.id,
+          version: 1,
+          data: modelData,
+          created_at: newModel.created_at
+        }
 
         // Initialize the store with the new model
         initializeFromModel(newModel, versionData)
@@ -695,11 +596,7 @@ export const useModelStore = create<ModelStore>()(
       if (!state.model) return
 
       try {
-        await supabase
-          .from('model_versions')
-          .delete()
-          .eq('model_id', state.model.id)
-          .eq('version', 0)
+        await modelApi.deleteAutosave(state.model.id)
         
         console.log('Auto-save deleted')
       } catch (error) {
@@ -1739,6 +1636,7 @@ export const useModelStore = create<ModelStore>()(
           selectedWireId: null,
           simulationResults: null,
           error: null,
+          saveConflict: false,
           modelLoading: false
         })
 

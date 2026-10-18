@@ -7,7 +7,7 @@ import { successResponse, errorResponse, ErrorResponses } from '@/lib/api-suppor
 import { getAllSheets } from '@/lib/api-support/sheet-search';
 import { isValidType, getTypeValidationError } from '@/lib/typeValidator';
 import { isValidC99Initializer, getC99InitializerError } from '@/lib/c99InitializerValidator';
-import { verifyModelOwnershipWithVersion } from '@/lib/api-support/auth';
+import { loadModelData, persistModelData } from '@/lib/api-support/auth';
 
 /**
  * Find a block by ID across all sheets (including nested subsystem sheets)
@@ -28,7 +28,7 @@ function findBlockById(sheets: any[], blockId: string): { block: any; sheet: any
  * ADD_BLOCK_PARAMETER - Add a parameter to a subsystem block
  */
 export async function handleAddBlockParameter(ctx: HandlerContext): Promise<NextResponse> {
-  const { supabase, userId, body } = ctx;
+  const { storage, body } = ctx;
   const { modelId, blockId, name, dataType, defaultValue } = body || {};
 
   // Validate required parameters
@@ -86,13 +86,13 @@ export async function handleAddBlockParameter(ctx: HandlerContext): Promise<Next
     );
   }
 
-  // Verify user owns this model and get version data
-  const authResult = await verifyModelOwnershipWithVersion(supabase, modelId, userId);
+  // Load the model and its current data
+  const authResult = loadModelData(storage, modelId);
   if (!authResult.authorized) {
     return authResult.errorResponse!;
   }
 
-  const versionData = authResult.versionData;
+  const versionData = authResult.versionData!;
 
   const modelData = versionData.data;
   const sheets = modelData.sheets || [];
@@ -133,40 +133,17 @@ export async function handleAddBlockParameter(ctx: HandlerContext): Promise<Next
   const newParam = { name, dataType, defaultValue };
   block.parameters.parameters.push(newParam);
 
-  // Create a new version with the updated data
-  const nextVersion = versionData.version + 1;
-
-  const { error: insertError } = await supabase
-    .from('model_versions')
-    .insert({
-      model_id: modelId,
-      version: nextVersion,
-      data: modelData
-    });
-
-  if (insertError) {
-    console.error('Error creating new version:', insertError);
-    return errorResponse('Failed to add parameter', 'ADD_PARAMETER_FAILED', 500);
-  }
-
-  // Update model's latest version
-  const { error: updateError } = await supabase
-    .from('models')
-    .update({
-      latest_version: nextVersion,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', modelId);
-
-  if (updateError) {
-    console.error('Error updating model:', updateError);
-    return errorResponse('Failed to update model version', 'UPDATE_MODEL_FAILED', 500);
+  // Persist in place (a version snapshot is recorded only on checkpoint)
+  const saved = persistModelData(ctx, modelId, modelData, versionData.hash);
+  if (!saved.ok) {
+    return saved.errorResponse;
   }
 
   return successResponse({
     modelId,
     blockId,
-    newVersion: nextVersion,
+    newVersion: saved.version,
+    hash: saved.hash,
     parameter: newParam
   }, 201);
 }

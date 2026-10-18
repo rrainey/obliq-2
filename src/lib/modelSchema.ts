@@ -280,10 +280,9 @@ export const ModelDataSchema = z.object({
   }
 })
 
-// Complete model schema (as stored in database)
+// Complete model schema (legacy database row: metadata + embedded data)
 export const ModelSchema = z.object({
   id: z.string().uuid('Model ID must be a valid UUID'),
-  user_id: z.string().uuid('User ID must be a valid UUID'),
   name: z.string().min(1, 'Model name cannot be empty'),
   data: ModelDataSchema,
   created_at: z.string().datetime('Invalid created_at timestamp'),
