@@ -1,6 +1,9 @@
 // next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Native SQLite binding used by src/lib/server/storage; must not be bundled.
+  serverExternalPackages: ['better-sqlite3'],
+
   webpack: (config, { isServer }) => {
     // Configure Web Workers and WebAssembly support
     if (!isServer) {

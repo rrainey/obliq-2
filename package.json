@@ -47,6 +47,7 @@
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.8",
     "@tabler/icons-react": "^3.34.0",
+    "better-sqlite3": "^12.11.1",
     "dotenv": "^16.5.0",
     "jszip": "^3.10.1",
     "katex": "^0.16.27",
@@ -68,6 +69,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/jest": "^29.5.14",
     "@types/katex": "^0.16.7",
     "@types/node": "^20",

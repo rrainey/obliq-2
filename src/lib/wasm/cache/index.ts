@@ -4,6 +4,7 @@
  * Exports cache management utilities for compiled WebAssembly modules.
  */
 
+export { FileCacheManager } from './FileCacheManager'
 export { SupabaseCacheManager } from './SupabaseCacheManager'
 export type { CacheMetadata, CachedWasmModule, CacheStats } from './SupabaseCacheManager'
 
