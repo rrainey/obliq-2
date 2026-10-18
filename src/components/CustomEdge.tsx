@@ -456,6 +456,10 @@ const segmentsToPath = (segments: PathSegment[]): string => {
   return path
 }
 
+// A press only becomes a segment drag once the pointer moves this far (screen px),
+// so a plain click still selects the wire without rewriting its routing.
+const DRAG_THRESHOLD_PX = 3
+
 // Editable step edge with segment dragging support
 export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
   const {
@@ -491,6 +495,8 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
 
   // Track current offset in a ref for use in handleMouseUp without state callback
   const currentOffsetRef = useRef<number>(0)
+
+  const dragMovedRef = useRef(false)
 
   // Ref to track hover clear timeout - prevents losing hover when moving to drag handle
   const hoverClearTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -562,6 +568,7 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
 
     // Initialize both state and ref
     currentOffsetRef.current = initialOffset
+    dragMovedRef.current = false
     setCurrentOffset(initialOffset)
     setIsDragging(true)
   }, [zoom, data?.routing?.midpointOffset, clearHoverTimeout])
@@ -573,6 +580,9 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
     const handleMouseMove = (e: MouseEvent) => {
       const { segmentIndex, startPos, startZoom, baseOffset } = dragStateRef.current
       if (segmentIndex === null || !startPos) return
+
+      if (!dragMovedRef.current && Math.abs(e.clientX - startPos.x) < DRAG_THRESHOLD_PX) return
+      dragMovedRef.current = true
 
       // For vertical segments, drag horizontally
       // Divide by zoom to convert screen pixels to canvas coordinates
@@ -588,8 +598,8 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
       // Read the final offset from the ref (avoids setState callback during render)
       const finalOffset = currentOffsetRef.current
 
-      // Commit the routing change
-      if (data?.onRoutingChange) {
+      // Commit the routing change (only if the segment actually moved)
+      if (dragMovedRef.current && data?.onRoutingChange) {
         const newRouting: WireRouting = {
           ...data?.routing,
           midpointOffset: finalOffset,
@@ -675,34 +685,55 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
         }}
       />
 
-      {/* Render each segment separately for individual interaction */}
+      {/* Visible segments (drawing only; interaction is handled by the hit bands below) */}
       {segments.map((segment, index) => (
         <path
           key={`${id}-segment-${index}`}
           d={segment.path}
           fill="none"
-          style={getSegmentStyle(index)}
+          style={{ ...getSegmentStyle(index), pointerEvents: 'none' }}
           markerEnd={index === segments.length - 1 ? customMarkerEnd : undefined}
-          onMouseEnter={() => {
-            clearHoverTimeout()
-            setIsHovered(true)
-            if (canDragSegment(index)) {
-              setHoveredSegmentIndex(index)
-            }
-          }}
-          onMouseLeave={() => {
-            // Don't clear hover state during drag - mouse may leave segment while dragging
-            if (!isDragging && hoveredSegmentIndex === index) {
-              // Use a small delay to allow mouse to reach the drag handle
-              // before clearing the hover state
-              clearHoverTimeout()
-              hoverClearTimeoutRef.current = setTimeout(() => {
-                setHoveredSegmentIndex(null)
-              }, 150)
-            }
-          }}
         />
       ))}
+
+      {/* Per-segment hit bands, drawn above the wire-wide selection path so a press
+          anywhere near a draggable segment starts the drag ("nodrag nopan" keeps
+          React Flow from treating it as a pane pan or selection box). */}
+      {segments.map((segment, index) => {
+        const draggable = canDragSegment(index)
+        return (
+          <path
+            key={`${id}-segment-hit-${index}`}
+            d={segment.path}
+            className={draggable ? 'nodrag nopan' : undefined}
+            style={{
+              fill: 'none',
+              stroke: 'transparent',
+              strokeWidth: 16,
+              cursor: draggable ? (isDragging ? 'grabbing' : 'ew-resize') : 'pointer',
+            }}
+            onMouseDown={draggable ? handleDragHandleMouseDown : undefined}
+            onMouseEnter={() => {
+              clearHoverTimeout()
+              setIsHovered(true)
+              if (draggable) {
+                setHoveredSegmentIndex(index)
+              }
+            }}
+            onMouseLeave={() => {
+              // Don't clear hover state during drag - mouse may leave segment while dragging
+              if (!isDragging && hoveredSegmentIndex === index) {
+                // Use a small delay to allow mouse to reach the drag handle
+                // before clearing the hover state
+                clearHoverTimeout()
+                hoverClearTimeoutRef.current = setTimeout(() => {
+                  setHoveredSegmentIndex(null)
+                }, 150)
+              }
+            }}
+          />
+        )
+      })}
 
       {/* Draggable handle for middle segment */}
       {hoveredSegmentIndex !== null && canDragSegment(hoveredSegmentIndex) && !isDragging && (
@@ -720,6 +751,7 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
                   cy={midY}
                   r={12}
                   fill="transparent"
+                  className="nodrag nopan"
                   style={{ cursor: 'ew-resize', pointerEvents: 'all' }}
                   onMouseEnter={clearHoverTimeout}
                   onMouseDown={handleDragHandleMouseDown}
