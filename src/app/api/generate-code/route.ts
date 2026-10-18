@@ -200,7 +200,7 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
   console.log('ZIP created, sending response')
 
   // Return the ZIP file
-  return new NextResponse(zipBuffer, {
+  return new NextResponse(new Uint8Array(zipBuffer), {
     headers: {
       'Content-Type': 'application/zip',
       'Content-Disposition': `attachment; filename="${sanitizeFilename(model.name)}_v${versionToUse}_library.zip"`

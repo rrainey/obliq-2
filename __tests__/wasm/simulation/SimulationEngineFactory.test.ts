@@ -46,16 +46,8 @@ describe('SimulationEngineFactory', () => {
       expect(available).toBe(true)
     })
 
-    it('should return false on server-side', () => {
-      const originalWindow = global.window
-      // @ts-ignore
-      delete global.window
-
-      const available = isWasmAvailable()
-      expect(available).toBe(false)
-
-      global.window = originalWindow
-    })
+    // The server-side case lives in SimulationEngineFactory.server.test.ts: jsdom's
+    // window can't be deleted (non-configurable since Jest 30), so it runs under node.
   })
 
   describe('Engine Type Detection', () => {
