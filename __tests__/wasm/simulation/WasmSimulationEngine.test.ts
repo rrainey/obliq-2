@@ -2,7 +2,7 @@
  * Tests for WasmSimulationEngine
  *
  * These tests require:
- * - Supabase with test model
+ * - A test model in the local store (~/.config/obliq-2)
  * - Docker with obliq-emscripten:latest
  * - API server running (for integration tests)
  */

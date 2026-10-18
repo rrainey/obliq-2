@@ -177,7 +177,7 @@ npm install
 Now that Task 0.1 is complete, you're ready for:
 
 ### Task 0.2: WASM Cache Infrastructure
-- Set up Supabase Storage bucket
+- Cache lives under ~/.config/obliq-2/cache/wasm (no setup needed)
 - Implement cache key generation
 - Create cache manager class
 

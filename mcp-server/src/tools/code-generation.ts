@@ -119,7 +119,7 @@ export const getGeneratedFilesTool: ToolWithHandler = {
       };
       
       // In a full implementation, this would require:
-      // 1. A storage system for generated files (e.g., Supabase Storage)
+      // 1. A storage system for generated files (e.g., files under the Obliq home directory)
       // 2. Tracking of generation history per model/version
       // 3. An API endpoint to retrieve stored files
       // 4. Cleanup policies for old generated files

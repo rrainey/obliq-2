@@ -3,67 +3,48 @@
  * Quick verification script to check local development setup
  */
 
-const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config({ path: '.env.local' });
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
-async function verifySupabase() {
-  console.log('🔍 Verifying Supabase connection...\n');
+async function verifyStorage() {
+  console.log('🔍 Verifying local storage...\n');
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const home = process.env.OBLIQ_HOME
+    ? path.resolve(process.env.OBLIQ_HOME)
+    : path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'obliq-2');
 
-  if (!supabaseUrl || !supabaseKey) {
-    console.error('❌ Missing Supabase credentials in .env.local');
-    console.log('\nExpected (see .env.local.example):');
-    console.log('  NEXT_PUBLIC_SUPABASE_URL=http://localhost:8000   # self-hosted Docker');
-    console.log('  # or http://127.0.0.1:54321                     # Supabase CLI');
-    console.log('  NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon JWT from Supabase .env / status>');
-    console.log('  SUPABASE_SERVICE_ROLE_KEY=<service_role JWT>');
-    if (supabaseUrl && supabaseUrl.startsWith('postgres')) {
-      console.error('\n❌ NEXT_PUBLIC_SUPABASE_URL looks like a Postgres connection string.');
-      console.error('   Use the HTTP API URL (e.g. http://localhost:8000), not postgresql://…');
-    }
-    process.exit(1);
-  }
-
-  if (supabaseUrl.startsWith('postgres')) {
-    console.error('❌ NEXT_PUBLIC_SUPABASE_URL must be an HTTP(S) API URL, not postgresql://…');
-    console.error(`   Got: ${supabaseUrl}`);
-    console.error('   Self-hosted Docker: http://localhost:8000 (SUPABASE_PUBLIC_URL)');
-    console.error('   Supabase CLI:      http://127.0.0.1:54321 (from `npx supabase status`)');
-    return false;
-  }
-
-  console.log(`✓ Supabase URL: ${supabaseUrl}`);
-  console.log(`✓ Anon Key: ${supabaseKey.substring(0, 20)}...`);
-
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  // Test connection
   try {
-    const { data, error } = await supabase
-      .from('models')
-      .select('count')
-      .limit(1);
-
-    if (error && error.message.includes('relation "public.models" does not exist')) {
-      console.log('\n⚠️  Models table does not exist yet');
-      console.log('   Apply database-scripts/ in order (see database-scripts/README.md):');
-      console.log('     setup.sql → versioning.sql → 03-API-tokens.sql →');
-      console.log('     04-wasm-cache.sql → 05-wasm-storage-bucket.sql');
-      return false;
-    } else if (error) {
-      console.error('\n❌ Database error:', error.message);
-      return false;
-    }
-
-    console.log('\n✅ Supabase connection successful!');
-    console.log('✅ Models table exists');
-    return true;
+    fs.mkdirSync(home, { recursive: true });
+    fs.accessSync(home, fs.constants.W_OK);
+    console.log(`✓ Obliq home: ${home}`);
   } catch (err) {
-    console.error('\n❌ Connection failed:', err.message);
+    console.error(`❌ Obliq home is not writable: ${home} (${err.message})`);
     return false;
   }
+
+  try {
+    const Database = require('better-sqlite3');
+    const db = new Database(':memory:');
+    const { v } = db.prepare('select sqlite_version() as v').get();
+    db.close();
+    console.log(`✓ better-sqlite3 loaded (SQLite ${v})`);
+  } catch (err) {
+    console.error('❌ better-sqlite3 failed to load:', err.message);
+    console.error('   Try: npm rebuild better-sqlite3');
+    return false;
+  }
+
+  const dbPath = path.join(home, 'obliq.db');
+  if (fs.existsSync(dbPath)) {
+    console.log(`✓ Database present: ${dbPath}`);
+  } else {
+    console.log('ℹ️  No database yet; it is created on first use');
+  }
+
+  console.log('\n✅ Local storage ready');
+  return true;
 }
 
 async function verifyDocker() {
@@ -75,11 +56,6 @@ async function verifyDocker() {
   try {
     await execAsync('docker --version');
     console.log('✅ Docker is installed');
-
-    const { stdout } = await execAsync('docker ps');
-    if (stdout.includes('supabase')) {
-      console.log('✅ Supabase containers are running');
-    }
 
     // Check if our WASM image exists
     try {
@@ -103,10 +79,10 @@ async function main() {
   console.log('═══════════════════════════════════════════\n');
 
   const dockerOk = await verifyDocker();
-  const supabaseOk = await verifySupabase();
+  const storageOk = await verifyStorage();
 
   console.log('\n═══════════════════════════════════════════');
-  if (dockerOk && supabaseOk) {
+  if (dockerOk && storageOk) {
     console.log('✅ All systems ready!');
     console.log('\nNext steps:');
     console.log('  npm run dev          - Start development server');

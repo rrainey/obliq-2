@@ -1,22 +1,18 @@
 /**
  * Integration tests for the WASM compilation API
  *
- * Tests the /api/compile-wasm endpoint with actual Supabase and Docker
+ * Tests the /api/compile-wasm endpoint with the local model store and Docker
  *
  * Prerequisites:
- * - Supabase running with test data
  * - Docker with obliq-emscripten:latest image
- * - Environment variables set
+ * - RUN_WASM_API_TESTS=true (and optionally TEST_WASM_MODEL_ID for a model in $OBLIQ_HOME)
  */
 
 import { POST } from '@/app/api/compile-wasm/route'
 import { NextRequest } from 'next/server'
 
-// Skip these tests if Supabase or Docker is not configured
-const describeIfConfigured =
-  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
-    ? describe
-    : describe.skip
+// Opt-in: requires Docker and the emscripten image
+const describeIfConfigured = process.env.RUN_WASM_API_TESTS === 'true' ? describe : describe.skip
 
 describeIfConfigured('WASM Compilation API', () => {
   // Helper to create a mock Next Request
@@ -99,7 +95,7 @@ describeIfConfigured('WASM Compilation API', () => {
   })
 
   describe('Compilation', () => {
-    // You'll need to create a test model in Supabase for these tests
+    // Point TEST_WASM_MODEL_ID at a model in the local store ($OBLIQ_HOME)
     const TEST_MODEL_ID = process.env.TEST_WASM_MODEL_ID || 'test-model-uuid'
 
     it.skip('should compile a simple model successfully', async () => {

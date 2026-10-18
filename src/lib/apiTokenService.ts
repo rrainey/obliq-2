@@ -2,7 +2,6 @@ import crypto from 'crypto'
 
 export interface ApiToken {
   id: string
-  user_id: string
   name: string
   token_hash: string
   created_at: string
@@ -118,91 +117,3 @@ export class ApiTokenService {
     return name.trim().substring(0, 100) // Limit to 100 characters
   }
 }
-
-// LRU Cache for token hashes
-export class TokenCache {
-  private cache: Map<string, { userId: string; timestamp: number }>
-  private maxSize: number
-  
-  constructor(maxSize: number = 10) {
-    this.cache = new Map()
-    this.maxSize = maxSize
-  }
-
-  /**
-   * Get user ID from cache if token hash exists
-   */
-  get(tokenHash: string): string | null {
-    const entry = this.cache.get(tokenHash)
-    
-    if (!entry) {
-      return null
-    }
-    
-    // Move to end (most recently used)
-    this.cache.delete(tokenHash)
-    this.cache.set(tokenHash, entry)
-    
-    return entry.userId
-  }
-
-  /**
-   * Add token hash to cache
-   */
-  set(tokenHash: string, userId: string): void {
-    // Remove oldest entry if at capacity
-    if (this.cache.size >= this.maxSize && !this.cache.has(tokenHash)) {
-      const firstKey = this.cache.keys().next().value
-      if (firstKey) {
-        this.cache.delete(firstKey)
-      }
-    }
-    
-    // Add or update entry
-    this.cache.set(tokenHash, {
-      userId,
-      timestamp: Date.now()
-    })
-  }
-
-  /**
-   * Remove token hash from cache
-   */
-  delete(tokenHash: string): void {
-    this.cache.delete(tokenHash)
-  }
-
-  /**
-   * Clear all entries
-   */
-  clear(): void {
-    this.cache.clear()
-  }
-
-  /**
-   * Get cache size
-   */
-  size(): number {
-    return this.cache.size
-  }
-
-  /**
-   * Get cache stats for monitoring
-   */
-  getStats(): { size: number; entries: Array<{ hash: string; userId: string; age: number }> } {
-    const now = Date.now()
-    const entries = Array.from(this.cache.entries()).map(([hash, data]) => ({
-      hash: hash.substring(0, 8) + '...',
-      userId: data.userId,
-      age: Math.floor((now - data.timestamp) / 1000) // Age in seconds
-    }))
-    
-    return {
-      size: this.cache.size,
-      entries
-    }
-  }
-}
-
-// Global token cache instance
-export const tokenCache = new TokenCache(10)

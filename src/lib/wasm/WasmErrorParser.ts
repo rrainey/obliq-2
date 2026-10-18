@@ -67,8 +67,7 @@ export function parseWasmError(errorMessage: string, details?: string): ParsedWa
       rawError: fullError,
       suggestions: [
         'Select Force Recompile',
-        'Check your internet connection',
-        'Check Supabase service status'
+        'Check that the Obliq dev server is still running'
       ],
       isUserFixable: true,
       severity: 'error'

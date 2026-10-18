@@ -1,6 +1,6 @@
 # Migrating off Supabase: SQLite + flat-file storage
 
-Status: in progress (phase 1 landed). Decisions recorded 2026-10-18.
+Status: phases 1–4, 6 and 7 are done on branch `sqlite-storage`. Phase 5 (watcher/SSE, conflict banner, link UI) remains. Decisions recorded 2026-10-18.
 
 ## Decisions
 
@@ -40,9 +40,9 @@ Status: in progress (phase 1 landed). Decisions recorded 2026-10-18.
 ## Phases
 
 1. **Storage core** (done): `src/lib/server/storage/` holds paths, db, fileIO, ModelRepository and TokenRepository; `FileCacheManager` replaces `SupabaseCacheManager`. Unit tests run against a temporary `OBLIQ_HOME`.
-2. **Server consumers**: model-builder handlers (`ctx.repo`), generate-code, compile-wasm(-stream), automations, ServerWasmExecutor, tokens, cache-maintenance.
-3. **`/api/models` REST layer**: `src/lib/modelApi.ts` replaces every browser-side `supabase.from(...)` in modelStore, `models/page.tsx` and `models/[id]/page.tsx`.
-4. **Auth replacement**: local session cookie, Host-header check, `AuthProvider` shim, removal of the login page, bind to 127.0.0.1.
-5. **Linked files and change detection**: directory watcher, SSE, conflict banner, "linked" and "missing" badges, `obliq:link` script.
-6. **Migration script**: `scripts/migrate-from-supabase.ts` (`--dry-run`, idempotent).
-7. **Removal**: `@supabase/*` packages, env vars, `database-scripts/` moved to `docs/archive`, README updates.
+2. **Server consumers** (done): model-builder handlers (`ctx.storage`), generate-code, compile-wasm(-stream), automations, ServerWasmExecutor, tokens, cache-maintenance.
+3. **`/api/models` REST layer** (done): `src/lib/modelApi.ts` replaces every browser-side `supabase.from(...)` in modelStore, `models/page.tsx` and `models/[id]/page.tsx`.
+4. **Auth replacement** (done): local session cookie, Host-header check, `AuthProvider` shim, removal of the login page, bind to 127.0.0.1.
+5. **Linked files and change detection** (todo). Already working: linking at the storage/API level, capture of external edits as versions, 409 on stale saves, and `GET /api/models/:id/status`. Still to do: directory watcher, SSE, conflict banner, "linked" and "missing" badges, `obliq:link` script.
+6. **Migration script** (done): `scripts/migrate-from-supabase.ts` (`--dry-run`, idempotent).
+7. **Removal** (done; `@supabase/supabase-js` stays as a devDependency for the migration script only): `@supabase/*` packages, env vars, `database-scripts/` moved to `docs/archive`, README updates.

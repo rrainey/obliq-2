@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { storageErrorResponse } from '@/lib/api-support/auth'
 
 export interface ApiError {
   message: string
@@ -50,45 +51,10 @@ export function createErrorResponse(error: unknown, context?: string): NextRespo
     )
   }
 
-  // Handle Supabase database errors
-  if (error && typeof error === 'object' && 'code' in error) {
-    const dbError = error as any
-    
-    switch (dbError.code) {
-      case 'PGRST116': // Row not found
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Resource not found',
-            code: ErrorTypes.NOT_FOUND,
-            timestamp: new Date().toISOString()
-          },
-          { status: 404 }
-        )
-      
-      case '42501': // Insufficient privilege
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Access denied',
-            code: ErrorTypes.FORBIDDEN,
-            timestamp: new Date().toISOString()
-          },
-          { status: 403 }
-        )
-      
-      default:
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Database operation failed',
-            code: ErrorTypes.DATABASE_ERROR,
-            details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
-            timestamp: new Date().toISOString()
-          },
-          { status: 500 }
-        )
-    }
+  // Handle local storage errors (missing model, conflicting write, bad model file)
+  const storageResponse = storageErrorResponse(error)
+  if (storageResponse) {
+    return storageResponse
   }
 
   // Handle validation errors (from Zod or similar)

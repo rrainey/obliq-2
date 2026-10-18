@@ -108,7 +108,7 @@ describe('WasmErrorParser', () => {
       expect(parsed.category).toBe('network')
       expect(parsed.title).toBe('Network Error')
       expect(parsed.isUserFixable).toBe(true)
-      expect(parsed.suggestions).toContain('Check your internet connection')
+      expect(parsed.suggestions).toContain('Check that the Obliq dev server is still running')
     })
 
     it('should parse cache error', () => {

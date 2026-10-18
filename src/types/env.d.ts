@@ -2,14 +2,12 @@
 
 declare namespace NodeJS {
   interface ProcessEnv {
-    // Supabase Configuration
-    NEXT_PUBLIC_SUPABASE_URL: string;
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
-    SUPABASE_SERVICE_ROLE_KEY: string;
-    
-    // API Tokens
-    AUTOMATION_API_TOKEN: string;
-    MODEL_BUILDER_API_TOKEN: string;
+    // Local storage root (default: ${XDG_CONFIG_HOME:-~/.config}/obliq-2)
+    OBLIQ_HOME?: string;
+    // Extra hostnames (comma-separated) allowed besides loopback; see src/middleware.ts
+    OBLIQ_ALLOWED_HOSTS?: string;
+    // Delete expired API tokens when they are presented
+    AUTO_DELETE_EXPIRED_TOKENS?: string;
     
     // MCP Server Configuration
     MCP_SERVER_PORT?: string;

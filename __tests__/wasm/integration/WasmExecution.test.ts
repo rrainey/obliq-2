@@ -9,7 +9,7 @@ import { WasmSimulationEngine } from '@/lib/simulation/WasmSimulationEngine'
 import { convertWasmToUIFormat, WasmDataCollector } from '@/lib/simulation/WasmResultConverter'
 import type { Sheet } from '@/components/SheetTabs'
 
-// Skip by default - requires Supabase connection
+// Skip by default - requires a running dev server and Docker
 describe.skip('WASM Execution Integration', () => {
   it('should execute a simple WASM simulation end-to-end', async () => {
     // This test verifies the complete flow:
@@ -20,7 +20,7 @@ describe.skip('WASM Execution Integration', () => {
     // 5. Convert to UI format
 
     // For now, this is a placeholder that documents the expected flow
-    // Real implementation requires a valid model ID and Supabase connection
+    // Real implementation requires a valid model ID in the local store and Docker
 
     const modelId = 'test-model-id'
     const engine = new WasmSimulationEngine(modelId)

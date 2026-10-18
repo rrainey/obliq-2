@@ -5,7 +5,7 @@
  *
  * Prerequisites:
  * - Dev server running on localhost:3000
- * - Test model created in Supabase
+ * - Test model created in the local store (~/.config/obliq-2)
  * - Docker with obliq-emscripten:latest
  */
 
