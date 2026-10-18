@@ -76,7 +76,7 @@ export class EvaluateBlockModule implements IBlockModule {
         p =>
           (p.isArray && (p.arraySize || 0) >= vecSize) ||
           (p.isMatrix && (p.rows || 0) >= vecSize && p.cols === 1) ||
-          p.isScalar
+          (!p.isArray && !p.isMatrix)
       )
     ) {
       // Parse all (idx, port) arms from nested ternary (extra parens ok)
@@ -130,7 +130,7 @@ export class EvaluateBlockModule implements IBlockModule {
         )
         const col = !!(p.isMatrix && p.cols === 1)
         for (let i = 0; i < vecSize; i++) {
-          const rhs = p.isScalar
+          const rhs = !p.isArray && !p.isMatrix
             ? src
             : col
               ? `${src}[${i}][0]`
@@ -152,14 +152,14 @@ export class EvaluateBlockModule implements IBlockModule {
         return !t.includes('[')
       }
       let cExpr = expression
-      cExpr = cExpr.replace(/\bin\((\d+)\)\((\d+)\)/g, (_, inp, idx) => {
+      cExpr = cExpr.replace(/\bin\((\d+)\)\((\d+)\)/g, (_: string, inp: string, idx: string) => {
         const i = Number(inp)
         const j = Number(idx) - 1
         const base = (inputs[i] || '0.0').replace(/\s+/g, '_')
         if (isScalarIn(i)) return j === 0 ? base : '0.0'
         return `${base}[${j}]`
       })
-      cExpr = cExpr.replace(/\bin\((\d+)\)\[(\d+)\]/g, (_, inp, idx) => {
+      cExpr = cExpr.replace(/\bin\((\d+)\)\[(\d+)\]/g, (_: string, inp: string, idx: string) => {
         const i = Number(inp)
         const j = Number(idx)
         const base = (inputs[i] || '0.0').replace(/\s+/g, '_')

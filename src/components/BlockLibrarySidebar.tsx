@@ -22,7 +22,7 @@ interface BlockType {
   category: string
   description: string
   icon: string
-  vectorSupport?: 'full' | 'scalar-only' | 'element-wise'
+  vectorSupport?: 'full' | 'scalar-only' | 'element-wise' | 'partial'
 }
 
 const blockTypes: BlockType[] = [
@@ -491,6 +491,12 @@ function DraggableBlock({ blockType }: DraggableBlockProps) {
             S
           </Badge>
         )
+      case 'partial':
+        return (
+          <Badge size="xs" color="gray" variant="light" title="Vector support depends on configuration">
+            P
+          </Badge>
+        )
       default:
         return null
     }
@@ -508,6 +514,9 @@ function DraggableBlock({ blockType }: DraggableBlockProps) {
         break
       case 'scalar-only':
         tooltip += '\n⚠ Requires scalar inputs only'
+        break
+      case 'partial':
+        tooltip += '\n◐ Vector support depends on configuration'
         break
     }
     return tooltip
@@ -645,6 +654,10 @@ export default function BlockLibrarySidebar() {
           <Group gap={4}>
             <Badge size="xs" color="yellow" variant="light">S</Badge>
             <Text size="xs" c="dimmed">Scalar only</Text>
+          </Group>
+          <Group gap={4}>
+            <Badge size="xs" color="gray" variant="light">P</Badge>
+            <Text size="xs" c="dimmed">Partial</Text>
           </Group>
         </Group>
       </Box>

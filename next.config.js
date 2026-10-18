@@ -4,6 +4,12 @@ const nextConfig = {
   // Native SQLite binding used by src/lib/server/storage; must not be bundled.
   serverExternalPackages: ['better-sqlite3'],
 
+  // Type-check only the app during `next build`; tests and scripts are covered by
+  // `npx tsc -p .` and Jest (mcp-server is a separate package with its own tsconfig).
+  typescript: {
+    tsconfigPath: 'tsconfig.build.json',
+  },
+
   webpack: (config, { isServer }) => {
     // Configure Web Workers and WebAssembly support
     if (!isServer) {
