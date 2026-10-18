@@ -3,6 +3,8 @@
 import { FlattenedModel, withFlattenedSampleParams } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
+import { SubsystemInfo } from './SubsystemInfo'
+import { ModelParameter } from '@/lib/modelSchema'
 
 /**
  * Options for InitFunctionGenerator
@@ -216,11 +218,20 @@ export class InitFunctionGenerator {
     let code = '    /* Initialize segregated subsystems */\n'
 
     for (const sub of this.model.segregatedSubsystems) {
-      code += `    ${sub.sanitizedName}_init(&model->${sub.sanitizedName});\n`
+      const mod = sub.moduleTypeName || sub.sanitizedName
+      const field = sub.sanitizedName
+      if (sub.sharedModule && (sub.instanceParameters || []).length > 0) {
+        code += this.generateInstanceParamsLiteral(sub, mod, field)
+        code += `    ${mod}_init(&model->${field}, &__params_${field});\n`
+      } else if (sub.sharedModule) {
+        code += `    ${mod}_init(&model->${field}, NULL);\n`
+      } else {
+        code += `    ${mod}_init(&model->${field});\n`
+      }
       // Parent init already set model->dt; push into module for unit_delay/sample_time
-      code += `    model->${sub.sanitizedName}.dt = model->dt;\n`
-      code += `    model->${sub.sanitizedName}.time = model->time;\n`
-      code += `    model->${sub.sanitizedName}.sample_tick = model->sample_tick;\n`
+      code += `    model->${field}.dt = model->dt;\n`
+      code += `    model->${field}.time = model->time;\n`
+      code += `    model->${field}.sample_tick = model->sample_tick;\n`
     }
 
     // Sync subsystem states to parent states struct
@@ -236,6 +247,42 @@ export class InitFunctionGenerator {
 
     code += '\n'
     return code
+  }
+
+  /** Emit `Type_params_t __params_field = { .name = value, ... };` */
+  private generateInstanceParamsLiteral(
+    sub: SubsystemInfo,
+    mod: string,
+    field: string
+  ): string {
+    const params = sub.instanceParameters || []
+    const parts: string[] = []
+    for (const p of params) {
+      const safe = CCodeBuilder.sanitizeIdentifier(p.name)
+      parts.push(`        .${safe} = ${this.formatParamValue(p)}`)
+    }
+    let code = `    ${mod}_params_t __params_${field} = {\n`
+    code += parts.join(',\n')
+    if (parts.length) code += '\n'
+    code += `    };\n`
+    return code
+  }
+
+  private formatParamValue(p: ModelParameter): string {
+    const v = p.value
+    if (typeof v === 'number') return String(v)
+    if (typeof v === 'boolean') return v ? '1' : '0'
+    if (Array.isArray(v) && v.length > 0 && Array.isArray(v[0])) {
+      const rows = (v as number[][]).map(
+        row => `{${row.map(n => String(n)).join(', ')}}`
+      )
+      return `{${rows.join(', ')}}`
+    }
+    if (Array.isArray(v)) {
+      return `{${(v as number[]).map(n => String(n)).join(', ')}}`
+    }
+    if (p.defaultValue) return p.defaultValue
+    return '0'
   }
 
   /**

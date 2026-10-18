@@ -36,6 +36,8 @@ export const BlockTypes = {
   TRANSFER_FUNCTION: 'transfer_function',
   DISCRETE_TRANSFORM: 'discrete_transform',
   UNIT_DELAY: 'unit_delay',
+  DERIVATIVE: 'derivative',
+  VARIABLE_TRANSPORT_DELAY: 'variable_transport_delay',
   
   // Lookup blocks
   LOOKUP_1D: 'lookup_1d',
@@ -58,6 +60,8 @@ export const BlockTypes = {
   
   // Subsystem
   SUBSYSTEM: 'subsystem',
+  FOR_ITERATOR_SUBSYSTEM: 'for_iterator_subsystem',
+  ITERATION_INDEX: 'iteration_index',
 
   TRIG:  'trig',
   CROSS: 'cross',
@@ -433,6 +437,43 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     description: 'Encapsulates another sheet as a reusable block'
   },
 
+  [BlockTypes.FOR_ITERATOR_SUBSYSTEM]: {
+    type: BlockTypes.FOR_ITERATOR_SUBSYSTEM,
+    displayName: 'For Iterator Subsystem',
+    category: 'Hierarchical',
+    defaultParameters: {
+      sheetId: '',
+      sheetName: 'For Iterator Subsystem',
+      inputPorts: ['Input1'],
+      outputPorts: ['Output1'],
+      showEnableInput: false,
+      showPortNames: true,
+      codeGenStrategy: 'segregated_atomic',
+      parameters: [],
+      iterationLimit: 5,
+      indexBase: 1,
+      resetStates: 'held',
+      accumulateOutputs: false
+    },
+    inputs: [],
+    outputs: [],
+    description:
+      'Runs an internal sheet N times (Simulink For Iterator Subsystem). ' +
+      'Index available via iteration_index blocks; optional output accumulation.'
+  },
+
+  [BlockTypes.ITERATION_INDEX]: {
+    type: BlockTypes.ITERATION_INDEX,
+    displayName: 'Iteration Index',
+    category: 'Sources',
+    defaultParameters: {
+      indexBase: 1
+    },
+    inputs: [],
+    outputs: [{ name: 'i' }],
+    description: 'Current for-iterator index (set by parent each iteration)'
+  },
+
   [BlockTypes.TRIG]: {
     type: BlockTypes.TRIG,
     displayName: 'Trig',
@@ -523,6 +564,30 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [{ name: 'input' }],
     outputs: [{ name: 'output' }],
     description: 'Absolute value of scalar input'
+  },
+
+  [BlockTypes.DERIVATIVE]: {
+    type: BlockTypes.DERIVATIVE,
+    displayName: 'Derivative',
+    category: 'Continuous',
+    defaultParameters: { initialCondition: 0 },
+    inputs: [{ name: 'u' }],
+    outputs: [{ name: 'du_dt' }],
+    description: 'Finite-difference derivative (u - u_prev) / dt'
+  },
+
+  [BlockTypes.VARIABLE_TRANSPORT_DELAY]: {
+    type: BlockTypes.VARIABLE_TRANSPORT_DELAY,
+    displayName: 'Variable Transport Delay',
+    category: 'Continuous',
+    defaultParameters: {
+      maximumDelay: 1,
+      maximumPoints: 1024,
+      initialInput: 0
+    },
+    inputs: [{ name: 'u' }, { name: 'delay_sec' }],
+    outputs: [{ name: 'y' }],
+    description: 'Variable transport delay via sample ring buffer'
   },
 
   [BlockTypes.SQUARE]: {

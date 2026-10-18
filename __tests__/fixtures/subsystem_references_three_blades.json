@@ -1,0 +1,266 @@
+{
+  "name": "subsystem_references_three_blades",
+  "description": "Core: one Blade definition + two references with distinct gains; parent sums outputs. U=2, gains 1/2/5 → Y=16",
+  "version": "2.2",
+  "sheets": [
+    {
+      "id": "main",
+      "name": "Main",
+      "extents": { "width": 1100, "height": 520 },
+      "blocks": [
+        {
+          "id": "u",
+          "type": "source",
+          "name": "U",
+          "position": { "x": 40, "y": 200 },
+          "parameters": { "signalType": "constant", "value": 2, "dataType": "double" }
+        },
+        {
+          "id": "blade_def",
+          "type": "subsystem",
+          "name": "Blade",
+          "position": { "x": 220, "y": 40 },
+          "parameters": {
+            "inputPorts": ["u"],
+            "outputPorts": ["y"],
+            "codeGenStrategy": "segregated_atomic",
+            "parameters": [
+              {
+                "name": "gain",
+                "dataType": "double",
+                "signalType": "double",
+                "value": 1,
+                "defaultValue": "1"
+              }
+            ],
+            "sheets": [
+              {
+                "id": "blade_body",
+                "name": "Blade",
+                "extents": { "width": 500, "height": 300 },
+                "blocks": [
+                  {
+                    "id": "in_u",
+                    "type": "input_port",
+                    "name": "u",
+                    "position": { "x": 40, "y": 100 },
+                    "parameters": { "portName": "u", "dataType": "double" }
+                  },
+                  {
+                    "id": "gain_src",
+                    "type": "source",
+                    "name": "GainParam",
+                    "position": { "x": 40, "y": 180 },
+                    "parameters": {
+                      "signalType": "constant",
+                      "useParameter": true,
+                      "parameterName": "gain",
+                      "dataType": "double",
+                      "value": 1
+                    }
+                  },
+                  {
+                    "id": "mul",
+                    "type": "multiply",
+                    "name": "Mul",
+                    "position": { "x": 220, "y": 120 },
+                    "parameters": { "numInputs": 2 }
+                  },
+                  {
+                    "id": "out_y",
+                    "type": "output_port",
+                    "name": "y",
+                    "position": { "x": 400, "y": 120 },
+                    "parameters": { "portName": "y", "dataType": "double" }
+                  }
+                ],
+                "connections": [
+                  {
+                    "id": "c1",
+                    "sourceBlockId": "in_u",
+                    "sourcePortIndex": 0,
+                    "targetBlockId": "mul",
+                    "targetPortIndex": 0
+                  },
+                  {
+                    "id": "c2",
+                    "sourceBlockId": "gain_src",
+                    "sourcePortIndex": 0,
+                    "targetBlockId": "mul",
+                    "targetPortIndex": 1
+                  },
+                  {
+                    "id": "c3",
+                    "sourceBlockId": "mul",
+                    "sourcePortIndex": 0,
+                    "targetBlockId": "out_y",
+                    "targetPortIndex": 0
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "blade_ref_2",
+          "type": "subsystem",
+          "name": "Blade_2",
+          "position": { "x": 220, "y": 200 },
+          "parameters": {
+            "isReference": true,
+            "referencedSubsystemId": "blade_def",
+            "codeGenStrategy": "segregated_atomic",
+            "inputPorts": ["u"],
+            "outputPorts": ["y"],
+            "sheets": [],
+            "parameters": [
+              {
+                "name": "gain",
+                "dataType": "double",
+                "signalType": "double",
+                "value": 2,
+                "defaultValue": "2"
+              }
+            ]
+          }
+        },
+        {
+          "id": "blade_ref_3",
+          "type": "subsystem",
+          "name": "Blade_3",
+          "position": { "x": 220, "y": 360 },
+          "parameters": {
+            "isReference": true,
+            "referencedSubsystemId": "blade_def",
+            "codeGenStrategy": "segregated_atomic",
+            "inputPorts": ["u"],
+            "outputPorts": ["y"],
+            "sheets": [],
+            "parameters": [
+              {
+                "name": "gain",
+                "dataType": "double",
+                "signalType": "double",
+                "value": 5,
+                "defaultValue": "5"
+              }
+            ]
+          }
+        },
+        {
+          "id": "sum",
+          "type": "sum",
+          "name": "SumBlades",
+          "position": { "x": 480, "y": 200 },
+          "parameters": { "numInputs": 3, "signs": "+++" }
+        },
+        {
+          "id": "out_y",
+          "type": "output_port",
+          "name": "Y",
+          "position": { "x": 700, "y": 200 },
+          "parameters": { "portName": "Y", "dataType": "double" }
+        },
+        {
+          "id": "out_y1",
+          "type": "output_port",
+          "name": "y1",
+          "position": { "x": 700, "y": 40 },
+          "parameters": { "portName": "y1", "dataType": "double" }
+        },
+        {
+          "id": "out_y2",
+          "type": "output_port",
+          "name": "y2",
+          "position": { "x": 700, "y": 200 },
+          "parameters": { "portName": "y2", "dataType": "double" }
+        },
+        {
+          "id": "out_y3",
+          "type": "output_port",
+          "name": "y3",
+          "position": { "x": 700, "y": 360 },
+          "parameters": { "portName": "y3", "dataType": "double" }
+        }
+      ],
+      "connections": [
+        {
+          "id": "w_u1",
+          "sourceBlockId": "u",
+          "sourcePortIndex": 0,
+          "targetBlockId": "blade_def",
+          "targetPortIndex": 0
+        },
+        {
+          "id": "w_u2",
+          "sourceBlockId": "u",
+          "sourcePortIndex": 0,
+          "targetBlockId": "blade_ref_2",
+          "targetPortIndex": 0
+        },
+        {
+          "id": "w_u3",
+          "sourceBlockId": "u",
+          "sourcePortIndex": 0,
+          "targetBlockId": "blade_ref_3",
+          "targetPortIndex": 0
+        },
+        {
+          "id": "w_s1",
+          "sourceBlockId": "blade_def",
+          "sourcePortIndex": 0,
+          "targetBlockId": "sum",
+          "targetPortIndex": 0
+        },
+        {
+          "id": "w_s2",
+          "sourceBlockId": "blade_ref_2",
+          "sourcePortIndex": 0,
+          "targetBlockId": "sum",
+          "targetPortIndex": 1
+        },
+        {
+          "id": "w_s3",
+          "sourceBlockId": "blade_ref_3",
+          "sourcePortIndex": 0,
+          "targetBlockId": "sum",
+          "targetPortIndex": 2
+        },
+        {
+          "id": "w_y",
+          "sourceBlockId": "sum",
+          "sourcePortIndex": 0,
+          "targetBlockId": "out_y",
+          "targetPortIndex": 0
+        },
+        {
+          "id": "w_y1",
+          "sourceBlockId": "blade_def",
+          "sourcePortIndex": 0,
+          "targetBlockId": "out_y1",
+          "targetPortIndex": 0
+        },
+        {
+          "id": "w_y2",
+          "sourceBlockId": "blade_ref_2",
+          "sourcePortIndex": 0,
+          "targetBlockId": "out_y2",
+          "targetPortIndex": 0
+        },
+        {
+          "id": "w_y3",
+          "sourceBlockId": "blade_ref_3",
+          "sourcePortIndex": 0,
+          "targetBlockId": "out_y3",
+          "targetPortIndex": 0
+        }
+      ]
+    }
+  ],
+  "parameters": [],
+  "globalSettings": {
+    "simulationTimeStep": 0.01,
+    "simulationDuration": 0.05,
+    "integrationAlgorithm": "rk4"
+  }
+}

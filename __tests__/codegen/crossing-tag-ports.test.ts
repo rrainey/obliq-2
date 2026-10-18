@@ -324,4 +324,114 @@ describe('Segregated crossing-tag promotion (integration)', () => {
     )
     expect(bridge).toBeTruthy()
   })
+
+  test('UH60 P4: collectSheetLabels recurses for_iterator_subsystem', () => {
+    const sheets = [
+      createSheet(
+        'root',
+        'Root',
+        [
+          createBlock('fi', 'for_iterator_subsystem', 'Segment_Calculations', {
+            codeGenStrategy: 'segregated_atomic',
+            inputPorts: [],
+            outputPorts: [],
+            iterationLimit: 5,
+            sheets: [
+              createSheet(
+                'body',
+                'Body',
+                [
+                  createBlock('g', 'sheet_label_sink', 'GotoPsi', {
+                    signalName: 'Psi_R',
+                    tagVisibility: 'local'
+                  }),
+                  createBlock('f', 'sheet_label_source', 'FromBeta', {
+                    signalName: 'Beta'
+                  })
+                ],
+                []
+              )
+            ]
+          }),
+          createBlock('og', 'sheet_label_sink', 'GotoBeta', {
+            signalName: 'Beta',
+            tagVisibility: 'global'
+          }),
+          createBlock('of', 'sheet_label_source', 'FromPsi', {
+            signalName: 'Psi_R'
+          })
+        ],
+        []
+      )
+    ]
+    const labels = collectSheetLabels(sheets)
+    expect(labels.some(l => l.signalName === 'Psi_R' && l.kind === 'goto')).toBe(
+      true
+    )
+    expect(labels.some(l => l.signalName === 'Beta' && l.kind === 'from')).toBe(
+      true
+    )
+    const crossing = computeCrossingTags(labels, ['Segment_Calculations'])
+    expect(crossing.exports).toEqual(['Psi_R'])
+    expect(crossing.imports).toEqual(['Beta'])
+  })
+
+  test('UH60 P4: for_iterator_subsystem promotes crossing tags to ports', () => {
+    const body = createSheet(
+      'body',
+      'Body',
+      [
+        createBlock('idx', 'iteration_index', 'For_Iterator', { indexBase: 1 }),
+        createBlock('goto', 'sheet_label_sink', 'GotoPsi', {
+          signalName: 'Psi_R',
+          tagVisibility: 'local'
+        }),
+        createBlock('from_b', 'sheet_label_source', 'FromBeta', {
+          signalName: 'Beta'
+        }),
+        createBlock('out_y', 'output_port', 'y', { portName: 'y' })
+      ],
+      [
+        createConnection('w1', 'idx', 0, 'goto', 0),
+        createConnection('w2', 'from_b', 0, 'out_y', 0)
+      ]
+    )
+
+    const main = createSheet(
+      'main',
+      'Main',
+      [
+        createBlock('plant', 'source', 'BetaSrc', { value: 0.1 }),
+        createBlock('goto_b', 'sheet_label_sink', 'GotoBeta', {
+          signalName: 'Beta',
+          tagVisibility: 'global'
+        }),
+        createBlock('seg', 'for_iterator_subsystem', 'Segment_Calculations', {
+          codeGenStrategy: 'segregated_atomic',
+          inputPorts: ['y'],
+          outputPorts: ['y'],
+          iterationLimit: 5,
+          indexBase: 1,
+          resetStates: 'reset',
+          accumulateOutputs: false,
+          sheets: [body]
+        }),
+        createBlock('from_psi', 'sheet_label_source', 'FromPsi', {
+          signalName: 'Psi_R'
+        }),
+        createBlock('out', 'output_port', 'psi', { portName: 'psi' })
+      ],
+      [
+        createConnection('m1', 'plant', 0, 'goto_b', 0),
+        createConnection('m2', 'from_psi', 0, 'out', 0)
+      ]
+    )
+
+    const result = new ModelFlattener().flattenModel([main], 'p4_fi')
+    expect(result.model.segregatedSubsystems).toHaveLength(1)
+    const sub = result.model.segregatedSubsystems[0]!
+    expect(sub.forIterator).toBeTruthy()
+    expect(sub.outputPorts.map(p => p.name)).toContain('Psi_R')
+    expect(sub.inputPorts.map(p => p.name)).toContain('Beta')
+  })
 })

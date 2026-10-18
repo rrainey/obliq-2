@@ -46,10 +46,10 @@ export class OrientationConversionBlockModule implements IBlockModule {
         code += this.generateDCMToQuat(inputs, outputName)
         break
       case 'quat_to_euler':
-        code += this.generateQuatToEuler(inputs, outputName, block.name)
+        code += this.generateQuatToEuler(inputs, outputName, block.name, inputTypes)
         break
       case 'quat_to_dcm':
-        code += this.generateQuatToDCM(inputs, outputName)
+        code += this.generateQuatToDCM(inputs, outputName, inputTypes)
         break
       default:
         code += `    // Unknown conversion type: ${conversionType}\n`
@@ -245,8 +245,25 @@ export class OrientationConversionBlockModule implements IBlockModule {
   /**
    * Quaternion to Euler angles
    */
-  private generateQuatToEuler(inputs: string[], outputName: string, _blockName: string): string {
+  private generateQuatToEuler(
+    inputs: string[],
+    outputName: string,
+    _blockName: string,
+    inputTypes?: string[]
+  ): string {
     const quat = inputs[0] || 'quat'
+    const t0 = inputTypes?.[0] || ''
+    // UH60 EOM wires body rates (double[3]) into Quaternion DCM block — stub until
+    // real quaternion state exists. Identity attitude → zero Euler.
+    if (t0.includes('[3]') && !t0.includes('[4]') && !t0.includes('[3][3]')) {
+      return `    {
+        /* WARNING: quat_to_euler got ${t0} (not double[4][1]); emitting zeros */
+        ${outputName}[0] = 0.0;
+        ${outputName}[1] = 0.0;
+        ${outputName}[2] = 0.0;
+    }
+`
+    }
     // Single double[3] {phi, theta, psi} — matches Simulink vector out → Demux
 
     return `    {
@@ -279,8 +296,22 @@ export class OrientationConversionBlockModule implements IBlockModule {
   /**
    * Quaternion to DCM
    */
-  private generateQuatToDCM(inputs: string[], outputName: string): string {
+  private generateQuatToDCM(
+    inputs: string[],
+    outputName: string,
+    inputTypes?: string[]
+  ): string {
     const quat = inputs[0] || 'quat'
+    const t0 = inputTypes?.[0] || ''
+    if (t0.includes('[3]') && !t0.includes('[4]') && !t0.includes('[3][3]')) {
+      return `    {
+        /* WARNING: quat_to_dcm got ${t0} (not double[4][1]); emitting identity DCM */
+        ${outputName}[0][0] = 1.0; ${outputName}[0][1] = 0.0; ${outputName}[0][2] = 0.0;
+        ${outputName}[1][0] = 0.0; ${outputName}[1][1] = 1.0; ${outputName}[1][2] = 0.0;
+        ${outputName}[2][0] = 0.0; ${outputName}[2][1] = 0.0; ${outputName}[2][2] = 1.0;
+    }
+`
+    }
 
     return `    {
         double q0 = ${quat}[0][0];  // Scalar (expects double[4][1])
@@ -553,7 +584,9 @@ export class OrientationConversionBlockModule implements IBlockModule {
     switch (conversionType) {
       case 'euler_to_dcm':
       case 'euler_to_quat':
-        return 3  // Phi, Theta, Psi
+        // UH60 P4 / aerolib Euler2DCM: Ports [1,1] — single double[3] {phi,theta,psi}.
+        // generateEulerToDCM still accepts 3 scalar wires if present.
+        return 1
       case 'dcm_to_euler':
       case 'dcm_to_quat':
         return 1  // DCM matrix
@@ -589,7 +622,7 @@ export class OrientationConversionBlockModule implements IBlockModule {
     switch (conversionType) {
       case 'euler_to_dcm':
       case 'euler_to_quat':
-        return ['Phi_rad', 'Theta_rad', 'Psi_rad']
+        return ['Euler_rad'] // double[3] {phi, theta, psi}
       case 'dcm_to_euler':
       case 'dcm_to_quat':
         return ['DCM']

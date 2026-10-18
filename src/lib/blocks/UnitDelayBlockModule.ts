@@ -1,6 +1,12 @@
 // lib/blocks/UnitDelayBlockModule.ts
 //
-// Unit delay (z⁻¹ / Memory): output is the previous sample of the input.
+// Unit delay (z⁻¹) and Simulink Memory (major-step hold / algebraic-loop break).
+//
+// delayMode (from mdl2obliq UH60 P3):
+//   'unit_delay' (default) — discrete z⁻¹; state = u in evaluate_algebraic
+//   'memory' — continuous-plant Memory; y = state during algebra, state = u
+//              after RK4/Euler (model_update_memory_states) so minor stages
+//              see a stable major-step hold under fixed-step integration.
 //
 // Two-phase algorithm (Simulink-compatible):
 //   Phase 1 generateComputation:       y = state
@@ -9,7 +15,7 @@
 // Updating state in phase 1 (before producers like Sum run) makes discrete
 // feedback z⁻² and destabilizes IIRs (Saturn reciprocal-acceleration filter).
 //
-// sampleInterval == 0  → update every model step
+// sampleInterval == 0  → update every model step (Memory default / major step)
 // sampleInterval > 0   → update on sample_tick hit (same gate as discrete algebra)
 //
 // Continuous integration does not touch this state (getBlockStateOrder returns 0
@@ -34,7 +40,9 @@ export class UnitDelayBlockModule implements IBlockModule {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     const name = BlockModuleUtils.sanitizeIdentifier(block.name)
 
-    let code = `    // Unit Delay block: ${block.name} (output phase)\n`
+    const mode =
+      block.parameters?.delayMode === 'memory' ? 'Memory major-step hold' : 'Unit Delay'
+    let code = `    // ${mode}: ${block.name} (output phase)\n`
 
     if (inputs.length === 0) {
       code += `    ${outputName} = 0.0; // No input\n`
@@ -82,7 +90,9 @@ export class UnitDelayBlockModule implements IBlockModule {
         ? context.enableExpr
         : null
 
-    let code = `    // Unit Delay state update: ${block.name}\n`
+    const mode =
+      block.parameters?.delayMode === 'memory' ? 'Memory latch' : 'Unit Delay state update'
+    let code = `    // ${mode}: ${block.name}\n`
 
     const conditions: string[] = []
     if (enableExpr) {

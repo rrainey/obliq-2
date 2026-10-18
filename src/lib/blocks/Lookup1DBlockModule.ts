@@ -1,72 +1,118 @@
 // lib/blocks/Lookup1DBlockModule.ts
 
 import { BlockData } from '@/components/BlockNode'
-import { BlockState, SimulationState } from '@/lib/simulationTypes'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
+
+/**
+ * Resolve 1D lookup axis/table source: model parameter name or inline array.
+ * Param path uses HeaderGenerator macros NAME / NAME_SIZE.
+ */
+function resolve1DAxis(
+  blockName: string,
+  role: 'inputs' | 'outputs',
+  inline: number[] | undefined,
+  paramName: string | undefined
+): { decl: string; arr: string; sizeExpr: string } {
+  if (paramName) {
+    const p = BlockModuleUtils.sanitizeIdentifier(paramName)
+    return {
+      decl: `        // ${role} from model parameter ${p}\n`,
+      arr: p,
+      sizeExpr: `${p}_SIZE`
+    }
+  }
+  const values = inline && inline.length ? inline : [0, 1]
+  const local = `${blockName}_${role}`
+  return {
+    decl:
+      `        const double ${local}[${values.length}] = {` +
+      values.join(', ') +
+      `};\n`,
+    arr: local,
+    sizeExpr: String(values.length)
+  }
+}
 
 export class Lookup1DBlockModule implements IBlockModule {
   generateComputation(block: BlockData, inputs: string[]): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
     const blockName = BlockModuleUtils.sanitizeIdentifier(block.name)
-    
+
     if (inputs.length === 0) {
       return `    ${outputName} = 0.0; // No input\n`
     }
-    
+
     const inputExpr = inputs[0]
-    const inputValues = block.parameters?.inputValues || [0, 1]
-    const outputValues = block.parameters?.outputValues || [0, 1]
     const extrapolation = block.parameters?.extrapolation || 'clamp'
-    const tableSize = Math.min(inputValues.length, outputValues.length)
-    
+    const inAxis = resolve1DAxis(
+      blockName,
+      'inputs',
+      block.parameters?.inputValues,
+      block.parameters?.inputValuesParam
+    )
+    const outAxis = resolve1DAxis(
+      blockName,
+      'outputs',
+      block.parameters?.outputValues,
+      block.parameters?.outputValuesParam
+    )
+
     let code = `    // 1D Lookup block: ${block.name}\n`
     code += `    {\n`
     code += `        double input = ${inputExpr};\n`
     code += `        double output = 0.0;\n`
     code += `        \n`
     code += `        // Lookup table data\n`
-    code += `        const double ${blockName}_inputs[${tableSize}] = {`
-    code += inputValues.slice(0, tableSize).join(', ')
-    code += `};\n`
-    code += `        const double ${blockName}_outputs[${tableSize}] = {`
-    code += outputValues.slice(0, tableSize).join(', ')
-    code += `};\n`
+    code += inAxis.decl
+    code += outAxis.decl
+    // Size = min of the two axes (matches prior inline Math.min behavior)
+    if (inAxis.sizeExpr === outAxis.sizeExpr && /^\d+$/.test(inAxis.sizeExpr)) {
+      code += `        const int ${blockName}_size = ${inAxis.sizeExpr};\n`
+    } else {
+      code += `        const int ${blockName}_size = (${inAxis.sizeExpr}) < (${outAxis.sizeExpr}) ? (${inAxis.sizeExpr}) : (${outAxis.sizeExpr});\n`
+    }
     code += `        \n`
-    
+
+    const inp = inAxis.arr
+    const outp = outAxis.arr
+    const sz = `${blockName}_size`
+
     // Handle edge cases
-    code += `        if (input <= ${blockName}_inputs[0]) {\n`
+    code += `        if (${sz} <= 0) {\n`
+    code += `            output = 0.0;\n`
+    code += `        } else if (input <= ${inp}[0]) {\n`
     if (extrapolation === 'clamp') {
-      code += `            output = ${blockName}_outputs[0];\n`
+      code += `            output = ${outp}[0];\n`
     } else {
       code += `            // Extrapolate\n`
-      code += `            if (${tableSize} >= 2) {\n`
-      code += `                double slope = (${blockName}_outputs[1] - ${blockName}_outputs[0]) / `
-      code += `(${blockName}_inputs[1] - ${blockName}_inputs[0]);\n`
-      code += `                output = ${blockName}_outputs[0] + slope * (input - ${blockName}_inputs[0]);\n`
+      code += `            if (${sz} >= 2) {\n`
+      code += `                double slope = (${outp}[1] - ${outp}[0]) / `
+      code += `(${inp}[1] - ${inp}[0]);\n`
+      code += `                output = ${outp}[0] + slope * (input - ${inp}[0]);\n`
       code += `            } else {\n`
-      code += `                output = ${blockName}_outputs[0];\n`
+      code += `                output = ${outp}[0];\n`
       code += `            }\n`
     }
-    code += `        } else if (input >= ${blockName}_inputs[${tableSize - 1}]) {\n`
+    code += `        } else if (input >= ${inp}[${sz} - 1]) {\n`
     if (extrapolation === 'clamp') {
-      code += `            output = ${blockName}_outputs[${tableSize - 1}];\n`
+      code += `            output = ${outp}[${sz} - 1];\n`
     } else {
       code += `            // Extrapolate\n`
-      code += `            if (${tableSize} >= 2) {\n`
-      code += `                double slope = (${blockName}_outputs[${tableSize - 1}] - ${blockName}_outputs[${tableSize - 2}]) / `
-      code += `(${blockName}_inputs[${tableSize - 1}] - ${blockName}_inputs[${tableSize - 2}]);\n`
-      code += `                output = ${blockName}_outputs[${tableSize - 1}] + slope * (input - ${blockName}_inputs[${tableSize - 1}]);\n`
+      code += `            if (${sz} >= 2) {\n`
+      code += `                double slope = (${outp}[${sz} - 1] - ${outp}[${sz} - 2]) / `
+      code += `(${inp}[${sz} - 1] - ${inp}[${sz} - 2]);\n`
+      code += `                output = ${outp}[${sz} - 1] + slope * (input - ${inp}[${sz} - 1]);\n`
       code += `            } else {\n`
-      code += `                output = ${blockName}_outputs[${tableSize - 1}];\n`
+      code += `                output = ${outp}[${sz} - 1];\n`
       code += `            }\n`
     }
     code += `        } else {\n`
     code += `            // Linear interpolation\n`
-    code += `            for (int i = 0; i < ${tableSize - 1}; i++) {\n`
-    code += `                if (input >= ${blockName}_inputs[i] && input <= ${blockName}_inputs[i + 1]) {\n`
-    code += `                    double t = (input - ${blockName}_inputs[i]) / `
-    code += `(${blockName}_inputs[i + 1] - ${blockName}_inputs[i]);\n`
-    code += `                    output = ${blockName}_outputs[i] + t * (${blockName}_outputs[i + 1] - ${blockName}_outputs[i]);\n`
+    code += `            for (int i = 0; i < ${sz} - 1; i++) {\n`
+    code += `                if (input >= ${inp}[i] && input <= ${inp}[i + 1]) {\n`
+    code += `                    double t = (input - ${inp}[i]) / `
+    code += `(${inp}[i + 1] - ${inp}[i]);\n`
+    code += `                    output = ${outp}[i] + t * (${outp}[i + 1] - ${outp}[i]);\n`
     code += `                    break;\n`
     code += `                }\n`
     code += `            }\n`
@@ -74,50 +120,39 @@ export class Lookup1DBlockModule implements IBlockModule {
     code += `        \n`
     code += `        ${outputName} = output;\n`
     code += `    }\n`
-    
+
     return code
   }
 
   getOutputType(block: BlockData, inputTypes: string[]): string {
-    // Output type matches input type for 1D lookup
     if (inputTypes.length === 0) {
-      return 'double' // Default type
+      return 'double'
     }
-    // 1D lookup only accepts scalar inputs
     const baseType = BlockModuleUtils.parseType(inputTypes[0]).baseType
-    return baseType // Return scalar type even if input was array
+    return baseType
   }
 
   generateStructMember(block: BlockData, outputType: string): string | null {
-    // Lookup blocks always need signal storage
     return BlockModuleUtils.generateStructMember(block.name, outputType)
   }
 
-  requiresState(block: BlockData): boolean {
-    // Lookup blocks don't need state variables
+  requiresState(_block: BlockData): boolean {
     return false
   }
 
-  generateStateStructMembers(block: BlockData, outputType: string): string[] {
-    // No state needed
+  generateStateStructMembers(_block: BlockData, _outputType: string): string[] {
     return []
   }
 
-  generateInitialization(block: BlockData): string {
-    // No initialization needed
+  generateInitialization(_block: BlockData): string {
     return ''
   }
 
-  getInputPortCount(block: BlockData): number {
-    // 1D lookup blocks have exactly 1 input
+  getInputPortCount(_block: BlockData): number {
     return 1
   }
 
-  getOutputPortCount(block: BlockData): number {
-    // 1D lookup blocks have exactly 1 output
+  getOutputPortCount(_block: BlockData): number {
     return 1
   }
-
-  // No custom port labels needed
-
 }

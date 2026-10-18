@@ -15,6 +15,18 @@ import {
   promoteCrossingPortsOnSubsystem,
   inferTagDataTypes
 } from './crossingTagPorts'
+import {
+  collectAllBlocksFromSheets,
+  isSubsystemReference,
+  resolveSubsystemDefinition,
+  resolveSubsystemSheets
+} from '@/lib/subsystemReference'
+
+/** Ordinary subsystem or For Iterator Subsystem (both carry nested sheets). */
+function isSubsystemLike(block: { type: string }): boolean {
+  return block.type === 'subsystem' || block.type === 'for_iterator_subsystem'
+}
+
 /**
  * A flattened block includes the original block data plus hierarchy information
  */
@@ -261,6 +273,13 @@ export class ModelFlattener {
   private allSheetLabels: SheetLabelRef[] = []
   /** Host/model-level parameters (for PARAM_* emission inside segregated modules). */
   private modelParameters: ModelParameter[] = []
+  /** All blocks in the model (for subsystem reference resolution). */
+  private allBlocksForRefs: BlockData[] = []
+  /**
+   * Definition block ids that have ≥1 reference — those modules use shared
+   * instance-params ABI.
+   */
+  private sharedDefinitionIds = new Set<string>()
   /**
    * Export tag name → segregated subsystem output (for parent From resolution
    * when the Goto lives inside an opaque segregated module).
@@ -290,7 +309,7 @@ export class ModelFlattener {
   ): void {
     for (const sheet of sheets) {
       for (const block of sheet.blocks) {
-        if (block.type === 'subsystem') {
+        if (isSubsystemLike(block)) {
           // Check if this subsystem has enable input
           const hasEnableInput = block.parameters?.showEnableInput === true
           const currentEnableScope = hasEnableInput ? block.id : parentEnableScope
@@ -403,15 +422,41 @@ export class ModelFlattener {
     parentPath: string[],
     parentEnableScope: string | null,
     /** Scoped id used in the parent flattened model (must match FlattenedBlock.originalId). */
-    scopedSubsystemId?: string
+    scopedSubsystemId?: string,
+    /** Original sheet block (unscoped id) for reference / shared-module metadata. */
+    originalBlock?: BlockData
   ): SubsystemInfo {
+    const source = originalBlock || block
+    const def =
+      resolveSubsystemDefinition(source, this.allBlocksForRefs) ||
+      (isSubsystemReference(source) ? undefined : source)
+    const definitionId = def?.id || source.id
+    const sharedModule =
+      isSubsystemReference(source) || this.sharedDefinitionIds.has(definitionId)
+    const moduleTypeName = CCodeBuilder.sanitizeIdentifier(
+      def?.name || source.name
+    )
+    // Unique parent field per instance path (4× Per_Segment_Calculations, etc.)
+    const instanceFieldName = CCodeBuilder.sanitizeIdentifier(
+      [...parentPath, source.name].filter(Boolean).join('_') || source.name
+    )
+
     // Extract subsystem-level parameters (if any)
     const subsystemParameters: ModelParameter[] = block.parameters?.parameters || []
+    // For shared modules, flatten with definition defaults (schema); instance
+    // values are applied at parent init via instanceParameters.
+    const flattenParams: ModelParameter[] = sharedModule
+      ? ((def?.parameters?.parameters || subsystemParameters) as ModelParameter[])
+      : subsystemParameters
 
     // Create a sub-flattener for the subsystem's internal structure
     // Pass subsystem's parameters (not parent model parameters) for this scope
     const subFlattener = new ModelFlattener(this.options)
-    const subResult = subFlattener.flattenModel(subsystemSheets, block.name, subsystemParameters)
+    const subResult = subFlattener.flattenModel(
+      subsystemSheets,
+      def?.name || block.name,
+      flattenParams
+    )
 
     // Collect warnings from sub-flattening
     this.warnings.push(...subResult.warnings.map(w => `[${block.name}] ${w}`))
@@ -463,20 +508,27 @@ export class ModelFlattener {
     }
 
     // Host model parameters are visible to Source blocks via PARAM_* macros;
-    // subsystem-local parameters override on name collision.
+    // subsystem-local parameters override on name collision (non-shared path).
     const hostParams = this.modelParameters || []
+    const localParams = sharedModule
+      ? ((def?.parameters?.parameters || []) as ModelParameter[])
+      : subsystemParameters
     const mergedParams = [
       ...hostParams,
-      ...subsystemParameters.filter(
-        sp => !hostParams.some(hp => hp.name === sp.name)
-      )
+      ...localParams.filter(sp => !hostParams.some(hp => hp.name === sp.name))
     ]
 
     return {
       // Must match FlattenedBlock.originalId so parent call-site lookup succeeds
       subsystemId: scopedSubsystemId || block.id,
-      subsystemName: block.name,
-      sanitizedName: CCodeBuilder.sanitizeIdentifier(block.name),
+      subsystemName: source.name,
+      sanitizedName: instanceFieldName,
+      moduleTypeName,
+      sharedModule,
+      definitionSubsystemId: definitionId,
+      instanceParameters: sharedModule
+        ? (subsystemParameters as ModelParameter[])
+        : undefined,
       sheets: subsystemSheets,
       flattenedModel: subResult.model,
       inputPorts,
@@ -595,7 +647,7 @@ export class ModelFlattener {
       for (const block of sheet.blocks) {
         const scopedBlockId = idPrefix + block.id
 
-        if (block.type === 'subsystem') {
+        if (isSubsystemLike(block)) {
           // Handle subsystem block
           const hasEnableInput = block.parameters?.showEnableInput === true
           const currentEnableScope = hasEnableInput
@@ -606,8 +658,12 @@ export class ModelFlattener {
             parentSampleScope
           )
 
-          // Check code generation strategy
-          const codeGenStrategy = block.parameters?.codeGenStrategy || 'flatten'
+          // Check code generation strategy. For-iterator bodies must stay
+          // segregated so the parent can wrap compute_outputs in a C for-loop.
+          const codeGenStrategy =
+            block.type === 'for_iterator_subsystem'
+              ? (block.parameters?.codeGenStrategy || 'segregated_atomic')
+              : (block.parameters?.codeGenStrategy || 'flatten')
 
           // Create port mapping for this subsystem (key = how parents address it)
           const portMapping: SubsystemPortMapping = {
@@ -616,22 +672,33 @@ export class ModelFlattener {
             outputPorts: new Map()
           }
 
-          // Process subsystem's internal sheets
-          if (block.parameters?.sheets) {
-            let subsystemSheets = block.parameters.sheets as Sheet[]
+          // Process subsystem's internal sheets (resolve reference → definition body)
+          {
+            let subsystemSheets = isSubsystemReference(block)
+              ? (JSON.parse(
+                  JSON.stringify(resolveSubsystemSheets(block, this.allBlocksForRefs))
+                ) as Sheet[])
+              : ((block.parameters?.sheets || []) as Sheet[])
             const newPath = [...subsystemPath, block.name]
             const childPrefix = `${scopedBlockId}__`
 
             // Declared port name lists (may be extended by crossing-tag promotion)
-            let declaredInputs: string[] = [...(block.parameters.inputPorts as string[] || [])]
-            let declaredOutputs: string[] = [...(block.parameters.outputPorts as string[] || [])]
+            let declaredInputs: string[] = [...((block.parameters?.inputPorts as string[]) || [])]
+            let declaredOutputs: string[] = [...((block.parameters?.outputPorts as string[]) || [])]
 
             // Crossing exports for this subsystem (Goto inside / From outside)
             let crossingExports: string[] = []
 
+            // References are always atomic segregated
+            const effectiveStrategy =
+              isSubsystemReference(block) ||
+              this.sharedDefinitionIds.has(block.id)
+                ? 'segregated_atomic'
+                : codeGenStrategy
+
             // For segregated*: auto-promote crossing Goto/From tags to ports and
             // rewrite sheets so internal Froms/Gotos bind to those ports.
-            if (codeGenStrategy === 'segregated' || codeGenStrategy === 'segregated_atomic') {
+            if (effectiveStrategy === 'segregated' || effectiveStrategy === 'segregated_atomic') {
               const crossing = computeCrossingTags(this.allSheetLabels, newPath)
               crossingExports = crossing.exports
               // Prefer structural inference (Goto driver types) over bare label params
@@ -698,7 +765,7 @@ export class ModelFlattener {
               }
             }
 
-            if (codeGenStrategy === 'segregated' || codeGenStrategy === 'segregated_atomic') {
+            if (effectiveStrategy === 'segregated' || effectiveStrategy === 'segregated_atomic') {
               // Mark as segregated so connection processing skips internal wire lookup
               portMapping.isSegregated = true
 
@@ -708,6 +775,7 @@ export class ModelFlattener {
                 id: scopedBlockId,
                 parameters: {
                   ...block.parameters,
+                  codeGenStrategy: effectiveStrategy,
                   inputPorts: declaredInputs,
                   outputPorts: declaredOutputs,
                   sheets: subsystemSheets,
@@ -721,8 +789,25 @@ export class ModelFlattener {
                 subsystemSheets,
                 newPath,
                 currentEnableScope,
-                scopedBlockId
+                scopedBlockId,
+                block // original (unscoped) block for reference metadata
               )
+              if (block.type === 'for_iterator_subsystem') {
+                const lim = Number(block.parameters?.iterationLimit)
+                const resetStates =
+                  block.parameters?.resetStates === 'reset' ? 'reset' : 'held'
+                subsystemInfo.forIterator = {
+                  iterationLimit:
+                    Number.isFinite(lim) && lim > 0 ? Math.floor(lim) : 1,
+                  indexBase: block.parameters?.indexBase === 0 ? 0 : 1,
+                  resetStates,
+                  accumulateOutputs: !!block.parameters?.accumulateOutputs
+                }
+                // Ensure _reset_states() is emitted when each iter must clear Memory/UD.
+                if (resetStates === 'reset') {
+                  subsystemInfo.hasResetInput = true
+                }
+              }
               this.segregatedSubsystems.push(subsystemInfo)
 
               // Register crossing exports so parent From(tag) → module.outputs.tag
@@ -856,7 +941,7 @@ export class ModelFlattener {
         allSheets.push(sheet)
         
         for (const block of sheet.blocks) {
-          if (block.type === 'subsystem' && block.parameters?.sheets) {
+          if (isSubsystemLike(block) && block.parameters?.sheets) {
             collectSheets(block.parameters.sheets as Sheet[])
           }
         }
@@ -879,7 +964,7 @@ export class ModelFlattener {
       
       // Check subsystems
       for (const block of sheet.blocks) {
-        if (block.type === 'subsystem' && block.parameters?.sheets) {
+        if (isSubsystemLike(block) && block.parameters?.sheets) {
           const nestedSheets = block.parameters.sheets as Sheet[] | undefined
           if (nestedSheets && Array.isArray(nestedSheets)) {
             const path = this.findBlockPath(
@@ -1329,13 +1414,13 @@ export class ModelFlattener {
           const ok = this.relinkSelfFeedbackImport(sub, port, feed.sourcePortIndex)
           if (ok) {
             this.addWarning(
-              `[${sub.name}] Self-feedback import '${port.name}' relinked to local ` +
+              `[${sub.subsystemName}] Self-feedback import '${port.name}' relinked to local ` +
                 `driver of output port ${feed.sourcePortIndex} (avoid one-step latch)`
             )
             continue
           }
           this.addWarning(
-            `[${sub.name}] Self-feedback import '${port.name}' detected but relink ` +
+            `[${sub.subsystemName}] Self-feedback import '${port.name}' detected but relink ` +
               `failed; leaving parent wire (may delay vs flatten)`
           )
         }
@@ -1697,7 +1782,14 @@ export class ModelFlattener {
     this.allSheetLabels = collectSheetLabels(sheets)
     this.segregatedExportBySignal.clear()
     this.modelParameters = parameters || []
-    
+    this.allBlocksForRefs = collectAllBlocksFromSheets(sheets)
+    this.sharedDefinitionIds = new Set(
+      this.allBlocksForRefs
+        .filter(isSubsystemReference)
+        .map(b => String(b.parameters?.referencedSubsystemId || ''))
+        .filter(Boolean)
+    )
+
     const diagnostics = {
       blocksFlattened: 0,
       connectionsRemapped: 0,

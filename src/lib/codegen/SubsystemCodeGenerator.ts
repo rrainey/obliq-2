@@ -1,6 +1,10 @@
 // lib/codegen/SubsystemCodeGenerator.ts
 
-import { SubsystemInfo, SubsystemPort } from './SubsystemInfo'
+import {
+  SubsystemInfo,
+  SubsystemPort,
+  subsystemModuleTypeName
+} from './SubsystemInfo'
 import { FlattenedBlock, FlattenedModel, SubsystemEnableInfo } from './ModelFlattener'
 import { CCodeBuilder } from './CCodeBuilder'
 import { TypePropagator } from './TypePropagator'
@@ -83,7 +87,7 @@ export class SubsystemCodeGenerator {
         subsystemEnableInfo: this.enableInfos,
         metadata: {
           ...info.flattenedModel.metadata,
-          modelName: info.sanitizedName
+          modelName: subsystemModuleTypeName(info)
         }
       }
       this.enableEvaluator = new EnableEvaluator(enableModel)
@@ -97,6 +101,15 @@ export class SubsystemCodeGenerator {
 
   private hasNestedEnables(): boolean {
     return this.enableInfos.some(e => e.hasEnableInput)
+  }
+
+  /** Shared C module type / file stem (not the parent instance field). */
+  private typeName(): string {
+    return subsystemModuleTypeName(this.info)
+  }
+
+  private useInstanceParams(): boolean {
+    return !!this.info.sharedModule
   }
 
   /**
@@ -137,7 +150,7 @@ export class SubsystemCodeGenerator {
     return {
       header,
       source,
-      subsystemName: this.info.sanitizedName,
+      subsystemName: this.typeName(),
       warnings: [...this.warnings]
     }
   }
@@ -146,7 +159,7 @@ export class SubsystemCodeGenerator {
    * Generate the header file (.h)
    */
   private generateHeader(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
     const guard = CCodeBuilder.generateIncludeGuard(name)
     let header = guard.start
 
@@ -197,7 +210,7 @@ export class SubsystemCodeGenerator {
    * Generate the source file (.c)
    */
   private generateSource(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
     let source = ''
 
     // File header comment
@@ -238,6 +251,12 @@ export class SubsystemCodeGenerator {
       source += '\n'
     }
 
+    // UH60 P3: Memory major-step hold (parent calls after RK4)
+    if (this.hasMemoryDelayBlocks()) {
+      source += this.generateUpdateMemoryStatesFunction()
+      source += '\n'
+    }
+
     return source
   }
 
@@ -245,17 +264,24 @@ export class SubsystemCodeGenerator {
   // Header Generation Helpers
   // ============================================================
 
+  /** Names of per-instance (subsystem-local) parameters when sharedModule. */
+  private instanceParamNameSet(): Set<string> {
+    return new Set((this.info.instanceParameters || []).map(p => p.name))
+  }
+
   /**
-   * Generate subsystem parameter definitions
-   * Scalars use #define, arrays use const with size macros
+   * Generate subsystem parameter definitions.
+   * Shared modules: instance params → `Name_params_t` struct; host params stay #define.
+   * Standalone: all params as #define / static const (legacy).
    */
   private generateParameters(): string {
     const params = this.info.parameters
     if (!params || params.length === 0) {
-      return '' // No parameters, no section
+      if (!this.useInstanceParams() || !(this.info.instanceParameters || []).length) {
+        return ''
+      }
     }
 
-    // Avoid #define clobbering port / signal member names (same rule as HeaderGenerator)
     const reserved = new Set<string>()
     for (const p of [...this.info.inputPorts, ...this.info.outputPorts]) {
       reserved.add(p.sanitizedName)
@@ -264,15 +290,53 @@ export class SubsystemCodeGenerator {
       reserved.add(this.signalName(block))
     }
 
+    const instanceNames = this.useInstanceParams()
+      ? this.instanceParamNameSet()
+      : new Set<string>()
+
     let code = CCodeBuilder.generateCommentBlock([
-      'Subsystem / host model parameters',
-      'Source blocks reference PARAM_<name>; bare #define omitted on name collisions'
+      this.useInstanceParams()
+        ? 'Host #defines + per-instance params struct (shared module)'
+        : 'Subsystem / host model parameters',
+      'Source blocks reference PARAM_<name>'
     ])
 
-    for (const param of params) {
-      const { name, signalType, value } = param
+    // Instance params struct (shared module ABI)
+    if (this.useInstanceParams() && instanceNames.size > 0) {
+      const name = this.typeName()
+      const members: string[] = []
+      for (const param of this.info.instanceParameters || []) {
+        const typeStr = String(param.dataType || param.signalType || 'double')
+        if (!isValidType(typeStr)) continue
+        const parsed = parseType(typeStr)
+        const safe = CCodeBuilder.sanitizeIdentifier(param.name)
+        if (parsed.isMatrix && parsed.rows && parsed.cols) {
+          members.push(
+            `    ${parsed.baseType} ${safe}[${parsed.rows}][${parsed.cols}];`
+          )
+        } else if (parsed.isArray && parsed.arraySize) {
+          members.push(`    ${parsed.baseType} ${safe}[${parsed.arraySize}];`)
+        } else {
+          members.push(`    ${parsed.baseType} ${safe};`)
+        }
+      }
+      if (members.length > 0) {
+        code += CCodeBuilder.generateStruct(
+          `${name}_params`,
+          members,
+          'Per-instance parameter values (set by parent at init)'
+        )
+        code += '\n'
+      }
+    }
 
-      // Parse signal type to determine if scalar, vector, or matrix
+    for (const param of params || []) {
+      const { name, signalType, value } = param
+      if (instanceNames.has(name)) {
+        // Instance field — no compile-time #define in the header
+        continue
+      }
+
       if (!signalType || !isValidType(signalType)) {
         code += `// Warning: Invalid signal type for parameter ${name}: ${signalType}\n`
         continue
@@ -283,44 +347,48 @@ export class SubsystemCodeGenerator {
       const safeName = CCodeBuilder.sanitizeIdentifier(name)
 
       if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
-        // Matrix: Use const array with #define for dimensions
+        // Host tables: declare extern (defined once in parent .c) to avoid ODR
+        // clashes when parent also materializes the same lookup parameters.
         code += `#define ${safeName}_ROWS ${parsedType.rows}\n`
         code += `#define ${safeName}_COLS ${parsedType.cols}\n`
-        code += `static const ${baseType} ${safeName}[${safeName}_ROWS][${safeName}_COLS] = `
-
-        // Format matrix value
-        if (Array.isArray(value) && Array.isArray(value[0])) {
-          code += this.formatMatrixLiteral(value as number[][], baseType)
-        } else {
-          code += '{{0}}' // Error fallback
-        }
-        code += ';\n'
+        code += `extern const ${baseType} ${safeName}[${safeName}_ROWS][${safeName}_COLS];\n`
         code += `#define PARAM_${safeName} ${safeName}\n\n`
-
       } else if (parsedType.isArray && parsedType.arraySize) {
-        // Vector: Use const array with #define for size
         code += `#define ${safeName}_SIZE ${parsedType.arraySize}\n`
-        code += `static const ${baseType} ${safeName}[${safeName}_SIZE] = `
-
-        // Format vector value
-        if (Array.isArray(value)) {
-          code += this.formatVectorLiteral(value as number[], baseType)
-        } else {
-          code += '{0}' // Error fallback
-        }
-        code += ';\n'
+        code += `extern const ${baseType} ${safeName}[${safeName}_SIZE];\n`
         code += `#define PARAM_${safeName} ${safeName}\n\n`
-
       } else {
-        // Scalar: PARAM_* only (SourceBlockModule references PARAM_<name>).
-        // Never emit a bare #define — this header is included by the parent,
-        // so aliases like `#define A_z_deg …` collide with parent params/signals.
         const literal = this.formatScalarLiteral(value as number, baseType)
         code += `#define PARAM_${safeName} ${literal}\n`
       }
     }
 
     code += '\n'
+    return code
+  }
+
+  /** File-scope macros mapping PARAM_* → model->params.* inside .c functions. */
+  private generateInstanceParamMacros(indent: string = '    '): string {
+    if (!this.useInstanceParams()) return ''
+    const names = this.info.instanceParameters || []
+    if (names.length === 0) return ''
+    let code = `${indent}/* Instance PARAM_* → model->params */\n`
+    for (const p of names) {
+      const safe = CCodeBuilder.sanitizeIdentifier(p.name)
+      code += `${indent}#define PARAM_${safe} (model->params.${safe})\n`
+    }
+    return code
+  }
+
+  private generateInstanceParamUndefs(indent: string = '    '): string {
+    if (!this.useInstanceParams()) return ''
+    const names = this.info.instanceParameters || []
+    if (names.length === 0) return ''
+    let code = ''
+    for (const p of names) {
+      const safe = CCodeBuilder.sanitizeIdentifier(p.name)
+      code += `${indent}#undef PARAM_${safe}\n`
+    }
     return code
   }
 
@@ -362,7 +430,7 @@ export class SubsystemCodeGenerator {
   }
 
   private generateInputsStruct(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
     const members: string[] = []
 
     for (const port of this.info.inputPorts) {
@@ -377,7 +445,7 @@ export class SubsystemCodeGenerator {
   }
 
   private generateOutputsStruct(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
     const members: string[] = []
 
     for (const port of this.info.outputPorts) {
@@ -392,7 +460,7 @@ export class SubsystemCodeGenerator {
   }
 
   private generateSignalsStruct(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
     const members: string[] = []
 
     // Add signals for each block that produces output
@@ -429,7 +497,7 @@ export class SubsystemCodeGenerator {
   }
 
   private generateStatesStruct(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
     const members: string[] = []
 
     // Add state variables for each stateful block
@@ -455,7 +523,7 @@ export class SubsystemCodeGenerator {
   }
 
   private generateDataStoresStruct(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
     const members: string[] = []
 
     for (const store of this.dataStores) {
@@ -474,7 +542,7 @@ export class SubsystemCodeGenerator {
   }
 
   private generateEnableStatesStruct(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
     const members: string[] = []
     for (const info of this.enableInfos) {
       if (!info.hasEnableInput) continue
@@ -511,9 +579,12 @@ export class SubsystemCodeGenerator {
   }
 
   private generateSubsystemStruct(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
     const members: string[] = []
 
+    if (this.useInstanceParams() && (this.info.instanceParameters || []).length > 0) {
+      members.push(`    ${name}_params_t params; /* Per-instance parameter values */`)
+    }
     members.push(`    ${name}_inputs_t inputs;`)
     members.push(`    ${name}_outputs_t outputs;`)
     members.push(`    ${name}_signals_t signals;`)
@@ -528,20 +599,30 @@ export class SubsystemCodeGenerator {
       `    unsigned long long sample_tick; /* Synced from parent (multi-rate hits) */`
     )
     members.push(`    int enabled; /* Enable state: 1=enabled, 0=disabled */`)
+    if (this.info.forIterator) {
+      members.push(
+        `    int iteration_index; /* Set by parent each for-iterator pass */`
+      )
+    }
 
     return CCodeBuilder.generateStruct(name, members, `Main subsystem structure for ${this.info.subsystemName}`)
   }
 
   private generateFunctionPrototypes(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
     let prototypes = CCodeBuilder.generateCommentBlock(['Function prototypes'])
 
-    // Init
+    // Init — shared modules take optional params pointer
+    const initParams = this.useInstanceParams()
+      ? [`${name}_t* model`, `const ${name}_params_t* params`]
+      : [`${name}_t* model`]
     prototypes += CCodeBuilder.generateFunctionPrototype(
       'void',
       `${name}_init`,
-      [`${name}_t* model`],
-      'Initialize subsystem to default state'
+      initParams,
+      this.useInstanceParams()
+        ? 'Initialize subsystem; copy per-instance params when non-NULL'
+        : 'Initialize subsystem to default state'
     ) + '\n'
 
     // Compute outputs
@@ -572,6 +653,15 @@ export class SubsystemCodeGenerator {
       ) + '\n'
     }
 
+    if (this.hasMemoryDelayBlocks()) {
+      prototypes += CCodeBuilder.generateFunctionPrototype(
+        'void',
+        `${name}_update_memory_states`,
+        [`${name}_t* model`],
+        'UH60 P3: Memory major-step hold — latch after parent RK4'
+      ) + '\n'
+    }
+
     if (this.hasNestedEnables()) {
       prototypes += CCodeBuilder.generateFunctionPrototype(
         'void',
@@ -589,12 +679,27 @@ export class SubsystemCodeGenerator {
   // ============================================================
 
   private generateInitFunction(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
+    const withParams = this.useInstanceParams()
 
-    let code = CCodeBuilder.generateCommentBlock(['Initialize subsystem to default state'])
-    code += `void ${name}_init(${name}_t* model) {\n`
+    let code = CCodeBuilder.generateCommentBlock([
+      withParams
+        ? 'Initialize subsystem; copy per-instance params when non-NULL'
+        : 'Initialize subsystem to default state'
+    ])
+    if (withParams) {
+      code += `void ${name}_init(${name}_t* model, const ${name}_params_t* params) {\n`
+    } else {
+      code += `void ${name}_init(${name}_t* model) {\n`
+    }
 
     // Zero all structures
+    if (withParams && (this.info.instanceParameters || []).length > 0) {
+      code += '    memset(&model->params, 0, sizeof(model->params));\n'
+      code += '    if (params) {\n'
+      code += '        model->params = *params;\n'
+      code += '    }\n'
+    }
     code += '    memset(&model->inputs, 0, sizeof(model->inputs));\n'
     code += '    memset(&model->outputs, 0, sizeof(model->outputs));\n'
     code += '    memset(&model->signals, 0, sizeof(model->signals));\n'
@@ -622,7 +727,7 @@ export class SubsystemCodeGenerator {
     }
 
     if (this.hasNestedEnables()) {
-      code += `\n    ${this.info.sanitizedName}_evaluate_enable_states(model);\n`
+      code += `\n    ${this.typeName()}_evaluate_enable_states(model);\n`
     }
 
     code += '}\n'
@@ -693,7 +798,7 @@ export class SubsystemCodeGenerator {
   }
 
   private generateComputeOutputsFunction(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
     const executionOrder = this.calculateExecutionOrder()
 
     // File-scope statics must sit outside the function (same as parent flatten).
@@ -711,6 +816,7 @@ export class SubsystemCodeGenerator {
     code += '    if (!model->enabled) {\n'
     code += '        return; /* Module-level enable: freeze outs */\n'
     code += '    }\n\n'
+    code += this.generateInstanceParamMacros()
 
     // Compute blocks in topological order
     // Note: Input port values are accessed directly via model->inputs (not copied to signals)
@@ -737,8 +843,9 @@ export class SubsystemCodeGenerator {
       }
     }
 
-    // Deferred unit_delay / Memory state = u after producers have run
-    code += this.generateDeferredStateUpdates(executionOrder)
+    // Discrete unit_delay only; Memory (delayMode:memory) latches in
+    // update_memory_states after parent RK4 (UH60 P3).
+    code += this.generateDeferredStateUpdates(executionOrder, 'unit_delay')
 
     // Copy signals to outputs
     code += '\n    /* Copy signals to outputs */\n'
@@ -760,6 +867,7 @@ export class SubsystemCodeGenerator {
       code += `\n    ${name}_evaluate_enable_states(model);\n`
     }
 
+    code += this.generateInstanceParamUndefs()
     code += '}\n'
     return code
   }
@@ -812,7 +920,10 @@ export class SubsystemCodeGenerator {
     return `(model->sample_tick % (unsigned long long)llround((${period}) / model->dt) == 0ULL)`
   }
 
-  private generateDeferredStateUpdates(executionOrder: FlattenedBlock[]): string {
+  private generateDeferredStateUpdates(
+    executionOrder: FlattenedBlock[],
+    mode: 'unit_delay' | 'memory' | 'all' = 'all'
+  ): string {
     let code = ''
     let header = false
     const subsystemParams = this.info.parameters || []
@@ -823,6 +934,13 @@ export class SubsystemCodeGenerator {
         block.block.type === 'output_port' ||
         !BlockModuleFactory.isSupported(block.block.type)
       ) {
+        continue
+      }
+      if (block.block.type === 'unit_delay') {
+        const isMemory = block.block.parameters?.delayMode === 'memory'
+        if (mode === 'unit_delay' && isMemory) continue
+        if (mode === 'memory' && !isMemory) continue
+      } else if (mode === 'memory') {
         continue
       }
       try {
@@ -847,7 +965,13 @@ export class SubsystemCodeGenerator {
         if (!update || !update.trim()) continue
 
         if (!header) {
-          code += '\n    /* Deferred discrete state updates (unit_delay / Memory) */\n'
+          const label =
+            mode === 'memory'
+              ? 'Memory major-step hold updates (post-integration)'
+              : mode === 'unit_delay'
+                ? 'Deferred discrete state updates (unit_delay)'
+                : 'Deferred discrete state updates (unit_delay / Memory)'
+          code += `\n    /* ${label} */\n`
           header = true
         }
         code += `\n    /* ${block.flattenedName || block.block.name} state update */\n`
@@ -857,6 +981,32 @@ export class SubsystemCodeGenerator {
       }
     }
     return code
+  }
+
+  /** UH60 P3: Memory latch after parent RK4 (called from parent update_memory_states). */
+  private generateUpdateMemoryStatesFunction(): string {
+    const name = this.typeName()
+    const executionOrder = this.calculateExecutionOrder()
+    const body = this.generateDeferredStateUpdates(executionOrder, 'memory')
+    let code = CCodeBuilder.generateCommentBlock([
+      'UH60 P3: Memory major-step hold — latch after parent RK4/Euler'
+    ])
+    code += `void ${name}_update_memory_states(${name}_t* model) {\n`
+    if (!body.trim()) {
+      code += '    (void)model;\n'
+    } else {
+      code += body
+    }
+    code += '}\n'
+    return code
+  }
+
+  private hasMemoryDelayBlocks(): boolean {
+    return this.info.flattenedModel.blocks.some(
+      b =>
+        b.block.type === 'unit_delay' &&
+        b.block.parameters?.delayMode === 'memory'
+    )
   }
 
   private generateBlockComputation(block: FlattenedBlock): string {
@@ -914,7 +1064,7 @@ export class SubsystemCodeGenerator {
   }
 
   private generateComputeDerivativesFunction(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
 
     let code = CCodeBuilder.generateCommentBlock([
       'Compute state derivatives for integration',
@@ -953,7 +1103,7 @@ export class SubsystemCodeGenerator {
   }
 
   private generateResetStatesFunction(): string {
-    const name = this.info.sanitizedName
+    const name = this.typeName()
 
     let code = CCodeBuilder.generateCommentBlock([
       'Reset integrator states to initial conditions',
@@ -961,7 +1111,7 @@ export class SubsystemCodeGenerator {
     ])
     code += `void ${name}_reset_states(${name}_t* model) {\n`
 
-    // Reset each integrator
+    // Reset integrators and unit delays / Memory (For Iterator ResetStates=reset)
     for (const block of this.info.flattenedModel.blocks) {
       if (block.block.type === 'integrator') {
         const safeName = this.signalName(block)
@@ -969,6 +1119,23 @@ export class SubsystemCodeGenerator {
 
         code += `    /* Reset ${block.flattenedName || block.block.name} */\n`
         code += `    model->states.${safeName}_states[0] = ${initialCondition};\n`
+      } else if (block.block.type === 'unit_delay') {
+        const safeName = this.signalName(block)
+        const x0 =
+          block.block.parameters?.initialValue ??
+          block.block.parameters?.initialCondition ??
+          0
+        const mode = block.block.parameters?.delayMode === 'memory' ? 'Memory' : 'unit_delay'
+        code += `    /* Reset ${block.flattenedName || block.block.name} (${mode}) */\n`
+        if (typeof x0 === 'number') {
+          code += `    model->states.${safeName}_state = ${x0};\n`
+        } else if (Array.isArray(x0) && !Array.isArray(x0[0])) {
+          for (let i = 0; i < x0.length; i++) {
+            code += `    model->states.${safeName}_state[${i}] = ${Number(x0[i]) || 0};\n`
+          }
+        } else {
+          code += `    model->states.${safeName}_state = 0;\n`
+        }
       }
     }
 

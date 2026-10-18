@@ -19,6 +19,8 @@ interface ExtendedTypeInfo {
   cols?: number          // for matrices
   isColumnMatrix: boolean // original was [N][1]
   accessPattern: string  // '[i]' or '[i][0]' or '[i][j]' etc.
+  /** Length-9 vector treated as 3×3 column-major (DCM reshape) */
+  flatColumnMajor?: boolean
 }
 
 export class MatrixMultiplyBlockModule implements IBlockModule {
@@ -73,8 +75,22 @@ export class MatrixMultiplyBlockModule implements IBlockModule {
       }
     }
 
-    // Vector [N]
+    // Vector [N] — treat length-9 as column-major 3×3 (common DCM reshape)
     if (parsed.isArray && parsed.arraySize) {
+      if (parsed.arraySize === 9) {
+        return {
+          baseType: parsed.baseType,
+          isScalar: false,
+          isVector: false,
+          isRowMatrix: false,
+          isMatrix: true,
+          rows: 3,
+          cols: 3,
+          isColumnMatrix: false,
+          accessPattern: 'flat9',
+          flatColumnMajor: true
+        }
+      }
       return {
         baseType: parsed.baseType,
         isScalar: false,
@@ -118,6 +134,16 @@ export class MatrixMultiplyBlockModule implements IBlockModule {
     // Helper to generate element access
     const access1 = (idx: string) => type1.isColumnMatrix ? `${input1}[${idx}][0]` : `${input1}[${idx}]`
     const access2 = (idx: string) => type2.isColumnMatrix ? `${input2}[${idx}][0]` : `${input2}[${idx}]`
+    /** Matrix element A[i][j]; flat column-major 9-vector uses index i+3*j */
+    const matAt = (
+      t: ExtendedTypeInfo,
+      expr: string,
+      i: string,
+      j: string
+    ) =>
+      t.flatColumnMajor
+        ? `${expr}[(${i}) + 3 * (${j})]`
+        : `${expr}[${i}][${j}]`
 
     // Case 1: Scalar × Scalar
     if (type1.isScalar && type2.isScalar) {
@@ -200,8 +226,10 @@ export class MatrixMultiplyBlockModule implements IBlockModule {
         code += `        ${outputName}[i] = ${access1('i')} * ${access2('i')};\n`
         code += `    }\n`
       } else {
+        // Prefer zero-fill matching declared output (often double[N]) over scalar assign
+        const outSize = type1.size! > type2.size! ? type2.size! : type1.size!
         code += `    // ERROR: Vector dimensions incompatible (${type1.size} vs ${type2.size})\n`
-        code += `    ${outputName} = 0.0;\n`
+        code += `    for (int i = 0; i < ${outSize || 3}; i++) { ${outputName}[i] = 0.0; }\n`
       }
       return code
     }
@@ -235,7 +263,7 @@ export class MatrixMultiplyBlockModule implements IBlockModule {
       return code
     }
 
-    // Case 11: Matrix × Vector
+    // Case 11: Matrix × Vector (incl. flat length-9 column-major DCM)
     if (type1.isMatrix && type2.isVector) {
       const rows = type1.rows!
       const cols = type1.cols!
@@ -244,12 +272,31 @@ export class MatrixMultiplyBlockModule implements IBlockModule {
         code += `    for (int i = 0; i < ${rows}; i++) {\n`
         code += `        ${outputName}[i] = 0.0;\n`
         code += `        for (int k = 0; k < ${cols}; k++) {\n`
-        code += `            ${outputName}[i] += ${input1}[i][k] * ${access2('k')};\n`
+        code += `            ${outputName}[i] += ${matAt(type1, input1, 'i', 'k')} * ${access2('k')};\n`
         code += `        }\n`
         code += `    }\n`
       } else {
         code += `    // ERROR: Matrix columns (${cols}) must equal vector size (${type2.size})\n`
         code += `    for (int i = 0; i < ${rows}; i++) { ${outputName}[i] = 0.0; }\n`
+      }
+      return code
+    }
+
+    // Case 11b: Vector × Matrix
+    if (type1.isVector && type2.isMatrix) {
+      const rows = type2.rows!
+      const cols = type2.cols!
+      if (type1.size === rows) {
+        code += `    // Vector-matrix: [${rows}] × [${rows}x${cols}] = [${cols}]\n`
+        code += `    for (int j = 0; j < ${cols}; j++) {\n`
+        code += `        ${outputName}[j] = 0.0;\n`
+        code += `        for (int k = 0; k < ${rows}; k++) {\n`
+        code += `            ${outputName}[j] += ${access1('k')} * ${matAt(type2, input2, 'k', 'j')};\n`
+        code += `        }\n`
+        code += `    }\n`
+      } else {
+        code += `    // ERROR: Vector size (${type1.size}) must equal matrix rows (${rows})\n`
+        code += `    for (int j = 0; j < ${cols}; j++) { ${outputName}[j] = 0.0; }\n`
       }
       return code
     }
@@ -355,6 +402,14 @@ export class MatrixMultiplyBlockModule implements IBlockModule {
     }
     if (type1.isVector && type2.isScalar) {
       return `${type1.baseType}[${type1.size}]`
+    }
+
+    // Flat 3×3 (len-9) × vector[3] → vector[3]
+    if (type1.isMatrix && type2.isVector && type1.cols === type2.size) {
+      return `${type1.baseType}[${type1.rows}]`
+    }
+    if (type1.isVector && type2.isMatrix && type1.size === type2.rows) {
+      return `${type2.baseType}[${type2.cols}]`
     }
 
     // Scalar × Row Matrix = Row Matrix

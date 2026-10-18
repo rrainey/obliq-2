@@ -308,12 +308,16 @@ export class CCodeBuilder {
   /**
    * Generate enable state struct for subsystems
    */
-  static generateEnableStateStruct(subsystemEnableInfo: Array<{
-    subsystemId: string,
-    subsystemName: string,
-    hasEnableInput: boolean,
-    enableEdge?: 'rising' | 'level'
-  }>): string {
+  static generateEnableStateStruct(
+    subsystemEnableInfo: Array<{
+      subsystemId: string
+      subsystemName: string
+      hasEnableInput: boolean
+      enableEdge?: 'rising' | 'level'
+    }>,
+    /** Prefix struct tag to avoid ODR clashes when linking multiple plants */
+    modelName?: string
+  ): string {
     const members: string[] = []
     
     // Add enable state for each subsystem that has enable input
@@ -346,9 +350,13 @@ export class CCodeBuilder {
         'Placeholder - no subsystems with enable inputs'
       ))
     }
+
+    const tag = modelName
+      ? `${this.sanitizeIdentifier(modelName)}_enable_states`
+      : 'enable_states'
     
     return this.generateStruct(
-      'enable_states',
+      tag,
       members,
       'Enable states for all subsystems'
     )

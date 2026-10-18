@@ -26,6 +26,8 @@ import { DotProductBlockModule } from './DotProductBlockModule'
 import { IfBlockModule } from './IfBlockModule'
 import { ConditionBlockModule } from './ConditionBlockModule'
 import { AbsoluteValueBlockModule } from './AbsoluteValueBlockModule'
+import { DerivativeBlockModule } from './DerivativeBlockModule'
+import { VariableTransportDelayBlockModule } from './VariableTransportDelayBlockModule'
 import { SquareBlockModule } from './SquareBlockModule'
 import { UnaryMinusBlockModule } from './UnaryMinusBlockModule'
 import { LimitBlockModule } from './LimitBlockModule'
@@ -47,6 +49,7 @@ import { AtmosphereBlockModule } from './AtmosphereBlockModule'
 import { SheetLabelSinkBlockModule } from './SheetLabelSinkBlockModule'
 import { SheetLabelSourceBlockModule } from './SheetLabelSourceBlockModule'
 import { SubsystemBlockModule } from './SubsystemBlockModule'
+import { IterationIndexBlockModule } from './IterationIndexBlockModule'
 import { SignalDisplayBlockModule } from './SignalDisplayBlockModule'
 import { SignalLoggerBlockModule } from './SignalLoggerBlockModule'
 import { NoConnectionBlockModule } from './NoConnectionBlockModule'
@@ -153,7 +156,11 @@ export class BlockModuleFactory {
         return new SheetLabelSourceBlockModule()
 
       case 'subsystem':
+      case 'for_iterator_subsystem':
         return new SubsystemBlockModule()
+
+      case 'iteration_index':
+        return new IterationIndexBlockModule()
 
       case 'trig':
         return new TrigBlockModule()
@@ -175,6 +182,12 @@ export class BlockModuleFactory {
 
       case 'abs': 
         return new AbsoluteValueBlockModule()
+
+      case 'derivative':
+        return new DerivativeBlockModule()
+
+      case 'variable_transport_delay':
+        return new VariableTransportDelayBlockModule()
 
       case 'square':
         return new SquareBlockModule()
@@ -267,6 +280,9 @@ export class BlockModuleFactory {
       'transpose',
       'mux',
       'demux',
+      'subsystem',
+      'for_iterator_subsystem',
+      'iteration_index',
       'trig',
       'mag',
       'cross',
@@ -278,6 +294,8 @@ export class BlockModuleFactory {
       'if',
       'condition',
       'abs',
+      'derivative',
+      'variable_transport_delay',
       'uminus',
       'limit',
       'relay',

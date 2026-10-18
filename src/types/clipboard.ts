@@ -78,6 +78,12 @@ export interface PasteOptions {
 
   /** Whether to auto-import missing subsystem sheets */
   importMissingSubsystems?: boolean
+
+  /**
+   * When clipboard contains subsystem(s): paste a deep copy (default) or a
+   * reference to the source definition (same model only).
+   */
+  subsystemPasteMode?: 'copy' | 'reference'
 }
 
 /**

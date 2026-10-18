@@ -70,11 +70,15 @@ export class HeaderGenerator {
 #include <string.h>
 #include <math.h>\n`
 
-    // Include segregated subsystem headers
+    // Include segregated subsystem headers (dedupe shared module types)
     if (this.model.segregatedSubsystems && this.model.segregatedSubsystems.length > 0) {
       includes += '\n/* Segregated subsystem headers */\n'
+      const seen = new Set<string>()
       for (const sub of this.model.segregatedSubsystems) {
-        includes += `#include "${sub.sanitizedName}.h"\n`
+        const mod = sub.moduleTypeName || sub.sanitizedName
+        if (seen.has(mod)) continue
+        seen.add(mod)
+        includes += `#include "${mod}.h"\n`
       }
     }
 
@@ -108,7 +112,10 @@ export class HeaderGenerator {
     types += '\n'
     
     // Always generate enable states structure to match function signatures
-    types += CCodeBuilder.generateEnableStateStruct(this.model.subsystemEnableInfo)
+    types += CCodeBuilder.generateEnableStateStruct(
+      this.model.subsystemEnableInfo,
+      this.modelName
+    )
     types += '\n'
     
     return types
@@ -123,12 +130,16 @@ export class HeaderGenerator {
     members.push(`    ${this.modelName}_signals_t signals;`)
     members.push(`    ${this.modelName}_states_t states;`)
     members.push(`    ${this.modelName}_data_stores_t data_stores;`)
-    members.push(`    enable_states_t enable_states;`) // Always include
+    members.push(`    ${this.modelName}_enable_states_t enable_states;`)
 
-    // Add segregated subsystem instances
+    // Add segregated subsystem instances (shared type, unique field names)
     if (this.model.segregatedSubsystems && this.model.segregatedSubsystems.length > 0) {
       for (const sub of this.model.segregatedSubsystems) {
-        members.push(`    ${sub.sanitizedName}_t ${sub.sanitizedName}; /* Segregated subsystem */`)
+        const mod = sub.moduleTypeName || sub.sanitizedName
+        const field = sub.sanitizedName
+        members.push(
+          `    ${mod}_t ${field}; /* ${sub.sharedModule ? 'Shared module instance' : 'Segregated subsystem'} */`
+        )
       }
     }
 
@@ -422,7 +433,10 @@ export class HeaderGenerator {
     if (this.model.segregatedSubsystems && this.model.segregatedSubsystems.length > 0) {
       for (const sub of this.model.segregatedSubsystems) {
         if (sub.hasState) {
-          members.push(`    ${sub.sanitizedName}_states_t ${sub.sanitizedName}; /* Subsystem states */`)
+          const mod = sub.moduleTypeName || sub.sanitizedName
+          members.push(
+            `    ${mod}_states_t ${sub.sanitizedName}; /* Subsystem states */`
+          )
         }
       }
     }
@@ -467,6 +481,13 @@ export class HeaderGenerator {
        `${this.modelName}_t* model`
       ],
       'Evaluate algebraic relationships (pure function, no state changes)'
+    ) + '\n'
+
+    prototypes += CCodeBuilder.generateFunctionPrototype(
+      'void',
+      `${this.modelName}_update_memory_states`,
+      [`${this.modelName}_t* model`],
+      'UH60 P3: Memory major-step hold — latch after RK4/Euler'
     ) + '\n'
 
     prototypes += CCodeBuilder.generateFunctionPrototype(
@@ -676,31 +697,15 @@ export class HeaderGenerator {
       const safeName = CCodeBuilder.sanitizeIdentifier(name)
 
       if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
-        // Matrix: Use const array with #define for dimensions
+        // Matrix: dimensions in header; storage defined once in the .c (avoid ODR)
         code += `#define ${safeName}_ROWS ${parsedType.rows}\n`
         code += `#define ${safeName}_COLS ${parsedType.cols}\n`
-        code += `const ${baseType} ${safeName}[${safeName}_ROWS][${safeName}_COLS] = `
-
-        // Format matrix value
-        if (Array.isArray(value) && Array.isArray(value[0])) {
-          code += this.formatMatrixLiteral(value as number[][], baseType)
-        } else {
-          code += '{{0}}' // Error fallback
-        }
-        code += ';\n\n'
+        code += `extern const ${baseType} ${safeName}[${safeName}_ROWS][${safeName}_COLS];\n\n`
 
       } else if (parsedType.isArray && parsedType.arraySize) {
-        // Vector: Use const array with #define for size
+        // Vector: size in header; storage defined once in the .c
         code += `#define ${safeName}_SIZE ${parsedType.arraySize}\n`
-        code += `const ${baseType} ${safeName}[${safeName}_SIZE] = `
-
-        // Format vector value
-        if (Array.isArray(value)) {
-          code += this.formatVectorLiteral(value as number[], baseType)
-        } else {
-          code += '{0}' // Error fallback
-        }
-        code += ';\n\n'
+        code += `extern const ${baseType} ${safeName}[${safeName}_SIZE];\n\n`
 
       } else {
         // Scalar: prefer bare #define for evaluate expressions; avoid clobbering signals
@@ -735,6 +740,45 @@ export class HeaderGenerator {
       }
     }
     return ids
+  }
+
+  /**
+   * Emit const array/matrix parameter storage for the .c file (header only
+   * declares `extern`). Scalars stay as #defines in the header.
+   */
+  generateParameterStorage(): string {
+    if (!this.model.parameters || this.model.parameters.length === 0) {
+      return ''
+    }
+    let code = CCodeBuilder.generateCommentBlock(['Model parameter storage'])
+    let any = false
+    for (const param of this.model.parameters) {
+      const { name, signalType, value } = param
+      if (!signalType || !isValidType(signalType)) continue
+      const parsedType = parseType(signalType)
+      const baseType = parsedType.baseType
+      const safeName = CCodeBuilder.sanitizeIdentifier(name)
+      if (parsedType.isMatrix && parsedType.rows && parsedType.cols) {
+        any = true
+        code += `const ${baseType} ${safeName}[${safeName}_ROWS][${safeName}_COLS] = `
+        if (Array.isArray(value) && Array.isArray(value[0])) {
+          code += this.formatMatrixLiteral(value as number[][], baseType)
+        } else {
+          code += '{{0}}'
+        }
+        code += ';\n\n'
+      } else if (parsedType.isArray && parsedType.arraySize) {
+        any = true
+        code += `const ${baseType} ${safeName}[${safeName}_SIZE] = `
+        if (Array.isArray(value)) {
+          code += this.formatVectorLiteral(value as number[], baseType)
+        } else {
+          code += '{0}'
+        }
+        code += ';\n\n'
+      }
+    }
+    return any ? code : ''
   }
 
   /**

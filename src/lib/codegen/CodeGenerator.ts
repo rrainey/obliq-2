@@ -166,7 +166,14 @@ export class CodeGenerator {
     }
     const subsystemFiles: SubsystemCodeResult[] = []
     if (model.segregatedSubsystems && model.segregatedSubsystems.length > 0) {
+      // Shared modules (definition + references): emit one .c/.h per moduleTypeName
+      const emittedModules = new Set<string>()
       for (const subInfo of model.segregatedSubsystems) {
+        const modKey = subInfo.moduleTypeName || subInfo.sanitizedName
+        if (subInfo.sharedModule && emittedModules.has(modKey)) {
+          continue
+        }
+        emittedModules.add(modKey)
         const subGenerator = new SubsystemCodeGenerator(subInfo)
         const subResult = subGenerator.generate()
         subsystemFiles.push(subResult)
@@ -230,6 +237,13 @@ export class CodeGenerator {
     }
     source += '\n'
 
+    // Vector/matrix model parameters (header declares extern)
+    const paramStorage = new HeaderGenerator(model, typeMap).generateParameterStorage()
+    if (paramStorage) {
+      source += paramStorage
+      source += '\n'
+    }
+
     if (this.options.debugMath) {
       source += generateDebugMathPreamble()
       source += '\n'
@@ -265,7 +279,10 @@ export class CodeGenerator {
     })
     source += algebraicEvaluator.generate()
     source += '\n'
-    
+    // UH60 P3: Memory major-step hold (post-RK4 latch)
+    source += algebraicEvaluator.generatePostIntegrationMemoryUpdates()
+    source += '\n'
+
     // Derivatives function (if needed)
     const rk4Generator = new RK4Generator(model, typeMap)
     const derivativesCode = rk4Generator.generate()
@@ -311,21 +328,23 @@ export class CodeGenerator {
     let code = ''
     let hasStaticData = false
     
-    // Generate lookup tables for 1D and 2D lookup blocks
+    // Generate lookup tables for 1D and 2D lookup blocks (inline arrays only).
+    // UH60 P2: parameter-backed lookups use model PARAM_* arrays from the header.
     for (const block of model.blocks) {
+      const p = block.block.parameters || {}
       if (block.block.type === 'lookup_1d') {
+        if (p.inputValuesParam || p.outputValuesParam) continue
         if (!hasStaticData) {
           code += CCodeBuilder.generateCommentBlock(['Static lookup tables'])
           hasStaticData = true
         }
-        
         code += this.generate1DLookupTable(block)
       } else if (block.block.type === 'lookup_2d') {
+        if (p.input1ValuesParam || p.input2ValuesParam || p.outputTableParam) continue
         if (!hasStaticData) {
           code += CCodeBuilder.generateCommentBlock(['Static lookup tables'])
           hasStaticData = true
         }
-        
         code += this.generate2DLookupTable(block)
       }
     }

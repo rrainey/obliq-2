@@ -177,37 +177,59 @@ export function validateBlockParameters(
       }
       break;
       
-    case BlockTypes.LOOKUP_1D:
-      // Validate inputValues array
-      if (parameters.inputValues !== undefined) {
-        if (!Array.isArray(parameters.inputValues) || parameters.inputValues.length < 2) {
-          errors.push('inputValues must be an array with at least 2 numbers');
-        } else if (!parameters.inputValues.every((n: any) => typeof n === 'number')) {
-          errors.push('inputValues must contain only numbers');
-        } else if (!isSorted(parameters.inputValues)) {
-          errors.push('inputValues must be sorted from smallest to largest');
+    case BlockTypes.LOOKUP_1D: {
+      // UH60 P2: model-parameter refs replace inline arrays
+      const idOk = (n: any) => typeof n === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(n);
+      if (parameters.inputValuesParam !== undefined) {
+        if (!idOk(parameters.inputValuesParam)) {
+          errors.push('inputValuesParam must be a valid C identifier');
         } else {
-          sanitized.inputValues = parameters.inputValues;
+          sanitized.inputValuesParam = parameters.inputValuesParam;
         }
-      } else {
-        sanitized.inputValues = defaults.inputValues;
       }
-      
+      if (parameters.outputValuesParam !== undefined) {
+        if (!idOk(parameters.outputValuesParam)) {
+          errors.push('outputValuesParam must be a valid C identifier');
+        } else {
+          sanitized.outputValuesParam = parameters.outputValuesParam;
+        }
+      }
+      const useParams = !!(parameters.inputValuesParam || parameters.outputValuesParam);
+
+      // Validate inputValues array (inline path)
+      if (!useParams || parameters.inputValues !== undefined) {
+        if (parameters.inputValues !== undefined) {
+          if (!Array.isArray(parameters.inputValues) || parameters.inputValues.length < 2) {
+            errors.push('inputValues must be an array with at least 2 numbers');
+          } else if (!parameters.inputValues.every((n: any) => typeof n === 'number')) {
+            errors.push('inputValues must contain only numbers');
+          } else if (!isSorted(parameters.inputValues)) {
+            errors.push('inputValues must be sorted from smallest to largest');
+          } else {
+            sanitized.inputValues = parameters.inputValues;
+          }
+        } else if (!useParams) {
+          sanitized.inputValues = defaults.inputValues;
+        }
+      }
+
       // Validate outputValues array
-      if (parameters.outputValues !== undefined) {
-        if (!Array.isArray(parameters.outputValues)) {
-          errors.push('outputValues must be an array of numbers');
-        } else if (parameters.inputValues && parameters.outputValues.length !== parameters.inputValues.length) {
-          errors.push('outputValues must have the same length as inputValues');
-        } else if (!parameters.outputValues.every((n: any) => typeof n === 'number')) {
-          errors.push('outputValues must contain only numbers');
-        } else {
-          sanitized.outputValues = parameters.outputValues;
+      if (!useParams || parameters.outputValues !== undefined) {
+        if (parameters.outputValues !== undefined) {
+          if (!Array.isArray(parameters.outputValues)) {
+            errors.push('outputValues must be an array of numbers');
+          } else if (parameters.inputValues && parameters.outputValues.length !== parameters.inputValues.length) {
+            errors.push('outputValues must have the same length as inputValues');
+          } else if (!parameters.outputValues.every((n: any) => typeof n === 'number')) {
+            errors.push('outputValues must contain only numbers');
+          } else {
+            sanitized.outputValues = parameters.outputValues;
+          }
+        } else if (!useParams) {
+          sanitized.outputValues = defaults.outputValues;
         }
-      } else {
-        sanitized.outputValues = defaults.outputValues;
       }
-      
+
       // Validate extrapolation
       if (parameters.extrapolation !== undefined) {
         if (parameters.extrapolation !== 'clamp' && parameters.extrapolation !== 'extrapolate') {
@@ -219,72 +241,102 @@ export function validateBlockParameters(
         sanitized.extrapolation = defaults.extrapolation;
       }
       break;
+    }
       
-    case BlockTypes.LOOKUP_2D:
+    case BlockTypes.LOOKUP_2D: {
+      const idOk2 = (n: any) => typeof n === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(n);
+      for (const key of [
+        'input1ValuesParam',
+        'input2ValuesParam',
+        'outputTableParam'
+      ] as const) {
+        if (parameters[key] !== undefined) {
+          if (!idOk2(parameters[key])) {
+            errors.push(`${key} must be a valid C identifier`);
+          } else {
+            sanitized[key] = parameters[key];
+          }
+        }
+      }
+      if (parameters.outputTableTranspose) {
+        sanitized.outputTableTranspose = true;
+      }
+      const useParams2 = !!(
+        parameters.input1ValuesParam ||
+        parameters.input2ValuesParam ||
+        parameters.outputTableParam
+      );
+
       // Validate input1Values array
-      if (parameters.input1Values !== undefined) {
-        if (!Array.isArray(parameters.input1Values) || parameters.input1Values.length < 2) {
-          errors.push('input1Values must be an array with at least 2 numbers');
-        } else if (!parameters.input1Values.every((n: any) => typeof n === 'number')) {
-          errors.push('input1Values must contain only numbers');
-        } else if (!isSorted(parameters.input1Values)) {
-          errors.push('input1Values must be sorted from smallest to largest');
-        } else {
-          sanitized.input1Values = parameters.input1Values;
+      if (!useParams2 || parameters.input1Values !== undefined) {
+        if (parameters.input1Values !== undefined) {
+          if (!Array.isArray(parameters.input1Values) || parameters.input1Values.length < 2) {
+            errors.push('input1Values must be an array with at least 2 numbers');
+          } else if (!parameters.input1Values.every((n: any) => typeof n === 'number')) {
+            errors.push('input1Values must contain only numbers');
+          } else if (!isSorted(parameters.input1Values)) {
+            errors.push('input1Values must be sorted from smallest to largest');
+          } else {
+            sanitized.input1Values = parameters.input1Values;
+          }
+        } else if (!useParams2) {
+          sanitized.input1Values = defaults.input1Values;
         }
-      } else {
-        sanitized.input1Values = defaults.input1Values;
       }
-      
+
       // Validate input2Values array
-      if (parameters.input2Values !== undefined) {
-        if (!Array.isArray(parameters.input2Values) || parameters.input2Values.length < 2) {
-          errors.push('input2Values must be an array with at least 2 numbers');
-        } else if (!parameters.input2Values.every((n: any) => typeof n === 'number')) {
-          errors.push('input2Values must contain only numbers');
-        } else if (!isSorted(parameters.input2Values)) {
-          errors.push('input2Values must be sorted from smallest to largest');
-        } else {
-          sanitized.input2Values = parameters.input2Values;
+      if (!useParams2 || parameters.input2Values !== undefined) {
+        if (parameters.input2Values !== undefined) {
+          if (!Array.isArray(parameters.input2Values) || parameters.input2Values.length < 2) {
+            errors.push('input2Values must be an array with at least 2 numbers');
+          } else if (!parameters.input2Values.every((n: any) => typeof n === 'number')) {
+            errors.push('input2Values must contain only numbers');
+          } else if (!isSorted(parameters.input2Values)) {
+            errors.push('input2Values must be sorted from smallest to largest');
+          } else {
+            sanitized.input2Values = parameters.input2Values;
+          }
+        } else if (!useParams2) {
+          sanitized.input2Values = defaults.input2Values;
         }
-      } else {
-        sanitized.input2Values = defaults.input2Values;
       }
-      
+
       // Validate outputTable 2D array
-      if (parameters.outputTable !== undefined) {
-        const expectedRows = sanitized.input2Values?.length || defaults.input2Values.length;
-        const expectedCols = sanitized.input1Values?.length || defaults.input1Values.length;
-        
-        if (!Array.isArray(parameters.outputTable)) {
-          errors.push('outputTable must be a 2D array of numbers');
-        } else if (parameters.outputTable.length !== expectedRows) {
-          errors.push(`outputTable must have ${expectedRows} rows (matching input2Values length)`);
-        } else {
-          let validTable = true;
-          for (let i = 0; i < parameters.outputTable.length; i++) {
-            if (!Array.isArray(parameters.outputTable[i])) {
-              errors.push(`outputTable row ${i} must be an array`);
-              validTable = false;
-              break;
-            } else if (parameters.outputTable[i].length !== expectedCols) {
-              errors.push(`outputTable row ${i} must have ${expectedCols} columns (matching input1Values length)`);
-              validTable = false;
-              break;
-            } else if (!parameters.outputTable[i].every((n: any) => typeof n === 'number')) {
-              errors.push(`outputTable row ${i} must contain only numbers`);
-              validTable = false;
-              break;
+      if (!useParams2 || parameters.outputTable !== undefined) {
+        if (parameters.outputTable !== undefined) {
+          const expectedRows = sanitized.input2Values?.length || defaults.input2Values.length;
+          const expectedCols = sanitized.input1Values?.length || defaults.input1Values.length;
+
+          if (!Array.isArray(parameters.outputTable)) {
+            errors.push('outputTable must be a 2D array of numbers');
+          } else if (parameters.outputTable.length !== expectedRows) {
+            errors.push(`outputTable must have ${expectedRows} rows (matching input2Values length)`);
+          } else {
+            let validTable = true;
+            for (let i = 0; i < parameters.outputTable.length; i++) {
+              if (!Array.isArray(parameters.outputTable[i])) {
+                errors.push(`outputTable row ${i} must be an array`);
+                validTable = false;
+                break;
+              } else if (parameters.outputTable[i].length !== expectedCols) {
+                errors.push(`outputTable row ${i} must have ${expectedCols} columns (matching input1Values length)`);
+                validTable = false;
+                break;
+              } else if (!parameters.outputTable[i].every((n: any) => typeof n === 'number')) {
+                errors.push(`outputTable row ${i} must contain only numbers`);
+                validTable = false;
+                break;
+              }
+            }
+            if (validTable) {
+              sanitized.outputTable = parameters.outputTable;
             }
           }
-          if (validTable) {
-            sanitized.outputTable = parameters.outputTable;
-          }
+        } else if (!useParams2) {
+          sanitized.outputTable = defaults.outputTable;
         }
-      } else {
-        sanitized.outputTable = defaults.outputTable;
       }
-      
+
       // Validate extrapolation
       if (parameters.extrapolation !== undefined) {
         if (parameters.extrapolation !== 'clamp' && parameters.extrapolation !== 'extrapolate') {
@@ -296,6 +348,7 @@ export function validateBlockParameters(
         sanitized.extrapolation = defaults.extrapolation;
       }
       break;
+    }
       
     case BlockTypes.OUTPUT_PORT:
       // Validate signalName

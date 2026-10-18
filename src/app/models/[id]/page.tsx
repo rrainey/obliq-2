@@ -29,6 +29,10 @@ import InputPortConfig from '@/components/InputPortConfig'
 import SourceConfig from '@/components/SourceConfig'
 import ScaleConfig from '@/components/ScaleConfig'
 import SubsystemConfig from '@/components/SubsystemConfig'
+import SubsystemPasteDialog, {
+  SubsystemPasteChoice
+} from '@/components/SubsystemPasteDialog'
+import { isSubsystemLike } from '@/lib/subsystemReference'
 import TransferFunctionConfig from '@/components/TransferFunctionConfig'
 import DiscreteTransformConfig from '@/components/DiscreteTransformConfig'
 import TrigConfig from '@/components/TrigConfig'
@@ -139,11 +143,11 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     // Actions
     setModel, setError, setModelLoading, saveModel,
     switchToSheet, addSheet, renameSheet, deleteSheet,
-    addBlock, updateBlock, updateBlocks, deleteBlock, addWire, deleteWire, updateWireRouting, renameBlock,
+    addBlock, updateBlock, updateBlocks, deleteBlock, syncSubsystemReferences, addWire, deleteWire, updateWireRouting, renameBlock,
     setSelectedBlockId, setSelectedBlocks, setSelectedWireId, setConfigBlock, clearSelection,
     requestFocus,
     // Feature 5: Clipboard actions
-    copySelection, cutSelection, pasteFromClipboard, checkClipboardDependencies,
+    copySelection, cutSelection, pasteFromClipboard, checkClipboardDependencies, getClipboardData,
     setSimulationResults, setIsSimulating, setOutputPortValues,
     setGlobalSimulationResults, clearGlobalSimulationResults,
     updateCurrentSheet, saveCurrentSheetData, initializeFromModel, saveAsNewModel,
@@ -191,6 +195,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const [forceRecompile, setForceRecompile] = useState<boolean>(false)
 
   const [showAutoSaveDialog, setShowAutoSaveDialog] = useState(false)
+  const [subsystemPasteOpen, setSubsystemPasteOpen] = useState(false)
+  const [subsystemPasteNames, setSubsystemPasteNames] = useState<string[]>([])
   const [autoSaveInfo, setAutoSaveInfo] = useState<{
     autoSaveDate: string
     lastSavedVersion: number
@@ -604,9 +610,21 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       return
     }
 
-    // Store deleteBlock also removes connected wires
+    // Store deleteBlock also removes connected wires. Refuse deleting a
+    // definition that still has subsystem references (user must resolve manually).
+    const failed: string[] = []
     for (const blockId of ids) {
-      deleteBlock(blockId)
+      const result = deleteBlock(blockId)
+      if (result && result.success === false) {
+        failed.push(result.error || 'Delete blocked')
+      }
+    }
+    if (failed.length > 0) {
+      notifications.show({
+        title: 'Cannot delete',
+        message: failed[0],
+        color: 'red'
+      })
     }
 
     if (selectedBlockId && ids.includes(selectedBlockId)) {
@@ -1512,50 +1530,54 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         color: 'blue',
         autoClose: 2000,
       })
+    } else if (useModelStore.getState().selectedBlockIds.length > 0) {
+      notifications.show({
+        title: 'Cut blocked',
+        message:
+          'Cannot cut a subsystem that still has references. Delete or retarget those references first.',
+        color: 'red'
+      })
     }
   }, [cutSelection])
 
-  const handlePaste = useCallback(() => {
-    // Check for dependency issues first
-    const depCheck = checkClipboardDependencies()
-    if (!depCheck.allSatisfied && depCheck.missingParameters.length > 0) {
-      // For now, auto-import missing parameters with a notification
-      // TODO: Show PasteDependencyDialog for user confirmation
-      const result = pasteFromClipboard({ importMissingParameters: true })
+  const runPaste = useCallback(
+    (opts?: { subsystemPasteMode?: SubsystemPasteChoice }) => {
+      const depCheck = checkClipboardDependencies()
+      const result = pasteFromClipboard({
+        importMissingParameters: !depCheck.allSatisfied,
+        subsystemPasteMode: opts?.subsystemPasteMode
+      })
       if (result.success) {
         notifications.show({
-          title: 'Pasted with dependencies',
-          message: `${result.pastedBlockIds.length} block${result.pastedBlockIds.length !== 1 ? 's' : ''} pasted. Missing parameters were imported.`,
-          color: 'green',
-          autoClose: 3000,
-        })
-      } else {
-        notifications.show({
-          title: 'Paste failed',
-          message: result.error || 'Unknown error',
-          color: 'red',
-          icon: <IconAlertCircle size={20} />,
-        })
-      }
-    } else {
-      const result = pasteFromClipboard()
-      if (result.success) {
-        notifications.show({
-          title: 'Pasted',
+          title: opts?.subsystemPasteMode === 'reference' ? 'Pasted reference' : 'Pasted',
           message: `${result.pastedBlockIds.length} block${result.pastedBlockIds.length !== 1 ? 's' : ''} pasted`,
           color: 'green',
-          autoClose: 2000,
+          autoClose: 2000
         })
-      } else if (result.error !== 'Clipboard is empty') {
+      } else if (result.error && result.error !== 'Clipboard is empty') {
         notifications.show({
           title: 'Paste failed',
-          message: result.error || 'Unknown error',
+          message: result.error,
           color: 'red',
-          icon: <IconAlertCircle size={20} />,
+          icon: <IconAlertCircle size={20} />
         })
       }
+    },
+    [checkClipboardDependencies, pasteFromClipboard]
+  )
+
+  const handlePaste = useCallback(() => {
+    const clip = getClipboardData()
+    if (!clip || clip.blocks.length === 0) return
+    const subs = clip.blocks.filter(isSubsystemLike)
+    // Only subsystem blocks on clipboard → offer copy vs reference
+    if (subs.length > 0 && subs.length === clip.blocks.length) {
+      setSubsystemPasteNames(subs.map(s => s.name))
+      setSubsystemPasteOpen(true)
+      return
     }
-  }, [checkClipboardDependencies, pasteFromClipboard])
+    runPaste()
+  }, [getClipboardData, runPaste])
 
   const handleAddSheet = () => {
     saveCurrentSheetData()
@@ -2193,6 +2215,16 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         </Stack>
       </AppShell.Aside>
 
+      <SubsystemPasteDialog
+        opened={subsystemPasteOpen}
+        subsystemNames={subsystemPasteNames}
+        onCancel={() => setSubsystemPasteOpen(false)}
+        onConfirm={(mode) => {
+          setSubsystemPasteOpen(false)
+          runPaste({ subsystemPasteMode: mode })
+        }}
+      />
+
       {showSaveAsDialog && (
         <SaveAsDialog
           currentName={model.name}
@@ -2386,9 +2418,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             <SubsystemConfig
               block={configBlock}
               availableSheets={sheets.filter(s => s.id !== activeSheetId)}
+              allBlocks={blocks}
               onUpdate={handleBlockConfigUpdate}
               onRename={(newName) => renameBlock(configBlock.id, newName)}
               onClose={() => setConfigBlock(null)}
+              onSyncReferences={(definitionId) => syncSubsystemReferences(definitionId)}
+              onOpenDefinition={(definitionId) => {
+                const def = blocks.find(b => b.id === definitionId)
+                if (def) setConfigBlock(def)
+              }}
               onSheetNavigate={(sheetId) => {
                 switchToSheet(sheetId)
                 setConfigBlock(null)

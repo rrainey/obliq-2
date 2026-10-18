@@ -45,18 +45,60 @@ const ModelParameterSchema = z.object({
 })
 
 // Subsystem-specific parameters schema
-const SubsystemParametersSchema = z.object({
-  inputPorts: z.array(z.string()).min(1, 'Subsystem must have at least one input port'),
-  outputPorts: z.array(z.string()).min(1, 'Subsystem must have at least one output port'),
-  sheets: z.array(SheetSchema).min(1, 'Subsystem must have at least one sheet'),
-  showEnableInput: z.boolean().optional().default(false),
-  codeGenStrategy: CodeGenStrategySchema.optional().default('flatten'),
-  // Subsystem-level parameters (only used for segregated subsystems)
-  parameters: z.array(ModelParameterSchema).optional().default([]),
-  // Optional visual size overrides for the block on the diagram
-  width: z.number().positive('Subsystem width must be positive').optional(),
-  height: z.number().positive('Subsystem height must be positive').optional()
-})
+// References (isReference) share another block's sheets; they carry instance parameter values only.
+const SubsystemParametersSchema = z
+  .object({
+    inputPorts: z.array(z.string()).min(1, 'Subsystem must have at least one input port'),
+    outputPorts: z.array(z.string()).min(1, 'Subsystem must have at least one output port'),
+    /** Nested sheets — required for definitions; empty/omitted for references */
+    sheets: z.array(SheetSchema).optional().default([]),
+    showEnableInput: z.boolean().optional().default(false),
+    codeGenStrategy: CodeGenStrategySchema.optional().default('flatten'),
+    // Subsystem-level parameters (schema+defaults on definition; instance values on references)
+    parameters: z.array(ModelParameterSchema).optional().default([]),
+    // Optional visual size overrides for the block on the diagram
+    width: z.number().positive('Subsystem width must be positive').optional(),
+    height: z.number().positive('Subsystem height must be positive').optional(),
+    // For Iterator Subsystem (UH60 P1) — only used when type is for_iterator_subsystem
+    iterationLimit: z.number().int().positive().optional(),
+    /** 0 = zero-based index port; 1 = one-based (Simulink default) */
+    indexBase: z.union([z.literal(0), z.literal(1)]).optional(),
+    resetStates: z.enum(['held', 'reset']).optional(),
+    /** When true, parent sums body outputs across iterations; else last iter wins */
+    accumulateOutputs: z.boolean().optional(),
+    /**
+     * Subsystem reference (UH60 multi-blade / shared body).
+     * When true, body comes from referencedSubsystemId; sheets must be empty.
+     */
+    isReference: z.boolean().optional().default(false),
+    /** Block id of the definition subsystem on the same model (required when isReference) */
+    referencedSubsystemId: z.string().min(1).optional()
+  })
+  .superRefine((params, ctx) => {
+    const isRef = !!params.isReference
+    if (isRef) {
+      if (!params.referencedSubsystemId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Subsystem reference requires referencedSubsystemId',
+          path: ['referencedSubsystemId']
+        })
+      }
+      if (params.sheets && params.sheets.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Subsystem reference must not embed sheets (body lives on the definition)',
+          path: ['sheets']
+        })
+      }
+    } else if (!params.sheets || params.sheets.length < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Subsystem must have at least one sheet',
+        path: ['sheets']
+      })
+    }
+  })
 
 // Block parameters schema with type validation for specific block types
 const BlockParametersSchema = z.record(z.any()).optional().superRefine((params, ctx) => {
@@ -83,7 +125,9 @@ const BlockSchema = z.discriminatedUnion('type', [
     type: z.enum([
       'sum', 'multiply', 'transfer_function', 'signal_display', 'signal_logger',
       'input_port', 'output_port', 'source', 'scale', 'lookup_1d', 'lookup_2d',
-      'sheet_label_sink', 'sheet_label_source', 'trig', 'integrator', 'comment'
+      'sheet_label_sink', 'sheet_label_source', 'trig', 'integrator', 'comment',
+      'iteration_index', 'abs', 'unit_delay', 'derivative', 'variable_transport_delay',
+      'orientation_conversion', 'evaluate', 'limit', 'mux', 'demux'
     ]),
     name: z.string().min(1, 'Block name cannot be empty'),
     position: PositionSchema,
@@ -93,6 +137,14 @@ const BlockSchema = z.discriminatedUnion('type', [
   z.object({
     id: z.string().min(1, 'Block ID cannot be empty'),
     type: z.literal('subsystem'),
+    name: z.string().min(1, 'Block name cannot be empty'),
+    position: PositionSchema,
+    parameters: SubsystemParametersSchema
+  }),
+  // For Iterator Subsystem (Simulink For Iterator Subsystem / UH60 P1)
+  z.object({
+    id: z.string().min(1, 'Block ID cannot be empty'),
+    type: z.literal('for_iterator_subsystem'),
     name: z.string().min(1, 'Block name cannot be empty'),
     position: PositionSchema,
     parameters: SubsystemParametersSchema

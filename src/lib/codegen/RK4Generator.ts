@@ -106,7 +106,8 @@ export class RK4Generator {
    * Generate derivative call for a segregated subsystem
    */
   private generateSubsystemDerivativeCall(sub: SubsystemInfo): string {
-    const safeName = sub.sanitizedName
+    const field = sub.sanitizedName
+    const mod = sub.moduleTypeName || sub.sanitizedName
     let code = `    /* ${sub.subsystemName} */\n`
 
     // Find the subsystem block to check enable state
@@ -116,11 +117,11 @@ export class RK4Generator {
 
     if (sub.hasEnableInput && subsystemBlock) {
       // Check if subsystem is enabled before computing derivatives
-      code += `    if (model->${safeName}.enabled) {\n`
-      code += `        ${safeName}_compute_derivatives(&model->${safeName}, &state_derivatives->${safeName});\n`
+      code += `    if (model->${field}.enabled) {\n`
+      code += `        ${mod}_compute_derivatives(&model->${field}, &state_derivatives->${field});\n`
       code += `    }\n`
     } else {
-      code += `    ${safeName}_compute_derivatives(&model->${safeName}, &state_derivatives->${safeName});\n`
+      code += `    ${mod}_compute_derivatives(&model->${field}, &state_derivatives->${field});\n`
     }
 
     code += '\n'

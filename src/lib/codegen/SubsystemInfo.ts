@@ -40,14 +40,37 @@ export interface SubsystemInfo {
   /** Original block name (display name) */
   subsystemName: string
 
-  /** C-safe identifier derived from subsystemName */
+  /**
+   * C-safe identifier for the **parent instance field** (`model-><sanitizedName>`).
+   * Unique per instance even when several references share one module type.
+   */
   sanitizedName: string
+
+  /**
+   * C type / file stem for the generated module (`Blade_t`, `Blade.c`).
+   * Shared across references to the same definition; defaults to sanitizedName.
+   */
+  moduleTypeName?: string
+
+  /**
+   * When true, codegen emits one .c/.h for moduleTypeName and N parent instances.
+   * Instance parameter values use a runtime `params` struct (not #define).
+   */
+  sharedModule?: boolean
+
+  /** Definition block id (own id for definitions; referencedSubsystemId for refs). */
+  definitionSubsystemId?: string
+
+  /**
+   * Per-instance parameter values when sharedModule (otherwise `parameters` are
+   * compile-time defines on the module).
+   */
+  instanceParameters?: ModelParameter[]
 
   // === Structure ===
 
   /** Original sheets from the subsystem (before internal flattening) */
   sheets: Sheet[]
-
   /**
    * Pre-flattened internal model of the subsystem.
    * This model has already processed any nested subsystems according to
@@ -110,6 +133,27 @@ export interface SubsystemInfo {
    * Copied from the module's internal flatten; parent must not own these.
    */
   subsystemEnableInfo?: SubsystemEnableInfo[]
+
+  /**
+   * Present when the parent block is a for_iterator_subsystem (UH60 P1).
+   * Parent AlgebraicEvaluator wraps compute_outputs in a C for-loop.
+   */
+  forIterator?: {
+    iterationLimit: number
+    indexBase: 0 | 1
+    resetStates: 'held' | 'reset'
+    accumulateOutputs: boolean
+  }
+}
+
+/** C type / file stem (`Blade` → `Blade_t`, `Blade.c`). */
+export function subsystemModuleTypeName(info: SubsystemInfo): string {
+  return info.moduleTypeName || info.sanitizedName
+}
+
+/** Parent instance field (`model->Blade_2`). */
+export function subsystemInstanceFieldName(info: SubsystemInfo): string {
+  return info.sanitizedName
 }
 
 /**

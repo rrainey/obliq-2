@@ -32,7 +32,9 @@ export class AlgebraicEvaluator {
   private hasSampleScopes: boolean
   /** Blocks that drive subsystem enable pins — must not be algebra-gated. */
   private enableSourceBlockIds: Set<string>
-  
+  /** Cached topological order from the last algebra generate (for Memory latch). */
+  private lastExecutionOrder: FlattenedBlock[] = []
+
   constructor(
     model: FlattenedModel,
     typeMap: Map<string, string>,
@@ -78,12 +80,13 @@ export class AlgebraicEvaluator {
     
     // Compute execution order
     const executionOrder = this.calculateExecutionOrder()
+    this.lastExecutionOrder = executionOrder
 
     // Static state for IGM terminal Chi-angle latch (Add12/Add14) if present
     if (needsIgmTerminalChiLatch(executionOrder)) {
       code = generateIgmTerminalChiLatchStatics() + code
     }
-    
+
     // Generate block computations in order
     code += this.generateBlockComputations(executionOrder)
     
@@ -387,8 +390,9 @@ export class AlgebraicEvaluator {
       }
     }
 
-    // Phase 2: unit_delay / Memory state = u after all algebraic outputs are current
-    code += this.generateDeferredStateUpdates(executionOrder)
+    // Phase 2: discrete unit_delay state = u (Memory major-step hold waits until
+    // after RK4 — see generatePostIntegrationMemoryUpdates / UH60 P3).
+    code += this.generateDeferredStateUpdates(executionOrder, 'unit_delay')
 
     // Add sample storage for data collection blocks
     code += this.generateDataCollectionStorage(executionOrder)
@@ -398,10 +402,66 @@ export class AlgebraicEvaluator {
   }
 
   /**
+   * UH60 P3: Memory (delayMode:memory) latches after continuous integration so
+   * RK4 minor stages see a stable major-step hold (Simulink Memory semantics
+   * under fixed-step). Emitted as `${model}_update_memory_states`.
+   */
+  generatePostIntegrationMemoryUpdates(): string {
+    const executionOrder = this.getExecutionOrderForDeferred()
+    const body = this.generateDeferredStateUpdates(executionOrder, 'memory')
+    if (!body.trim()) {
+      // Still emit an empty function so _step can call it unconditionally
+      let code = CCodeBuilder.generateCommentBlock([
+        'UH60 P3: no Memory (delayMode:memory) blocks — major-step hold no-op'
+      ])
+      code += `void ${this.modelName}_update_memory_states(${this.modelName}_t* model) {\n`
+      code += '    (void)model;\n'
+      code += '}\n'
+      return code
+    }
+    let code = CCodeBuilder.generateCommentBlock([
+      'UH60 P3: Memory major-step hold — latch state = u after RK4/Euler',
+      'Output phase already published previous state during evaluate_algebraic'
+    ])
+    code += `void ${this.modelName}_update_memory_states(${this.modelName}_t* model) {\n`
+    code += body
+    // Segregated modules may contain Memory; update after parent integration
+    for (const sub of this.model.segregatedSubsystems || []) {
+      const memBlocks = (sub.flattenedModel?.blocks || []).filter(
+        b =>
+          b.block.type === 'unit_delay' &&
+          b.block.parameters?.delayMode === 'memory'
+      )
+      if (memBlocks.length > 0) {
+        code += `    ${(sub.moduleTypeName || sub.sanitizedName)}_update_memory_states(&model->${sub.sanitizedName});\n`
+      }
+    }
+    code += '}\n'
+    return code
+  }
+
+  /** Execution order used for deferred / memory updates (same as algebra). */
+  private getExecutionOrderForDeferred(): FlattenedBlock[] {
+    // Reuse the order from the last generate() path: topological over model.blocks
+    // AlgebraicEvaluator stores execution via calculateExecutionOrder in generate().
+    // Fall back to model.blocks if called standalone.
+    return this.lastExecutionOrder?.length
+      ? this.lastExecutionOrder
+      : this.model.blocks.filter(b => !b.isSegregated)
+  }
+
+  /**
    * Emit deferred unit_delay state updates (state = u) after producers have run.
    * Enable-gates updates so disabled subsystems freeze delay lines (RTW).
+   *
+   * @param mode `unit_delay` = discrete z⁻¹ (algebra phase);
+   *             `memory` = major-step hold (post-integration);
+   *             `all` = both (legacy / subsystem without split)
    */
-  private generateDeferredStateUpdates(executionOrder: FlattenedBlock[]): string {
+  private generateDeferredStateUpdates(
+    executionOrder: FlattenedBlock[],
+    mode: 'unit_delay' | 'memory' | 'all' = 'all'
+  ): string {
     let code = ''
     let header = false
 
@@ -410,6 +470,16 @@ export class AlgebraicEvaluator {
         continue
       }
       if (block.isSegregated || !BlockModuleFactory.isSupported(block.block.type)) {
+        continue
+      }
+      if (block.block.type === 'unit_delay') {
+        const dm = block.block.parameters?.delayMode
+        const isMemory = dm === 'memory'
+        if (mode === 'unit_delay' && isMemory) continue
+        if (mode === 'memory' && !isMemory) continue
+        // mode === 'all' → both
+      } else if (mode === 'memory') {
+        // Only unit_delay participates in memory latch
         continue
       }
 
@@ -439,7 +509,13 @@ export class AlgebraicEvaluator {
         }
 
         if (!header) {
-          code += '\n    /* Deferred discrete state updates (unit_delay / Memory) */\n'
+          const label =
+            mode === 'memory'
+              ? 'Memory major-step hold updates (post-integration)'
+              : mode === 'unit_delay'
+                ? 'Deferred discrete state updates (unit_delay)'
+                : 'Deferred discrete state updates (unit_delay / Memory)'
+          code += `\n    /* ${label} */\n`
           header = true
         }
         code += `\n    /* ${block.flattenedName} state update */\n`
@@ -933,13 +1009,14 @@ export class AlgebraicEvaluator {
       return `    /* Error: Segregated subsystem info not found for ${block.block.name} */\n`
     }
 
-    const safeName = subInfo.sanitizedName
+    const field = subInfo.sanitizedName
+    const mod = subInfo.moduleTypeName || subInfo.sanitizedName
     let code = `\n    /* Segregated subsystem: ${block.block.name} */\n`
 
     // Sync timebase so unit_delay / sample_time / clock inside the module see parent values
-    code += `    model->${safeName}.time = model->time;\n`
-    code += `    model->${safeName}.dt = model->dt;\n`
-    code += `    model->${safeName}.sample_tick = model->sample_tick;\n`
+    code += `    model->${field}.time = model->time;\n`
+    code += `    model->${field}.dt = model->dt;\n`
+    code += `    model->${field}.sample_tick = model->sample_tick;\n`
 
     // Sync shared data stores parent → module (intersection of names)
     const parentStoreNames = new Set((this.model.dataStores || []).map(s => s.name))
@@ -949,9 +1026,9 @@ export class AlgebraicEvaluator {
     for (const store of sharedStores) {
       const sn = CCodeBuilder.sanitizeIdentifier(store.name)
       if ((store.dataType || '').includes('[')) {
-        code += `    memcpy(&model->${safeName}.data_stores.${sn}, &model->data_stores.${sn}, sizeof(model->${safeName}.data_stores.${sn}));\n`
+        code += `    memcpy(&model->${field}.data_stores.${sn}, &model->data_stores.${sn}, sizeof(model->${field}.data_stores.${sn}));\n`
       } else {
-        code += `    model->${safeName}.data_stores.${sn} = model->data_stores.${sn};\n`
+        code += `    model->${field}.data_stores.${sn} = model->data_stores.${sn};\n`
       }
     }
 
@@ -965,31 +1042,77 @@ export class AlgebraicEvaluator {
       const inputExpr = this.getInputExpressionForPort(block, port.index)
       if (inputExpr) {
         if (port.dataType.includes('[')) {
-          code += `    memcpy(&model->${safeName}.inputs.${port.sanitizedName}, &${inputExpr}, sizeof(model->${safeName}.inputs.${port.sanitizedName}));\n`
+          code += `    memcpy(&model->${field}.inputs.${port.sanitizedName}, &${inputExpr}, sizeof(model->${field}.inputs.${port.sanitizedName}));\n`
         } else {
-          code += `    model->${safeName}.inputs.${port.sanitizedName} = ${inputExpr};\n`
+          code += `    model->${field}.inputs.${port.sanitizedName} = ${inputExpr};\n`
         }
       }
     }
 
-    // Set enable state if subsystem has enable input
-    if (subInfo.hasEnableInput) {
+    // For Iterator Subsystem: run body N times; optional accumulate / reset.
+    const fi = subInfo.forIterator
+    if (fi) {
+      const lim = fi.iterationLimit
+      const base = fi.indexBase
+      const end = base === 0 ? lim : lim + 1
+      code += `    /* For Iterator: ${lim} pass(es), indexBase=${base}, resetStates=${fi.resetStates}, accumulate=${fi.accumulateOutputs} */\n`
+      if (fi.accumulateOutputs) {
+        for (const port of subInfo.outputPorts) {
+          if (port.dataType.includes('[')) {
+            // Vector/matrix accumulate: zero then add element-wise each pass.
+            code += `    memset(&model->${field}.outputs.${port.sanitizedName}, 0, sizeof(model->${field}.outputs.${port.sanitizedName}));\n`
+          } else {
+            code += `    double __fi_acc_${port.sanitizedName} = 0.0;\n`
+          }
+        }
+      }
+      code += `    for (int __fi = ${base}; __fi < ${end}; ++__fi) {\n`
+      code += `        model->${field}.iteration_index = __fi;\n`
+      if (fi.resetStates === 'reset') {
+        code += `        ${mod}_reset_states(&model->${field});\n`
+      }
+      if (subInfo.hasEnableInput) {
+        const enableExpr = this.getEnableExpression(block)
+        code += `        model->${field}.enabled = (${enableExpr}) > 0.5 ? 1 : 0;\n`
+        code += `        if (model->${field}.enabled) {\n`
+        code += `            ${mod}_compute_outputs(&model->${field});\n`
+        code += `        }\n`
+      } else {
+        code += `        ${mod}_compute_outputs(&model->${field});\n`
+      }
+      if (fi.accumulateOutputs) {
+        for (const port of subInfo.outputPorts) {
+          if (!port.dataType.includes('[')) {
+            code += `        __fi_acc_${port.sanitizedName} += model->${field}.outputs.${port.sanitizedName};\n`
+          }
+        }
+      }
+      code += `    }\n`
+      if (fi.accumulateOutputs) {
+        for (const port of subInfo.outputPorts) {
+          if (!port.dataType.includes('[')) {
+            code += `    model->${field}.outputs.${port.sanitizedName} = __fi_acc_${port.sanitizedName};\n`
+          }
+        }
+      }
+    } else if (subInfo.hasEnableInput) {
+      // Set enable state if subsystem has enable input
       const enableExpr = this.getEnableExpression(block)
-      code += `    model->${safeName}.enabled = (${enableExpr}) > 0.5 ? 1 : 0;\n`
-      code += `    if (model->${safeName}.enabled) {\n`
-      code += `        ${safeName}_compute_outputs(&model->${safeName});\n`
+      code += `    model->${field}.enabled = (${enableExpr}) > 0.5 ? 1 : 0;\n`
+      code += `    if (model->${field}.enabled) {\n`
+      code += `        ${mod}_compute_outputs(&model->${field});\n`
       code += `    }\n`
     } else {
-      code += `    ${safeName}_compute_outputs(&model->${safeName});\n`
+      code += `    ${mod}_compute_outputs(&model->${field});\n`
     }
 
     // Sync shared data stores module → parent (writes from inside must be visible)
     for (const store of sharedStores) {
       const sn = CCodeBuilder.sanitizeIdentifier(store.name)
       if ((store.dataType || '').includes('[')) {
-        code += `    memcpy(&model->data_stores.${sn}, &model->${safeName}.data_stores.${sn}, sizeof(model->data_stores.${sn}));\n`
+        code += `    memcpy(&model->data_stores.${sn}, &model->${field}.data_stores.${sn}, sizeof(model->data_stores.${sn}));\n`
       } else {
-        code += `    model->data_stores.${sn} = model->${safeName}.data_stores.${sn};\n`
+        code += `    model->data_stores.${sn} = model->${field}.data_stores.${sn};\n`
       }
     }
 

@@ -292,13 +292,34 @@ export class CodeGenerationValidator {
   }
   
   /**
-   * Validate 1D lookup parameters
+   * Validate 1D lookup parameters.
+   * UH60 P2: when axes/tables are model-parameter refs (*Param), skip inline-array checks.
    */
   private validateLookup1D(block: FlattenedBlock): void {
     const params = block.block.parameters || {}
+    if (params.inputValuesParam || params.outputValuesParam) {
+      const nameOk = (n: unknown) =>
+        typeof n === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(n)
+      if (params.inputValuesParam && !nameOk(params.inputValuesParam)) {
+        this.addError({
+          code: 'LOOKUP_PARAM_INVALID',
+          message: `Lookup '${block.flattenedName}' inputValuesParam must be a C identifier`,
+          blockId: block.originalId
+        })
+      }
+      if (params.outputValuesParam && !nameOk(params.outputValuesParam)) {
+        this.addError({
+          code: 'LOOKUP_PARAM_INVALID',
+          message: `Lookup '${block.flattenedName}' outputValuesParam must be a C identifier`,
+          blockId: block.originalId
+        })
+      }
+      return
+    }
+
     const inputValues = params.inputValues || []
     const outputValues = params.outputValues || []
-    
+
     if (inputValues.length !== outputValues.length) {
       this.addError({
         code: 'LOOKUP_SIZE_MISMATCH',
@@ -307,7 +328,7 @@ export class CodeGenerationValidator {
         details: { inputSize: inputValues.length, outputSize: outputValues.length }
       })
     }
-    
+
     if (inputValues.length < 2) {
       this.addError({
         code: 'LOOKUP_TOO_SMALL',
@@ -315,10 +336,10 @@ export class CodeGenerationValidator {
         blockId: block.originalId
       })
     }
-    
+
     // Check that input values are monotonic
     for (let i = 1; i < inputValues.length; i++) {
-      if (inputValues[i] <= inputValues[i-1]) {
+      if (inputValues[i] <= inputValues[i - 1]) {
         this.addError({
           code: 'LOOKUP_NOT_MONOTONIC',
           message: `Lookup table '${block.flattenedName}' input values must be strictly increasing`,
@@ -328,16 +349,40 @@ export class CodeGenerationValidator {
       }
     }
   }
-  
+
   /**
-   * Validate 2D lookup parameters
+   * Validate 2D lookup parameters.
+   * UH60 P2: parameter-backed tables skip inline size checks.
    */
   private validateLookup2D(block: FlattenedBlock): void {
     const params = block.block.parameters || {}
+    if (
+      params.input1ValuesParam ||
+      params.input2ValuesParam ||
+      params.outputTableParam
+    ) {
+      const nameOk = (n: unknown) =>
+        typeof n === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(n)
+      for (const key of [
+        'input1ValuesParam',
+        'input2ValuesParam',
+        'outputTableParam'
+      ] as const) {
+        if (params[key] && !nameOk(params[key])) {
+          this.addError({
+            code: 'LOOKUP_PARAM_INVALID',
+            message: `2D lookup '${block.flattenedName}' ${key} must be a C identifier`,
+            blockId: block.originalId
+          })
+        }
+      }
+      return
+    }
+
     const input1Values = params.input1Values || []
     const input2Values = params.input2Values || []
     const outputTable = params.outputTable || []
-    
+
     if (outputTable.length !== input1Values.length) {
       this.addError({
         code: 'LOOKUP2D_SIZE_MISMATCH',
@@ -345,7 +390,7 @@ export class CodeGenerationValidator {
         blockId: block.originalId
       })
     }
-    
+
     for (let i = 0; i < outputTable.length; i++) {
       if (!Array.isArray(outputTable[i]) || outputTable[i].length !== input2Values.length) {
         this.addError({

@@ -78,7 +78,7 @@ describe('Unit Delay Block', () => {
         ['model->signals.Input1'],
         ['double']
       )
-      expect(out).toContain('Unit Delay block: Delay1')
+      expect(out).toContain('Unit Delay: Delay1')
       expect(out).toContain('model->signals.Delay1 = model->states.Delay1_state')
       expect(out).not.toContain('model->states.Delay1_state = model->signals.Input1')
 

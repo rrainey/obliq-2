@@ -6,11 +6,21 @@
  *   Inside From   ↔ Outside Goto → IMPORT → input port
  *
  * Internal tags (both ends inside) are left alone.
+ *
+ * UH60 P4: for_iterator_subsystem is treated like subsystem for label walks and
+ * crossing promotion. Local tags wholly inside the iterator stay internal (no
+ * cross-iteration global alias); tags that cross the iterator boundary become
+ * ports on the segregated module (same as ordinary segregated subsystems).
  */
 
 import { Sheet } from '@/lib/simulationTypes'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
+
+/** Nested sheet containers that can hold Goto/From (UH60 P4 includes for-iterator). */
+function isSubsystemLike(block: { type: string }): boolean {
+  return block.type === 'subsystem' || block.type === 'for_iterator_subsystem'
+}
 
 export type SheetLabelKind = 'goto' | 'from'
 
@@ -74,7 +84,7 @@ export function collectSheetLabels(sheets: Sheet[], path: string[] = []): SheetL
             blockName: block.name
           })
         }
-      } else if (block.type === 'subsystem' && params.sheets) {
+      } else if (isSubsystemLike(block) && params.sheets) {
         out.push(
           ...collectSheetLabels(params.sheets as Sheet[], [...path, block.name])
         )
@@ -147,7 +157,7 @@ export function inferTagDataTypes(sheets: Sheet[]): Map<string, string> {
             types.set(signalName, dt)
           }
         }
-        if (b.type === 'subsystem' && params.sheets) {
+        if (isSubsystemLike(b) && params.sheets) {
           visit(params.sheets as Sheet[])
         }
       }

@@ -10,14 +10,24 @@ import { ModelParameter } from '@/lib/modelSchema'
 import { isValidType, getTypeValidationError } from '@/lib/typeValidator'
 import { isValidC99Initializer, getC99InitializerError, toC99Initializer, parseC99Initializer } from '@/lib/c99InitializerValidator'
 import { createInputPortBlock, createOutputPortBlock } from '@/lib/blockFactory'
+import {
+  isSubsystemReference,
+  resolveSubsystemDefinition
+} from '@/lib/subsystemReference'
 
 interface SubsystemConfigProps {
   block: BlockData
   availableSheets?: Sheet[]
+  /** All blocks on the active sheet (for resolving reference definitions). */
+  allBlocks?: BlockData[]
   onUpdate: (parameters: Record<string, any>) => void
   onRename?: (newName: string) => void
   onClose: () => void
   onSheetNavigate?: (sheetId: string) => void
+  /** After saving a definition's parameter schema, sync all references. */
+  onSyncReferences?: (definitionId: string) => void
+  /** Jump to the definition block's config / first sheet. */
+  onOpenDefinition?: (definitionId: string) => void
 }
 
 type CodeGenStrategy = 'flatten' | 'segregated' | 'segregated_atomic'
@@ -34,7 +44,22 @@ interface ParameterFormData {
   defaultValue: string
 }
 
-export default function SubsystemConfig({ block, availableSheets = [], onUpdate, onRename, onClose, onSheetNavigate }: SubsystemConfigProps) {
+export default function SubsystemConfig({
+  block,
+  availableSheets = [],
+  allBlocks = [],
+  onUpdate,
+  onRename,
+  onClose,
+  onSheetNavigate,
+  onSyncReferences,
+  onOpenDefinition
+}: SubsystemConfigProps) {
+  const isReference = isSubsystemReference(block)
+  const definition = isReference
+    ? resolveSubsystemDefinition(block, allBlocks.length ? allBlocks : [block])
+    : null
+
   const [blockName, setBlockName] = useState(block.name)
   const [sheets, setSheets] = useState<Sheet[]>(block.parameters?.sheets || [])
   const [inputPorts, setInputPorts] = useState(block.parameters?.inputPorts || ['Input1'])
@@ -43,13 +68,15 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
   const [editingSheetName, setEditingSheetName] = useState('')
   const [showEnableInput, setShowEnableInput] = useState(block.parameters?.showEnableInput || false)
   const [showPortNames, setShowPortNames] = useState(block.parameters?.showPortNames || false)
-  const [codeGenStrategy, setCodeGenStrategy] = useState<CodeGenStrategy>(block.parameters?.codeGenStrategy || 'flatten')
+  const [codeGenStrategy, setCodeGenStrategy] = useState<CodeGenStrategy>(
+    (block.parameters?.codeGenStrategy as CodeGenStrategy) || 'flatten'
+  )
   const [parameters, setParameters] = useState<ModelParameter[]>(block.parameters?.parameters || [])
   const [editingParamIndex, setEditingParamIndex] = useState<number | null>(null)
   const [addingParam, setAddingParam] = useState(false)
   const [paramFormData, setParamFormData] = useState<ParameterFormData>({ name: '', dataType: 'double', defaultValue: '0' })
   const [paramFormError, setParamFormError] = useState<string | null>(null)
-  const [showParameters, setShowParameters] = useState(false)
+  const [showParameters, setShowParameters] = useState(isReference)
 
   const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -76,6 +103,25 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
   }
 
   const handleSave = () => {
+    // Reference: instance parameter values only (schema/body owned by definition)
+    if (isReference) {
+      onUpdate({
+        ...(block.parameters || {}),
+        isReference: true,
+        referencedSubsystemId: block.parameters?.referencedSubsystemId,
+        codeGenStrategy: 'segregated_atomic',
+        sheets: [],
+        inputPorts: block.parameters?.inputPorts || inputPorts,
+        outputPorts: block.parameters?.outputPorts || outputPorts,
+        showEnableInput: block.parameters?.showEnableInput || false,
+        showPortNames,
+        parameters
+      })
+      if (blockName !== block.name && onRename) onRename(blockName)
+      onClose()
+      return
+    }
+
     const nameChanged = blockName !== block.name
     let updatedSheets: Sheet[] = sheets
     if (nameChanged) {
@@ -235,9 +281,15 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
       showEnableInput,
       showPortNames,
       codeGenStrategy,
-      parameters: (codeGenStrategy === 'segregated' || codeGenStrategy === 'segregated_atomic') ? parameters : []
+      parameters: (codeGenStrategy === 'segregated' || codeGenStrategy === 'segregated_atomic') ? parameters : [],
+      isReference: false
     }
     onUpdate(blockParams)
+
+    // Keep reference instance parameter lists aligned with this definition's schema
+    if (onSyncReferences) {
+      onSyncReferences(block.id)
+    }
 
     if (nameChanged && onRename) {
       onRename(blockName)
@@ -437,7 +489,37 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
           placeholder="Enter subsystem name"
         />
 
-        {/* Sheets Section */}
+        {isReference && (
+          <Alert icon={<IconInfoCircle size={16} />} color="blue" title="Subsystem reference">
+            <Text size="sm">
+              This block shares the body of{' '}
+              <Text span fw={600}>
+                {definition?.name || block.parameters?.referencedSubsystemId || '(missing definition)'}
+              </Text>
+              . Ports and parameter <em>names/types</em> come from the definition; only instance
+              values are editable here.
+            </Text>
+            {definition && onOpenDefinition && (
+              <Button
+                mt="xs"
+                size="xs"
+                variant="light"
+                leftSection={<IconExternalLink size={14} />}
+                onClick={() => onOpenDefinition(definition.id)}
+              >
+                Open definition
+              </Button>
+            )}
+            {!definition && (
+              <Text size="xs" c="red" mt="xs">
+                Definition not found — retarget or delete this reference.
+              </Text>
+            )}
+          </Alert>
+        )}
+
+        {/* Sheets Section — definitions only */}
+        {!isReference && (
         <div>
           <Text size="sm" fw={500} mb="xs">Sheets</Text>
           {sheets.length > 0 && (
@@ -484,63 +566,75 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
             Add Sheet
           </Button>
         </div>
+        )}
 
-        {/* Input Ports */}
-        <div>
-          <Text size="sm" fw={500} mb="xs">Input Ports</Text>
-          <Stack gap="xs">
-            {inputPorts.map((port: string, index: number) => (
-              <Group key={index} gap="xs">
-                <TextInput
-                  value={port}
-                  onChange={(e) => updateInputPort(index, e.target.value)}
-                  placeholder={`Input ${index + 1}`}
-                  size="xs"
-                  style={{ flex: 1 }}
-                />
-                <ActionIcon variant="subtle" color="red" size="sm" onClick={() => removeInputPort(index)} disabled={inputPorts.length <= 1}>
-                  <IconX size={14} />
-                </ActionIcon>
-              </Group>
-            ))}
-          </Stack>
-          <Button variant="subtle" size="xs" leftSection={<IconPlus size={14} />} onClick={addInputPort} mt="xs">
-            Add Input Port
-          </Button>
-        </div>
+        {/* Structure editors — definitions only (references mirror definition ports) */}
+        {!isReference && (
+          <>
+            <div>
+              <Text size="sm" fw={500} mb="xs">Input Ports</Text>
+              <Stack gap="xs">
+                {inputPorts.map((port: string, index: number) => (
+                  <Group key={index} gap="xs">
+                    <TextInput
+                      value={port}
+                      onChange={(e) => updateInputPort(index, e.target.value)}
+                      placeholder={`Input ${index + 1}`}
+                      size="xs"
+                      style={{ flex: 1 }}
+                    />
+                    <ActionIcon variant="subtle" color="red" size="sm" onClick={() => removeInputPort(index)} disabled={inputPorts.length <= 1}>
+                      <IconX size={14} />
+                    </ActionIcon>
+                  </Group>
+                ))}
+              </Stack>
+              <Button variant="subtle" size="xs" leftSection={<IconPlus size={14} />} onClick={addInputPort} mt="xs">
+                Add Input Port
+              </Button>
+            </div>
 
-        {/* Output Ports */}
-        <div>
-          <Text size="sm" fw={500} mb="xs">Output Ports</Text>
-          <Stack gap="xs">
-            {outputPorts.map((port: string, index: number) => (
-              <Group key={index} gap="xs">
-                <TextInput
-                  value={port}
-                  onChange={(e) => updateOutputPort(index, e.target.value)}
-                  placeholder={`Output ${index + 1}`}
-                  size="xs"
-                  style={{ flex: 1 }}
-                />
-                <ActionIcon variant="subtle" color="red" size="sm" onClick={() => removeOutputPort(index)} disabled={outputPorts.length <= 1}>
-                  <IconX size={14} />
-                </ActionIcon>
-              </Group>
-            ))}
-          </Stack>
-          <Button variant="subtle" size="xs" leftSection={<IconPlus size={14} />} onClick={addOutputPort} mt="xs">
-            Add Output Port
-          </Button>
-        </div>
+            <div>
+              <Text size="sm" fw={500} mb="xs">Output Ports</Text>
+              <Stack gap="xs">
+                {outputPorts.map((port: string, index: number) => (
+                  <Group key={index} gap="xs">
+                    <TextInput
+                      value={port}
+                      onChange={(e) => updateOutputPort(index, e.target.value)}
+                      placeholder={`Output ${index + 1}`}
+                      size="xs"
+                      style={{ flex: 1 }}
+                    />
+                    <ActionIcon variant="subtle" color="red" size="sm" onClick={() => removeOutputPort(index)} disabled={outputPorts.length <= 1}>
+                      <IconX size={14} />
+                    </ActionIcon>
+                  </Group>
+                ))}
+              </Stack>
+              <Button variant="subtle" size="xs" leftSection={<IconPlus size={14} />} onClick={addOutputPort} mt="xs">
+                Add Output Port
+              </Button>
+            </div>
 
-        <Divider />
+            <Divider />
 
-        <Checkbox
-          label="Show Enable Input"
-          description="Adds a boolean input port that controls whether the subsystem is active"
-          checked={showEnableInput}
-          onChange={(e) => setShowEnableInput(e.currentTarget.checked)}
-        />
+            <Checkbox
+              label="Show Enable Input"
+              description="Adds a boolean input port that controls whether the subsystem is active"
+              checked={showEnableInput}
+              onChange={(e) => setShowEnableInput(e.currentTarget.checked)}
+            />
+
+            <Select
+              label="Code Generation Strategy"
+              value={codeGenStrategy}
+              onChange={(val) => setCodeGenStrategy((val || 'flatten') as CodeGenStrategy)}
+              data={CODE_GEN_STRATEGY_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+              description={CODE_GEN_STRATEGY_OPTIONS.find(o => o.value === codeGenStrategy)?.description}
+            />
+          </>
+        )}
 
         <Checkbox
           label="Show Port Names"
@@ -549,26 +643,23 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
           onChange={(e) => setShowPortNames(e.currentTarget.checked)}
         />
 
-        <Select
-          label="Code Generation Strategy"
-          value={codeGenStrategy}
-          onChange={(val) => setCodeGenStrategy((val || 'flatten') as CodeGenStrategy)}
-          data={CODE_GEN_STRATEGY_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
-          description={CODE_GEN_STRATEGY_OPTIONS.find(o => o.value === codeGenStrategy)?.description}
-        />
-
         {/* Subsystem Parameters */}
-        {(codeGenStrategy === 'segregated' || codeGenStrategy === 'segregated_atomic') && (
+        {(isReference ||
+          codeGenStrategy === 'segregated' ||
+          codeGenStrategy === 'segregated_atomic') && (
           <>
             <Divider />
             <div>
               <Group justify="space-between" mb="xs" style={{ cursor: 'pointer' }} onClick={() => setShowParameters(!showParameters)}>
-                <Text size="sm" fw={500}>Subsystem Parameters</Text>
+                <Text size="sm" fw={500}>
+                  {isReference ? 'Instance Parameters' : 'Subsystem Parameters'}
+                </Text>
                 <IconChevronDown size={16} style={{ transform: showParameters ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
               </Group>
               <Text size="xs" c="dimmed" mb="xs">
-                Parameters scoped to this subsystem. Types: double, float, long, bool, or arrays like double[3].
-                Values use C99 syntax: 42, 3.14f, true, {'{1, 2, 3}'}.
+                {isReference
+                  ? 'Edit values for this instance. Names and types are fixed by the definition.'
+                  : 'Parameters scoped to this subsystem. Types: double, float, long, bool, or arrays like double[3]. Values use C99 syntax.'}
               </Text>
 
               <Collapse in={showParameters}>
@@ -587,8 +678,25 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
                         {parameters.map((param, index) => (
                           editingParamIndex === index ? (
                             <Table.Tr key={index}>
-                              <Table.Td><TextInput size="xs" value={paramFormData.name} onChange={(e) => setParamFormData({ ...paramFormData, name: e.target.value })} error={paramFormError?.includes('name') || paramFormError?.includes('identifier') || paramFormError?.includes('exists')} /></Table.Td>
-                              <Table.Td><TextInput size="xs" value={paramFormData.dataType} onChange={(e) => setParamFormData({ ...paramFormData, dataType: e.target.value })} placeholder="double" error={paramFormError?.includes('type') || paramFormError?.includes('Invalid type')} /></Table.Td>
+                              <Table.Td>
+                                <TextInput
+                                  size="xs"
+                                  value={paramFormData.name}
+                                  disabled={isReference}
+                                  onChange={(e) => setParamFormData({ ...paramFormData, name: e.target.value })}
+                                  error={paramFormError?.includes('name') || paramFormError?.includes('identifier') || paramFormError?.includes('exists')}
+                                />
+                              </Table.Td>
+                              <Table.Td>
+                                <TextInput
+                                  size="xs"
+                                  value={paramFormData.dataType}
+                                  disabled={isReference}
+                                  onChange={(e) => setParamFormData({ ...paramFormData, dataType: e.target.value })}
+                                  placeholder="double"
+                                  error={paramFormError?.includes('type') || paramFormError?.includes('Invalid type')}
+                                />
+                              </Table.Td>
                               <Table.Td><TextInput size="xs" value={paramFormData.defaultValue} onChange={(e) => setParamFormData({ ...paramFormData, defaultValue: e.target.value })} placeholder="0" error={paramFormError?.includes('value') || paramFormError?.includes('initializer') || paramFormError?.includes('Expected')} /></Table.Td>
                               <Table.Td>
                                 <Group gap={4}>
@@ -605,13 +713,15 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
                               <Table.Td>
                                 <Group gap={4}>
                                   <ActionIcon variant="subtle" size="sm" onClick={() => startEditingParam(index)}><IconPencil size={14} /></ActionIcon>
-                                  <ActionIcon variant="subtle" color="red" size="sm" onClick={() => handleDeleteParam(index)}><IconTrash size={14} /></ActionIcon>
+                                  {!isReference && (
+                                    <ActionIcon variant="subtle" color="red" size="sm" onClick={() => handleDeleteParam(index)}><IconTrash size={14} /></ActionIcon>
+                                  )}
                                 </Group>
                               </Table.Td>
                             </Table.Tr>
                           )
                         ))}
-                        {addingParam && (
+                        {addingParam && !isReference && (
                           <Table.Tr>
                             <Table.Td><TextInput size="xs" value={paramFormData.name} onChange={(e) => setParamFormData({ ...paramFormData, name: e.target.value })} placeholder="MY_PARAM" autoFocus error={paramFormError?.includes('name') || paramFormError?.includes('identifier') || paramFormError?.includes('exists')} /></Table.Td>
                             <Table.Td><TextInput size="xs" value={paramFormData.dataType} onChange={(e) => setParamFormData({ ...paramFormData, dataType: e.target.value })} placeholder="double" error={paramFormError?.includes('type') || paramFormError?.includes('Invalid type')} /></Table.Td>
@@ -630,14 +740,16 @@ export default function SubsystemConfig({ block, availableSheets = [], onUpdate,
 
                   {paramFormError && <Text size="sm" c="red">{paramFormError}</Text>}
 
-                  {!addingParam && editingParamIndex === null && (
+                  {!isReference && !addingParam && editingParamIndex === null && (
                     <Button variant="light" size="xs" leftSection={<IconPlus size={14} />} onClick={() => setAddingParam(true)} fullWidth>
                       Add Parameter
                     </Button>
                   )}
 
                   {parameters.length === 0 && !addingParam && (
-                    <Text size="sm" c="dimmed" ta="center">No parameters defined.</Text>
+                    <Text size="sm" c="dimmed" ta="center">
+                      {isReference ? 'No instance parameters (definition has none).' : 'No parameters defined.'}
+                    </Text>
                   )}
                 </Stack>
               </Collapse>

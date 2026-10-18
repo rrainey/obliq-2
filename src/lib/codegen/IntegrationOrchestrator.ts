@@ -83,7 +83,7 @@ export class IntegrationOrchestrator {
     code += '    /* Evaluate algebraic relationships */\n'
     code += `    ${this.modelName}_evaluate_algebraic(model);\n`
     code += '\n'
-    
+
     // State integration
     if (this.stateIntegrator.hasStatefulBlocks()) {
       if (this.options.integrationMethod === 'euler') {
@@ -101,22 +101,27 @@ export class IntegrationOrchestrator {
       // but the subsystem's compute_outputs reads from model->SubsystemName.states
       code += this.generateSubsystemStateSync()
     }
-    
+
+    // UH60 P3: Memory major-step hold — latch after continuous integration
+    code += '    /* Memory major-step hold (delayMode:memory) — post-integration latch */\n'
+    code += `    ${this.modelName}_update_memory_states(model);\n`
+    code += '\n'
+
     // Evaluate enable states at end of step (if needed)
     if (this.hasEnableSubsystems()) {
       code += '    /* Evaluate enable states for next step */\n'
       code += `    ${this.modelName}_evaluate_enable_states(model);\n`
       code += '\n'
     }
-    
+
     // Update simulation time and multi-rate sample tick
     code += '    /* Update simulation time + sample tick (for MDL SampleTime hits) */\n'
     code += '    model->time += model->dt;\n'
     code += '    model->sample_tick++;\n'
     code += '\n'
-    
+
     code += '}\n'
-    
+
     return code
   }
   

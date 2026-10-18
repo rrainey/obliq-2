@@ -21,6 +21,14 @@ import {
   collectNamesFromBlocks,
   remapClipboardSelection,
 } from '@/lib/clipboardRemap'
+import {
+  collectAllBlocksFromSheets,
+  createReferenceParametersFromDefinition,
+  getSubsystemDeleteBlockReason,
+  isSubsystemLike,
+  syncAllReferencesToDefinition
+} from '@/lib/subsystemReference'
+import { generateBlockId } from '@/lib/blockFactory'
 
 export interface Sheet {
   id: string
@@ -116,7 +124,10 @@ export interface ModelActions {
   addBlock: (block: BlockData) => void
   updateBlock: (blockId: string, updates: Partial<BlockData>) => void
   updateBlocks: (updates: Array<{ id: string; updates: Partial<BlockData> }>) => void  // Feature 4: Batch update
-  deleteBlock: (blockId: string) => void
+  /** Returns success:false when deleting a definition that still has references. */
+  deleteBlock: (blockId: string) => { success: boolean; error?: string }
+  /** After definition parameter schema changes, sync all reference instance lists. */
+  syncSubsystemReferences: (definitionId: string) => void
   addWire: (wire: WireData) => void
   deleteWire: (wireId: string) => void
   updateWireRouting: (wireId: string, routing: WireData['routing']) => void
@@ -772,13 +783,62 @@ export const useModelStore = create<ModelStore>()(
       }
     }),
 
-    deleteBlock: (blockId) => set((state) => ({
-      blocks: state.blocks.filter(block => block.id !== blockId),
-      wires: state.wires.filter(wire => 
-        wire.sourceBlockId !== blockId && wire.targetBlockId !== blockId
-      ),
-      isDirty: true
-    })),
+    deleteBlock: (blockId) => {
+      const state = get()
+      // Model-wide: top-level sheets + nested subsystem sheets
+      const allBlocks = collectAllBlocksFromSheets(state.sheets)
+      const reason = getSubsystemDeleteBlockReason(blockId, allBlocks)
+      if (reason) {
+        return { success: false, error: reason }
+      }
+
+      set((s) => ({
+        blocks: s.blocks.filter(block => block.id !== blockId),
+        wires: s.wires.filter(
+          wire =>
+            wire.sourceBlockId !== blockId && wire.targetBlockId !== blockId
+        ),
+        isDirty: true
+      }))
+      return { success: true }
+    },
+
+    syncSubsystemReferences: (definitionId: string) => {
+      set((state) => {
+        const updateSheets = (sheets: Sheet[]): Sheet[] =>
+          sheets.map(sheet => ({
+            ...sheet,
+            blocks: syncAllReferencesToDefinition(
+              definitionId,
+              sheet.blocks || []
+            ).map(b => {
+              // Also sync nested subsystem sheets' blocks
+              if (
+                (b.type === 'subsystem' || b.type === 'for_iterator_subsystem') &&
+                Array.isArray(b.parameters?.sheets) &&
+                !b.parameters?.isReference
+              ) {
+                return {
+                  ...b,
+                  parameters: {
+                    ...b.parameters,
+                    sheets: updateSheets(b.parameters.sheets as Sheet[])
+                  }
+                }
+              }
+              return b
+            })
+          }))
+
+        const sheets = updateSheets(state.sheets)
+        const active = sheets.find(s => s.id === state.activeSheetId)
+        return {
+          sheets,
+          blocks: active?.blocks || state.blocks,
+          isDirty: true
+        }
+      })
+    },
 
     addWire: (wire) => set((state) => ({ 
       wires: [...state.wires, wire],
@@ -1152,10 +1212,24 @@ export const useModelStore = create<ModelStore>()(
         return null
       }
 
+      // Refuse cut if any selected definition still has references
+      const allBlocks = collectAllBlocksFromSheets(state.sheets)
+      for (const blockId of state.selectedBlockIds) {
+        const reason = getSubsystemDeleteBlockReason(blockId, allBlocks)
+        if (reason) {
+          console.warn(reason)
+          return null
+        }
+      }
+
       // Delete selected blocks (this will also delete connected wires via deleteBlock)
       const selectedIds = [...state.selectedBlockIds]
       for (const blockId of selectedIds) {
-        get().deleteBlock(blockId)
+        const result = get().deleteBlock(blockId)
+        if (!result.success) {
+          console.warn(result.error)
+          return null
+        }
       }
 
       // Clear selection
@@ -1281,6 +1355,96 @@ export const useModelStore = create<ModelStore>()(
       } else if (isSameSheet) {
         // Default offset for same-sheet paste
         baseOffset = { x: 20, y: 20 }
+      }
+
+      // Paste-as-reference: same-model subsystem → shared body, instance params
+      if (options?.subsystemPasteMode === 'reference') {
+        const sameModel =
+          !clipboardData.sourceModelId ||
+          clipboardData.sourceModelId === state.model?.id
+        const subs = clipboardData.blocks.filter(isSubsystemLike)
+        if (!sameModel) {
+          return {
+            success: false,
+            pastedBlockIds: [],
+            pastedWireIds: [],
+            error:
+              'Cannot paste subsystem references across models; use Paste full copy.'
+          }
+        }
+        if (subs.length === 0) {
+          return {
+            success: false,
+            pastedBlockIds: [],
+            pastedWireIds: [],
+            error: 'Clipboard has no subsystem to paste as a reference.'
+          }
+        }
+        if (subs.length !== clipboardData.blocks.length) {
+          return {
+            success: false,
+            pastedBlockIds: [],
+            pastedWireIds: [],
+            error:
+              'Paste as reference requires selecting only subsystem block(s).'
+          }
+        }
+
+        const existingNames = collectNamesFromBlocks(state.blocks)
+        const pastedIds: string[] = []
+        for (const src of subs) {
+          // Source must still exist in this model (definition identity = block id)
+          const liveDef = collectAllBlocksFromSheets(state.sheets).find(
+            b => b.id === src.id && isSubsystemLike(b)
+          )
+          if (!liveDef) {
+            return {
+              success: false,
+              pastedBlockIds: pastedIds,
+              pastedWireIds: [],
+              error: `Definition "${src.name}" is no longer in this model; cannot create a reference.`
+            }
+          }
+          // Upgrade flatten → atomic on the live definition
+          if (liveDef.parameters?.codeGenStrategy === 'flatten') {
+            get().updateBlock(liveDef.id, {
+              parameters: {
+                ...liveDef.parameters,
+                codeGenStrategy: 'segregated_atomic'
+              }
+            })
+          }
+
+          let name = `${src.name}_ref`
+          let n = 2
+          while (existingNames.has(name)) {
+            name = `${src.name}_ref_${n++}`
+          }
+          existingNames.add(name)
+
+          const refBlock: BlockData = {
+            id: generateBlockId('subsystem'),
+            type: 'subsystem',
+            name,
+            position: {
+              x: src.position.x + baseOffset.x,
+              y: src.position.y + baseOffset.y
+            },
+            parameters: createReferenceParametersFromDefinition({
+              ...liveDef,
+              // Ensure id matches referencedSubsystemId
+              id: liveDef.id
+            })
+          }
+          get().addBlock(refBlock)
+          pastedIds.push(refBlock.id)
+        }
+        get().setSelectedBlocks(pastedIds)
+        return {
+          success: true,
+          pastedBlockIds: pastedIds,
+          pastedWireIds: []
+        }
       }
 
       // Deep-remap ids (including nested subsystem sheets) and uniquify names
