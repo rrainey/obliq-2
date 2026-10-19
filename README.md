@@ -10,6 +10,12 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 
 ![Screenshot](images/transp07.png)
 
+## What's New in 3.1.0
+
+- **Sheet overview map.** When the canvas shows less than the whole sheet (zoomed in, or a sheet larger than the window), an overview of the sheet appears in the bottom-right corner with the visible region outlined. Drag in it to pan, and scroll in it to zoom.
+- **Fixed: spurious "Model updated from disk" after Save.** With large models, the save could finish before the file watcher reported it, and the editor mistook its own save for an outside change and reloaded. Outside edits are still detected.
+- **Fixed: wire highlight and block selection showing together.** Selecting a block now clears a "Highlight Connections" net highlight.
+
 ## What's New in 3.0.0
 
 Version 3.0.0 makes obliq-2 a **local, single-user application** and substantially improves diagram layout.
