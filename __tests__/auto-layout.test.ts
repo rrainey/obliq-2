@@ -457,7 +457,7 @@ describe('computeAutoLayout', () => {
 
   describe('robustness', () => {
     it('returns no moves for an empty sheet', () => {
-      expect(computeAutoLayout([], [])).toEqual({ moves: [], resizes: [] })
+      expect(computeAutoLayout([], [])).toEqual({ moves: [], resizes: [], routes: [] })
     })
 
     it('leaves comment blocks out of the layout', () => {

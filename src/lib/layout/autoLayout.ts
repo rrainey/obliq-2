@@ -17,6 +17,9 @@
 //      to -- over wires of any length, not just to the adjacent column -- then
 //      re-sorting the column by those targets and resolving overlaps optimally
 //      with isotonic regression.
+//   6. Route wires (wireRouting.ts): choose where each wire turns, give each
+//      net its own track in the gap between columns, and widen gaps whose
+//      tracks would not otherwise fit.
 //
 // Feedback loops with chained dynamic/discontinuous blocks: because back-edges
 // are excluded from ranking, the block closer to the input (shorter forward
@@ -30,7 +33,9 @@ import type { BlockData } from '@/components/BlockNode'
 import type { WireData } from '@/components/Wire'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { isResizable, RESIZE_SNAP, RESIZE_MIN_WIDTH } from '@/lib/blocks/resizableBlocks'
+import { routeWires, type RoutableWire, type RoutingRect } from './wireRouting'
 import {
+  HANDLE_OUTSET,
   getBlockWidth,
   getBlockHeight,
   getIntrinsicBlockHeight,
@@ -53,6 +58,12 @@ export interface AutoLayoutOptions {
   resizeBlocks?: boolean
   maxBlockHeight?: number  // ceiling when resizing (px)
   resizePasses?: number    // resize/replace refinement iterations
+  /**
+   * Choose where each wire turns (see wireRouting.ts) and widen crowded gaps.
+   * On by default; the result's `routes` carry each wire's turn offset.
+   */
+  routeWires?: boolean
+  trackSpacing?: number    // px between adjacent wire tracks in a gap
 }
 
 export interface LayoutMove {
@@ -67,10 +78,22 @@ export interface LayoutResize {
   height: number
 }
 
+/**
+ * Where a wire should turn, as the editor's `routing.midpointOffset` (relative
+ * to the midpoint between its ports). `undefined` means the default midpoint,
+ * which also clears any turn the user dragged before the blocks moved.
+ */
+export interface WireRoute {
+  id: string
+  midpointOffset: number | undefined
+}
+
 export interface AutoLayoutResult {
   moves: LayoutMove[]
   /** Empty unless `resizeBlocks` was enabled. */
   resizes: LayoutResize[]
+  /** Empty unless `routeWires` is enabled (the default). */
+  routes: WireRoute[]
 }
 
 // --- Block classification -------------------------------------------------
@@ -139,6 +162,9 @@ function measure(block: BlockData): Metrics {
 
 /** One wire, retaining the port indices the ordering and alignment need. */
 interface LEdge {
+  wireId: string
+  /** Enable/reset wire: attaches to the top/bottom of the target, so it is not routed. */
+  control: boolean
   u: string      // source block id
   uPort: number  // source port index
   v: string      // target block id
@@ -182,6 +208,8 @@ function buildGraph(
     // Control ports (enable/reset) use negative indices; treat them as port 0
     // for geometry purposes since they attach top/bottom rather than left/right.
     const e: LEdge = {
+      wireId: w.id,
+      control: w.targetPortIndex < 0,
       u: w.sourceBlockId,
       uPort: Math.max(0, w.sourcePortIndex),
       v: w.targetBlockId,
@@ -444,6 +472,8 @@ function computeColumnGeometry(
   columns: Map<number, string[]>,
   metrics: Map<string, Metrics>,
   opts: Required<AutoLayoutOptions>,
+  /** Extra width for the gap after the i-th column (in sorted order). */
+  extraGap: Map<number, number> = new Map(),
 ) {
   const sortedRanks = [...columns.keys()].sort((a, b) => a - b)
   const colWidth = new Map<number, number>()
@@ -454,10 +484,10 @@ function computeColumnGeometry(
   }
   const colX = new Map<number, number>()
   let x = opts.originX
-  for (const c of sortedRanks) {
+  sortedRanks.forEach((c, i) => {
     colX.set(c, x)
-    x += colWidth.get(c)! + opts.columnSpacing
-  }
+    x += colWidth.get(c)! + opts.columnSpacing + (extraGap.get(i) ?? 0)
+  })
   return { sortedRanks, colWidth, colX }
 }
 
@@ -692,10 +722,12 @@ export function computeAutoLayout(
     resizeBlocks: options.resizeBlocks ?? false,
     maxBlockHeight: options.maxBlockHeight ?? 1200,
     resizePasses: options.resizePasses ?? 3,
+    routeWires: options.routeWires ?? true,
+    trackSpacing: options.trackSpacing ?? 8,
   }
 
   const { graph, laidOut } = buildGraph(blocks, wires)
-  if (laidOut.length === 0) return { moves: [], resizes: [] }
+  if (laidOut.length === 0) return { moves: [], resizes: [], routes: [] }
 
   const metrics = new Map(laidOut.map(b => [b.id, measure(b)]))
   const original = new Map([...metrics].map(([id, m]) => [id, { width: m.width, height: m.height }]))
@@ -713,7 +745,8 @@ export function computeAutoLayout(
   }
 
   const y = computePlacement(graph, columns, rank, metrics, opts)
-  const { sortedRanks, colWidth, colX } = computeColumnGeometry(columns, metrics, opts)
+  const extraGap = new Map<number, number>()
+  let { sortedRanks, colWidth, colX } = computeColumnGeometry(columns, metrics, opts, extraGap)
 
   // Global centring: a single translation once alignment has settled.
   let minY = Infinity, maxY = -Infinity
@@ -723,6 +756,30 @@ export function computeAutoLayout(
     maxY = Math.max(maxY, top + metrics.get(id)!.height)
   }
   const shift = Number.isFinite(minY) ? opts.originY - (minY + maxY) / 2 : 0
+
+  const routes: WireRoute[] = []
+  if (opts.routeWires) {
+    // Route, widen gaps whose tracks don't fit, and route again on the wider grid.
+    const margin = 14
+    for (let iter = 0; iter < 3; iter++) {
+      const routed = routeLaidOutWires(graph, columns, metrics, y, shift, { sortedRanks, colWidth, colX }, opts)
+      let widened = false
+      routed.tracksPerGap.forEach((n, gap) => {
+        const need = 2 * margin + Math.max(0, n - 1) * opts.trackSpacing
+        const have = opts.columnSpacing + (extraGap.get(gap) ?? 0)
+        if (need > have + 0.5) {
+          extraGap.set(gap, need - opts.columnSpacing)
+          widened = true
+        }
+      })
+      if (widened && iter < 2) {
+        ;({ sortedRanks, colWidth, colX } = computeColumnGeometry(columns, metrics, opts, extraGap))
+        continue
+      }
+      routes.push(...routed.routes)
+      break
+    }
+  }
 
   const moves: LayoutMove[] = []
   for (const c of sortedRanks) {
@@ -750,5 +807,65 @@ export function computeAutoLayout(
     }
   }
 
-  return { moves, resizes }
+  return { moves, resizes, routes }
+}
+
+/** Build the routing problem from final block positions and solve it. */
+function routeLaidOutWires(
+  graph: Graph,
+  columns: Map<number, string[]>,
+  metrics: Map<string, Metrics>,
+  y: Map<string, number>,
+  shift: number,
+  geom: { sortedRanks: number[]; colWidth: Map<number, number>; colX: Map<number, number> },
+  opts: Required<AutoLayoutOptions>,
+): { routes: WireRoute[]; tracksPerGap: Map<number, number> } {
+  const { sortedRanks, colWidth, colX } = geom
+  const colIndex = new Map<string, number>()
+  const rects = new Map<string, RoutingRect>()
+  sortedRanks.forEach((c, i) => {
+    for (const id of columns.get(c)!) {
+      const m = metrics.get(id)!
+      colIndex.set(id, i)
+      rects.set(id, {
+        x: Math.round(colX.get(c)! + (colWidth.get(c)! - m.width) / 2),
+        y: Math.round(y.get(id)! + shift),
+        w: m.width,
+        h: m.height,
+      })
+    }
+  })
+  const routingColumns = sortedRanks.map(c => ({ left: colX.get(c)!, right: colX.get(c)! + colWidth.get(c)! }))
+
+  const wires: RoutableWire[] = []
+  const defaultMid = new Map<string, number>()
+  for (const e of graph.edges) {
+    const a = rects.get(e.u)!, b = rects.get(e.v)!
+    const mu = metrics.get(e.u)!, mv = metrics.get(e.v)!
+    const w: RoutableWire = {
+      id: e.wireId,
+      net: `${e.u}:${e.uPort}`,
+      src: e.u,
+      tgt: e.v,
+      srcCol: colIndex.get(e.u)!,
+      // Control wires are excluded by giving them no forward span.
+      tgtCol: e.control ? colIndex.get(e.u)! : colIndex.get(e.v)!,
+      x1: a.x + a.w + HANDLE_OUTSET,
+      y1: a.y + portOffsetY(e.uPort, mu.outputs, a.h),
+      x2: b.x - HANDLE_OUTSET,
+      y2: b.y + portOffsetY(e.vPort, mv.inputs, b.h),
+    }
+    wires.push(w)
+    defaultMid.set(w.id, (w.x1 + w.x2) / 2)
+  }
+
+  const { turnX, tracksPerGap } = routeWires(routingColumns, rects, wires, { trackSpacing: opts.trackSpacing })
+  const routes = wires.map(w => {
+    const turn = turnX.get(w.id)
+    return {
+      id: w.id,
+      midpointOffset: turn === undefined ? undefined : Math.round((turn - defaultMid.get(w.id)!) * 2) / 2,
+    }
+  })
+  return { routes, tracksPerGap }
 }

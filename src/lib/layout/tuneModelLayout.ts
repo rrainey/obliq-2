@@ -39,6 +39,8 @@ export const DEFAULT_TUNE_OPTIONS: TuneLayoutOptions = {
 export interface TuneLayoutSummary {
   sheetsAffected: number
   blocksMoved: number
+  /** Wires whose turn position (routing) was set or cleared. */
+  wiresRouted: number
   blocksResized: number
   namesHidden: number
   portLabelsChanged: number
@@ -76,7 +78,7 @@ export function tuneModelLayout(
   options: TuneLayoutOptions,
 ): TuneLayoutResult {
   const summary: TuneLayoutSummary = {
-    sheetsAffected: 0, blocksMoved: 0, blocksResized: 0, namesHidden: 0,
+    sheetsAffected: 0, blocksMoved: 0, wiresRouted: 0, blocksResized: 0, namesHidden: 0,
     portLabelsChanged: 0,
   }
   if (isNoOp(options)) return { sheets, summary }
@@ -88,16 +90,34 @@ export function tuneModelLayout(
     buildExportPlan(sheets, options.scope, activeSheetId).sheets.map(s => s.id)
   )
 
-  /** Apply the requested adjustments to one sheet's blocks. */
-  const tuneBlocks = (sheet: Sheet, blocks: BlockData[]): BlockData[] => {
+  /** Apply the requested adjustments to one sheet's blocks and wires. */
+  const tuneSheetContents = (sheet: Sheet, blocks: BlockData[]): { blocks: BlockData[]; connections: Sheet['connections'] } => {
     // Layout is computed even when only resizing: the fitted sizes come from
     // where the blocks would sit once arranged.
     const needsLayout = options.cleanUpLayout || options.resizeSubsystems
     const layout = needsLayout
       ? computeAutoLayout(blocks, sheet.connections || [], {
           resizeBlocks: options.resizeSubsystems,
+          routeWires: options.cleanUpLayout,
         })
-      : { moves: [], resizes: [] }
+      : { moves: [], resizes: [], routes: [] }
+
+    // Wire turns only make sense for the arrangement they were computed for,
+    // so they are written (or cleared) together with the block moves.
+    const routeById = new Map(options.cleanUpLayout ? layout.routes.map(r => [r.id, r.midpointOffset]) : [])
+    const connections = (sheet.connections || []).map(wire => {
+      if (!routeById.has(wire.id)) return wire
+      const offset = routeById.get(wire.id)
+      const current = wire.routing?.midpointOffset
+      if (offset === undefined) {
+        if (!wire.routing) return wire
+        summary.wiresRouted++
+        return { ...wire, routing: undefined }
+      }
+      if (current === offset && !wire.routing?.waypoints) return wire
+      summary.wiresRouted++
+      return { ...wire, routing: { midpointOffset: offset } }
+    })
 
     const moveById = new Map(
       options.cleanUpLayout ? layout.moves.map(m => [m.id, m.position]) : []
@@ -106,7 +126,7 @@ export function tuneModelLayout(
       options.resizeSubsystems ? layout.resizes.map(r => [r.id, r]) : []
     )
 
-    return blocks.map(block => {
+    const tunedBlocks = blocks.map(block => {
       let next = block
 
       const position = moveById.get(block.id)
@@ -146,6 +166,7 @@ export function tuneModelLayout(
 
       return next
     })
+    return { blocks: tunedBlocks, connections }
   }
 
   /**
@@ -168,16 +189,20 @@ export function tuneModelLayout(
     })
     if (changed) blocks = recursed
 
+    let connections = sheet.connections
     if (inScope.has(sheet.id)) {
-      const tuned = tuneBlocks(sheet, blocks)
-      if (tuned.some((b, i) => b !== blocks[i])) {
-        blocks = tuned
+      const tuned = tuneSheetContents(sheet, blocks)
+      const blocksChanged = tuned.blocks.some((b, i) => b !== blocks[i])
+      const wiresChanged = tuned.connections.some((w, i) => w !== (sheet.connections || [])[i])
+      if (blocksChanged || wiresChanged) {
+        blocks = tuned.blocks
+        if (wiresChanged) connections = tuned.connections
         changed = true
         summary.sheetsAffected++
       }
     }
 
-    return changed ? { ...sheet, blocks } : sheet
+    return changed ? { ...sheet, blocks, connections } : sheet
   }
 
   return { sheets: sheets.map(transformSheet), summary }

@@ -15,6 +15,14 @@ export const MIN_HEIGHT = 64
 export const TERMINATOR_HEIGHT = 45 // Flatter height for terminator blocks
 export const DEFAULT_WIDTH = 80
 
+/**
+ * How far a wire's end lies outside the block edge, in px. BlockNode draws
+ * 12px-wide left/right handles that React Flow offsets past the block edge;
+ * edges start/end at the handle's outer side, measured at 6px. Wire routing
+ * uses this so computed turn positions match what the editor draws.
+ */
+export const HANDLE_OUTSET = 6
+
 /** Minimal structural shape needed for geometry; satisfied by BlockData. */
 export interface GeomBlock {
   type: string

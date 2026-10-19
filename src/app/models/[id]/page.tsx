@@ -1751,6 +1751,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
     const parts: string[] = []
     if (summary.blocksMoved) parts.push(`${summary.blocksMoved} moved`)
+    if (summary.wiresRouted) parts.push(`${summary.wiresRouted} wire${summary.wiresRouted === 1 ? '' : 's'} routed`)
     if (summary.blocksResized) parts.push(`${summary.blocksResized} resized`)
     if (summary.namesHidden) parts.push(`${summary.namesHidden} name${summary.namesHidden === 1 ? '' : 's'} hidden`)
     if (summary.portLabelsChanged) parts.push(`${summary.portLabelsChanged} port label${summary.portLabelsChanged === 1 ? '' : 's'} updated`)
