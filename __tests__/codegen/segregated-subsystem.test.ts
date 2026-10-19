@@ -280,8 +280,35 @@ describe('Segregated Subsystem Code Generation', () => {
       expect(code.header).toContain('void Dynamics_compute_derivatives(')
       expect(code.header).toContain('Dynamics_states_t* derivatives')
 
-      // Source should have derivatives function (const because it doesn't modify model)
-      expect(code.source).toContain('void Dynamics_compute_derivatives(const Dynamics_t* model, Dynamics_states_t* derivatives)')
+      // Source should have derivatives function (const because it doesn't modify model).
+      // Derivative terms read the RK4 stage state, not the major-step model->states.
+      expect(code.source).toContain('void Dynamics_compute_derivatives(const Dynamics_t* model, const Dynamics_states_t* current_states, Dynamics_states_t* derivatives)')
+    })
+
+    test('derivative state terms read the RK4 stage state, not the major-step state', () => {
+      // A first-order lag's derivative depends on its own state; reading
+      // model->states would give every RK4 stage the same value.
+      const subBlocks = [
+        createBlock('sub_input', 'input_port', 'In1', { portName: 'In1' }),
+        createBlock('sub_tf', 'transfer_function', 'Lag', { numerator: [1], denominator: [0.1, 1] }),
+        createBlock('sub_output', 'output_port', 'Out1', { portName: 'Out1' })
+      ]
+      const subConnections = [
+        createConnection('sub_w1', 'sub_input', 0, 'sub_tf', 0),
+        createConnection('sub_w2', 'sub_tf', 0, 'sub_output', 0)
+      ]
+      const mainBlocks = [
+        createBlock('subsystem1', 'subsystem', 'Dynamics', {
+          codeGenStrategy: 'segregated',
+          inputPorts: ['In1'],
+          outputPorts: ['Out1'],
+          sheets: [createSheet('sub_sheet', 'SubSheet', subBlocks, subConnections)]
+        })
+      ]
+      const result = new ModelFlattener().flattenModel([createSheet('main', 'Main', mainBlocks, [])])
+      const code = new SubsystemCodeGenerator(result.model.segregatedSubsystems[0]).generate()
+      expect(code.source).toContain('current_states->Lag_states[0]')
+      expect(code.source).not.toContain('model->states->')
     })
   })
 })

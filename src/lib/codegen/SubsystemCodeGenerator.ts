@@ -277,9 +277,8 @@ export class SubsystemCodeGenerator {
   private generateParameters(): string {
     const params = this.info.parameters
     if (!params || params.length === 0) {
-      if (!this.useInstanceParams() || !(this.info.instanceParameters || []).length) {
-        return ''
-      }
+      if (!this.useInstanceParams()) return ''
+      if (!(this.info.instanceParameters || []).length) return this.emptyParamsStruct()
     }
 
     const reserved = new Set<string>()
@@ -327,7 +326,11 @@ export class SubsystemCodeGenerator {
           'Per-instance parameter values (set by parent at init)'
         )
         code += '\n'
+      } else {
+        code += this.emptyParamsStruct()
       }
+    } else if (this.useInstanceParams()) {
+      code += this.emptyParamsStruct()
     }
 
     for (const param of params || []) {
@@ -365,6 +368,20 @@ export class SubsystemCodeGenerator {
 
     code += '\n'
     return code
+  }
+
+  /**
+   * A shared module's init always takes a `Name_params_t*` (the parent passes
+   * NULL when there are no instance parameters), so the type must exist.
+   */
+  private emptyParamsStruct(): string {
+    return (
+      CCodeBuilder.generateStruct(
+        `${this.typeName()}_params`,
+        ['    int unused; /* No per-instance parameters */'],
+        'Per-instance parameter values (none for this module)'
+      ) + '\n'
+    )
   }
 
   /** File-scope macros mapping PARAM_* → model->params.* inside .c functions. */
@@ -638,7 +655,7 @@ export class SubsystemCodeGenerator {
       prototypes += CCodeBuilder.generateFunctionPrototype(
         'void',
         `${name}_compute_derivatives`,
-        [`const ${name}_t* model`, `${name}_states_t* derivatives`],
+        [`const ${name}_t* model`, `const ${name}_states_t* current_states`, `${name}_states_t* derivatives`],
         'Compute state derivatives for integration'
       ) + '\n'
     }
@@ -1070,7 +1087,10 @@ export class SubsystemCodeGenerator {
       'Compute state derivatives for integration',
       'Called by parent during RK4 stages'
     ])
-    code += `void ${name}_compute_derivatives(const ${name}_t* model, ${name}_states_t* derivatives) {\n`
+    // current_states is the RK4 stage state (the parent's stage struct for this
+    // instance); model->states holds the major-step state. Block derivative
+    // terms must read the stage state or RK4 degrades to Euler for them.
+    code += `void ${name}_compute_derivatives(const ${name}_t* model, const ${name}_states_t* current_states, ${name}_states_t* derivatives) {\n`
     code += '    memset(derivatives, 0, sizeof(*derivatives));\n\n'
 
     // Generate derivative computation for each stateful block
@@ -1083,11 +1103,10 @@ export class SubsystemCodeGenerator {
           const outputType = this.getBlockOutputType(block)
 
           code += `    /* ${block.flattenedName || block.block.name} */\n`
-          // Use 'model->states' - block modules generate code expecting 'model->' prefix
           const derivCode = generator.generateStateDerivative(
             named,
             inputExpr,
-            'model->states',
+            'current_states',
             outputType
           )
           // Replace 'state_derivatives' with 'derivatives' in the generated code

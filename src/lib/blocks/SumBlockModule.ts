@@ -36,7 +36,8 @@ export class SumBlockModule implements IBlockModule {
 
     const access = (inp: string, typ: string | undefined, idx: string) => {
       const p = BlockModuleUtils.parseType(typ || 'double')
-      if (p.isMatrix && p.rows && p.cols === 1) return `${inp}${idx}[0]`
+      // Column matrix read as a vector element; a matrix index already has [j]
+      if (p.isMatrix && p.rows && p.cols === 1 && idx === '[i]') return `${inp}${idx}[0]`
       if (p.isMatrix && p.rows && p.cols) return `${inp}${idx}`
       if (p.isArray && p.arraySize) return `${inp}${idx}`
       // If typed scalar but signal name looks like a mux/vector, still index

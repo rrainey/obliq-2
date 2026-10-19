@@ -118,10 +118,10 @@ export class RK4Generator {
     if (sub.hasEnableInput && subsystemBlock) {
       // Check if subsystem is enabled before computing derivatives
       code += `    if (model->${field}.enabled) {\n`
-      code += `        ${mod}_compute_derivatives(&model->${field}, &state_derivatives->${field});\n`
+      code += `        ${mod}_compute_derivatives(&model->${field}, &current_states->${field}, &state_derivatives->${field});\n`
       code += `    }\n`
     } else {
-      code += `    ${mod}_compute_derivatives(&model->${field}, &state_derivatives->${field});\n`
+      code += `    ${mod}_compute_derivatives(&model->${field}, &current_states->${field}, &state_derivatives->${field});\n`
     }
 
     code += '\n'

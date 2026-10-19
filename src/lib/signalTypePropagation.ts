@@ -5,6 +5,34 @@ import { WireData } from '@/components/Wire'
 import { areTypesCompatible, getTypeCompatibilityError, parseType, ParsedType, typeToString, isMatrixType, getMatrixDimensions } from './typeValidator'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
 import { collectSheetsRecursive } from './sheetLabelUtils'
+import { collectAllBlocksFromSheets, isSubsystemReference, resolveSubsystemSheets } from './subsystemReference'
+
+/**
+ * Every block of the model while a propagation runs, so a subsystem reference
+ * (which has no sheets of its own) can be typed from its definition's sheets.
+ */
+let modelBlocksForReferences: BlockData[] | null = null
+
+/** A subsystem's sheets; a reference uses its definition's. */
+function subsystemSheets(block: BlockData): any[] {
+  const own = block.parameters?.sheets
+  if (Array.isArray(own) && own.length > 0) return own
+  if (isSubsystemReference(block) && modelBlocksForReferences) {
+    return resolveSubsystemSheets(block, modelBlocksForReferences)
+  }
+  return Array.isArray(own) ? own : []
+}
+
+/** Run `fn` with `blocks` available for reference resolution, unless an outer call already set them. */
+function withModelBlocks<T>(blocks: () => BlockData[], fn: () => T): T {
+  if (modelBlocksForReferences) return fn()
+  modelBlocksForReferences = blocks()
+  try {
+    return fn()
+  } finally {
+    modelBlocksForReferences = null
+  }
+}
 
 // Debug flag for verbose logging - set to true to enable detailed trace output
 const DEBUG_PROPAGATION = false
@@ -347,6 +375,20 @@ function getPortInputType(
 }
 
 /**
+ * Shape of an array initial value: [a, b, c] → double[3], [[1], [0]] → double[2][1].
+ * Lets a state block inside a feedback loop be typed before its input is.
+ */
+function initialValueType(block: BlockData): string | null {
+  const iv = block.parameters?.initialValue ?? block.parameters?.initialCondition
+  if (!Array.isArray(iv) || iv.length === 0) return null
+  if (Array.isArray(iv[0])) {
+    const cols = (iv[0] as unknown[]).length
+    return cols > 0 && iv.every(r => Array.isArray(r) && r.length === cols) ? `double[${iv.length}][${cols}]` : null
+  }
+  return iv.every(x => typeof x === 'number') ? `double[${iv.length}]` : null
+}
+
+/**
  * Resolve output type for integrator / unit_delay / transfer_function family.
  * Uses derivative/input when known, else x(0)/IC, else default double.
  */
@@ -362,12 +404,12 @@ function determineStateBlockOutputType(
       const ic = getPortInputType(block, 1, wiresByTarget, blockOutputTypes)
       if (ic) return ic
     }
-    return block.parameters?.dataType || 'double'
+    return block.parameters?.dataType || initialValueType(block) || 'double'
   }
   if (block.type === 'unit_delay') {
     const input = getPortInputType(block, 0, wiresByTarget, blockOutputTypes)
     if (input) return input
-    return block.parameters?.dataType || 'double'
+    return block.parameters?.dataType || initialValueType(block) || 'double'
   }
   // transfer_function / discrete_transform: match input when known
   const input = getPortInputType(block, 0, wiresByTarget, blockOutputTypes)
@@ -605,6 +647,16 @@ function determineProcessingBlockOutputType(
  * Propagates signal types through the model
  */
 export function propagateSignalTypes(
+  blocks: BlockData[],
+  wires: WireData[]
+): TypePropagationResult {
+  return withModelBlocks(
+    () => collectAllBlocksFromSheets([{ blocks }]),
+    () => propagateSignalTypesInSheet(blocks, wires)
+  )
+}
+
+function propagateSignalTypesInSheet(
   blocks: BlockData[],
   wires: WireData[]
 ): TypePropagationResult {
@@ -1345,15 +1397,16 @@ function getSubsystemOutputType(
 ): string | null {
   debugLog(`  getSubsystemOutputType: subsystem="${subsystemBlock.name}", port="${outputPortName}"`)
 
-  if (!subsystemBlock.parameters?.sheets) {
+  const sheets = subsystemSheets(subsystemBlock)
+  if (sheets.length === 0) {
     debugLog(`    FAIL: No sheets in subsystem parameters`)
     return null
   }
 
-  debugLog(`    Searching ${subsystemBlock.parameters.sheets.length} sheets`)
+  debugLog(`    Searching ${sheets.length} sheets`)
 
   // Search through subsystem sheets for the output port block
-  for (const sheet of subsystemBlock.parameters.sheets) {
+  for (const sheet of sheets) {
     debugLog(`    Sheet "${sheet.name || sheet.id}": ${sheet.blocks?.length || 0} blocks, ${sheet.connections?.length || 0} connections`)
 
     // Log all blocks in this sheet for debugging
@@ -1432,6 +1485,15 @@ function getSubsystemOutputType(
 }
 
 export function propagateSignalTypesMultiSheet(
+  sheets: Array<{ blocks: BlockData[], connections: WireData[] }>
+): TypePropagationResult {
+  return withModelBlocks(
+    () => collectAllBlocksFromSheets(sheets),
+    () => propagateAllSheets(sheets)
+  )
+}
+
+function propagateAllSheets(
   sheets: Array<{ blocks: BlockData[], connections: WireData[] }>
 ): TypePropagationResult {
   debugLog('=== propagateSignalTypesMultiSheet START ===')

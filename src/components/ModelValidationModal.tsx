@@ -80,7 +80,7 @@ export default function ModelValidationModal({
     
     return (
       <Paper
-        key={`${item.wireId || item.blockId || index}`}
+        key={`${item.wireId || item.blockId || 'item'}-${index}`}
         p="sm"
         withBorder
         style={{ cursor: 'pointer' }}

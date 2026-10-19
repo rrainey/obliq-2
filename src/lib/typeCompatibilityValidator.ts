@@ -577,8 +577,10 @@ function validateBlockInputType(
       break
       
     case 'mag':
-      // Magnitude requires vector input
-      if (!parsedInputType.isArray || parsedInputType.isMatrix) {
+      // Magnitude requires a vector input (a column matrix such as a
+      // double[4][1] quaternion counts as one)
+      if (!(parsedInputType.isArray && !parsedInputType.isMatrix) &&
+          !(parsedInputType.isMatrix && parsedInputType.cols === 1)) {
         return {
           blockId: block.id,
           message: `${block.name} requires vector input but received ${inputType} from ${sourceBlock.name}`,
