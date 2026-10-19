@@ -28,6 +28,7 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useComputedColorScheme } from '@mantine/core'
+import SheetOverview from './SheetOverview'
 
 import BlockNode, { nodeTypes, blockDataToNode, wireDataToEdge, BlockNodeData } from './BlockNode'
 import { edgeTypes, createCustomEdge, updateEdgeData, CustomEdgeData, CustomEdgeWrapper } from './CustomEdge'
@@ -992,6 +993,9 @@ const handleEdgesChange = useCallback((changes: any[]) => {
             <span>Zoom: {Math.round(viewport.zoom * 100)}%</span>
           </div>
         </Panel>
+
+        {/* Overview map, shown while the view covers less than the whole sheet */}
+        <SheetOverview dark={colorScheme === 'dark'} />
 
         {/* Instructions Panel */}
         <Panel position="bottom-left" className="bg-blue-500 dark:bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
