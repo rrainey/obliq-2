@@ -4,13 +4,20 @@ const nextConfig = {
   // Native SQLite binding used by src/lib/server/storage; must not be bundled.
   serverExternalPackages: ['better-sqlite3'],
 
+  // Dev server: keep compiled pages around while working, so switching between
+  // My Models and the editor doesn't trigger a recompile after a minute away.
+  onDemandEntries: {
+    maxInactiveAge: 60 * 60 * 1000,
+    pagesBufferLength: 10,
+  },
+
   // Type-check only the app during `next build`; tests and scripts are covered by
   // `npx tsc -p .` and Jest (mcp-server is a separate package with its own tsconfig).
   typescript: {
     tsconfigPath: 'tsconfig.build.json',
   },
 
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
     // Configure Web Workers and WebAssembly support
     if (!isServer) {
       // Enable Web Workers with webpack 5 (native support)
@@ -28,8 +35,12 @@ const nextConfig = {
       config.output.globalObject = 'self'
     }
 
-    // Optimize cache strategy for large files
-    if (!isServer) {
+    // Optimize cache strategy and chunking for production client builds only.
+    // In `next dev` these custom splitChunks groups make compiling a new route
+    // (e.g. opening the editor for the first time) re-chunk modules shared with
+    // the current page; Fast Refresh then does a full reload, which cancels the
+    // in-flight navigation and leaves the user on the page they were leaving.
+    if (!isServer && !dev) {
       config.cache = {
         type: 'filesystem',
         compression: 'gzip',
