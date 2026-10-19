@@ -86,6 +86,13 @@ const MIGRATIONS: string[] = [
     created_at        TEXT NOT NULL
   );
   `,
+  // 2: store-level key/value settings (e.g. reference-model seeding record)
+  `
+  CREATE TABLE meta (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+  );
+  `,
 ]
 
 export function openDatabase(dbPath: string): Db {
@@ -111,4 +118,14 @@ export function migrate(db: Db): void {
       db.pragma(`user_version = ${v + 1}`)
     })()
   }
+}
+
+export function getMeta(db: Db, key: string): string | null {
+  const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value: string } | undefined
+  return row?.value ?? null
+}
+
+export function setMeta(db: Db, key: string, value: string): void {
+  db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run(key, value)
 }

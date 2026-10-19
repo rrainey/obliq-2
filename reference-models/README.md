@@ -1,0 +1,20 @@
+# Reference models
+
+Example models that ship with obliq-2.
+
+- **New installations:** every `*.json` file here is imported once, as an ordinary model, when the local store is first created (`~/.config/obliq-2`, or `$OBLIQ_HOME`). Deleting one of these models does not bring it back.
+- **Existing installations:** import a file with **My Models → Import Model**. Nothing is added automatically.
+
+Each file uses the standard export format, `{ "name": ..., "data": { "sheets": [...] } }`.
+
+Set `OBLIQ_REFERENCE_MODELS_DIR` to seed from a different folder. Set it to an empty string to start new stores empty.
+
+## Models
+
+| File | Model | Status |
+|---|---|---|
+| `fpv-quadcopter.json` | 5-inch FPV quadcopter: motors, 6-DOF frame, IMU/magnetometer/barometer, Betaflight-style flight controller | In development. See [docs/fpv-reference-model-plan.md](../docs/fpv-reference-model-plan.md). |
+
+## Sources and licensing
+
+Each model lists its sources in its own description. The models are re-implemented from published equations, datasheets and permissively licensed (MIT, BSD-3, Apache-2.0) references. No GPL code is translated.

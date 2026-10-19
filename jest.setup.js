@@ -9,3 +9,9 @@ require('dotenv').config({ path: '.env.local' });
 
 // Note: Integration tests import fetch directly from 'undici' in api-client.ts
 // so no global polyfill is needed here
+
+// Stores created by tests start empty: don't import the repo's reference
+// models unless a test opts in (see __tests__/storage/reference-models.test.ts).
+if (process.env.OBLIQ_REFERENCE_MODELS_DIR === undefined) {
+  process.env.OBLIQ_REFERENCE_MODELS_DIR = ''
+}
