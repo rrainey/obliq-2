@@ -65,6 +65,84 @@ describe('computeAutoLayout', () => {
     })
   })
 
+  describe('local plumbing: Goto / From', () => {
+    // in -> g1 -> g2 -> g3 -> out, with g1 also driving a Goto and a From feeding g3.
+    const blocks = [
+      block('in', 'input_port'),
+      block('g1', 'scale'),
+      block('g2', 'scale'),
+      block('g3', 'sum', { signs: '++' }),
+      block('out', 'output_port'),
+      block('goto', 'sheet_label_sink', { signalName: 'a' }),
+      block('from', 'sheet_label_source', { signalName: 'b' }),
+    ]
+    const wires = [
+      wire('w1', 'in', 0, 'g1', 0),
+      wire('w2', 'g1', 0, 'g2', 0),
+      wire('w3', 'g2', 0, 'g3', 0),
+      wire('w4', 'g3', 0, 'out', 0),
+      wire('w5', 'g1', 0, 'goto', 0),
+      wire('w6', 'from', 0, 'g3', 1),
+    ]
+    const moves = layout(blocks, wires)
+    const x = (id: string) => posOf(moves, id).x
+
+    it('keeps a Goto one column after the block that drives it', () => {
+      expect(x('goto')).toBe(x('g2'))
+      expect(x('goto')).toBeLessThan(x('out'))
+    })
+
+    it('moves a From to just before the block it feeds', () => {
+      expect(x('from')).toBe(x('g2'))
+      expect(x('from')).toBeGreaterThan(x('in'))
+    })
+
+    it('still pins the sheet boundary: Input Ports left, Output Ports right', () => {
+      const xs = moves.map(m => m.position.x)
+      expect(x('in')).toBe(Math.min(...xs))
+      expect(x('out')).toBe(Math.max(...xs))
+    })
+  })
+
+  describe('long wires', () => {
+    it('orders Output Ports by the ports that feed them, however far back', () => {
+      // Path A (seeded at the top) is a long chain; path B (seeded at the bottom)
+      // reaches its Output Port from column 1, far from the output column. The
+      // outputs are seeded in the opposite order to their sources.
+      const blocks = [
+        block('inA', 'input_port', {}, 0),
+        block('a1', 'scale', {}, 0),
+        block('a2', 'scale', {}, 0),
+        block('a3', 'scale', {}, 0),
+        block('outA', 'output_port', {}, 500),
+        block('inB', 'input_port', {}, 500),
+        block('b1', 'scale', {}, 500),
+        block('outB', 'output_port', {}, 0),
+      ]
+      const wires = [
+        wire('w1', 'inA', 0, 'a1', 0),
+        wire('w2', 'a1', 0, 'a2', 0),
+        wire('w3', 'a2', 0, 'a3', 0),
+        wire('w4', 'a3', 0, 'outA', 0),
+        wire('w5', 'inB', 0, 'b1', 0),
+        wire('w6', 'b1', 0, 'outB', 0),
+      ]
+      const moves = layout(blocks, wires)
+      const y = (id: string) => posOf(moves, id).y
+
+      // Which path ends up on top is immaterial; the outputs must follow their sources.
+      expect(Math.sign(y('outA') - y('outB'))).toBe(Math.sign(y('a3') - y('b1')))
+      // Both wires into the outputs end up straight (port to port).
+      const portY = (id: string) => {
+        const b = blocks.find(x => x.id === id)!
+        const outs = b.type === 'output_port' ? 0 : 1
+        return y(id) + portOffsetY(0, 1, getBlockHeight(b, 1, outs))
+      }
+      expect(Math.abs(portY('outA') - portY('a3'))).toBeLessThanOrEqual(0.5)
+      expect(Math.abs(portY('outB') - portY('b1'))).toBeLessThanOrEqual(0.5)
+    })
+  })
+
   describe('1A: port-aware vertical ordering', () => {
     it('orders downstream blocks by the subsystem output port that feeds them', () => {
       const sub = block('sub', 'subsystem', {

@@ -4,13 +4,19 @@
 //   1. Classify blocks (sources / sinks / annotations).
 //   2. Build a port-aware directed graph from wires; break back-edges
 //      (feedback loops) via DFS so ranking sees only forward flow.
-//   3. Rank via longest-path from sources -> left-to-right flow. Sinks are
-//      hoisted to the rightmost column.
-//   4. Order within columns using a *port-aware* barycenter, so the vertical
-//      order of a block's output ports drives the vertical order of the
-//      blocks it feeds.
-//   5. Assign y-coordinates by pulling each block toward the port that feeds
-//      it, then resolving overlaps optimally with isotonic regression.
+//   3. Rank via longest-path from sources -> left-to-right flow. Only the
+//      sheet's *boundary* blocks are pinned to the edges: Output Ports and
+//      displays/loggers to the rightmost column, Input Ports to the leftmost.
+//      Gotos (sheet label sinks) and data-store writes stay just after the
+//      block that drives them; Froms, data-store reads, constants and clocks
+//      move to just before their first consumer.
+//   4. Seed the order within columns using a *port-aware* barycenter, so the
+//      vertical order of a block's output ports drives the vertical order of
+//      the blocks it feeds.
+//   5. Assign y-coordinates by pulling each block toward the ports it connects
+//      to -- over wires of any length, not just to the adjacent column -- then
+//      re-sorting the column by those targets and resolving overlaps optimally
+//      with isotonic regression.
 //
 // Feedback loops with chained dynamic/discontinuous blocks: because back-edges
 // are excluded from ranking, the block closer to the input (shorter forward
@@ -75,6 +81,17 @@ const SOURCE_TYPES = new Set<string>([
   'sheet_label_source',
   'data_store_read',
   'clock',
+])
+
+/**
+ * Sinks that represent the sheet's outputs; these keep the rightmost column.
+ * Other sinks (Goto / data store write) are local plumbing and sit next to
+ * their source instead, which keeps their wires short.
+ */
+const BOUNDARY_SINK_TYPES = new Set<string>([
+  'output_port',
+  'signal_display',
+  'signal_logger',
 ])
 
 const SINK_TYPES = new Set<string>([
@@ -258,13 +275,28 @@ function assignRanks(graph: Graph, laidOut: BlockData[]): Map<string, number> {
   }
   for (const id of graph.nodes) if (!rank.has(id)) rank.set(id, 0)
 
-  // Hoist sinks to the rightmost column.
-  let maxNonSinkRank = 0
-  for (const id of graph.nodes) {
-    if (!isSink(typeOf.get(id)!)) maxNonSinkRank = Math.max(maxNonSinkRank, rank.get(id)!)
+  // Longest-path ranking puts every source in column 0. Except for Input
+  // Ports (the sheet's boundary), move each source to just before its earliest
+  // consumer so e.g. a From sits next to the block it feeds. Only sources move
+  // and they have no predecessors, so a single reverse-topological pass is exact.
+  for (const id of [...topo].reverse()) {
+    const type = typeOf.get(id)!
+    if (!isSource(type) || type === 'input_port') continue
+    const consumers = [...graph.fwdOut.get(id)!]
+    if (consumers.length === 0) continue
+    const earliest = Math.min(...consumers.map(v => rank.get(v)!))
+    rank.set(id, Math.max(rank.get(id)!, earliest - 1))
   }
-  const sinkRank = maxNonSinkRank + 1
-  for (const id of graph.nodes) if (isSink(typeOf.get(id)!)) rank.set(id, sinkRank)
+
+  // Hoist boundary sinks to the rightmost column. Other sinks keep their
+  // longest-path rank, one column after the block that drives them.
+  const hoisted = (type: string) => BOUNDARY_SINK_TYPES.has(type)
+  let maxOtherRank = 0
+  for (const id of graph.nodes) {
+    if (!hoisted(typeOf.get(id)!)) maxOtherRank = Math.max(maxOtherRank, rank.get(id)!)
+  }
+  const sinkRank = maxOtherRank + 1
+  for (const id of graph.nodes) if (hoisted(typeOf.get(id)!)) rank.set(id, sinkRank)
 
   return rank
 }
@@ -523,7 +555,23 @@ function computePlacement(
       }
     }
 
-    const placed = isotonicPlace(desired, weights, heights, opts.rowSpacing)
+    // Re-sort the column by where each block wants its centre to be. The
+    // seeded barycenter order only sees the adjacent column, so a block fed
+    // from several columns back (or a hoisted Output Port) would otherwise be
+    // stuck in an arbitrary slot that isotonic placement must preserve. Ties
+    // keep the current order, which keeps the result deterministic.
+    const order = ids
+      .map((_, i) => i)
+      .sort((a, b) => (desired[a] + heights[a] / 2) - (desired[b] + heights[b] / 2) || a - b)
+    const sortedIds = order.map(i => ids[i])
+    const placed = isotonicPlace(
+      order.map(i => desired[i]),
+      order.map(i => weights[i]),
+      order.map(i => heights[i]),
+      opts.rowSpacing,
+    )
+    // Columns are shared with later passes, so update the order in place.
+    ids.splice(0, ids.length, ...sortedIds)
     ids.forEach((id, i) => y.set(id, placed[i]))
   }
 
