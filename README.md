@@ -10,6 +10,20 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 
 ![Screenshot](images/transp07.png)
 
+## What's New in 3.0.0
+
+Version 3.0.0 makes obliq-2 a **local, single-user application** and substantially improves diagram layout.
+
+- **Supabase replaced by SQLite and plain files.** There is no database server, cloud project or login. Models are JSON files under `~/.config/obliq-2/`, indexed by a local SQLite database (`better-sqlite3`). Each **Save** keeps a version snapshot. Existing Supabase data can be imported with `npm run migrate:supabase` (see [Migrating from the previous Supabase backend](#migrating-from-the-previous-supabase-backend)).
+- **Models as files you can script against.** You can link a model file that lives in another repository. When a model's file changes on disk (a script, the Model Builder API/MCP, or another tab), the editor reloads it or offers **Reload / Keep mine / Save mine as new model**. The disk version is always kept in the version history.
+- **Better automatic layout.** Gotos and Froms sit next to the blocks they connect to, blocks are ordered by the wires that feed them however far back, and wire turns are routed into separate tracks instead of stacking on top of each other (see [Diagram Layout](#diagram-layout)).
+- **Editor refinements.**
+  - A wire's vertical segment can be dragged from anywhere along it.
+  - Simulation settings are saved with the model and take effect on the next run.
+  - Option descriptions appear on hover, focus or click.
+  - The toolbar fits on one row, with exports grouped under **Export**.
+- **Dependency updates.** Next.js 15.5.27 (security fix), Jest 30, and a large reduction in `npm audit` findings.
+
 ## Key Features
 
 ### Visual Modeling
@@ -101,18 +115,30 @@ independent adjustments, each of which can be left alone:
 
 | Adjustment | Effect |
 |------------|--------|
-| **Clean up block layout** | Arranges blocks so data flows left to right |
+| **Clean up block layout** | Arranges blocks so data flows left to right and routes the turns of the wires between them |
 | **Resize Subsystems** | Sizes subsystem blocks so their ports fit what they connect to |
 | **Subsystem Ports Labeling** | Shows or hides port-name labels on subsystem blocks |
 | **Hide unnecessary block names** | Hides names on everything except subsystems |
 | **Scope** | Current sheet (default), current subsystem, or the entire model |
 
-- Sources are placed on the left and sinks (output ports, displays, loggers) on the right, with the columns between them ordered by signal flow
-- Feedback loops are detected and properly handled
-- Layout is **port-aware**: the vertical order of a block's output ports drives the vertical order of the blocks it feeds, and each block is pulled toward the port that feeds it so wires run straight wherever the geometry allows
-- Resizing grows a subsystem until its ports are far enough apart for neighboring blocks to line up with them, and writes the result into the model as `width` / `height`
-- Scope may reach sheets nested inside subsystems that are not currently open, so the dialog reports how many sheets a scope covers and warns when that is more than one. Tuning cannot be undone
-- Subsystem blocks can also be resized by hand: right-click the block, choose **Resize...**, and drag any corner handle
+**Block placement**
+- Blocks are ranked into columns by signal flow, so data runs left to right. Feedback loops are detected and do not disturb the ordering.
+- Only a sheet's **boundary** blocks are pinned to the edges: Input Ports on the left, and Output Ports, displays and loggers on the right.
+- **Gotos** and data-store writes sit just after the block that drives them. **Froms**, data-store reads, constants and clocks sit just before the block they feed. Their wires stay short instead of fanning across the whole sheet.
+- Layout is **port-aware**. Each block is pulled toward the ports it connects to, over wires of *any* length, not just to the neighboring column. The column is then ordered by those targets, so a block lands vertically close to the output that feeds it, and wires run straight wherever the geometry allows.
+
+**Wire routing**
+- The editor draws each wire as across, down, across. Cleaning up the layout also decides where each wire turns, instead of always turning midway between its ports.
+- Each turn is placed in the gap between block columns where it causes the fewest crossings, overlaps with other wires, and runs through blocks.
+- Within a gap, every net (all wires from one output port) gets its own vertical track, ordered to avoid crossings. Wires from one output share a track, which reads as a junction.
+- Gaps that need many tracks are widened so tracks stay 8 px apart.
+- Turn positions are saved with each wire. Straight wires, feedback wires and enable/reset connections keep the default midpoint, which also clears turns dragged by hand before the blocks moved.
+- To adjust a wire yourself, hover its vertical segment and drag it left or right from anywhere along its length.
+
+**Other notes**
+- Resizing grows a subsystem until its ports are far enough apart for neighboring blocks to line up with them, and writes the result into the model as `width` / `height`.
+- A scope may reach sheets nested inside subsystems that are not currently open, so the dialog reports how many sheets a scope covers and warns when that is more than one. Tuning cannot be undone, but every Save keeps a version snapshot.
+- Subsystem blocks can also be resized by hand: right-click the block, choose **Resize...**, and drag any corner handle.
 
 ### Block Name Visibility
 - A newly added block **hides its name**; a Subsystem is the exception and shows it, since the name is what distinguishes one subsystem from another
@@ -132,7 +158,7 @@ independent adjustments, each of which can be left alone:
 ### Simulation Engine
 - **Client-side simulation** - Models are compiled dynamically and executed as [Web Assemblies](https://webassembly.org/)
 - Real-time signal visualization with Recharts
-- Configurable time steps, duration, and integration methods
+- Configurable time steps, duration, and integration methods, saved with the model
 - Signal logging with CSV export capability
 - Support for both continuous and discrete-time systems
 
@@ -146,7 +172,7 @@ independent adjustments, each of which can be left alone:
 - Runs locally as your OS user; no database server or account needed
 - Models stored as JSON files under `~/.config/obliq-2/` with a SQLite index
 - Version snapshots on save, auto-save every 5 minutes
-- Link models to files elsewhere on disk (e.g. generated by scripts)
+- Link models to files elsewhere on disk (e.g. generated by scripts); changes made on disk are detected while a model is open
 - Model management dashboard
 
 ### Automation and Model Building APIs + MCP Server
@@ -159,7 +185,7 @@ independent adjustments, each of which can be left alone:
 ## Tech Stack
 
 - **Frontend**: Mantine, Next.js (App Router), React, ReactFlow, TypeScript
-- **Backend**: Next.js API Routes (serverless functions)
+- **Backend**: Next.js API routes running on a local Node.js server (bound to `127.0.0.1`)
 - **Storage**: SQLite (`better-sqlite3`) index + flat JSON model files under `~/.config/obliq-2/`
 - **Authentication**: Local session cookie (browser) and hashed API tokens (MCP/automation)
 - **State Management**: Zustand
@@ -350,10 +376,12 @@ obliq-2/
 │   │   │
 │   │   ├── server/                   # Server-only code (never import from client components)
 │   │   │   ├── storage/              # SQLite index + flat-file model store (ModelRepository, TokenRepository)
+│   │   │   ├── modelWatcher.ts       # Watches open models' files for changes on disk (feeds the SSE stream)
 │   │   │   └── session.ts            # Local session cookie
 │   │   │
 │   │   ├── layout/                   # Auto-layout and shared block geometry
 │   │   │   ├── autoLayout.ts         # Layered left-to-right arrangement
+│   │   │   ├── wireRouting.ts        # Wire turn placement (per-net tracks between columns)
 │   │   │   ├── tuneModelLayout.ts    # Scoped layout / resize / name tuning
 │   │   │   └── blockGeometry.ts      # Block sizes / port offsets (shared with the canvas)
 │   │   │
@@ -420,7 +448,10 @@ obliq-2/
 ├── examples/                         # Example scripts
 │   └── model-builder-api/            # API usage examples
 │
-└── database-scripts/                 # Schema SQL (apply in order — see that folder’s README)
+└── scripts/                          # Command-line tools
+    ├── obliq-link.ts                 # npm run obliq:link — link/list/unlink model files
+    ├── migrate-from-supabase.ts      # npm run migrate:supabase — one-time import from 2.x
+    └── obliq-cgen.ts                 # npm run obliq:cgen — C code from a model JSON file
 ```
 
 ## Testing
