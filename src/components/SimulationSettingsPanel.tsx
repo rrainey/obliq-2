@@ -2,8 +2,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Paper, Text, NumberInput, Stack, Checkbox, Tooltip, SegmentedControl, Group } from '@mantine/core'
-import { IconInfoCircle } from '@tabler/icons-react'
+import { Paper, Text, NumberInput, Stack, Checkbox, SegmentedControl, Group } from '@mantine/core'
+import InfoHint from './InfoHint'
 import type { IntegrationAlgorithm } from '@/lib/modelSchema'
 
 export type SimulationSettingsChange = {
@@ -172,77 +172,69 @@ export default function SimulationSettingsPanel({
           </Text>
         )}
 
-        <Tooltip
-          label="Instrument generated C: abort on divide/mod by ~0 with block name, and check RK4 derivatives for NaN/Inf after each stage. Requires Force Recompile after toggling."
-          withArrow
-          multiline
-          w={280}
-        >
-          <Checkbox
-            label={
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                Debug math (abort on /0, NaN)
-                <IconInfoCircle size={14} style={{ opacity: 0.6 }} />
-              </span>
-            }
-            checked={debugMath}
-            onChange={(e) => handleDebugMathChange(e.currentTarget.checked)}
-            size="sm"
-          />
-        </Tooltip>
+        <Checkbox
+          label={
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              Debug math (abort on /0, NaN)
+              <InfoHint
+                ariaLabel="About debug math"
+                label="Instrument generated C: abort on divide/mod by ~0 with block name, and check RK4 derivatives for NaN/Inf after each stage. Requires Force Recompile after toggling."
+              />
+            </span>
+          }
+          checked={debugMath}
+          onChange={(e) => handleDebugMathChange(e.currentTarget.checked)}
+          size="sm"
+        />
 
         {/* Web Worker toggle */}
         {onWorkerChange && (
-          <Tooltip
+          <Checkbox
             label={
-              workerAvailable
-                ? 'Run simulation in background thread for responsive UI (experimental)'
-                : 'Web Workers not available in this browser'
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                Use Web Worker
+                <InfoHint
+                  ariaLabel="About Web Worker"
+                  width={250}
+                  label={
+                    workerAvailable
+                      ? 'Run simulation in background thread for responsive UI (experimental)'
+                      : 'Web Workers not available in this browser'
+                  }
+                />
+              </span>
             }
-            withArrow
-          >
-            <Checkbox
-              label={
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  Use Web Worker
-                  <IconInfoCircle size={14} style={{ opacity: 0.6 }} />
-                </span>
+            checked={useWorker}
+            onChange={(e) => {
+              const newValue = e.currentTarget.checked
+              onWorkerChange(newValue)
+              // Store preference in localStorage
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('obliq-use-workers', String(newValue))
               }
-              checked={useWorker}
-              onChange={(e) => {
-                const newValue = e.currentTarget.checked
-                onWorkerChange(newValue)
-                // Store preference in localStorage
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem('obliq-use-workers', String(newValue))
-                }
-              }}
-              disabled={!workerAvailable}
-              size="sm"
-            />
-          </Tooltip>
+            }}
+            disabled={!workerAvailable}
+            size="sm"
+          />
         )}
 
         {/* Force Recompile toggle */}
         {onForceRecompileChange && (
-          <Tooltip
-            label="Bypass WASM cache and force fresh compilation. Use this if you suspect stale compiled code."
-            withArrow
-            multiline
-            w={250}
-          >
-            <Checkbox
-              label={
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  Force Recompile
-                  <IconInfoCircle size={14} style={{ opacity: 0.6 }} />
-                </span>
-              }
-              checked={forceRecompile}
-              onChange={(e) => onForceRecompileChange(e.currentTarget.checked)}
-              size="sm"
-            />
-          </Tooltip>
+          <Checkbox
+            label={
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                Force Recompile
+                <InfoHint
+                  ariaLabel="About Force Recompile"
+                  width={250}
+                  label="Bypass WASM cache and force fresh compilation. Use this if you suspect stale compiled code."
+                />
+              </span>
+            }
+            checked={forceRecompile}
+            onChange={(e) => onForceRecompileChange(e.currentTarget.checked)}
+            size="sm"
+          />
         )}
       </Stack>
     </Paper>
