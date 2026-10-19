@@ -178,6 +178,16 @@ function CanvasReactFlowInner({
   // Highlighted net state - tracks which source port's connections are highlighted
   const [highlightedNet, setHighlightedNet] = useState<HighlightedNet>(null)
 
+  // Selecting blocks clears a net highlight: showing both at once reads as one
+  // combined selection. Keyed on the selection's contents (not array identity)
+  // so it only fires when the selection actually changes; clicking a block that
+  // is already selected is handled in onNodeClick.
+  const blockSelectionKey = (selectedBlockIds.length > 0 ? selectedBlockIds : selectedBlockId ? [selectedBlockId] : [])
+    .slice().sort().join('|')
+  useEffect(() => {
+    if (blockSelectionKey) setHighlightedNet(null)
+  }, [blockSelectionKey])
+
   // Feature 7: Rename dialog state
   const [renameDialog, setRenameDialog] = useState<{
     blockId: string
@@ -939,6 +949,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         nodesDraggable={true}
         elementsSelectable={true}
         onNodeClick={(event, node) => {
+          setHighlightedNet(null)
           // Feature 4: Handle Shift+Click for toggle selection
           if (event.shiftKey && onBlocksSelect) {
             const currentSelection = selectedBlockIds || []
