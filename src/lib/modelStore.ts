@@ -41,6 +41,33 @@ export interface Sheet {
   }
 }
 
+/** Model-level simulation settings, persisted as `data.globalSettings`. */
+export interface SimulationGlobalSettings {
+  simulationTimeStep: number
+  simulationDuration: number
+  integrationAlgorithm: 'euler' | 'rk4'
+  debugMath: boolean
+}
+
+export const DEFAULT_GLOBAL_SETTINGS: SimulationGlobalSettings = {
+  simulationTimeStep: 0.01,
+  simulationDuration: 10.0,
+  integrationAlgorithm: 'rk4',
+  debugMath: false
+}
+
+/** Fill in defaults for missing/invalid fields of a stored `globalSettings`. */
+export function normalizeGlobalSettings(raw: any): SimulationGlobalSettings {
+  const positive = (v: unknown, fallback: number) =>
+    typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : fallback
+  return {
+    simulationTimeStep: positive(raw?.simulationTimeStep, DEFAULT_GLOBAL_SETTINGS.simulationTimeStep),
+    simulationDuration: positive(raw?.simulationDuration, DEFAULT_GLOBAL_SETTINGS.simulationDuration),
+    integrationAlgorithm: raw?.integrationAlgorithm === 'euler' ? 'euler' : 'rk4',
+    debugMath: !!raw?.debugMath
+  }
+}
+
 export interface ModelState {
   // Model data
   model: Model | null
@@ -49,6 +76,8 @@ export interface ModelState {
   sheets: Sheet[]
   activeSheetId: string
   parameters: ModelParameter[]  // Feature 1: Model parameters
+  /** Simulation settings (part of the model; changing them makes it dirty). */
+  globalSettings: SimulationGlobalSettings
 
   // Current sheet content
   blocks: BlockData[]
@@ -114,6 +143,8 @@ export interface ModelActions {
   saveModel: (globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4'; debugMath?: boolean }) => Promise<boolean>
   saveAsNewModel: (newName: string, globalSettings?: { simulationTimeStep: number; simulationDuration: number; integrationAlgorithm?: 'euler' | 'rk4'; debugMath?: boolean }) => Promise<string | null>
   saveAutoSave: () => Promise<boolean>
+  /** Update simulation settings; marks the model dirty only if a value changed. */
+  setGlobalSettings: (updates: Partial<SimulationGlobalSettings>) => void
   deleteAutoSave: () => Promise<void>
   enableAutoSave: () => void
   disableAutoSave: () => void
@@ -282,6 +313,7 @@ export const useModelStore = create<ModelStore>()(
     sheets: [],
     activeSheetId: 'main',
     parameters: [],  // Feature 1: Model parameters
+    globalSettings: DEFAULT_GLOBAL_SETTINGS,
     blocks: [],
     wires: [],
     selectedBlockId: null,
@@ -354,7 +386,9 @@ export const useModelStore = create<ModelStore>()(
           return false
         }
         
-        // Use provided globalSettings or defaults
+        // Explicit settings (from the Save button) override the store's current ones
+        const settings: SimulationGlobalSettings = { ...updatedState.globalSettings, ...(globalSettings || {}) }
+        set({ globalSettings: settings })
         const modelData = {
           version: "2.1",  // Feature 1: Updated to v2.1 for parameter support
           metadata: {
@@ -362,12 +396,7 @@ export const useModelStore = create<ModelStore>()(
             description: `Model ${updatedState.model.name}`
           },
           sheets: updatedState.sheets,
-          globalSettings: {
-            simulationTimeStep: globalSettings?.simulationTimeStep ?? 0.01,
-            simulationDuration: globalSettings?.simulationDuration ?? 10.0,
-            integrationAlgorithm: globalSettings?.integrationAlgorithm ?? 'rk4',
-            debugMath: globalSettings?.debugMath ?? false
-          },
+          globalSettings: settings,
           parameters: updatedState.parameters,  // Feature 1: Include parameters
           dataStores: (updatedState as any).dataStores || []
         }
@@ -440,12 +469,7 @@ export const useModelStore = create<ModelStore>()(
             description: `Model ${newName}`
           },
           sheets: updatedState.sheets,
-          globalSettings: {
-            simulationTimeStep: globalSettings?.simulationTimeStep ?? 0.01,
-            simulationDuration: globalSettings?.simulationDuration ?? 10.0,
-            integrationAlgorithm: globalSettings?.integrationAlgorithm ?? 'rk4',
-            debugMath: globalSettings?.debugMath ?? false
-          },
+          globalSettings: { ...updatedState.globalSettings, ...(globalSettings || {}) },
           parameters: updatedState.parameters  // Feature 1: Include parameters
         }
 
@@ -467,6 +491,13 @@ export const useModelStore = create<ModelStore>()(
       }
     },
     
+    setGlobalSettings: (updates) => {
+      const current = get().globalSettings
+      const next = { ...current, ...updates }
+      if (JSON.stringify(next) === JSON.stringify(current)) return
+      set({ globalSettings: next, isDirty: true })
+    },
+
     saveAutoSave: async () => {
       const state = get()
   
@@ -529,11 +560,7 @@ export const useModelStore = create<ModelStore>()(
             description: `Model ${updatedState.model.name} (auto-save)`
           },
           sheets: updatedState.sheets,
-          globalSettings: {
-            simulationTimeStep: 0.01,
-            simulationDuration: 10.0,
-            integrationAlgorithm: 'rk4'
-          },
+          globalSettings: updatedState.globalSettings,
           parameters: updatedState.parameters,
           dataStores: (updatedState as any).dataStores || []
         }
@@ -569,11 +596,7 @@ export const useModelStore = create<ModelStore>()(
             description: `Copy of ${model.name}`
           },
           sheets,
-          globalSettings: {
-            simulationTimeStep: 0.01,
-            simulationDuration: 10,
-            integrationAlgorithm: 'rk4'
-          }
+          globalSettings: get().globalSettings
         }
 
         // Create the new model (its file and version 1)
@@ -1591,7 +1614,7 @@ export const useModelStore = create<ModelStore>()(
     markAsClean: () => {
       const state = get()
       // Create a hash of the current model state
-      const currentStateHash = createModelHash(state.sheets)
+      const currentStateHash = createModelHash(state.sheets, state.globalSettings)
       set({ 
         isDirty: false,
         lastSavedHash: currentStateHash 
@@ -1602,7 +1625,7 @@ export const useModelStore = create<ModelStore>()(
       const state = get()
       if (!state.lastSavedHash) return state.isDirty
       
-      const currentStateHash = createModelHash(state.sheets)
+      const currentStateHash = createModelHash(state.sheets, state.globalSettings)
       const isDirty = currentStateHash !== state.lastSavedHash
       
       // Update the isDirty flag if it's different
@@ -1641,6 +1664,7 @@ export const useModelStore = create<ModelStore>()(
           sheets,
           activeSheetId: firstSheetId,
           parameters,  // Feature 1: Load parameters
+          globalSettings: normalizeGlobalSettings(versionData.data.globalSettings),
           blocks: firstSheet?.blocks || [],
           wires: firstSheet?.connections || [],
           selectedBlockId: null,
@@ -1664,9 +1688,10 @@ export const useModelStore = create<ModelStore>()(
   }))
 )
 
-function createModelHash(sheets: Sheet[]): string {
+function createModelHash(sheets: Sheet[], globalSettings: SimulationGlobalSettings): string {
   // Create a deterministic string representation of the model
   const modelString = JSON.stringify({
+    globalSettings,
     sheets: sheets.map(sheet => ({
       id: sheet.id,
       name: sheet.name,

@@ -192,10 +192,12 @@ export async function POST(request: NextRequest) {
         const parameters = modelData.parameters || [] // Feature 3
         const debugMath = !!modelData.globalSettings?.debugMath
 
+        const integrationAlgorithm = modelData.globalSettings?.integrationAlgorithm === 'euler' ? 'euler' : 'rk4'
         const cacheKey = generateCacheKey(modelId, { sheets, parameters }, {
           optimizationLevel,
           enableSimd,
-          includeDebugInfo: debugMath
+          includeDebugInfo: debugMath,
+          integrationAlgorithm
         })
         console.log(`[compile-wasm-stream] Generated cache key: ${cacheKey}`)
 
@@ -287,10 +289,7 @@ export async function POST(request: NextRequest) {
             includeEmscriptenExports: true,
             includeDebugFunctions: false,
             debugMath,
-            integrationAlgorithm:
-              modelData.globalSettings?.integrationAlgorithm === 'euler'
-                ? 'euler'
-                : 'rk4'
+            integrationAlgorithm
           })
 
           generatedCode = generator.generateWasm(sheets, parameters)

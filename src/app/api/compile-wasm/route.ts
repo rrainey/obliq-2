@@ -124,9 +124,11 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
   const debugMath = !!modelData.globalSettings?.debugMath
 
   // Generate cache key (debugMath changes codegen → separate cache entry)
+  const integrationAlgorithm = modelData.globalSettings?.integrationAlgorithm === 'euler' ? 'euler' : 'rk4'
   const cacheKey = generateCacheKey(modelId, { sheets }, {
     optimizationLevel,
-    includeDebugInfo: debugMath
+    includeDebugInfo: debugMath,
+    integrationAlgorithm
   })
   console.log(`[compile-wasm] Cache key: ${cacheKey}${debugMath ? ' (debugMath)' : ''}`)
 
@@ -187,10 +189,7 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
       includeEmscriptenExports: true,
       includeDebugFunctions: false,
       debugMath,
-      integrationAlgorithm:
-        modelData.globalSettings?.integrationAlgorithm === 'euler'
-          ? 'euler'
-          : 'rk4'
+      integrationAlgorithm
     })
 
     generatedCode = generator.generateWasm(sheets)

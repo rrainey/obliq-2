@@ -75,7 +75,7 @@ import { getSheetPath } from '@/lib/navigationUtils'
 import { parseType } from '@/lib/typeValidator'
 import { propagateSignalTypes } from '@/lib/signalTypePropagation'
 import { migrateToHierarchicalSheets } from '@/lib/modelStore'
-import { useModelStore } from '@/lib/modelStore'
+import { useModelStore, normalizeGlobalSettings } from '@/lib/modelStore'
 import { createBlock } from '@/lib/blockFactory'
 
 import { useAutoSave } from '@/lib/useAutoSave'
@@ -162,6 +162,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
     // Auto-save specific
     isDirty, saveAutoSave, deleteAutoSave, enableAutoSave, setIsDirty, markAsClean,
+    setGlobalSettings,
 
     // New actions needed for auto-save recovery
     setSheets, setActiveSheetId, setBlocks, setWires,
@@ -504,6 +505,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         // The recovered content differs from the model file until the next Save.
         useModelStore.setState({
           parameters: autoSaveData.data.parameters ?? autoSaveInfo.current.data?.parameters ?? [],
+          globalSettings: normalizeGlobalSettings(
+            autoSaveData.data.globalSettings ?? autoSaveInfo.current.data?.globalSettings
+          ),
           hasAutosavedEdits: true
         })
 
@@ -1596,7 +1600,19 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       integrationAlgorithm: settings.integrationAlgorithm || prev.integrationAlgorithm,
       debugMath: settings.debugMath ?? prev.debugMath
     }))
-  }, [])
+
+    // The settings are part of the model: record them in the store (marks it dirty
+    // when they change) so autosave, compile, and Save all see them. Fields still
+    // being typed into an invalid value are left as they were.
+    const duration = parseFloat(settings.duration)
+    const timeStep = parseFloat(settings.timeStep)
+    setGlobalSettings({
+      ...(Number.isFinite(duration) && duration > 0 ? { simulationDuration: duration } : {}),
+      ...(Number.isFinite(timeStep) && timeStep > 0 ? { simulationTimeStep: timeStep } : {}),
+      ...(settings.integrationAlgorithm ? { integrationAlgorithm: settings.integrationAlgorithm } : {}),
+      ...(settings.debugMath !== undefined ? { debugMath: settings.debugMath } : {})
+    })
+  }, [setGlobalSettings])
 
   // Feature 5: Clipboard handlers
   const handleCopy = useCallback(() => {
@@ -2146,6 +2162,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
           {/* Simulation Settings Panel */}
           <SimulationSettingsPanel
+            // The panel copies its initial values once; remount it whenever the
+            // editor content is (re)loaded so it shows the loaded settings.
+            key={`${currentVersion}:${fileHash ?? 'snapshot'}`}
             initialDuration={parseFloat(simulationSettings.duration) || 10.0}
             initialTimeStep={parseFloat(simulationSettings.timeStep) || 0.01}
             initialIntegrationAlgorithm={simulationSettings.integrationAlgorithm}

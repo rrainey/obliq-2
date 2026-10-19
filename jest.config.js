@@ -19,7 +19,8 @@ const config = {
     "^mdl2obliq/(.*)$": "<rootDir>/../mdl2obliq/src/$1",
 
     // Handle module aliases (same as in tsconfig.json)
-    '^@/(.*)$': '<rootDir>/$1',
+    // (SWC rewrites `@/` in imports itself; this mapping is what jest.mock('@/...') uses)
+    '^@/(.*)$': '<rootDir>/src/$1',
   },
   // Transform TypeScript files in __tests__ directory
   transformIgnorePatterns: [

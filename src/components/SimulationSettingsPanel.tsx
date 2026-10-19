@@ -178,7 +178,7 @@ export default function SimulationSettingsPanel({
               Debug math (abort on /0, NaN)
               <InfoHint
                 ariaLabel="About debug math"
-                label="Instrument generated C: abort on divide/mod by ~0 with block name, and check RK4 derivatives for NaN/Inf after each stage. Requires Force Recompile after toggling."
+                label="Instrument generated C: abort on divide/mod by ~0 with block name, and check RK4 derivatives for NaN/Inf after each stage. Takes effect on the next run (the model is recompiled automatically)."
               />
             </span>
           }

@@ -325,3 +325,38 @@ describe('Cache Key Generation', () => {
     })
   })
 })
+
+describe('integration algorithm in cache keys', () => {
+  const structure = {
+    sheets: [{ id: 'main', name: 'Main', blocks: [], connections: [], extents: { width: 1, height: 1 } }]
+  } as any
+
+  it('keeps RK4 keys unchanged and gives Euler its own key', () => {
+    const rk4 = generateCacheKey('model-1', structure)
+    expect(generateCacheKey('model-1', structure, { integrationAlgorithm: 'rk4' })).toBe(rk4)
+    const euler = generateCacheKey('model-1', structure, { integrationAlgorithm: 'euler' })
+    expect(euler).toBe(`${rk4}-euler`)
+  })
+
+  it('validates and parses the -euler suffix alongside -simd and -debug', () => {
+    const key = generateCacheKey('a-b-c', structure, {
+      integrationAlgorithm: 'euler',
+      enableSimd: true,
+      includeDebugInfo: true
+    })
+    expect(key).toMatch(/-O2-euler-simd-debug$/)
+    expect(isValidCacheKey(key)).toBe(true)
+    expect(parseCacheKey(key)).toMatchObject({
+      modelId: 'a-b-c',
+      optimizationLevel: 'O2',
+      integrationAlgorithm: 'euler',
+      enableSimd: true,
+      debugInfo: true
+    })
+    expect(parseCacheKey(generateCacheKey('a-b-c', structure, { enableSimd: true }))).toMatchObject({
+      modelId: 'a-b-c',
+      integrationAlgorithm: 'rk4',
+      enableSimd: true
+    })
+  })
+})

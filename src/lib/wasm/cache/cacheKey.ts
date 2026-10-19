@@ -55,6 +55,8 @@ export interface CacheKeyOptions {
   optimizationLevel?: 'O0' | 'O1' | 'O2' | 'O3'
   includeDebugInfo?: boolean
   enableSimd?: boolean
+  /** Generated stepping code differs per algorithm; 'rk4' (default) adds no suffix. */
+  integrationAlgorithm?: 'rk4' | 'euler'
 }
 
 /**
@@ -70,13 +72,19 @@ export function generateCacheKey(
   model: ModelStructure,
   options: CacheKeyOptions = {}
 ): string {
-  const { optimizationLevel = 'O2', includeDebugInfo = false, enableSimd = false } = options
+  const {
+    optimizationLevel = 'O2',
+    includeDebugInfo = false,
+    enableSimd = false,
+    integrationAlgorithm = 'rk4'
+  } = options
 
   const hash = hashModel(model)
+  const eulerSuffix = integrationAlgorithm === 'euler' ? '-euler' : ''
   const debugSuffix = includeDebugInfo ? '-debug' : ''
   const simdSuffix = enableSimd ? '-simd' : ''
 
-  return `${CODEGEN_VERSION}-${modelId}-${hash}-${optimizationLevel}${simdSuffix}${debugSuffix}`
+  return `${CODEGEN_VERSION}-${modelId}-${hash}-${optimizationLevel}${eulerSuffix}${simdSuffix}${debugSuffix}`
 }
 
 /**
@@ -151,11 +159,11 @@ export function hashModel(model: ModelStructure): string {
  * @returns True if the cache key has valid format
  */
 export function isValidCacheKey(cacheKey: string): boolean {
-  // Format: {version}-{modelId}-{hash}-{opt}[-simd][-debug]
+  // Format: {version}-{modelId}-{hash}-{opt}[-euler][-simd][-debug]
   // Example: v28-550e8400-e29b-41d4-a716-446655440000-a1b2c3d4e5f67890-O2
   // Example: v28-test-model-id-0123456789abcdef-O2-simd
   // Example: v28-test-model-id-0123456789abcdef-O0-simd-debug
-  const pattern = /^v\d+-.+-[a-f0-9]{16}-O[0-3](-simd)?(-debug)?$/
+  const pattern = /^v\d+-.+-[a-f0-9]{16}-O[0-3](-euler)?(-simd)?(-debug)?$/
   return pattern.test(cacheKey)
 }
 
@@ -172,6 +180,7 @@ export function parseCacheKey(cacheKey: string): {
   optimizationLevel: string
   enableSimd: boolean
   debugInfo: boolean
+  integrationAlgorithm: 'rk4' | 'euler'
 } | null {
   if (!isValidCacheKey(cacheKey)) {
     return null
@@ -179,11 +188,13 @@ export function parseCacheKey(cacheKey: string): {
 
   const parts = cacheKey.split('-')
   const debugInfo = cacheKey.endsWith('-debug')
-  const enableSimd = cacheKey.includes('-simd')
+  const enableSimd = /-O[0-3](-euler)?-simd/.test(cacheKey)
+  const euler = /-O[0-3]-euler/.test(cacheKey)
   const version = parts[0] // v1, v2, etc.
 
   // Calculate suffix count to determine where modelId ends
   let suffixCount = 2 // hash, opt level
+  if (euler) suffixCount++
   if (enableSimd) suffixCount++
   if (debugInfo) suffixCount++
 
@@ -192,7 +203,15 @@ export function parseCacheKey(cacheKey: string): {
   const optLevel = parts[parts.length - suffixCount + 1]
   const modelId = parts.slice(1, parts.length - suffixCount).join('-')
 
-  return { version, modelId, hash, optimizationLevel: optLevel, enableSimd, debugInfo }
+  return {
+    version,
+    modelId,
+    hash,
+    optimizationLevel: optLevel,
+    enableSimd,
+    debugInfo,
+    integrationAlgorithm: euler ? 'euler' : 'rk4'
+  }
 }
 
 /**
