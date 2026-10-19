@@ -1,0 +1,1864 @@
+{
+  "name": "FPV Quadcopter",
+  "data": {
+    "version": "2.2",
+    "metadata": {
+      "created": "2026-10-19T00:00:00.000Z",
+      "description": "5-inch FPV quadcopter reference model (in development: plant only). NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems. Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md."
+    },
+    "globalSettings": {
+      "simulationTimeStep": 0.001,
+      "simulationDuration": 5,
+      "integrationAlgorithm": "rk4",
+      "debugMath": false
+    },
+    "parameters": [],
+    "dataStores": [],
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "main__MotorCmd",
+            "type": "source",
+            "name": "MotorCmd",
+            "position": {
+              "x": 100,
+              "y": 368
+            },
+            "parameters": {
+              "showName": true,
+              "signalType": "constant",
+              "value": [
+                0.465106,
+                0.465106,
+                0.465106,
+                0.465106
+              ],
+              "dataType": "double[4]"
+            }
+          },
+          {
+            "id": "main__MotorCmdSplit",
+            "type": "demux",
+            "name": "MotorCmdSplit",
+            "position": {
+              "x": 380,
+              "y": 350
+            },
+            "parameters": {
+              "showName": true,
+              "outputCount": 4,
+              "inputDimensions": [
+                4
+              ]
+            }
+          },
+          {
+            "id": "main__Motor_RR",
+            "type": "subsystem",
+            "name": "Motor_RR",
+            "position": {
+              "x": 540,
+              "y": 120
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [
+                "cmd"
+              ],
+              "outputPorts": [
+                "omega",
+                "thrust"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "segregated_atomic",
+              "sheets": [
+                {
+                  "id": "motor",
+                  "name": "Motor",
+                  "blocks": [
+                    {
+                      "id": "motor__cmd",
+                      "type": "input_port",
+                      "name": "cmd",
+                      "position": {
+                        "x": 100,
+                        "y": 378
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "cmd",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "motor__CmdLimit",
+                      "type": "limit",
+                      "name": "CmdLimit",
+                      "position": {
+                        "x": 280,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "lowerLimit": 0,
+                        "upperLimit": 1
+                      }
+                    },
+                    {
+                      "id": "motor__OmegaMax",
+                      "type": "scale",
+                      "name": "OmegaMax",
+                      "position": {
+                        "x": 440,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "gain": 2332.0076665563943
+                      }
+                    },
+                    {
+                      "id": "motor__MotorLag",
+                      "type": "transfer_function",
+                      "name": "MotorLag",
+                      "position": {
+                        "x": 600,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "numerator": [
+                          1
+                        ],
+                        "denominator": [
+                          0.033,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "id": "motor__OmegaSq",
+                      "type": "square",
+                      "name": "OmegaSq",
+                      "position": {
+                        "x": 770,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "motor__ThrustCoeff",
+                      "type": "scale",
+                      "name": "ThrustCoeff",
+                      "position": {
+                        "x": 930,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "gain": 0.000001563
+                      }
+                    },
+                    {
+                      "id": "motor__omega",
+                      "type": "output_port",
+                      "name": "omega",
+                      "position": {
+                        "x": 1090,
+                        "y": 315
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "omega",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "motor__thrust",
+                      "type": "output_port",
+                      "name": "thrust",
+                      "position": {
+                        "x": 1090,
+                        "y": 440
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "thrust",
+                        "dataType": "double"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_motor__cmd_motor__CmdLimit",
+                      "sourceBlockId": "motor__cmd",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "motor__CmdLimit",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_2_motor__CmdLimit_motor__OmegaMax",
+                      "sourceBlockId": "motor__CmdLimit",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "motor__OmegaMax",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_3_motor__OmegaMax_motor__MotorLag",
+                      "sourceBlockId": "motor__OmegaMax",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "motor__MotorLag",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_4_motor__MotorLag_motor__OmegaSq",
+                      "sourceBlockId": "motor__MotorLag",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "motor__OmegaSq",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_5_motor__OmegaSq_motor__ThrustCoeff",
+                      "sourceBlockId": "motor__OmegaSq",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "motor__ThrustCoeff",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_6_motor__MotorLag_motor__omega",
+                      "sourceBlockId": "motor__MotorLag",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "motor__omega",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -160
+                      }
+                    },
+                    {
+                      "id": "w_7_motor__ThrustCoeff_motor__thrust",
+                      "sourceBlockId": "motor__ThrustCoeff",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "motor__thrust",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    }
+                  ],
+                  "extents": {
+                    "width": 1390,
+                    "height": 640
+                  }
+                }
+              ],
+              "width": 140,
+              "height": 80
+            }
+          },
+          {
+            "id": "main__Motor_FR",
+            "type": "subsystem",
+            "name": "Motor_FR",
+            "position": {
+              "x": 540,
+              "y": 280
+            },
+            "parameters": {
+              "showName": true,
+              "width": 140,
+              "height": 80,
+              "inputPorts": [
+                "cmd"
+              ],
+              "outputPorts": [
+                "omega",
+                "thrust"
+              ],
+              "showPortNames": true,
+              "isReference": true,
+              "referencedSubsystemId": "main__Motor_RR",
+              "codeGenStrategy": "segregated_atomic",
+              "sheets": []
+            }
+          },
+          {
+            "id": "main__Motor_RL",
+            "type": "subsystem",
+            "name": "Motor_RL",
+            "position": {
+              "x": 540,
+              "y": 440
+            },
+            "parameters": {
+              "showName": true,
+              "width": 140,
+              "height": 80,
+              "inputPorts": [
+                "cmd"
+              ],
+              "outputPorts": [
+                "omega",
+                "thrust"
+              ],
+              "showPortNames": true,
+              "isReference": true,
+              "referencedSubsystemId": "main__Motor_RR",
+              "codeGenStrategy": "segregated_atomic",
+              "sheets": []
+            }
+          },
+          {
+            "id": "main__Motor_FL",
+            "type": "subsystem",
+            "name": "Motor_FL",
+            "position": {
+              "x": 540,
+              "y": 600
+            },
+            "parameters": {
+              "showName": true,
+              "width": 140,
+              "height": 80,
+              "inputPorts": [
+                "cmd"
+              ],
+              "outputPorts": [
+                "omega",
+                "thrust"
+              ],
+              "showPortNames": true,
+              "isReference": true,
+              "referencedSubsystemId": "main__Motor_RR",
+              "codeGenStrategy": "segregated_atomic",
+              "sheets": []
+            }
+          },
+          {
+            "id": "main__Thrusts",
+            "type": "mux",
+            "name": "Thrusts",
+            "position": {
+              "x": 764,
+              "y": 440
+            },
+            "parameters": {
+              "showName": true,
+              "rows": 4,
+              "cols": 1,
+              "baseType": "double",
+              "outputType": "double[4]"
+            }
+          },
+          {
+            "id": "main__RotorSpeeds",
+            "type": "mux",
+            "name": "RotorSpeeds",
+            "position": {
+              "x": 764,
+              "y": 260
+            },
+            "parameters": {
+              "showName": true,
+              "rows": 4,
+              "cols": 1,
+              "baseType": "double",
+              "outputType": "double[4]"
+            }
+          },
+          {
+            "id": "main__Frame",
+            "type": "subsystem",
+            "name": "Frame",
+            "position": {
+              "x": 934,
+              "y": 270
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [
+                "thrust"
+              ],
+              "outputPorts": [
+                "pos_ned",
+                "vel_ned",
+                "quat",
+                "euler",
+                "omega",
+                "accel"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "flatten",
+              "sheets": [
+                {
+                  "id": "frame",
+                  "name": "Frame",
+                  "blocks": [
+                    {
+                      "id": "frame__thrust",
+                      "type": "input_port",
+                      "name": "thrust",
+                      "position": {
+                        "x": 150,
+                        "y": 372
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "thrust",
+                        "dataType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "frame__ThrustDirection",
+                      "type": "source",
+                      "name": "ThrustDirection",
+                      "position": {
+                        "x": 100,
+                        "y": 228
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": [
+                          [
+                            0,
+                            0,
+                            0,
+                            0
+                          ],
+                          [
+                            0,
+                            0,
+                            0,
+                            0
+                          ],
+                          [
+                            -1,
+                            -1,
+                            -1,
+                            -1
+                          ]
+                        ],
+                        "dataType": "double[3][4]"
+                      }
+                    },
+                    {
+                      "id": "frame__MomentArms",
+                      "type": "source",
+                      "name": "MomentArms",
+                      "position": {
+                        "x": 100,
+                        "y": 497
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": [
+                          [
+                            -0.1,
+                            -0.1,
+                            0.1,
+                            0.1
+                          ],
+                          [
+                            -0.0775,
+                            0.0775,
+                            -0.0775,
+                            0.0775
+                          ],
+                          [
+                            -0.0122,
+                            0.0122,
+                            0.0122,
+                            -0.0122
+                          ]
+                        ],
+                        "dataType": "double[3][4]"
+                      }
+                    },
+                    {
+                      "id": "frame__RotorForce",
+                      "type": "matrix_multiply",
+                      "name": "RotorForce",
+                      "position": {
+                        "x": 380,
+                        "y": 273
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "frame__RotorMoment",
+                      "type": "matrix_multiply",
+                      "name": "RotorMoment",
+                      "position": {
+                        "x": 380,
+                        "y": 451
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "frame__q",
+                      "type": "integrator",
+                      "name": "q",
+                      "position": {
+                        "x": 1610,
+                        "y": 406
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "initialValue": [
+                          [
+                            1
+                          ],
+                          [
+                            0
+                          ],
+                          [
+                            0
+                          ],
+                          [
+                            0
+                          ]
+                        ]
+                      }
+                    },
+                    {
+                      "id": "frame__qNorm",
+                      "type": "mag",
+                      "name": "qNorm",
+                      "position": {
+                        "x": 1770,
+                        "y": 355
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "frame__q_n",
+                      "type": "divide",
+                      "name": "q_n",
+                      "position": {
+                        "x": 1930,
+                        "y": 345
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "frame__C_bn",
+                      "type": "orientation_conversion",
+                      "name": "C_bn",
+                      "position": {
+                        "x": 2090,
+                        "y": 375
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "conversionType": "quat_to_dcm"
+                      }
+                    },
+                    {
+                      "id": "frame__C_nb",
+                      "type": "transpose",
+                      "name": "C_nb",
+                      "position": {
+                        "x": 2250,
+                        "y": 342
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "frame__v_ned",
+                      "type": "integrator",
+                      "name": "v_ned",
+                      "position": {
+                        "x": 2928,
+                        "y": 444
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "initialValue": [
+                          0,
+                          0,
+                          0
+                        ]
+                      }
+                    },
+                    {
+                      "id": "frame__v_body",
+                      "type": "matrix_multiply",
+                      "name": "v_body",
+                      "position": {
+                        "x": 3113,
+                        "y": 452
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "frame__DragCoeff",
+                      "type": "source",
+                      "name": "DragCoeff",
+                      "position": {
+                        "x": 3088,
+                        "y": 596
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": [
+                          -0.3,
+                          -0.3,
+                          -0.15
+                        ],
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "frame__DragForce",
+                      "type": "multiply",
+                      "name": "DragForce",
+                      "position": {
+                        "x": 3308,
+                        "y": 523
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "numInputs": 2
+                      }
+                    },
+                    {
+                      "id": "frame__F_body",
+                      "type": "sum",
+                      "name": "F_body",
+                      "position": {
+                        "x": 600,
+                        "y": 284
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signs": "++",
+                        "numInputs": 2
+                      }
+                    },
+                    {
+                      "id": "frame__F_ned",
+                      "type": "matrix_multiply",
+                      "name": "F_ned",
+                      "position": {
+                        "x": 2410,
+                        "y": 372
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "frame__InvMass",
+                      "type": "scale",
+                      "name": "InvMass",
+                      "position": {
+                        "x": 2594,
+                        "y": 372
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "gain": 1.3333333333333333
+                      }
+                    },
+                    {
+                      "id": "frame__Gravity",
+                      "type": "source",
+                      "name": "Gravity",
+                      "position": {
+                        "x": 2580,
+                        "y": 516
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": [
+                          0,
+                          0,
+                          9.80665
+                        ],
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "frame__a_ned",
+                      "type": "sum",
+                      "name": "a_ned",
+                      "position": {
+                        "x": 2768,
+                        "y": 444
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signs": "++",
+                        "numInputs": 2
+                      }
+                    },
+                    {
+                      "id": "frame__p_ned",
+                      "type": "integrator",
+                      "name": "p_ned",
+                      "position": {
+                        "x": 3118,
+                        "y": 308
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "initialValue": [
+                          0,
+                          0,
+                          0
+                        ]
+                      }
+                    },
+                    {
+                      "id": "frame__SpecificForce",
+                      "type": "scale",
+                      "name": "SpecificForce",
+                      "position": {
+                        "x": 810,
+                        "y": 185
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "gain": 1.3333333333333333
+                      }
+                    },
+                    {
+                      "id": "frame__omega_body",
+                      "type": "integrator",
+                      "name": "omega_body",
+                      "position": {
+                        "x": 970,
+                        "y": 556
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "initialValue": [
+                          0,
+                          0,
+                          0
+                        ]
+                      }
+                    },
+                    {
+                      "id": "frame__Inertia",
+                      "type": "source",
+                      "name": "Inertia",
+                      "position": {
+                        "x": 550,
+                        "y": 606
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": [
+                          0.0025,
+                          0.0021,
+                          0.0043
+                        ],
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "frame__Jw",
+                      "type": "multiply",
+                      "name": "Jw",
+                      "position": {
+                        "x": 1130,
+                        "y": 572
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "numInputs": 2
+                      }
+                    },
+                    {
+                      "id": "frame__GyroTorque",
+                      "type": "cross",
+                      "name": "GyroTorque",
+                      "position": {
+                        "x": 1290,
+                        "y": 562
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "frame__M_net",
+                      "type": "sum",
+                      "name": "M_net",
+                      "position": {
+                        "x": 600,
+                        "y": 462
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signs": "+-",
+                        "numInputs": 2
+                      }
+                    },
+                    {
+                      "id": "frame__omega_dot",
+                      "type": "divide",
+                      "name": "omega_dot",
+                      "position": {
+                        "x": 810,
+                        "y": 556
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "frame__pqr",
+                      "type": "demux",
+                      "name": "pqr",
+                      "position": {
+                        "x": 1130,
+                        "y": 398
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "outputCount": 3,
+                        "inputDimensions": [
+                          3
+                        ]
+                      }
+                    },
+                    {
+                      "id": "frame__q_dot",
+                      "type": "body2quaternion_rates",
+                      "name": "q_dot",
+                      "position": {
+                        "x": 1290,
+                        "y": 378
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "frame__qNormError",
+                      "type": "sum",
+                      "name": "qNormError",
+                      "position": {
+                        "x": 2090,
+                        "y": 519
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signs": "+-",
+                        "numInputs": 2
+                      }
+                    },
+                    {
+                      "id": "frame__qNormGain",
+                      "type": "scale",
+                      "name": "qNormGain",
+                      "position": {
+                        "x": 2250,
+                        "y": 486
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "gain": 10
+                      }
+                    },
+                    {
+                      "id": "frame__q_dot_total",
+                      "type": "sum",
+                      "name": "q_dot_total",
+                      "position": {
+                        "x": 1450,
+                        "y": 406
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signs": "++",
+                        "numInputs": 2
+                      }
+                    },
+                    {
+                      "id": "frame__Euler",
+                      "type": "orientation_conversion",
+                      "name": "Euler",
+                      "position": {
+                        "x": 2090,
+                        "y": 60
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "conversionType": "quat_to_euler"
+                      }
+                    },
+                    {
+                      "id": "frame__pos_ned",
+                      "type": "output_port",
+                      "name": "pos_ned",
+                      "position": {
+                        "x": 3468,
+                        "y": 320
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "pos_ned",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "frame__vel_ned",
+                      "type": "output_port",
+                      "name": "vel_ned",
+                      "position": {
+                        "x": 3468,
+                        "y": 570
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "vel_ned",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "frame__quat",
+                      "type": "output_port",
+                      "name": "quat",
+                      "position": {
+                        "x": 3468,
+                        "y": 445
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "quat",
+                        "dataType": "double[4][1]"
+                      }
+                    },
+                    {
+                      "id": "frame__euler",
+                      "type": "output_port",
+                      "name": "euler",
+                      "position": {
+                        "x": 3468,
+                        "y": 70
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "euler",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "frame__omega",
+                      "type": "output_port",
+                      "name": "omega",
+                      "position": {
+                        "x": 3468,
+                        "y": 695
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "omega",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "frame__accel",
+                      "type": "output_port",
+                      "name": "accel",
+                      "position": {
+                        "x": 3468,
+                        "y": 195
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "accel",
+                        "dataType": "double[3]"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_frame__ThrustDirection_frame__RotorForce",
+                      "sourceBlockId": "frame__ThrustDirection",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__RotorForce",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -8
+                      }
+                    },
+                    {
+                      "id": "w_2_frame__thrust_frame__RotorForce",
+                      "sourceBlockId": "frame__thrust",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__RotorForce",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 25
+                      }
+                    },
+                    {
+                      "id": "w_3_frame__MomentArms_frame__RotorMoment",
+                      "sourceBlockId": "frame__MomentArms",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__RotorMoment",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 8
+                      }
+                    },
+                    {
+                      "id": "w_4_frame__thrust_frame__RotorMoment",
+                      "sourceBlockId": "frame__thrust",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__RotorMoment",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 25
+                      }
+                    },
+                    {
+                      "id": "w_5_frame__q_frame__qNorm",
+                      "sourceBlockId": "frame__q",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__qNorm",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_6_frame__q_frame__q_n",
+                      "sourceBlockId": "frame__q",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__q_n",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 80
+                      }
+                    },
+                    {
+                      "id": "w_7_frame__qNorm_frame__q_n",
+                      "sourceBlockId": "frame__qNorm",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__q_n",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_8_frame__q_n_frame__C_bn",
+                      "sourceBlockId": "frame__q_n",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__C_bn",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_9_frame__C_bn_frame__C_nb",
+                      "sourceBlockId": "frame__C_bn",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__C_nb",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_10_frame__C_bn_frame__v_body",
+                      "sourceBlockId": "frame__C_bn",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__v_body",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -435.5
+                      }
+                    },
+                    {
+                      "id": "w_11_frame__v_ned_frame__v_body",
+                      "sourceBlockId": "frame__v_ned",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__v_body",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -12.5
+                      }
+                    },
+                    {
+                      "id": "w_12_frame__v_body_frame__DragForce",
+                      "sourceBlockId": "frame__v_body",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__DragForce",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 8.5
+                      }
+                    },
+                    {
+                      "id": "w_13_frame__DragCoeff_frame__DragForce",
+                      "sourceBlockId": "frame__DragCoeff",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__DragForce",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_14_frame__RotorForce_frame__F_body",
+                      "sourceBlockId": "frame__RotorForce",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__F_body",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_15_frame__DragForce_frame__F_body",
+                      "sourceBlockId": "frame__DragForce",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__F_body",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_16_frame__C_nb_frame__F_ned",
+                      "sourceBlockId": "frame__C_nb",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__F_ned",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_17_frame__F_body_frame__F_ned",
+                      "sourceBlockId": "frame__F_body",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__F_ned",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 821
+                      }
+                    },
+                    {
+                      "id": "w_18_frame__F_ned_frame__InvMass",
+                      "sourceBlockId": "frame__F_ned",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__InvMass",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_19_frame__InvMass_frame__a_ned",
+                      "sourceBlockId": "frame__InvMass",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__a_ned",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 3
+                      }
+                    },
+                    {
+                      "id": "w_20_frame__Gravity_frame__a_ned",
+                      "sourceBlockId": "frame__Gravity",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__a_ned",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_21_frame__a_ned_frame__v_ned",
+                      "sourceBlockId": "frame__a_ned",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__v_ned",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_22_frame__v_ned_frame__p_ned",
+                      "sourceBlockId": "frame__v_ned",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__p_ned",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -15
+                      }
+                    },
+                    {
+                      "id": "w_23_frame__F_body_frame__SpecificForce",
+                      "sourceBlockId": "frame__F_body",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__SpecificForce",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 17
+                      }
+                    },
+                    {
+                      "id": "w_24_frame__Inertia_frame__Jw",
+                      "sourceBlockId": "frame__Inertia",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__Jw",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 156
+                      }
+                    },
+                    {
+                      "id": "w_25_frame__omega_body_frame__Jw",
+                      "sourceBlockId": "frame__omega_body",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__Jw",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_26_frame__omega_body_frame__GyroTorque",
+                      "sourceBlockId": "frame__omega_body",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__GyroTorque",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 80
+                      }
+                    },
+                    {
+                      "id": "w_27_frame__Jw_frame__GyroTorque",
+                      "sourceBlockId": "frame__Jw",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__GyroTorque",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_28_frame__RotorMoment_frame__M_net",
+                      "sourceBlockId": "frame__RotorMoment",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__M_net",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_29_frame__GyroTorque_frame__M_net",
+                      "sourceBlockId": "frame__GyroTorque",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__M_net",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_30_frame__M_net_frame__omega_dot",
+                      "sourceBlockId": "frame__M_net",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__omega_dot",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 25
+                      }
+                    },
+                    {
+                      "id": "w_31_frame__Inertia_frame__omega_dot",
+                      "sourceBlockId": "frame__Inertia",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__omega_dot",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 8
+                      }
+                    },
+                    {
+                      "id": "w_32_frame__omega_dot_frame__omega_body",
+                      "sourceBlockId": "frame__omega_dot",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__omega_body",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_33_frame__omega_body_frame__pqr",
+                      "sourceBlockId": "frame__omega_body",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__pqr",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_34_frame__q_n_frame__q_dot",
+                      "sourceBlockId": "frame__q_n",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__q_dot",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_35_frame__pqr_frame__q_dot",
+                      "sourceBlockId": "frame__pqr",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__q_dot",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_36_frame__pqr_frame__q_dot",
+                      "sourceBlockId": "frame__pqr",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "frame__q_dot",
+                      "targetPortIndex": 2
+                    },
+                    {
+                      "id": "w_37_frame__pqr_frame__q_dot",
+                      "sourceBlockId": "frame__pqr",
+                      "sourcePortIndex": 2,
+                      "targetBlockId": "frame__q_dot",
+                      "targetPortIndex": 3
+                    },
+                    {
+                      "id": "w_38_frame__q_n_frame__qNormError",
+                      "sourceBlockId": "frame__q_n",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__qNormError",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_39_frame__q_frame__qNormError",
+                      "sourceBlockId": "frame__q",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__qNormError",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -160
+                      }
+                    },
+                    {
+                      "id": "w_40_frame__qNormError_frame__qNormGain",
+                      "sourceBlockId": "frame__qNormError",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__qNormGain",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_41_frame__q_dot_frame__q_dot_total",
+                      "sourceBlockId": "frame__q_dot",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__q_dot_total",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_42_frame__qNormGain_frame__q_dot_total",
+                      "sourceBlockId": "frame__qNormGain",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__q_dot_total",
+                      "targetPortIndex": 1
+                    },
+                    {
+                      "id": "w_43_frame__q_dot_total_frame__q",
+                      "sourceBlockId": "frame__q_dot_total",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__q",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_44_frame__q_n_frame__Euler",
+                      "sourceBlockId": "frame__q_n",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__Euler",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_45_frame__p_ned_frame__pos_ned",
+                      "sourceBlockId": "frame__p_ned",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__pos_ned",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 95
+                      }
+                    },
+                    {
+                      "id": "w_46_frame__v_ned_frame__vel_ned",
+                      "sourceBlockId": "frame__v_ned",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__vel_ned",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -190
+                      }
+                    },
+                    {
+                      "id": "w_47_frame__q_n_frame__quat",
+                      "sourceBlockId": "frame__q_n",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__quat",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -689
+                      }
+                    },
+                    {
+                      "id": "w_48_frame__Euler_frame__euler",
+                      "sourceBlockId": "frame__Euler",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__euler",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_49_frame__omega_body_frame__omega",
+                      "sourceBlockId": "frame__omega_body",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__omega",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -1165
+                      }
+                    },
+                    {
+                      "id": "w_50_frame__SpecificForce_frame__accel",
+                      "sourceBlockId": "frame__SpecificForce",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "frame__accel",
+                      "targetPortIndex": 0
+                    }
+                  ],
+                  "extents": {
+                    "width": 3768,
+                    "height": 895
+                  }
+                }
+              ],
+              "width": 160,
+              "height": 260
+            }
+          },
+          {
+            "id": "main__pos_ned",
+            "type": "output_port",
+            "name": "pos_ned",
+            "position": {
+              "x": 1188,
+              "y": -16
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "pos_ned",
+              "dataType": "double[3]"
+            }
+          },
+          {
+            "id": "main__vel_ned",
+            "type": "output_port",
+            "name": "vel_ned",
+            "position": {
+              "x": 1188,
+              "y": 253
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "vel_ned",
+              "dataType": "double[3]"
+            }
+          },
+          {
+            "id": "main__quat",
+            "type": "output_port",
+            "name": "quat",
+            "position": {
+              "x": 1188,
+              "y": 378
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "quat",
+              "dataType": "double[4][1]"
+            }
+          },
+          {
+            "id": "main__euler",
+            "type": "output_port",
+            "name": "euler",
+            "position": {
+              "x": 1188,
+              "y": 647
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "euler",
+              "dataType": "double[3]"
+            }
+          },
+          {
+            "id": "main__omega",
+            "type": "output_port",
+            "name": "omega",
+            "position": {
+              "x": 1188,
+              "y": 916
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "omega",
+              "dataType": "double[3]"
+            }
+          },
+          {
+            "id": "main__accel",
+            "type": "output_port",
+            "name": "accel",
+            "position": {
+              "x": 1188,
+              "y": 1041
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "accel",
+              "dataType": "double[3]"
+            }
+          },
+          {
+            "id": "main__motor_omega",
+            "type": "output_port",
+            "name": "motor_omega",
+            "position": {
+              "x": 1174,
+              "y": -285
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "motor_omega",
+              "dataType": "double[4]"
+            }
+          },
+          {
+            "id": "main__Position",
+            "type": "signal_display",
+            "name": "Position",
+            "position": {
+              "x": 1198,
+              "y": 109
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "main__Attitude",
+            "type": "signal_display",
+            "name": "Attitude",
+            "position": {
+              "x": 1198,
+              "y": 503
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "main__BodyRates",
+            "type": "signal_display",
+            "name": "BodyRates",
+            "position": {
+              "x": 1198,
+              "y": 772
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "main__RotorSpeed",
+            "type": "signal_display",
+            "name": "RotorSpeed",
+            "position": {
+              "x": 1198,
+              "y": -160
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_main__MotorCmd_main__MotorCmdSplit",
+            "sourceBlockId": "main__MotorCmd",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__MotorCmdSplit",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_2_main__MotorCmdSplit_main__Motor_RR",
+            "sourceBlockId": "main__MotorCmdSplit",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Motor_RR",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -12
+            }
+          },
+          {
+            "id": "w_3_main__MotorCmdSplit_main__Motor_FR",
+            "sourceBlockId": "main__MotorCmdSplit",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__Motor_FR",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 4
+            }
+          },
+          {
+            "id": "w_4_main__MotorCmdSplit_main__Motor_RL",
+            "sourceBlockId": "main__MotorCmdSplit",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__Motor_RL",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 12
+            }
+          },
+          {
+            "id": "w_5_main__MotorCmdSplit_main__Motor_FL",
+            "sourceBlockId": "main__MotorCmdSplit",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__Motor_FL",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_6_main__Motor_RR_main__Thrusts",
+            "sourceBlockId": "main__Motor_RR",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__Thrusts",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_7_main__Motor_RR_main__RotorSpeeds",
+            "sourceBlockId": "main__Motor_RR",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__RotorSpeeds",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 20
+            }
+          },
+          {
+            "id": "w_8_main__Motor_FR_main__Thrusts",
+            "sourceBlockId": "main__Motor_FR",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__Thrusts",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -20
+            }
+          },
+          {
+            "id": "w_9_main__Motor_FR_main__RotorSpeeds",
+            "sourceBlockId": "main__Motor_FR",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__RotorSpeeds",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -12
+            }
+          },
+          {
+            "id": "w_10_main__Motor_RL_main__Thrusts",
+            "sourceBlockId": "main__Motor_RL",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__Thrusts",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": 12
+            }
+          },
+          {
+            "id": "w_11_main__Motor_RL_main__RotorSpeeds",
+            "sourceBlockId": "main__Motor_RL",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__RotorSpeeds",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -28
+            }
+          },
+          {
+            "id": "w_12_main__Motor_FL_main__Thrusts",
+            "sourceBlockId": "main__Motor_FL",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__Thrusts",
+            "targetPortIndex": 3,
+            "routing": {
+              "midpointOffset": 28
+            }
+          },
+          {
+            "id": "w_13_main__Motor_FL_main__RotorSpeeds",
+            "sourceBlockId": "main__Motor_FL",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__RotorSpeeds",
+            "targetPortIndex": 3,
+            "routing": {
+              "midpointOffset": 4
+            }
+          },
+          {
+            "id": "w_14_main__Thrusts_main__Frame",
+            "sourceBlockId": "main__Thrusts",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Frame",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 4
+            }
+          },
+          {
+            "id": "w_15_main__Frame_main__pos_ned",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__pos_ned",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -19
+            }
+          },
+          {
+            "id": "w_16_main__Frame_main__vel_ned",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__vel_ned",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 5
+            }
+          },
+          {
+            "id": "w_17_main__Frame_main__quat",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__quat",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -11
+            }
+          },
+          {
+            "id": "w_18_main__Frame_main__euler",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__euler",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 13
+            }
+          },
+          {
+            "id": "w_19_main__Frame_main__omega",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 4,
+            "targetBlockId": "main__omega",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -3
+            }
+          },
+          {
+            "id": "w_20_main__Frame_main__accel",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 5,
+            "targetBlockId": "main__accel",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -27
+            }
+          },
+          {
+            "id": "w_21_main__RotorSpeeds_main__motor_omega",
+            "sourceBlockId": "main__RotorSpeeds",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__motor_omega",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -124
+            }
+          },
+          {
+            "id": "w_22_main__Frame_main__Position",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Position",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -24
+            }
+          },
+          {
+            "id": "w_23_main__Frame_main__Attitude",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__Attitude",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 8
+            }
+          },
+          {
+            "id": "w_24_main__Frame_main__BodyRates",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 4,
+            "targetBlockId": "main__BodyRates",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -8
+            }
+          },
+          {
+            "id": "w_25_main__RotorSpeeds_main__RotorSpeed",
+            "sourceBlockId": "main__RotorSpeeds",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__RotorSpeed",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -136
+            }
+          }
+        ],
+        "extents": {
+          "width": 1498,
+          "height": 1241
+        }
+      }
+    ]
+  }
+}

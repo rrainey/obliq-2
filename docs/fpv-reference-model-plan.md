@@ -103,7 +103,15 @@ Defaults: center 70 °/s, max 670 °/s, expo 0.
 **Known parameter conflicts.**
 
 - **κ:** kingfisher.yaml gives 0.022 m; c_d/c_l from Kaufmann et al. (2022) gives 0.0122 m. We use **0.0122 m** and note the alternative.
-- **Thrust limit:** ω_max = 2800 rad/s would give 12.3 N, more than the 8.5 N limit. The model clamps thrust, so ω effectively tops out near 2330 rad/s.
+- **Thrust limit:** ω_max = 2800 rad/s would give 12.3 N, more than the 8.5 N limit. The model instead sets ω_max = √(T_max/c_l) ≈ 2332 rad/s, so full command gives exactly 8.5 N and no separate clamp is needed.
+
+**Conventions (as built).**
+
+- NED world frame; FRD body frame (x forward, y right, z down); scalar-first quaternion for body attitude. `quat_to_dcm` gives C_bn (NED → body).
+- Motor order follows Betaflight's quad X: 0 rear-right, 1 front-right, 2 rear-left, 3 front-left. Rotor positions are x = ±0.0775 m, y = ±0.10 m.
+- Front-right and rear-left props spin CCW seen from above. Their reaction torque yaws the nose right (+M_z).
+- Motor command is in [0, 1], with ω_cmd = ω_max·cmd, so thrust ∝ cmd². Hover is cmd = √(mg/4/T_max) ≈ 0.4651.
+- **Mixer sign for Phase 3:** in FRD, positive pitch (nose up, +M_y) needs more thrust at the front. That is the opposite sign to the pitch column of Betaflight's table, which uses Betaflight's own axis convention, so our mixer's pitch column is negated.
 
 ## Phase 0: Random Noise block
 
@@ -134,7 +142,8 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
 
 0. **Random Noise block.** Implement it, add it to the library and MCP docs, and test it. ✅ Done: `__tests__/codegen/random-noise-native.test.ts`.
 1. **Packaging.** Add the `reference-models/` folder, seeding on database creation, and tests. ✅ Done: `src/lib/server/storage/referenceModels.ts`, `__tests__/storage/reference-models.test.ts`.
-2. **Plant.** Build the motor subsystem ×4 and the frame.
+2. **Plant.** Build the motor subsystem ×4 and the frame. ✅ Done: `scripts/build-fpv-reference-model.ts` builds `reference-models/fpv-quadcopter.json`, and `__tests__/reference-models/fpv-plant.test.ts` checks it.
+   - The motor is one subsystem definition with three references. The frame uses constant allocation matrices for rotor force and moment, a quaternion integrator, and drag in body axes.
    - Verify hover equilibrium: ω ≈ 1085 rad/s per rotor, zero acceleration.
    - Verify the step responses of the motor lag.
    - Check that thrust and torque signs match the mixer convention.
@@ -155,6 +164,15 @@ Each phase adds native-codegen tests to `__tests__/reference-models/` that fly t
 3. **Convenience blocks:** quaternion multiply, inverse and normalise; vector min/max. Each can be built from existing blocks first and promoted to a block if the diagram gets unreadable.
 4. **PID anti-windup:** a clamped discrete accumulator, built from Unit Delay + Limit.
 5. **Deferred:** filters with time-varying coefficients (dynamic notch, dynamic LPF, TPA).
+6. **Integration accuracy (found in Phase 2):** obliq's RK4 is stage-accurate only for a block's own state terms, such as a transfer function's poles. An integrator fed through other blocks gets one derivative per step, which is effectively forward Euler. The plant runs at 1 kHz, where this is accurate enough. The quaternion is renormalised in the model (q/|q| downstream, plus a 10/s pull back to unit norm). True RK4 needs the algebra re-evaluated at each stage. That is a codegen change, and it would shift existing results such as Saturn IB.
+
+**Fixed while building the plant:**
+
+- A shared subsystem module with no parameters referenced an undeclared `_params_t` type.
+- Segregated modules' `compute_derivatives` read the major-step state instead of the RK4 stage state. It also emitted `model->states->`, which did not compile.
+- Sum produced a bad `[i][j][0]` index for column-matrix inputs.
+- Magnitude assumed a length of 3 and ignored the connected type. It now also accepts column vectors such as `double[4][1]`.
+- UI type propagation could not type subsystem references, and it typed array-IC integrators inside feedback loops as scalars. The validation dialog also produced duplicate React keys.
 
 ## Sources
 
