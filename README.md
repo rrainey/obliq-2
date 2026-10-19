@@ -10,6 +10,10 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 
 ![Screenshot](images/transp07.png)
 
+## What's New in 3.1.1
+
+- **Fixed: "Open Model" sometimes needing two clicks** when running `npm run dev`. Opening the editor made the dev server compile it on demand, and custom webpack chunking (meant for production builds) forced a full page reload that cancelled the navigation. The chunking now applies to production builds only, and the dev server keeps compiled pages for an hour.
+
 ## What's New in 3.1.0
 
 - **Sheet overview map.** When the canvas shows less than the whole sheet (zoomed in, or a sheet larger than the window), an overview of the sheet appears in the bottom-right corner with the visible region outlined. Drag in it to pan, and scroll in it to zoom.
