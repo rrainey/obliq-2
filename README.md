@@ -63,6 +63,7 @@ Version 3.0.0 makes obliq-2 a **local, single-user application** and substantial
 |------------|--------------|----------|-------------|
 | `source` | Source | Sources | Provides constant or signal generator output (step, ramp, sine, chirp, noise) |
 | `clock` | Clock | Sources | Outputs current simulation time in seconds as a double scalar |
+| `random_noise` | Random Noise | Sources | Seeded Gaussian or uniform white noise, held per sample period; σ or noise density (σ = N/√Ts); scalar or vector |
 | `input_port` | Input Port | Ports | External input to a model or subsystem |
 | `output_port` | Output Port | Ports | External output from a model or subsystem |
 | `sum` | Sum | Math | Sums multiple input signals with configurable signs (+/-) |

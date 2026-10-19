@@ -135,6 +135,41 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     inputs: [],
     outputs: ['output']
   },
+  {
+    type: 'random_noise',
+    displayName: 'Random Noise',
+    category: 'Sources',
+    description:
+      'Gaussian or uniform white noise from a seeded SplitMix64 generator, held for one sample period. ' +
+      'Deterministic: the same seed gives the same sequence in native and WASM builds. Vector outputs draw an independent value per element.',
+    parameters: {
+      distribution: {
+        type: 'string',
+        description: 'gaussian, or uniform on mean ± √3·σ (same variance)',
+        default: 'gaussian',
+        enum: ['gaussian', 'uniform']
+      },
+      mean: { type: 'number', description: 'Mean; a number or one value per element', default: 0 },
+      amplitudeMode: {
+        type: 'string',
+        description: 'stdDev uses σ directly; density uses σ = noiseDensity/√Ts (Ts = sampleTime, or the model step)',
+        default: 'stdDev',
+        enum: ['stdDev', 'density']
+      },
+      stdDev: { type: 'number', description: 'Standard deviation σ; a number or one value per element', default: 1, minimum: 0 },
+      noiseDensity: {
+        type: 'number',
+        description: 'White-noise density N in units/√Hz (amplitudeMode=density); a number or one value per element',
+        default: 0,
+        minimum: 0
+      },
+      sampleTime: { type: 'number', description: 'Hold time in seconds; 0 draws every model step', default: 0, minimum: 0 },
+      seed: { type: 'number', description: 'Generator seed (non-negative integer); use distinct seeds for independent blocks', default: 1, minimum: 0 },
+      dataType: { type: 'string', description: 'double or double[N]', default: 'double' }
+    },
+    inputs: [],
+    outputs: ['output']
+  },
 
   // === Ports ===
   {

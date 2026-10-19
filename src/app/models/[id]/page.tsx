@@ -53,6 +53,7 @@ import LimitConfig from '@/components/LimitConfig'
 import RelayConfig from '@/components/RelayConfig'
 import RateLimiterConfig from '@/components/RateLimiterConfig'
 import QuantizerConfig from '@/components/QuantizerConfig'
+import RandomNoiseConfig from '@/components/RandomNoiseConfig'
 import SelectorConfig from '@/components/SelectorConfig'
 import DataStoreWriteConfig from '@/components/DataStoreWriteConfig'
 import DataStoreReadConfig from '@/components/DataStoreReadConfig'
@@ -1557,6 +1558,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'relay' ||
       block.type === 'rate_limiter' ||
       block.type === 'quantizer' ||
+      block.type === 'random_noise' ||
       block.type === 'selector' ||
       block.type === 'data_store_write' ||
       block.type === 'data_store_read' ||
@@ -2495,6 +2497,13 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'quantizer' && (
             <QuantizerConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'random_noise' && (
+            <RandomNoiseConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}

@@ -6,7 +6,7 @@ import { memo, CSSProperties, useCallback, useEffect, useRef, useState } from 'r
 import { Handle, Position, NodeProps, useStore } from 'reactflow'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
-import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, IconCube, IconClockCog, IconX } from '@tabler/icons-react'
+import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, IconCube, IconClockCog, IconActivity, IconX } from '@tabler/icons-react'
 import { useComputedColorScheme } from '@mantine/core'
 import CommentNode from './CommentNode'
 import { useModelStore } from '@/lib/modelStore'
@@ -254,6 +254,11 @@ const getBlockSymbol = (data: BlockNodeData) => {
   // Handle clock block with Tabler icon
   if (data.type === 'clock') {
     return <IconClockCog size={24} stroke={1.5} />
+  }
+
+  // Random noise: a jagged trace
+  if (data.type === 'random_noise') {
+    return <IconActivity size={24} stroke={1.5} />
   }
 
   // Handle no_connection block with Tabler icon

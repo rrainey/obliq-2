@@ -1923,7 +1923,7 @@ export class ModelFlattener {
     
     for (const block of model.blocks) {
       // Skip source blocks and input ports as they may not have incoming connections
-      if (block.block.type === 'source' || block.block.type === 'input_port') {
+      if (block.block.type === 'source' || block.block.type === 'random_noise' || block.block.type === 'input_port') {
         continue
       }
 

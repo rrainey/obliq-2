@@ -99,7 +99,7 @@ ${opts.smokeMainBody}
   execSync(`cmake --build "${buildDir}"`, { encoding: 'utf8' })
 
   const bin = path.join(buildDir, `${modelName}_smoke`)
-  const stdout = execSync(`"${bin}"`, { encoding: 'utf8' })
+  const stdout = execSync(`"${bin}"`, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
 
   return {
     outDir,

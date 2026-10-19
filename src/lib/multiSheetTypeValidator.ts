@@ -102,7 +102,7 @@ export function validateMultiSheetTypeCompatibility(sheets: SheetData[]): MultiS
   for (const sheet of sheets) {
     for (const block of sheet.blocks) {
       // Skip certain block types that don't require inputs
-      if (['source', 'input_port', 'sheet_label_source'].includes(block.type)) {
+      if (['source', 'random_noise', 'input_port', 'sheet_label_source'].includes(block.type)) {
         continue
       }
       

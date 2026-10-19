@@ -13,7 +13,7 @@ export interface ValidationResult {
  */
 function getBlockOutputType(block: BlockData, portIndex: number): string | null {
   // For blocks with explicit types
-  if (block.type === 'source' || block.type === 'input_port') {
+  if (block.type === 'source' || block.type === 'random_noise' || block.type === 'input_port') {
     return block.parameters?.dataType || 'double'
   }
   

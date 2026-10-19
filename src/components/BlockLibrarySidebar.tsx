@@ -237,6 +237,14 @@ const blockTypes: BlockType[] = [
     icon: '⏱',
     vectorSupport: 'scalar-only'
   },
+  {
+    id: 'random_noise',
+    name: 'Random Noise',
+    category: 'Sources',
+    description: 'Seeded Gaussian or uniform noise',
+    icon: '〰',
+    vectorSupport: 'full'
+  },
 
   // Display & Logging
   {

@@ -190,6 +190,7 @@ function getBlockOutputType(block: BlockData): string | null {
   switch (block.type) {
     case 'source':
     case 'input_port':
+    case 'random_noise':
       // These blocks have explicit dataType parameter
       return block.parameters?.dataType || 'double'
 
@@ -2147,6 +2148,7 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'input_port':
     case 'source':
     case 'clock':
+    case 'random_noise':
     case 'matrix_multiply':
     case 'evaluate':
     case 'if':
@@ -2271,6 +2273,7 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'input_port':
     case 'source':
     case 'clock':
+    case 'random_noise':
       return 0
     case 'subsystem':
       // Don't count enable port in regular input count

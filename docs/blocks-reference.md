@@ -379,6 +379,31 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 
 ---
 
+### Random Noise Block
+**Purpose**: White noise for sensor models and disturbance inputs. Gaussian or uniform, held for one sample period, from a seeded deterministic generator.
+
+**Parameters**:
+- `distribution` (`gaussian` | `uniform`, default `gaussian`): uniform spans `mean ± √3·σ`, so both have the same variance
+- `mean` (number or number[], default 0): one value for all elements, or one per element
+- `amplitudeMode` (`stdDev` | `density`, default `stdDev`)
+- `stdDev` (number or number[], default 1): σ, used when `amplitudeMode` is `stdDev`
+- `noiseDensity` (number or number[], default 0): white-noise density N in units/√Hz, used when `amplitudeMode` is `density`; σ = N/√Ts
+- `sampleTime` (seconds, default 0): hold time; 0 draws a new value every model step. Inside a sampled subsystem, 0 inherits the subsystem's period
+- `seed` (non-negative integer, default 1): give each noise block its own seed
+- `dataType` (`double` or `double[N]`)
+
+**Semantics**:
+- A new value is drawn at the start of each sample period (`sample_tick % round(Ts/dt) == 0`) and held until the next. RK4 minor stages never advance the generator.
+- Ts is `sampleTime`, else the enclosing sample scope, else the model step.
+- The generator is SplitMix64, emitted inline in the generated C, with Box–Muller for Gaussian values. Native and WASM builds produce identical sequences for the same seed; libc `rand()` is not used.
+- Vector outputs draw an independent value per element.
+
+**Ports**: no inputs, one output. Not direct feedthrough.
+
+**Example**: a gyro axis with density 4.9e-5 rad/s/√Hz sampled at 1 kHz has σ = 4.9e-5/√0.001 ≈ 1.55e-3 rad/s.
+
+---
+
 ## Signal Display
 
 ### Signal Display Block

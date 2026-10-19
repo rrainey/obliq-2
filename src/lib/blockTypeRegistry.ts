@@ -19,6 +19,7 @@ export const BlockTypes = {
   // Source blocks
   SOURCE: 'source',
   CLOCK: 'clock',
+  RANDOM_NOISE: 'random_noise',
   INPUT_PORT: 'input_port',
   
   // Math blocks
@@ -138,6 +139,25 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [],
     outputs: [{ name: 'output' }],
     description: 'Outputs the current simulation time in seconds as a double scalar'
+  },
+
+  [BlockTypes.RANDOM_NOISE]: {
+    type: BlockTypes.RANDOM_NOISE,
+    displayName: 'Random Noise',
+    category: 'Sources',
+    defaultParameters: {
+      distribution: 'gaussian',
+      mean: 0,
+      amplitudeMode: 'stdDev',
+      stdDev: 1,
+      noiseDensity: 0,
+      sampleTime: 0,
+      seed: 1,
+      dataType: 'double'
+    },
+    inputs: [],
+    outputs: [{ name: 'output' }],
+    description: 'Gaussian or uniform white noise held for one sample period, from a seeded deterministic generator'
   },
 
   [BlockTypes.INPUT_PORT]: {

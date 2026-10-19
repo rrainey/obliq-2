@@ -152,7 +152,7 @@ export class CodeGenerationValidator {
     
     for (const block of model.blocks) {
       // Some blocks are allowed to have no connections
-      const allowedOrphans = ['source', 'input_port', 'output_port', 'signal_display', 'signal_logger']
+      const allowedOrphans = ['source', 'random_noise', 'input_port', 'output_port', 'signal_display', 'signal_logger']
 
       // Skip segregated subsystems - they are validated separately
       if (block.isSegregated) {
