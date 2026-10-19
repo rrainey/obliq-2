@@ -20,6 +20,7 @@ import AutoSaveRecoveryDialog from '@/components/AutoSaveRecoveryDialog'
 import AutoSaveStatusIndicator from '@/components/AutoSaveStatusIndicator'
 import ExternalChangeBanner, { type ExternalChangeKind } from '@/components/ExternalChangeBanner'
 import { useModelFileStatus } from '@/hooks/useModelFileStatus'
+import { decideExternalChange } from '@/lib/externalChange'
 import ModelParametersDialog from '@/components/ModelParametersDialog'
 import CanvasReactFlow from '@/components/CanvasReactFlow'
 import BlockLibrarySidebar from '@/components/BlockLibrarySidebar'
@@ -235,23 +236,28 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   const [externalChange, setExternalChange] = useState<ExternalChangeKind | null>(null)
   const [resolvingExternal, setResolvingExternal] = useState(false)
 
+  // Every file version this editor has held (loaded or saved), so a late status
+  // report about a version it replaced can be recognised as stale.
+  const heldHashesRef = useRef(new Set<string>())
   useEffect(() => {
-    if (!fileStatus || saving || resolvingExternal) return
-    if (fileStatus.status === 'missing') {
-      setExternalChange('missing')
-      return
-    }
-    if (!fileHash || fileStatus.hash === fileHash) {
-      if (!saveConflict) setExternalChange(null)
-      return
-    }
-    // The file on disk differs from what this editor loaded.
-    if (isDirty || hasAutosavedEdits) {
-      setExternalChange('changed')
-    } else {
-      reloadFromDisk(true)
-    }
-  }, [fileStatus, fileHash, saving, resolvingExternal, isDirty, hasAutosavedEdits, saveConflict])
+    if (fileHash) heldHashesRef.current.add(fileHash)
+  }, [fileHash])
+
+  useEffect(() => {
+    const action = decideExternalChange({
+      status: fileStatus,
+      fileHash,
+      knownMtimeMs: model?.file_mtime_ms,
+      previousHashes: heldHashesRef.current,
+      busy: saving || resolvingExternal,
+      hasUnsavedEdits: isDirty || hasAutosavedEdits,
+      saveConflict,
+    })
+    if (action === 'missing') setExternalChange('missing')
+    else if (action === 'clear') setExternalChange(null)
+    else if (action === 'banner') setExternalChange('changed')
+    else if (action === 'reload') reloadFromDisk(true)
+  }, [fileStatus, fileHash, model?.file_mtime_ms, saving, resolvingExternal, isDirty, hasAutosavedEdits, saveConflict])
 
   // A save rejected with 409 (file changed since load) gets the same banner.
   useEffect(() => {
