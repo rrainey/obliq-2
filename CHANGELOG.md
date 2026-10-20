@@ -1,5 +1,9 @@
 # obliq-2 Change Log
 
+## Unreleased
+
+- **Subsystem names are easier to read.** A subsystem's name now appears below the block in large bold text (250% of the usual block-name size), centred and wrapped. **Tune Model Layout** leaves room for it, so a long name does not run into the block beneath. Hide Name still hides it, and other blocks keep the small name above.
+
 ## What's New in 3.2.0
 
 - **FPV quadcopter reference model.** A 5-inch FPV quadcopter ships in `reference-models/` and appears in My Models on new installations. Existing installations can add it with **Import Model**. It is located at Tri-County Aerodrome (48TX), Texas, and includes:

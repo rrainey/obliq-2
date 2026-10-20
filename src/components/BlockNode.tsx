@@ -1083,7 +1083,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             blocks, and for any block whose showName is explicitly off).
             A missing showName means "show": blocks saved before the setting
             existed must keep looking the way they always have. */}
-        {data.type !== 'no_connection' && data.parameters?.showName !== false && (
+        {data.type !== 'no_connection' && data.parameters?.showName !== false && !BlockGeometry.hasNameBelow(data) && (
           <div
             className={`absolute left-0 right-0 text-center font-medium pointer-events-none ${isDark ? 'text-gray-200' : 'text-gray-800'}`}
             style={{
@@ -1103,6 +1103,28 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             )}
           </div>
         )}
+
+        {/* Subsystem name: large, bold, centred and wrapped below the block.
+            Its size comes from blockGeometry so auto-layout leaves room for it. */}
+        {BlockGeometry.hasNameBelow(data) && (() => {
+          const L = BlockGeometry.SUBSYSTEM_NAME_LABEL
+          const labelWidth = BlockGeometry.getNameBelowWidth(data)
+          return (
+            <div
+              className={`absolute text-center font-bold pointer-events-none ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+              style={{
+                width: labelWidth,
+                left: (blockWidth - labelWidth) / 2,
+                top: minHeight + L.gapPx,
+                fontSize: L.fontPx,
+                lineHeight: `${L.lineHeightPx}px`,
+                overflowWrap: 'break-word',
+              }}
+            >
+              {data.name}
+            </div>
+          )
+        })()}
 
         {/* Enable port indicator for blocks with showEnableInput (subsystem, integrator) */}
         {(data.type === 'subsystem' || data.type === 'integrator') && data.parameters?.showEnableInput && (

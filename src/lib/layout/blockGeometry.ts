@@ -30,6 +30,56 @@ export interface GeomBlock {
   parameters?: Record<string, any> | null
 }
 
+/**
+ * A subsystem shows its name in large bold text, centred and wrapped, below
+ * the block (other blocks show a small name above). Layout reserves room for
+ * it so the block below in a column does not collide with the label.
+ */
+export const SUBSYSTEM_NAME_LABEL = {
+  fontPx: 20, // 250% of the 8px name used by other blocks
+  lineHeightPx: 24,
+  /** Gap between the block's bottom edge and the label */
+  gapPx: 6,
+  /** The label may be wider than a narrow block */
+  minWidthPx: 160,
+  /** Average bold glyph width as a fraction of the font size, for estimating wraps */
+  charWidthEm: 0.6,
+} as const
+
+export function hasNameBelow(data: GeomBlock): boolean {
+  return data.type === 'subsystem' && data.parameters?.showName !== false && !!data.name
+}
+
+/** Width of the wrapped name label below a subsystem. */
+export function getNameBelowWidth(data: GeomBlock): number {
+  return Math.max(getBlockWidth(data), SUBSYSTEM_NAME_LABEL.minWidthPx)
+}
+
+/**
+ * Estimated vertical space the name label takes below a subsystem (gap plus
+ * wrapped lines), or 0 when the block has none. Word wrapping is estimated
+ * from an average glyph width, which is close enough to keep labels clear.
+ */
+export function getNameBelowHeight(data: GeomBlock): number {
+  if (!hasNameBelow(data)) return 0
+  const L = SUBSYSTEM_NAME_LABEL
+  const perLine = Math.max(1, Math.floor(getNameBelowWidth(data) / (L.fontPx * L.charWidthEm)))
+  let lines = 1, used = 0
+  for (const word of String(data.name).split(/\s+/).filter(Boolean)) {
+    const len = word.length
+    if (used === 0) {
+      lines += Math.floor(Math.max(0, len - 1) / perLine)
+      used = ((len - 1) % perLine) + 1
+    } else if (used + 1 + len <= perLine) {
+      used += 1 + len
+    } else {
+      lines += 1 + Math.floor(Math.max(0, len - 1) / perLine)
+      used = ((len - 1) % perLine) + 1
+    }
+  }
+  return L.gapPx + lines * L.lineHeightPx
+}
+
 export function getBlockWidth(data: GeomBlock): number {
   // Resized subsystems carry an explicit width.
   if (data.type === 'subsystem' && typeof data.parameters?.width === 'number') {
