@@ -42,7 +42,7 @@ interface Row {
 
 function fly(name: string, opts: { sticks?: StickProfile; initialOmega?: number[] }, seconds: number) {
   // Ideal sensors: these tests check the controller, not the sensor models
-  const model = buildFpvModel({ ...opts, sensors: 'ideal' })
+  const model = buildFpvModel({ ...opts, sensors: 'ideal', initialAltitude: 30 })
   const n = Math.round(seconds / FPV.dt)
   const result = compileAndRunNative({
     modelName: `fpv_${name}`,

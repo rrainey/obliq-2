@@ -22,7 +22,7 @@ const punch: StickProfile = { ...centred, throttle: [[0, thr], [1.0, thr], [1.05
 interface Row { t: number; v: number; i: number; soc: number; rotor: number[]; vz: number }
 
 function fly(name: string, sticks: StickProfile, seconds: number) {
-  const model = buildFpvModel({ sticks, sensors: 'ideal' })
+  const model = buildFpvModel({ sticks, sensors: 'ideal', initialAltitude: 30 })
   const n = Math.round(seconds / FPV.dt)
   const result = compileAndRunNative({
     modelName: `fpvb_${name}`,

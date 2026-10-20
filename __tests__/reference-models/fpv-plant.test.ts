@@ -41,7 +41,8 @@ describe('FPV reference model: plant', () => {
   let outDir: string | undefined
 
   beforeAll(() => {
-    const model = buildFpvModel({ openLoop: true })
+    // High enough that 2 s of free fall stays clear of the ground
+    const model = buildFpvModel({ openLoop: true, initialAltitude: 50 })
     const names = Object.keys(SCENARIOS)
     const cmds = names.map(n => `{${SCENARIOS[n]!.join(', ')}}`).join(',\n    ')
     const result = compileAndRunNative({

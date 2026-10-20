@@ -3,7 +3,7 @@
  * AUX switch, flown with the modelled sensors and the Mahony estimate.
  */
 
-import { buildFpvModel, FC, FPV, HOVER_THROTTLE, type StickProfile } from '../../scripts/build-fpv-reference-model'
+import { AIRBORNE_DEMO_STICKS, buildFpvModel, FC, FPV, HOVER_THROTTLE, type StickProfile } from '../../scripts/build-fpv-reference-model'
 import { cleanupNativeDir, compileAndRunNative } from '../support/nativeCgen'
 
 jest.setTimeout(240000)
@@ -16,7 +16,8 @@ const pulse = (t0: number, t1: number, v: number): Array<[number, number]> => [[
 interface Row { t: number; sp: number[]; w: number[]; e: number[]; est: number[] }
 
 function fly(name: string, opts: { sticks?: StickProfile; initialOmega?: number[]; initialEuler?: number[] }, seconds: number) {
-  const model = buildFpvModel(opts)
+  // Start in the air, clear of the ground
+  const model = buildFpvModel({ initialAltitude: 30, ...opts })
   const n = Math.round(seconds / FPV.dt)
   const result = compileAndRunNative({
     modelName: `fpva_${name}`,
@@ -64,7 +65,7 @@ describe('FPV reference model: angle mode', () => {
     run('levelAcro', { initialEuler: tilted, sticks: { ...centred, aux: hold(0) } }, 2)
     run('bank', { sticks: { ...centred, roll: pulse(0.5, 2.0, 0.5), aux: hold(1) } }, 3)
     run('yaw', { sticks: { ...centred, yaw: pulse(0.5, 2.0, 0.5), aux: hold(1) } }, 2.5)
-    run('demo', {}, 5)
+    run('demo', { sticks: AIRBORNE_DEMO_STICKS }, 5)
   })
   afterAll(() => dirs.forEach(cleanupNativeDir))
 
@@ -102,7 +103,7 @@ describe('FPV reference model: angle mode', () => {
     for (const r of between(runs['yaw']!, 1.2, 2.0)) expect(Math.hypot(r.e[0]!, r.e[1]!)).toBeLessThan(4)
   })
 
-  it('the demo switches from acro to angle mode at 2.4 s', () => {
+  it('the airborne demo switches from acro to angle mode at 2.4 s', () => {
     const rows = runs['demo']!
     // Acro: roll doublet tracked as rates
     expect(at(rows, 0.9).sp[0]).toBeCloseTo(185, 6)

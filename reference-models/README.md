@@ -13,7 +13,7 @@ Set `OBLIQ_REFERENCE_MODELS_DIR` to seed from a different folder. Set it to an e
 
 | File | Model | Status |
 |---|---|---|
-| `fpv-quadcopter.json` | 5-inch FPV quadcopter: motors, 6-DOF frame, IMU/magnetometer/barometer, Betaflight-style flight controller | Complete except ground contact: plant with rotor inertia and battery, acro and angle modes, modelled sensors and estimators, at the 48TX site. See [docs/fpv-reference-model-plan.md](../docs/fpv-reference-model-plan.md). |
+| `fpv-quadcopter.json` | 5-inch FPV quadcopter: motors, 6-DOF frame, IMU/magnetometer/barometer, Betaflight-style flight controller | Complete: takes off from the ground at the 48TX site; plant with rotor inertia, battery and ground contact; acro and angle modes with arming; modelled sensors and estimators. Outputs and scopes are on the Telemetry sheet. See [docs/fpv-reference-model-plan.md](../docs/fpv-reference-model-plan.md). |
 
 `fpv-quadcopter.json` is generated: edit `scripts/build-fpv-reference-model.ts`, then run `npx tsx --tsconfig tsconfig.json scripts/build-fpv-reference-model.ts`. A test fails if the committed file drifts from the builder.
 

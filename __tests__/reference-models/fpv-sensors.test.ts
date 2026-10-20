@@ -5,6 +5,7 @@
  */
 
 import {
+  AIRBORNE_DEMO_STICKS,
   buildFpvModel,
   ESTIMATOR,
   FC,
@@ -21,6 +22,7 @@ import { cleanupNativeDir, compileAndRunNative } from '../support/nativeCgen'
 jest.setTimeout(240000)
 
 const thr = Number(HOVER_THROTTLE.toFixed(4))
+const ALT0 = 30 // m above the field at the start
 const centred: StickProfile = { roll: [[0, 0]], pitch: [[0, 0]], yaw: [[0, 0]], throttle: [[0, thr]] }
 
 interface Row {
@@ -32,7 +34,7 @@ interface Row {
 }
 
 function fly(name: string, sticks: StickProfile | undefined, seconds: number) {
-  const model = buildFpvModel({ sticks })
+  const model = buildFpvModel({ sticks: sticks ?? AIRBORNE_DEMO_STICKS, initialAltitude: ALT0 })
   const n = Math.round(seconds / FPV.dt)
   const result = compileAndRunNative({
     modelName: `fpvs_${name}`,
@@ -194,7 +196,7 @@ describe('FPV reference model: sensors and estimators', () => {
   it('altitude estimate follows the true altitude within 0.5 m, including the sink during the demo', () => {
     for (const r of [...hover, ...demo]) expect(Math.abs(r.altEst - trueAltitude(r))).toBeLessThan(0.5)
     // The demo loses real altitude, so this is tracking, not a constant
-    expect(trueAltitude(demo[demo.length - 1]!)).toBeLessThan(SENSORS.baro.homeAltitude - 5)
+    expect(trueAltitude(demo[demo.length - 1]!)).toBeLessThan(SENSORS.baro.homeAltitude + ALT0 - 5)
   })
 
   it('the controller flies on the noisy gyro and still tracks the demo rates', () => {

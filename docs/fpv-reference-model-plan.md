@@ -1,6 +1,6 @@
 # FPV Quadcopter Reference Model: Plan
 
-Status: Phases 0–5 complete, except ground contact and the top-level layout tidy (see Phase 5).
+Status: Phases 0–5 complete.
 Decisions recorded 2026-10-19.
 
 ## Goal
@@ -194,9 +194,18 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
      - Each motor draws κTω/η (η = 0.8, est.). Motor speed at a given command scales with V/16.8 V.
      - Hover draws about 7.3 A and sags the pack to 16.65 V. The pilot's hover throttle (0.438) accounts for this.
      - The motors read the previous step's voltage. A segregated subsystem counts as direct feedthrough on every port, so feeding the current voltage made an algebraic loop. obliq broke that loop at an arbitrary block, so one motor saw a different voltage and the symmetric hover tumbled slightly.
-   - **Not done:**
-     - **Ground contact,** starting at rest on the ground. This needs Betaflight-style arming and I-term handling on the ground to behave sensibly, not just a contact force.
-     - **Top-level layout tidy:** group the 20 model outputs.
+   - **Ground contact.** The field plane is NED z = 0, and the CG rests at about 1 mm compression.
+     - Spring-damper normal force (k = mg/1 mm, c = 150 N·s/m) that can push but not pull, plus viscous friction.
+     - Landing-leg righting torque and damping while in contact. All values are estimates.
+     - The ground force enters the body force, so the IMU reads 1 g on the ground.
+     - A 2 m drop lands with about a 1 cm hop and settles.
+   - **Arming** on an AUX2 switch, after Betaflight:
+     - Disarmed stops the motors; armed runs them at idle.
+     - Airmode, and with it the I-term, starts once throttle first exceeds 25%. Until then the I-term stays reset, so gyro bias cannot wind it up while sitting on the ground.
+   - **Default demo:** take off from rest. Arm at 0.25 s, climb, hover, then in angle mode a 24° bank, an 18° forward pitch and a yaw turn.
+     - The previous airborne demo is `AIRBORNE_DEMO_STICKS`, used with the `initialAltitude` build option.
+   - **Layout:** model outputs and scopes moved to a second top-level sheet, **Telemetry**, fed by sheet labels from Main. Main now shows only the vehicle; run results appear on the Telemetry tab.
+     - This exposed a WASM wrapper bug: scopes and outputs fed by a sheet label on another top-level sheet read a non-existent `From_*` signal. Fixed (codegen v34).
 
 Each phase adds native-codegen tests to `__tests__/reference-models/` that fly the model for a few seconds and assert physical invariants.
 
