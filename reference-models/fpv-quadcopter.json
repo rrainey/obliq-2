@@ -25,7 +25,7 @@
             "name": "MotorCmdSplit",
             "position": {
               "x": 100,
-              "y": 238
+              "y": 255
             },
             "parameters": {
               "showName": true,
@@ -41,7 +41,7 @@
             "name": "Pilot",
             "position": {
               "x": 100,
-              "y": 64
+              "y": 103
             },
             "parameters": {
               "showName": true,
@@ -393,8 +393,8 @@
             "type": "subsystem",
             "name": "FlightController",
             "position": {
-              "x": 1702,
-              "y": 133
+              "x": 1715,
+              "y": 178
             },
             "parameters": {
               "showName": true,
@@ -426,7 +426,7 @@
                       "name": "sticks",
                       "position": {
                         "x": 102,
-                        "y": 596
+                        "y": 623
                       },
                       "parameters": {
                         "showName": true,
@@ -440,7 +440,7 @@
                       "name": "gyro",
                       "position": {
                         "x": 102,
-                        "y": 305
+                        "y": 376
                       },
                       "parameters": {
                         "showName": true,
@@ -454,7 +454,7 @@
                       "name": "accel",
                       "position": {
                         "x": 102,
-                        "y": 180
+                        "y": 126
                       },
                       "parameters": {
                         "showName": true,
@@ -468,7 +468,7 @@
                       "name": "mag",
                       "position": {
                         "x": 102,
-                        "y": 430
+                        "y": 251
                       },
                       "parameters": {
                         "showName": true,
@@ -482,7 +482,7 @@
                       "name": "pressure",
                       "position": {
                         "x": 100,
-                        "y": 55
+                        "y": 1
                       },
                       "parameters": {
                         "showName": true,
@@ -496,7 +496,7 @@
                       "name": "AttitudeEstimator",
                       "position": {
                         "x": 284,
-                        "y": 328
+                        "y": 233
                       },
                       "parameters": {
                         "showName": true,
@@ -1336,8 +1336,8 @@
                       "type": "subsystem",
                       "name": "AltitudeEstimator",
                       "position": {
-                        "x": 444,
-                        "y": 111
+                        "x": 561,
+                        "y": 14
                       },
                       "parameters": {
                         "showName": true,
@@ -1735,8 +1735,8 @@
                       "type": "subsystem",
                       "name": "Rates",
                       "position": {
-                        "x": 284,
-                        "y": 542
+                        "x": 343,
+                        "y": 575
                       },
                       "parameters": {
                         "showName": true,
@@ -1967,8 +1967,8 @@
                       "type": "subsystem",
                       "name": "AngleMode",
                       "position": {
-                        "x": 444,
-                        "y": 515
+                        "x": 592,
+                        "y": 542
                       },
                       "parameters": {
                         "showName": true,
@@ -2315,8 +2315,8 @@
                       "type": "subsystem",
                       "name": "GyroFilters",
                       "position": {
-                        "x": 284,
-                        "y": 154
+                        "x": 316,
+                        "y": 423
                       },
                       "parameters": {
                         "showName": true,
@@ -2460,8 +2460,8 @@
                       "type": "subsystem",
                       "name": "Arming",
                       "position": {
-                        "x": 284,
-                        "y": 716
+                        "x": 336,
+                        "y": 727
                       },
                       "parameters": {
                         "showName": true,
@@ -2669,8 +2669,8 @@
                       "type": "subsystem",
                       "name": "RatePID",
                       "position": {
-                        "x": 604,
-                        "y": 577
+                        "x": 837,
+                        "y": 603
                       },
                       "parameters": {
                         "showName": true,
@@ -3367,8 +3367,8 @@
                       "type": "subsystem",
                       "name": "Mixer",
                       "position": {
-                        "x": 764,
-                        "y": 595
+                        "x": 1018,
+                        "y": 619
                       },
                       "parameters": {
                         "showName": true,
@@ -3925,8 +3925,8 @@
                       "type": "multiply",
                       "name": "MotorsArmed",
                       "position": {
-                        "x": 924,
-                        "y": 606
+                        "x": 1178,
+                        "y": 634
                       },
                       "parameters": {
                         "showName": true,
@@ -3938,8 +3938,8 @@
                       "type": "output_port",
                       "name": "motors",
                       "position": {
-                        "x": 1102,
-                        "y": 615
+                        "x": 1356,
+                        "y": 643
                       },
                       "parameters": {
                         "showName": true,
@@ -3952,8 +3952,8 @@
                       "type": "output_port",
                       "name": "setpoint",
                       "position": {
-                        "x": 1100,
-                        "y": 490
+                        "x": 1354,
+                        "y": 518
                       },
                       "parameters": {
                         "showName": true,
@@ -3966,8 +3966,8 @@
                       "type": "output_port",
                       "name": "gyro_dps",
                       "position": {
-                        "x": 1100,
-                        "y": -10
+                        "x": 1354,
+                        "y": 393
                       },
                       "parameters": {
                         "showName": true,
@@ -3980,8 +3980,8 @@
                       "type": "output_port",
                       "name": "euler_est",
                       "position": {
-                        "x": 1096,
-                        "y": 365
+                        "x": 1350,
+                        "y": 268
                       },
                       "parameters": {
                         "showName": true,
@@ -3994,8 +3994,8 @@
                       "type": "output_port",
                       "name": "altitude_est",
                       "position": {
-                        "x": 1084,
-                        "y": 115
+                        "x": 1338,
+                        "y": 18
                       },
                       "parameters": {
                         "showName": true,
@@ -4008,8 +4008,8 @@
                       "type": "output_port",
                       "name": "quat_est",
                       "position": {
-                        "x": 1100,
-                        "y": 240
+                        "x": 1354,
+                        "y": 143
                       },
                       "parameters": {
                         "showName": true,
@@ -4026,7 +4026,7 @@
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 13
+                        "midpointOffset": 5
                       }
                     },
                     {
@@ -4056,7 +4056,7 @@
                       "targetBlockId": "fc__AltitudeEstimator",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -91
+                        "midpointOffset": -149.5
                       }
                     },
                     {
@@ -4066,7 +4066,7 @@
                       "targetBlockId": "fc__AltitudeEstimator",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 24
+                        "midpointOffset": -8
                       }
                     },
                     {
@@ -4076,7 +4076,7 @@
                       "targetBlockId": "fc__AltitudeEstimator",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": 64
+                        "midpointOffset": 122.5
                       }
                     },
                     {
@@ -4086,7 +4086,7 @@
                       "targetBlockId": "fc__Rates",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 5
+                        "midpointOffset": -16.5
                       }
                     },
                     {
@@ -4096,7 +4096,7 @@
                       "targetBlockId": "fc__AngleMode",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -75
+                        "midpointOffset": -141
                       }
                     },
                     {
@@ -4106,7 +4106,7 @@
                       "targetBlockId": "fc__AngleMode",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -8
+                        "midpointOffset": -15.5
                       }
                     },
                     {
@@ -4116,7 +4116,7 @@
                       "targetBlockId": "fc__AngleMode",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": 0
+                        "midpointOffset": 21.5
                       }
                     },
                     {
@@ -4126,7 +4126,7 @@
                       "targetBlockId": "fc__GyroFilters",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 13
+                        "midpointOffset": -11
                       }
                     },
                     {
@@ -4136,7 +4136,7 @@
                       "targetBlockId": "fc__Arming",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 5
+                        "midpointOffset": -13
                       }
                     },
                     {
@@ -4146,7 +4146,7 @@
                       "targetBlockId": "fc__RatePID",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 4
+                        "midpointOffset": 15.5
                       }
                     },
                     {
@@ -4156,7 +4156,7 @@
                       "targetBlockId": "fc__RatePID",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 76
+                        "midpointOffset": 146
                       }
                     },
                     {
@@ -4166,7 +4166,7 @@
                       "targetBlockId": "fc__RatePID",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": -64
+                        "midpointOffset": 171.5
                       }
                     },
                     {
@@ -4183,7 +4183,7 @@
                       "targetBlockId": "fc__Mixer",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -152
+                        "midpointOffset": -183.5
                       }
                     },
                     {
@@ -4200,7 +4200,7 @@
                       "targetBlockId": "fc__MotorsArmed",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 240
+                        "midpointOffset": 334
                       }
                     },
                     {
@@ -4217,7 +4217,7 @@
                       "targetBlockId": "fc__setpoint",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 232
+                        "midpointOffset": 270
                       }
                     },
                     {
@@ -4227,7 +4227,7 @@
                       "targetBlockId": "fc__gyro_dps",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -352
+                        "midpointOffset": 400.5
                       }
                     },
                     {
@@ -4237,7 +4237,7 @@
                       "targetBlockId": "fc__euler_est",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -2
+                        "midpointOffset": 378.5
                       }
                     },
                     {
@@ -4254,17 +4254,17 @@
                       "targetBlockId": "fc__quat_est",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -12
+                        "midpointOffset": 368.5
                       }
                     }
                   ],
                   "extents": {
-                    "width": 1402,
-                    "height": 916
+                    "width": 1656,
+                    "height": 927
                   }
                 }
               ],
-              "width": 180,
+              "width": 220,
               "height": 180,
               "sampleTimeSec": 0.001
             }
@@ -4275,7 +4275,7 @@
             "name": "Motor_RR",
             "position": {
               "x": 260,
-              "y": 270
+              "y": 280
             },
             "parameters": {
               "showName": true,
@@ -4690,8 +4690,8 @@
             "type": "subsystem",
             "name": "Motor_FR",
             "position": {
-              "x": 810,
-              "y": 47
+              "x": 823,
+              "y": 95
             },
             "parameters": {
               "showName": true,
@@ -4719,8 +4719,8 @@
             "type": "subsystem",
             "name": "Motor_RL",
             "position": {
-              "x": 810,
-              "y": 237
+              "x": 823,
+              "y": 255
             },
             "parameters": {
               "showName": true,
@@ -4748,8 +4748,8 @@
             "type": "subsystem",
             "name": "Motor_FL",
             "position": {
-              "x": 810,
-              "y": 427
+              "x": 823,
+              "y": 415
             },
             "parameters": {
               "showName": true,
@@ -4777,8 +4777,8 @@
             "type": "mux",
             "name": "Thrusts",
             "position": {
-              "x": 1042,
-              "y": 220
+              "x": 1055,
+              "y": 237
             },
             "parameters": {
               "showName": true,
@@ -4793,8 +4793,8 @@
             "type": "mux",
             "name": "RotorSpeeds",
             "position": {
-              "x": 1042,
-              "y": 39
+              "x": 1055,
+              "y": 57
             },
             "parameters": {
               "showName": true,
@@ -4809,8 +4809,8 @@
             "type": "mux",
             "name": "RotorAccelerations",
             "position": {
-              "x": 1042,
-              "y": 400
+              "x": 1055,
+              "y": 417
             },
             "parameters": {
               "showName": true,
@@ -4826,7 +4826,7 @@
             "name": "MotorPower",
             "position": {
               "x": 480,
-              "y": 501
+              "y": 489
             },
             "parameters": {
               "showName": true,
@@ -4842,7 +4842,7 @@
             "name": "Battery",
             "position": {
               "x": 650,
-              "y": 511
+              "y": 499
             },
             "parameters": {
               "showName": true,
@@ -5156,8 +5156,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_voltage",
             "position": {
-              "x": 820,
-              "y": 617
+              "x": 833,
+              "y": 575
             },
             "parameters": {
               "showName": true,
@@ -5169,8 +5169,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_current",
             "position": {
-              "x": 820,
-              "y": 761
+              "x": 833,
+              "y": 719
             },
             "parameters": {
               "showName": true,
@@ -5182,8 +5182,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_soc",
             "position": {
-              "x": 820,
-              "y": 905
+              "x": 833,
+              "y": 863
             },
             "parameters": {
               "showName": true,
@@ -5195,8 +5195,8 @@
             "type": "subsystem",
             "name": "Frame",
             "position": {
-              "x": 1212,
-              "y": 230
+              "x": 1225,
+              "y": 247
             },
             "parameters": {
               "showName": true,
@@ -6904,8 +6904,8 @@
             "type": "subsystem",
             "name": "Sensors",
             "position": {
-              "x": 1452,
-              "y": 280
+              "x": 1465,
+              "y": 305
             },
             "parameters": {
               "showName": true,
@@ -6934,7 +6934,7 @@
                       "name": "pos_ned",
                       "position": {
                         "x": 126,
-                        "y": 175
+                        "y": 190
                       },
                       "parameters": {
                         "showName": true,
@@ -6948,7 +6948,7 @@
                       "name": "quat",
                       "position": {
                         "x": 126,
-                        "y": 550
+                        "y": 565
                       },
                       "parameters": {
                         "showName": true,
@@ -6962,7 +6962,7 @@
                       "name": "omega",
                       "position": {
                         "x": 126,
-                        "y": 300
+                        "y": 315
                       },
                       "parameters": {
                         "showName": true,
@@ -6976,7 +6976,7 @@
                       "name": "specific_force",
                       "position": {
                         "x": 100,
-                        "y": 425
+                        "y": 440
                       },
                       "parameters": {
                         "showName": true,
@@ -6989,8 +6989,8 @@
                       "type": "subsystem",
                       "name": "IMU",
                       "position": {
-                        "x": 332,
-                        "y": 353
+                        "x": 374,
+                        "y": 364
                       },
                       "parameters": {
                         "showName": true,
@@ -7343,7 +7343,7 @@
                       "name": "Magnetometer",
                       "position": {
                         "x": 332,
-                        "y": 541
+                        "y": 552
                       },
                       "parameters": {
                         "showName": true,
@@ -7581,8 +7581,8 @@
                       "type": "subsystem",
                       "name": "Barometer",
                       "position": {
-                        "x": 332,
-                        "y": 166
+                        "x": 351,
+                        "y": 177
                       },
                       "parameters": {
                         "showName": true,
@@ -7816,8 +7816,8 @@
                       "type": "output_port",
                       "name": "gyro",
                       "position": {
-                        "x": 494,
-                        "y": 300
+                        "x": 578,
+                        "y": 315
                       },
                       "parameters": {
                         "showName": true,
@@ -7830,8 +7830,8 @@
                       "type": "output_port",
                       "name": "accel",
                       "position": {
-                        "x": 494,
-                        "y": 425
+                        "x": 578,
+                        "y": 440
                       },
                       "parameters": {
                         "showName": true,
@@ -7844,8 +7844,8 @@
                       "type": "output_port",
                       "name": "mag",
                       "position": {
-                        "x": 494,
-                        "y": 550
+                        "x": 578,
+                        "y": 565
                       },
                       "parameters": {
                         "showName": true,
@@ -7858,8 +7858,8 @@
                       "type": "output_port",
                       "name": "pressure",
                       "position": {
-                        "x": 492,
-                        "y": 175
+                        "x": 576,
+                        "y": 190
                       },
                       "parameters": {
                         "showName": true,
@@ -7876,7 +7876,7 @@
                       "targetBlockId": "sensors__IMU",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 9
+                        "midpointOffset": -12
                       }
                     },
                     {
@@ -7886,7 +7886,7 @@
                       "targetBlockId": "sensors__IMU",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 4
+                        "midpointOffset": -17
                       }
                     },
                     {
@@ -7910,7 +7910,7 @@
                       "targetBlockId": "sensors__gyro",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -5
+                        "midpointOffset": 16
                       }
                     },
                     {
@@ -7920,7 +7920,7 @@
                       "targetBlockId": "sensors__accel",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 3
+                        "midpointOffset": 24
                       }
                     },
                     {
@@ -7939,8 +7939,8 @@
                     }
                   ],
                   "extents": {
-                    "width": 794,
-                    "height": 750
+                    "width": 878,
+                    "height": 765
                   }
                 }
               ],
@@ -7953,8 +7953,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_imu_gyro",
             "position": {
-              "x": 1736,
-              "y": -11
+              "x": 1769,
+              "y": 34
             },
             "parameters": {
               "showName": true,
@@ -7966,8 +7966,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_imu_accel",
             "position": {
-              "x": 1734,
-              "y": 447
+              "x": 1767,
+              "y": 438
             },
             "parameters": {
               "showName": true,
@@ -7979,8 +7979,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_mag",
             "position": {
-              "x": 1752,
-              "y": 591
+              "x": 1785,
+              "y": 582
             },
             "parameters": {
               "showName": true,
@@ -7992,8 +7992,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_pressure",
             "position": {
-              "x": 1736,
-              "y": 735
+              "x": 1769,
+              "y": 726
             },
             "parameters": {
               "showName": true,
@@ -8005,8 +8005,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_pos_ned",
             "position": {
-              "x": 1483,
-              "y": -153
+              "x": 1496,
+              "y": -127
             },
             "parameters": {
               "showName": true,
@@ -8018,8 +8018,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_vel_ned",
             "position": {
-              "x": 1483,
-              "y": -9
+              "x": 1496,
+              "y": 17
             },
             "parameters": {
               "showName": true,
@@ -8031,8 +8031,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_quat",
             "position": {
-              "x": 1497,
-              "y": 135
+              "x": 1510,
+              "y": 161
             },
             "parameters": {
               "showName": true,
@@ -8044,8 +8044,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler",
             "position": {
-              "x": 1497,
-              "y": 540
+              "x": 1510,
+              "y": 536
             },
             "parameters": {
               "showName": true,
@@ -8057,8 +8057,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_omega",
             "position": {
-              "x": 1497,
-              "y": 684
+              "x": 1510,
+              "y": 680
             },
             "parameters": {
               "showName": true,
@@ -8070,8 +8070,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_accel",
             "position": {
-              "x": 1497,
-              "y": 828
+              "x": 1510,
+              "y": 824
             },
             "parameters": {
               "showName": true,
@@ -8083,8 +8083,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_motor_omega",
             "position": {
-              "x": 1232,
-              "y": 57
+              "x": 1245,
+              "y": 75
             },
             "parameters": {
               "showName": true,
@@ -8096,8 +8096,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_motor_cmd",
             "position": {
-              "x": 1964,
-              "y": -169
+              "x": 2017,
+              "y": -124
             },
             "parameters": {
               "showName": true,
@@ -8109,8 +8109,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_rate_setpoint",
             "position": {
-              "x": 1962,
-              "y": -25
+              "x": 2015,
+              "y": 20
             },
             "parameters": {
               "showName": true,
@@ -8122,8 +8122,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gyro_dps",
             "position": {
-              "x": 1966,
-              "y": 119
+              "x": 2019,
+              "y": 164
             },
             "parameters": {
               "showName": true,
@@ -8135,8 +8135,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler_est",
             "position": {
-              "x": 1964,
-              "y": 263
+              "x": 2017,
+              "y": 308
             },
             "parameters": {
               "showName": true,
@@ -8148,8 +8148,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_altitude_est",
             "position": {
-              "x": 1962,
-              "y": 407
+              "x": 2015,
+              "y": 452
             },
             "parameters": {
               "showName": true,
@@ -8161,8 +8161,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_quat_est",
             "position": {
-              "x": 1966,
-              "y": 551
+              "x": 2019,
+              "y": 596
             },
             "parameters": {
               "showName": true,
@@ -8178,7 +8178,7 @@
             "targetBlockId": "main__FlightController",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -339
+              "midpointOffset": -345.5
             }
           },
           {
@@ -8195,7 +8195,7 @@
             "targetBlockId": "main__Motor_RR",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4
+              "midpointOffset": 0
             }
           },
           {
@@ -8205,7 +8205,7 @@
             "targetBlockId": "main__Motor_FR",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -287
+              "midpointOffset": -289.5
             }
           },
           {
@@ -8215,7 +8215,7 @@
             "targetBlockId": "main__Motor_RL",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -263
+              "midpointOffset": 108.5
             }
           },
           {
@@ -8225,7 +8225,7 @@
             "targetBlockId": "main__Motor_FL",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -271
+              "midpointOffset": -273.5
             }
           },
           {
@@ -8235,7 +8235,7 @@
             "targetBlockId": "main__Thrusts",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -111
+              "midpointOffset": -279.5
             }
           },
           {
@@ -8245,7 +8245,7 @@
             "targetBlockId": "main__RotorSpeeds",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -285
+              "midpointOffset": -295.5
             }
           },
           {
@@ -8255,7 +8255,7 @@
             "targetBlockId": "main__RotorAccelerations",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -103
+              "midpointOffset": -109.5
             }
           },
           {
@@ -8265,7 +8265,7 @@
             "targetBlockId": "main__MotorPower",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 4
+              "midpointOffset": 0
             }
           },
           {
@@ -8295,7 +8295,7 @@
             "targetBlockId": "main__RotorAccelerations",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -8
+              "midpointOffset": 16
             }
           },
           {
@@ -8332,7 +8332,7 @@
             "targetBlockId": "main__RotorAccelerations",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -24
+              "midpointOffset": 8
             }
           },
           {
@@ -8359,7 +8359,7 @@
             "targetBlockId": "main__RotorSpeeds",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": 8
+              "midpointOffset": -8
             }
           },
           {
@@ -8369,7 +8369,7 @@
             "targetBlockId": "main__RotorAccelerations",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": 16
+              "midpointOffset": -24
             }
           },
           {
@@ -8560,7 +8560,7 @@
             "targetBlockId": "main__Tag_imu_gyro",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -29
+              "midpointOffset": -39
             }
           },
           {
@@ -8570,7 +8570,7 @@
             "targetBlockId": "main__Tag_imu_accel",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -20
+              "midpointOffset": -30
             }
           },
           {
@@ -8580,7 +8580,7 @@
             "targetBlockId": "main__Tag_mag",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -21
+              "midpointOffset": -31
             }
           },
           {
@@ -8590,7 +8590,7 @@
             "targetBlockId": "main__Tag_pressure",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -5
+              "midpointOffset": -15
             }
           },
           {
@@ -8722,8 +8722,8 @@
           }
         ],
         "extents": {
-          "width": 2266,
-          "height": 1105
+          "width": 2319,
+          "height": 1063
         }
       },
       {

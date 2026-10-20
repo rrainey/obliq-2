@@ -329,7 +329,7 @@ const subsystem = (
 /** Block sizes so port labels stay legible. */
 const MOTOR_SIZE = { width: 140, height: 80 }
 const FRAME_SIZE = { width: 160, height: 260 }
-const FC_SIZE = { width: 180, height: 180 }
+const FC_SIZE = { width: 220, height: 180 }
 const SENSORS_SIZE = { width: 170, height: 150 }
 const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'altitude_est', 'quat_est']
 

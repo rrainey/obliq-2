@@ -795,9 +795,11 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
 
   // Minimums enforced during resize
   const minResizeWidth = Math.max(RESIZE_MIN_WIDTH, 40)
+  // A subsystem also keeps room for its name at the current width
   const minResizeHeight = Math.max(
     MIN_HEIGHT,
-    Math.max(inputCount, outputCount) * PORT_SPACING + 20
+    Math.max(inputCount, outputCount) * PORT_SPACING + 20,
+    BlockGeometry.subsystemNameContentHeight(data, blockWidth)
   )
 
   type Corner = 'nw' | 'ne' | 'sw' | 'se'
@@ -1083,7 +1085,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             blocks, and for any block whose showName is explicitly off).
             A missing showName means "show": blocks saved before the setting
             existed must keep looking the way they always have. */}
-        {data.type !== 'no_connection' && data.parameters?.showName !== false && !BlockGeometry.hasNameBelow(data) && (
+        {data.type !== 'no_connection' && data.parameters?.showName !== false && !BlockGeometry.hasSubsystemName(data) && (
           <div
             className={`absolute left-0 right-0 text-center font-medium pointer-events-none ${isDark ? 'text-gray-200' : 'text-gray-800'}`}
             style={{
@@ -1103,28 +1105,6 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             )}
           </div>
         )}
-
-        {/* Subsystem name: large, bold, centred and wrapped below the block.
-            Its size comes from blockGeometry so auto-layout leaves room for it. */}
-        {BlockGeometry.hasNameBelow(data) && (() => {
-          const L = BlockGeometry.SUBSYSTEM_NAME_LABEL
-          const labelWidth = BlockGeometry.getNameBelowWidth(data)
-          return (
-            <div
-              className={`absolute text-center font-bold pointer-events-none ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
-              style={{
-                width: labelWidth,
-                left: (blockWidth - labelWidth) / 2,
-                top: minHeight + L.gapPx,
-                fontSize: L.fontPx,
-                lineHeight: `${L.lineHeightPx}px`,
-                overflowWrap: 'break-word',
-              }}
-            >
-              {data.name}
-            </div>
-          )
-        })()}
 
         {/* Enable port indicator for blocks with showEnableInput (subsystem, integrator) */}
         {(data.type === 'subsystem' || data.type === 'integrator') && data.parameters?.showEnableInput && (
@@ -1201,10 +1181,29 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
               height: minHeight,
             }}
           >
-            {/* Block Symbol */}
-            <div className={`text-xl pointer-events-none flex items-center justify-center w-full h-full ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-              {getBlockSymbol(data)}
-            </div>
+            {/* Block Symbol; a subsystem shows its name, large and bold, below the icon */}
+            {BlockGeometry.hasSubsystemName(data) ? (
+              <div
+                className={`pointer-events-none flex flex-col items-center justify-center w-full h-full overflow-hidden ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                style={{ padding: BlockGeometry.SUBSYSTEM_NAME_LABEL.paddingPx, gap: BlockGeometry.SUBSYSTEM_NAME_LABEL.gapPx }}
+              >
+                {getBlockSymbol(data)}
+                <div
+                  className="w-full text-center font-bold"
+                  style={{
+                    fontSize: BlockGeometry.SUBSYSTEM_NAME_LABEL.fontPx,
+                    lineHeight: `${BlockGeometry.SUBSYSTEM_NAME_LABEL.lineHeightPx}px`,
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {data.name}
+                </div>
+              </div>
+            ) : (
+              <div className={`text-xl pointer-events-none flex items-center justify-center w-full h-full ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                {getBlockSymbol(data)}
+              </div>
+            )}
           </div>
         )}
 

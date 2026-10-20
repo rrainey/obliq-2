@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- **Subsystem names are easier to read.** A subsystem's name now appears below the block in large bold text (250% of the usual block-name size), centred and wrapped. **Tune Model Layout** leaves room for it, so a long name does not run into the block beneath. Hide Name still hides it, and other blocks keep the small name above.
+- **Subsystem names are easier to read.** A subsystem now shows its name inside the block, in large bold text (250% of the usual block-name size) centred below its icon.
+  - A subsystem you haven't resized grows to fit its name: wide enough for one line, up to 260 px, wrapping beyond that.
+  - A resized subsystem keeps its size, and the name wraps inside it. Resizing won't shrink it below what the name needs.
+  - Hide Name returns it to the plain icon at the original size. Other blocks keep their small name above.
 
 ## What's New in 3.2.0
 

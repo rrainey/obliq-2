@@ -31,59 +31,92 @@ export interface GeomBlock {
 }
 
 /**
- * A subsystem shows its name in large bold text, centred and wrapped, below
- * the block (other blocks show a small name above). Layout reserves room for
- * it so the block below in a column does not collide with the label.
+ * A subsystem shows its name inside the block, in large bold text centred
+ * and wrapped below its icon. An unsized subsystem grows to fit the name; a
+ * resized one keeps its size and the name wraps within it.
  */
 export const SUBSYSTEM_NAME_LABEL = {
-  fontPx: 20, // 250% of the 8px name used by other blocks
+  fontPx: 20, // 250% of the 8px name other blocks show above themselves
   lineHeightPx: 24,
-  /** Gap between the block's bottom edge and the label */
-  gapPx: 6,
-  /** The label may be wider than a narrow block */
-  minWidthPx: 160,
-  /** Average bold glyph width as a fraction of the font size, for estimating wraps */
-  charWidthEm: 0.6,
+  iconPx: 24,
+  /** Between the icon and the name */
+  gapPx: 4,
+  /** Inside the block border, around the icon and name */
+  paddingPx: 8,
+  /** The block's border (BlockNode draws border-2) */
+  borderPx: 2,
+  /** Widest an unsized subsystem grows to fit its name on one line */
+  maxAutoWidthPx: 260,
+  /** Safety margin on estimated text widths */
+  widthMargin: 1.05,
 } as const
 
-export function hasNameBelow(data: GeomBlock): boolean {
+/**
+ * Advance widths of Arial Bold (the canvas font is Arial/Helvetica), in
+ * 1/1000 em, so block sizes and wraps can be estimated without a DOM.
+ * Characters not listed use 0.6 em.
+ */
+const BOLD_WIDTHS: Record<string, number> = (() => {
+  const w: Record<string, number> = {}
+  const set = (chars: string, width: number) => { for (const c of chars) w[c] = width }
+  set('0123456789', 556)
+  set('ABCDHKNRU', 722); set('EPSVXY', 667); set('FLTZ', 611); set('GOQ', 778)
+  set('I', 278); set('J', 556); set('M', 833); set('W', 944)
+  set('acekvxy', 556); set('bdghnopqu', 611); set('fjt', 333); set('il', 278)
+  set('m', 889); set('r', 389); set('s', 556); set('w', 778); set('z', 500)
+  set(' ', 278); set('_', 556); set('-', 333); set('.,:;', 278); set('()', 333)
+  return w
+})()
+
+/** Estimated rendered width (px) of text in the subsystem name font. */
+export function subsystemNameTextWidth(text: string): number {
+  let units = 0
+  for (const c of text) units += BOLD_WIDTHS[c] ?? 600
+  return (units / 1000) * SUBSYSTEM_NAME_LABEL.fontPx * SUBSYSTEM_NAME_LABEL.widthMargin
+}
+
+/** True when a subsystem draws its name inside the block. */
+export function hasSubsystemName(data: GeomBlock): boolean {
   return data.type === 'subsystem' && data.parameters?.showName !== false && !!data.name
 }
 
-/** Width of the wrapped name label below a subsystem. */
-export function getNameBelowWidth(data: GeomBlock): number {
-  return Math.max(getBlockWidth(data), SUBSYSTEM_NAME_LABEL.minWidthPx)
+/** Estimated number of lines the name wraps to inside a block of this width. */
+export function subsystemNameLines(name: string, blockWidth: number): number {
+  const L = SUBSYSTEM_NAME_LABEL
+  const avail = Math.max(1, blockWidth - 2 * (L.paddingPx + L.borderPx))
+  const space = subsystemNameTextWidth(' ')
+  let lines = 1, used = 0
+  for (const word of name.split(/\s+/).filter(Boolean)) {
+    const w = subsystemNameTextWidth(word)
+    if (used > 0 && used + space + w <= avail) {
+      used += space + w
+      continue
+    }
+    if (used > 0) lines++
+    // A word wider than the line breaks across lines (overflow-wrap: anywhere)
+    lines += Math.max(0, Math.ceil(w / avail) - 1)
+    used = w > avail ? w % avail || avail : w
+  }
+  return lines
 }
 
-/**
- * Estimated vertical space the name label takes below a subsystem (gap plus
- * wrapped lines), or 0 when the block has none. Word wrapping is estimated
- * from an average glyph width, which is close enough to keep labels clear.
- */
-export function getNameBelowHeight(data: GeomBlock): number {
-  if (!hasNameBelow(data)) return 0
+/** Block height the icon and wrapped name need in a subsystem of this width (0 without a name). */
+export function subsystemNameContentHeight(data: GeomBlock, blockWidth: number): number {
+  if (!hasSubsystemName(data)) return 0
   const L = SUBSYSTEM_NAME_LABEL
-  const perLine = Math.max(1, Math.floor(getNameBelowWidth(data) / (L.fontPx * L.charWidthEm)))
-  let lines = 1, used = 0
-  for (const word of String(data.name).split(/\s+/).filter(Boolean)) {
-    const len = word.length
-    if (used === 0) {
-      lines += Math.floor(Math.max(0, len - 1) / perLine)
-      used = ((len - 1) % perLine) + 1
-    } else if (used + 1 + len <= perLine) {
-      used += 1 + len
-    } else {
-      lines += 1 + Math.floor(Math.max(0, len - 1) / perLine)
-      used = ((len - 1) % perLine) + 1
-    }
-  }
-  return L.gapPx + lines * L.lineHeightPx
+  return 2 * (L.paddingPx + L.borderPx) + L.iconPx + L.gapPx + subsystemNameLines(String(data.name), blockWidth) * L.lineHeightPx
 }
 
 export function getBlockWidth(data: GeomBlock): number {
   // Resized subsystems carry an explicit width.
   if (data.type === 'subsystem' && typeof data.parameters?.width === 'number') {
     return data.parameters.width
+  }
+  // Otherwise wide enough for the name on one line, within limits
+  if (hasSubsystemName(data)) {
+    const L = SUBSYSTEM_NAME_LABEL
+    const oneLine = Math.ceil(subsystemNameTextWidth(String(data.name))) + 2 * (L.paddingPx + L.borderPx)
+    return Math.max(DEFAULT_WIDTH, Math.min(L.maxAutoWidthPx, oneLine))
   }
   if (data.type === 'transfer_function') {
     const numerator = data.parameters?.numerator || [1]
@@ -183,7 +216,9 @@ export function getIntrinsicBlockHeight(
   if (data.type === 'no_connection') {
     return 32 // Half size for no_connection block
   }
-  return Math.max(MIN_HEIGHT, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
+  const forPorts = Math.max(MIN_HEIGHT, Math.max(inputCount, outputCount) * PORT_SPACING + 20)
+  if (hasSubsystemName(data)) return Math.max(forPorts, subsystemNameContentHeight(data, getBlockWidth(data)))
+  return forPorts
 }
 
 /**

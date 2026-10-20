@@ -39,7 +39,6 @@ import {
   getBlockWidth,
   getBlockHeight,
   getIntrinsicBlockHeight,
-  getNameBelowHeight,
   portOffsetY,
   portFraction,
 } from './blockGeometry'
@@ -142,7 +141,6 @@ interface Metrics {
   outputs: number      // effective output port count
   minHeight: number    // natural height; a resize may not go below this
   resizable: boolean
-  below: number        // clearance under the block (a subsystem's name label)
 }
 
 function measure(block: BlockData): Metrics {
@@ -157,7 +155,6 @@ function measure(block: BlockData): Metrics {
     outputs,
     minHeight: getIntrinsicBlockHeight(block, inputs, outputs),
     resizable: isResizable(block.type),
-    below: getNameBelowHeight(block),
   }
 }
 
@@ -513,12 +510,12 @@ function computePlacement(
   for (const c of sortedRanks) {
     const ids = columns.get(c)!
     let totalH = 0
-    for (const id of ids) totalH += metrics.get(id)!.height + metrics.get(id)!.below
+    for (const id of ids) totalH += metrics.get(id)!.height
     totalH += Math.max(0, ids.length - 1) * opts.rowSpacing
     let cursor = -totalH / 2
     for (const id of ids) {
       y.set(id, cursor)
-      cursor += metrics.get(id)!.height + metrics.get(id)!.below + opts.rowSpacing
+      cursor += metrics.get(id)!.height + opts.rowSpacing
     }
   }
 
@@ -556,12 +553,10 @@ function computePlacement(
     const desired: number[] = []
     const weights: number[] = []
     const heights: number[] = []
-    const extents: number[] = [] // height plus the clearance kept below
 
     for (const id of ids) {
       const m = metrics.get(id)!
       heights.push(m.height)
-      extents.push(m.height + m.below)
 
       // Pull this block so its own port lines up with the port at the far end.
       let sum = 0, n = 0
@@ -602,7 +597,7 @@ function computePlacement(
     const placed = isotonicPlace(
       order.map(i => desired[i]),
       order.map(i => weights[i]),
-      order.map(i => extents[i]),
+      order.map(i => heights[i]),
       opts.rowSpacing,
     )
     // Columns are shared with later passes, so update the order in place.
@@ -758,7 +753,7 @@ export function computeAutoLayout(
   for (const id of graph.nodes) {
     const top = y.get(id)!
     minY = Math.min(minY, top)
-    maxY = Math.max(maxY, top + metrics.get(id)!.height + metrics.get(id)!.below)
+    maxY = Math.max(maxY, top + metrics.get(id)!.height)
   }
   const shift = Number.isFinite(minY) ? opts.originY - (minY + maxY) / 2 : 0
 
