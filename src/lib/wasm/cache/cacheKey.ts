@@ -50,8 +50,10 @@ import type { ModelParameter } from '@/lib/modelSchema'
  *        module derivatives read the stage state; Random Noise block.
  * - v33: Atmosphere block computes the 1976 standard atmosphere from its
  *        layer formulae (was a coarse, partly inaccurate table).
+ * - v34: WASM wrapper resolves sheet labels across top-level sheets (scopes
+ *        and outputs fed by a From on another sheet); M_PI fallback.
  */
-const CODEGEN_VERSION = 'v33'
+const CODEGEN_VERSION = 'v34'
 
 export interface ModelStructure {
   sheets: Sheet[]

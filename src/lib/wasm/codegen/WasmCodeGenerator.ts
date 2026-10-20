@@ -189,16 +189,20 @@ export class WasmCodeGenerator extends CodeGenerator {
     ): { block: any; portIndex: number } | null => {
       const signalName = fromBlock.parameters?.signalName as string | undefined
       if (!signalName) return null
-      const sink = sheet.blocks.find(
-        (b: any) =>
-          b.type === 'sheet_label_sink' && b.parameters?.signalName === signalName
-      )
-      if (!sink) return null
-      const feed = sheet.connections.find((c: any) => c.targetBlockId === sink.id)
-      if (!feed) return null
-      const src = sheet.blocks.find((b: any) => b.id === feed.sourceBlockId)
-      if (!src) return null
-      return { block: src, portIndex: feed.sourcePortIndex }
+      // Top-level sheets share one label scope: look on this sheet first, then the others
+      for (const candidate of [sheet, ...sheets.filter(s => s !== sheet)]) {
+        const sink = candidate.blocks.find(
+          (b: any) =>
+            b.type === 'sheet_label_sink' && b.parameters?.signalName === signalName
+        )
+        if (!sink) continue
+        const feed = candidate.connections.find((c: any) => c.targetBlockId === sink.id)
+        if (!feed) return null
+        const src = candidate.blocks.find((b: any) => b.id === feed.sourceBlockId)
+        if (!src) return null
+        return { block: src, portIndex: feed.sourcePortIndex }
+      }
+      return null
     }
 
     /**

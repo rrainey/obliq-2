@@ -167,6 +167,7 @@ export class SubsystemCodeGenerator {
     header += '#include <stdint.h>\n'
     header += '#include <stdbool.h>\n'
     header += '#include <math.h>\n\n'
+    header += '#ifndef M_PI\n#define M_PI 3.14159265358979323846\n#endif\n\n'
 
     // Subsystem parameters as #define statements
     header += this.generateParameters()

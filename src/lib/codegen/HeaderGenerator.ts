@@ -68,7 +68,7 @@ export class HeaderGenerator {
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>\n`
+#include <math.h>\n\n/* M_PI is POSIX, not ISO C: define it for strict C99 compilers */\n#ifndef M_PI\n#define M_PI 3.14159265358979323846\n#endif\n`
 
     // Include segregated subsystem headers (dedupe shared module types)
     if (this.model.segregatedSubsystems && this.model.segregatedSubsystems.length > 0) {
