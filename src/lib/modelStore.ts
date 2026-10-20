@@ -26,7 +26,9 @@ import {
   createReferenceParametersFromDefinition,
   getSubsystemDeleteBlockReason,
   isSubsystemLike,
-  syncAllReferencesToDefinition
+  syncAllReferencesToDefinition,
+  syncReferencePortsModelWide,
+  isSubsystemReference,
 } from '@/lib/subsystemReference'
 import { generateBlockId } from '@/lib/blockFactory'
 
@@ -236,6 +238,10 @@ export type ModelStore = ModelState & ModelActions
  */
 function syncSubsystemPortsFromSheets(subsystemBlock: BlockData): void {
   if (subsystemBlock.type !== 'subsystem' || !subsystemBlock.parameters?.sheets) {
+    return
+  }
+  // A reference has no sheets of its own; its ports come from its definition
+  if (isSubsystemReference(subsystemBlock)) {
     return
   }
 
@@ -642,7 +648,7 @@ export const useModelStore = create<ModelStore>()(
     disableAutoSave: () => set({ autoSaveEnabled: false }),
 
     // Sheet actions
-    setSheets: (sheets) => set({ sheets }),
+    setSheets: (sheets) => set({ sheets: syncReferencePortsModelWide(sheets) }),
     setActiveSheetId: (activeSheetId) => set({ activeSheetId }),
     
     addSheet: (sheet) => set((state) => ({ 
@@ -1522,9 +1528,11 @@ export const useModelStore = create<ModelStore>()(
     saveCurrentSheetData: () => {
       const state = get()
 
-      // Helper to recursively update a specific sheet and sync subsystem ports
+      // Helper to recursively update a specific sheet and sync subsystem ports.
+      // Returns the same array when nothing inside it changed, so only the
+      // subsystems that actually contain the edited sheet are re-synced.
       const updateSheetRecursively = (sheets: Sheet[]): Sheet[] => {
-        return sheets.map(sheet => {
+        const next = sheets.map(sheet => {
           if (sheet.id === state.activeSheetId) {
             // This is the sheet we're updating
             return {
@@ -1561,12 +1569,15 @@ export const useModelStore = create<ModelStore>()(
           })
 
           // Return sheet with potentially updated blocks
-          const blocksChanged = updatedBlocks !== sheet.blocks
+          const blocksChanged = updatedBlocks.some((b, i) => b !== sheet.blocks[i])
           return blocksChanged ? { ...sheet, blocks: updatedBlocks } : sheet
         })
+        return next.some((sh, i) => sh !== sheets[i]) ? next : sheets
       }
 
-      const updatedSheets = updateSheetRecursively(state.sheets)
+      // References follow their definition's ports (e.g. after editing the
+      // definition's sheet)
+      const updatedSheets = syncReferencePortsModelWide(updateSheetRecursively(state.sheets))
       set({ sheets: updatedSheets })
     },
 
@@ -1640,7 +1651,8 @@ export const useModelStore = create<ModelStore>()(
       if (versionData?.data?.sheets) {
         // Convert flat sheet structure to hierarchical structure
         const hierarchicalData = migrateToHierarchicalSheets(versionData.data)
-        const sheets = hierarchicalData.sheets
+        // Repairs references whose ports an earlier editor version cleared
+        const sheets = syncReferencePortsModelWide<Sheet>(hierarchicalData.sheets)
 
         // Data integrity check - model must have at least one sheet
         if (sheets.length === 0) {

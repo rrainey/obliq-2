@@ -279,3 +279,45 @@ export function createReferenceParametersFromDefinition(
     height: definition.parameters?.height
   }
 }
+
+/**
+ * Give every reference in the model its definition's current input/output
+ * port lists. References have no sheets of their own, so their ports must
+ * come from the definition, wherever in the model it lives. Returns the
+ * same array (and sheet/block objects) when nothing changed.
+ */
+export function syncReferencePortsModelWide<S extends { blocks?: any[] }>(sheets: S[]): S[] {
+  const allBlocks = collectAllBlocksFromSheets(sheets as Array<{ blocks?: BlockData[] }>)
+  const sameList = (a: unknown, b: unknown) =>
+    Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i])
+
+  const visit = <T extends { blocks?: any[] }>(list: T[]): T[] => {
+    let changed = false
+    const next = list.map(sheet => {
+      let blocksChanged = false
+      const blocks = (sheet.blocks || []).map((b: any) => {
+        let out = b
+        if (isSubsystemReference(b)) {
+          const def = resolveSubsystemDefinition(b, allBlocks)
+          if (def) {
+            const ins = def.parameters?.inputPorts || []
+            const outs = def.parameters?.outputPorts || []
+            if (!sameList(b.parameters?.inputPorts, ins) || !sameList(b.parameters?.outputPorts, outs)) {
+              out = { ...b, parameters: { ...(b.parameters || {}), inputPorts: [...ins], outputPorts: [...outs] } }
+            }
+          }
+        } else if (isSubsystemLike(b) && Array.isArray(b.parameters?.sheets)) {
+          const inner = visit(b.parameters.sheets as Array<{ blocks?: any[] }>)
+          if (inner !== b.parameters.sheets) out = { ...b, parameters: { ...b.parameters, sheets: inner } }
+        }
+        if (out !== b) blocksChanged = true
+        return out
+      })
+      if (!blocksChanged) return sheet
+      changed = true
+      return { ...sheet, blocks }
+    })
+    return changed ? next : list
+  }
+  return visit(sheets)
+}

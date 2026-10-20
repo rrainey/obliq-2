@@ -500,9 +500,11 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         
         // Load the auto-save data but maintain the latest version number
         setSheets(sheets)
-        setActiveSheetId(sheets[0].id)
-        setBlocks(sheets[0]?.blocks || [])
-        setWires(sheets[0]?.connections || [])
+        // setSheets repairs reference ports, so take the first sheet from the store
+        const loadedFirst = useModelStore.getState().sheets[0]
+        setActiveSheetId(loadedFirst.id)
+        setBlocks(loadedFirst?.blocks || [])
+        setWires(loadedFirst?.connections || [])
         
         // Critical: Set version tracking to indicate we're on the latest version
         setCurrentVersion(model.latest_version || 1)
