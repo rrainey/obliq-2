@@ -164,13 +164,13 @@ describe('StateIntegrator', () => {
     // Check for RK4 structure
     expect(result).toContain('RK4 Integration')
     expect(result).toContain('k1, k2, k3, k4')
-    expect(result).toContain('temp_states')
+    expect(result).toContain('rk4_major')
 
     // Check for k1-k4 calculations
     expect(result).toContain('Calculate k1 = f(t, y)')
-    expect(result).toContain('Calculate k2 = f(t + h/2, y + h/2 * k1)')
-    expect(result).toContain('Calculate k3 = f(t + h/2, y + h/2 * k2)')
-    expect(result).toContain('Calculate k4 = f(t + h, y + h * k3)')
+    expect(result).toContain('Calculate k2 = f(t0 + half_h, y + half_h * k1)')
+    expect(result).toContain('Calculate k3 = f(t0 + half_h, y + half_h * k2)')
+    expect(result).toContain('Calculate k4 = f(t0 + h, y + h * k3)')
 
     // Check for derivatives calls
     expect(result).toContain('test_model_derivatives')

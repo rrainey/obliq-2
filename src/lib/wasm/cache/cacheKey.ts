@@ -43,8 +43,13 @@ import type { ModelParameter } from '@/lib/modelSchema'
  * - v27: Removed spurious evaluate_algebraic calls from RK4 substeps that caused extra sample storage
  * - v28: Added SIMD optimization support (-msimd128 flag)
  * - v29: Added model parameters support (Feature 3) - parameters in header, source block references
+ * - v31: skip algebra in disabled enabled-subsystems + debugMath
+ * - v32: True RK4: algebra re-evaluated at each stage on the model, then the
+ *        major-step snapshot restored (v27 dropped the stage evaluations because
+ *        they stored extra samples; the restore undoes that). Also segregated
+ *        module derivatives read the stage state; Random Noise block.
  */
-const CODEGEN_VERSION = 'v31' // v31: skip algebra in disabled enabled-subsystems + debugMath
+const CODEGEN_VERSION = 'v32'
 
 export interface ModelStructure {
   sheets: Sheet[]

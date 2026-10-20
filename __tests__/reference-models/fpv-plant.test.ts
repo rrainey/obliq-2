@@ -138,8 +138,9 @@ describe('FPV reference model: plant', () => {
     // The accelerometer reads only drag: specific force = -k v
     expect(r.a[2]! + k * r.v[2]!).toBeCloseTo(0, 9)
     expect(Math.abs(r.a[0]!) + Math.abs(r.a[1]!)).toBeLessThan(1e-12)
-    // v = (g/k)(1 - e^{-kt}); obliq integrates this loop at one derivative per step
-    expect(r.v[2]! / ((FPV.gravity / k) * (1 - Math.exp(-k * r.t)))).toBeCloseTo(1, 3)
+    // v = (g/k)(1 - e^{-kt}); the drag loop closes through other blocks, so this
+    // also checks that RK4 re-evaluates the algebra at each stage
+    expect(r.v[2]! / ((FPV.gravity / k) * (1 - Math.exp(-k * r.t)))).toBeCloseTo(1, 10)
   })
 
   it('more thrust on the left rolls right and drifts east', () => {

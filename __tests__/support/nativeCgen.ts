@@ -19,6 +19,8 @@ export interface NativeCgenOptions {
   sheets: Sheet[]
   parameters?: ModelParameter[]
   dt?: number
+  /** Default 'rk4'. */
+  integrationAlgorithm?: 'rk4' | 'euler'
   /** Body of main() after includes; must print results and return 0 on success. */
   smokeMainBody: string
   /** Extra #includes for the smoke main (default: stdio + math). */
@@ -61,7 +63,7 @@ export function compileAndRunNative(opts: NativeCgenOptions): NativeCgenResult {
 
   const gen = new CodeGenerator({
     modelName,
-    integrationAlgorithm: 'rk4',
+    integrationAlgorithm: opts.integrationAlgorithm ?? 'rk4',
     generateMain: false
   })
   const result = gen.generate(opts.sheets, opts.parameters || [])

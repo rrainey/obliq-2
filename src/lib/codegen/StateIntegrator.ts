@@ -325,7 +325,18 @@ export class StateIntegrator {
   }
   
   /**
-   * Generate RK4 integration code
+   * Generate RK4 integration code.
+   *
+   * Each stage re-evaluates the model's algebra at the stage state and time,
+   * so a derivative that reaches an integrator through other blocks (e.g.
+   * q_dot computed from q and omega) sees the stage values, not the
+   * major-step ones. Without this, every k equals k1 and the update is
+   * forward Euler for those states.
+   *
+   * The stage evaluation runs on the model itself and is then undone by
+   * restoring a snapshot: discrete states (unit delays, rate limiters, noise,
+   * Memory), data stores, logged samples, signals and outputs all keep their
+   * major-step values, so the only effect of a step is the RK4 update.
    */
   generateRK4Integration(): string {
     const statefulBlocks = this.getStatefulBlocks()
@@ -334,74 +345,92 @@ export class StateIntegrator {
     if (statefulBlocks.length === 0 && !hasSubsystemStates) {
       return '    /* No state integration needed - no stateful blocks */\n'
     }
-    
+
+    const m = this.modelName
     let code = ''
-    
+
     if (this.options.includeComments) {
-      code += '    /* RK4 Integration (Runge-Kutta 4th order) */\n'
+      code += '    /* RK4 Integration (Runge-Kutta 4th order); algebra re-evaluated at each stage */\n'
     }
-    
-    // Declare RK4 temporary variables
-    code += '    /* RK4 temporary variables */\n'
-    code += `    ${this.modelName}_states_t k1, k2, k3, k4;\n`
-    code += `    ${this.modelName}_states_t temp_states;\n`
-    code += '    double h = model->dt;\n'
-    code += '    double half_h = h * 0.5;\n\n'
-    
-    // k1 = f(t, y)
-    code += '    /* Calculate k1 = f(t, y) */\n'
-    code += `    ${this.modelName}_derivatives(\n`
-    code += '        model->time,\n'
-    code += '        model,\n'
-    code += '        &model->states,\n'
-    code += '        &k1\n'
-    code += '    );\n'
-    code += this.generateFiniteAssertCall('k1', 'model->time')
-    code += '\n'
 
-    // k2 = f(t + h/2, y + h/2 * k1)
-    code += '    /* Calculate k2 = f(t + h/2, y + h/2 * k1) */\n'
-    code += this.generateStateUpdate('temp_states', 'model->states', 'k1', 'half_h')
-    code += '\n'
-    code += `    ${this.modelName}_derivatives(\n`
-    code += '        model->time + half_h,\n'
-    code += '        model,\n'
-    code += '        &temp_states,\n'
-    code += '        &k2\n'
-    code += '    );\n'
-    code += this.generateFiniteAssertCall('k2', 'model->time + half_h')
-    code += '\n'
+    code += '    /* RK4 temporary variables. The snapshot is static because a model struct\n'
+    code += '       can be too large for the stack (notably under WebAssembly). */\n'
+    code += `    static ${m}_t rk4_major;\n`
+    code += `    ${m}_states_t k1, k2, k3, k4;\n`
+    code += '    const double h = model->dt;\n'
+    code += '    const double half_h = h * 0.5;\n'
+    code += '    const double t0 = model->time;\n\n'
 
-    // k3 = f(t + h/2, y + h/2 * k2)
-    code += '    /* Calculate k3 = f(t + h/2, y + h/2 * k2) */\n'
-    code += this.generateStateUpdate('temp_states', 'model->states', 'k2', 'half_h')
-    code += '\n'
-    code += `    ${this.modelName}_derivatives(\n`
-    code += '        model->time + half_h,\n'
-    code += '        model,\n'
-    code += '        &temp_states,\n'
-    code += '        &k3\n'
-    code += '    );\n'
-    code += this.generateFiniteAssertCall('k3', 'model->time + half_h')
-    code += '\n'
+    // k1 = f(t, y): signals are current from this step's evaluate_algebraic
+    code += '    /* Calculate k1 = f(t, y) from the major-step evaluation */\n'
+    code += `    ${m}_derivatives(t0, model, &model->states, &k1);\n`
+    code += this.generateFiniteAssertCall('k1', 't0')
+    code += '    rk4_major = *model;\n\n'
 
-    // k4 = f(t + h, y + h * k3)
-    code += '    /* Calculate k4 = f(t + h, y + h * k3) */\n'
-    code += this.generateStateUpdate('temp_states', 'model->states', 'k3', 'h')
-    code += '\n'
-    code += `    ${this.modelName}_derivatives(\n`
-    code += '        model->time + h,\n'
-    code += '        model,\n'
-    code += '        &temp_states,\n'
-    code += '        &k4\n'
-    code += '    );\n'
-    code += this.generateFiniteAssertCall('k4', 'model->time + h')
-    code += '\n'
-    
+    const stages: Array<[string, string, string, string]> = [
+      ['k2', 'k1', 'half_h', 't0 + half_h'],
+      ['k3', 'k2', 'half_h', 't0 + half_h'],
+      ['k4', 'k3', 'h', 't0 + h'],
+    ]
+    for (const [k, prev, factor, time] of stages) {
+      code += `    /* Calculate ${k} = f(${time}, y + ${factor} * ${prev}) */\n`
+      code += this.generateRK4StageStateUpdate(prev, factor)
+      code += this.generateStageSubsystemStateSync()
+      code += `    model->time = ${time};\n`
+      code += `    ${m}_evaluate_algebraic(model);\n`
+      code += `    ${m}_derivatives(model->time, model, &model->states, &${k});\n`
+      code += this.generateFiniteAssertCall(k, time)
+      code += '    *model = rk4_major; /* undo the stage evaluation */\n\n'
+    }
+
     // Update states using RK4 formula
     code += '    /* Update states using RK4 formula: y[n+1] = y[n] + h/6 * (k1 + 2*k2 + 2*k3 + k4) */\n'
     code += this.generateRK4FinalUpdate(statefulBlocks)
-    
+
+    return code
+  }
+
+  /**
+   * Stage state: model->states = y_n + factor * k for every continuous state
+   * that the final update would advance (same enable gating).
+   */
+  private generateRK4StageStateUpdate(derivative: string, factor: string): string {
+    let code = ''
+    for (const block of this.getStatefulBlocks()) {
+      if (block.block.type !== 'transfer_function' && block.block.type !== 'integrator') continue
+      const update = this.generateStateUpdateForBlock(block, 'model->states', 'rk4_major.states', derivative, factor)
+      if (!update) continue
+      if (this.options.checkEnableStates && this.hasEnableScope(block)) {
+        code += `    if (${this.generateEnableCheck(block)}) {\n`
+        code += CCodeBuilder.indent(update, 1)
+        if (!code.endsWith('\n')) code += '\n'
+        code += '    }\n'
+      } else {
+        code += update
+      }
+    }
+    for (const sub of this.getStatefulSubsystems()) {
+      const update = this.generateSubsystemStateUpdateFor(sub, 'model->states', 'rk4_major.states', derivative, factor)
+      if (!update) continue
+      if (sub.hasEnableInput) {
+        code += `    if (model->${sub.sanitizedName}.enabled) {\n`
+        code += CCodeBuilder.indent(update, 1)
+        if (!code.endsWith('\n')) code += '\n'
+        code += '    }\n'
+      } else {
+        code += update
+      }
+    }
+    return code
+  }
+
+  /** Copy stage states into segregated modules, whose outputs read their own copy. */
+  private generateStageSubsystemStateSync(): string {
+    let code = ''
+    for (const sub of this.getStatefulSubsystems()) {
+      const name = sub.sanitizedName
+      code += `    memcpy(&model->${name}.states, &model->states.${name}, sizeof(model->${name}.states));\n`
+    }
     return code
   }
 
@@ -521,60 +550,54 @@ export class StateIntegrator {
    * Transfer functions use _states[...][stateOrder] pattern.
    * Integrators use simplified access matching signal dimensions.
    */
-  private generateStateUpdate(
+  /** Stage update `dest = source + factor * derivative` for one block's continuous state ('' if none). */
+  private generateStateUpdateForBlock(
+    block: FlattenedBlock,
     dest: string,
     source: string,
     derivative: string,
     factor: string
   ): string {
+    // Use flattened name for state access to handle subsystem blocks correctly
+    const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
+    const typeInfo = this.getBlockTypeInfo(block)
+    const stateOrder = this.getBlockStateOrder(block)
+    const simplified = this.usesSimplifiedStateAccess(block)
     let code = ''
-    const statefulBlocks = this.getStatefulBlocks()
 
-    for (const block of statefulBlocks) {
-      // Use flattened name for state access to handle subsystem blocks correctly
-      const safeName = CCodeBuilder.sanitizeIdentifier(block.flattenedName)
-      const typeInfo = this.getBlockTypeInfo(block)
-      const stateOrder = this.getBlockStateOrder(block)
-      const simplified = this.usesSimplifiedStateAccess(block)
-
-      if (stateOrder > 0) {
-        if (typeInfo.isMatrix) {
-          const [rows, cols] = typeInfo.dimensions
-          code += `    for (int i = 0; i < ${rows}; i++) {\n`
-          code += `        for (int j = 0; j < ${cols}; j++) {\n`
-          if (simplified) {
-            // Integrators: direct 2D access matching signal dimensions
-            code += `            ${dest}.${safeName}_states[i][j] = ${source}.${safeName}_states[i][j] + ${factor} * ${derivative}.${safeName}_states[i][j];\n`
-          } else {
-            code += `            for (int k = 0; k < ${stateOrder}; k++) {\n`
-            code += `                ${dest}.${safeName}_states[i][j][k] = ${source}.${safeName}_states[i][j][k] + ${factor} * ${derivative}.${safeName}_states[i][j][k];\n`
-            code += `            }\n`
-          }
-          code += `        }\n`
-          code += `    }\n`
-        } else if (typeInfo.isVector) {
-          const size = typeInfo.dimensions[0]
-          code += `    for (int i = 0; i < ${size}; i++) {\n`
-          if (simplified) {
-            // Integrators: direct 1D access matching signal dimensions
-            code += `        ${dest}.${safeName}_states[i] = ${source}.${safeName}_states[i] + ${factor} * ${derivative}.${safeName}_states[i];\n`
-          } else {
-            code += `        for (int j = 0; j < ${stateOrder}; j++) {\n`
-            code += `            ${dest}.${safeName}_states[i][j] = ${source}.${safeName}_states[i][j] + ${factor} * ${derivative}.${safeName}_states[i][j];\n`
-            code += `        }\n`
-          }
-          code += `    }\n`
+    if (stateOrder > 0) {
+      if (typeInfo.isMatrix) {
+        const [rows, cols] = typeInfo.dimensions
+        code += `    for (int i = 0; i < ${rows}; i++) {\n`
+        code += `        for (int j = 0; j < ${cols}; j++) {\n`
+        if (simplified) {
+          // Integrators: direct 2D access matching signal dimensions
+          code += `            ${dest}.${safeName}_states[i][j] = ${source}.${safeName}_states[i][j] + ${factor} * ${derivative}.${safeName}_states[i][j];\n`
         } else {
-          code += `    for (int i = 0; i < ${stateOrder}; i++) {\n`
-          code += `        ${dest}.${safeName}_states[i] = ${source}.${safeName}_states[i] + ${factor} * ${derivative}.${safeName}_states[i];\n`
-          code += `    }\n`
+          code += `            for (int k = 0; k < ${stateOrder}; k++) {\n`
+          code += `                ${dest}.${safeName}_states[i][j][k] = ${source}.${safeName}_states[i][j][k] + ${factor} * ${derivative}.${safeName}_states[i][j][k];\n`
+          code += `            }\n`
         }
+        code += `        }\n`
+        code += `    }\n`
+      } else if (typeInfo.isVector) {
+        const size = typeInfo.dimensions[0]
+        code += `    for (int i = 0; i < ${size}; i++) {\n`
+        if (simplified) {
+          // Integrators: direct 1D access matching signal dimensions
+          code += `        ${dest}.${safeName}_states[i] = ${source}.${safeName}_states[i] + ${factor} * ${derivative}.${safeName}_states[i];\n`
+        } else {
+          code += `        for (int j = 0; j < ${stateOrder}; j++) {\n`
+          code += `            ${dest}.${safeName}_states[i][j] = ${source}.${safeName}_states[i][j] + ${factor} * ${derivative}.${safeName}_states[i][j];\n`
+          code += `        }\n`
+        }
+        code += `    }\n`
+      } else {
+        code += `    for (int i = 0; i < ${stateOrder}; i++) {\n`
+        code += `        ${dest}.${safeName}_states[i] = ${source}.${safeName}_states[i] + ${factor} * ${derivative}.${safeName}_states[i];\n`
+        code += `    }\n`
       }
     }
-
-    // Update subsystem states
-    code += this.generateSubsystemStateUpdate(dest, source, derivative, factor)
-
     return code
   }
 
@@ -583,20 +606,19 @@ export class StateIntegrator {
    * Transfer functions use _states[...][stateOrder] pattern.
    * Integrators use simplified access matching signal dimensions.
    */
-  private generateSubsystemStateUpdate(
+  private generateSubsystemStateUpdateFor(
+    sub: SubsystemInfo,
     dest: string,
     source: string,
     derivative: string,
     factor: string
   ): string {
     let code = ''
-    const statefulSubs = this.getStatefulSubsystems()
-
-    for (const sub of statefulSubs) {
+    {
       const subName = sub.sanitizedName
       const statefulBlocks = this.getSubsystemStatefulBlocks(sub)
 
-      if (statefulBlocks.length === 0) continue
+      if (statefulBlocks.length === 0) return ''
 
       code += `    /* Subsystem: ${sub.subsystemName} */\n`
 

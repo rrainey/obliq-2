@@ -274,9 +274,12 @@ describe('Code Generation System', () => {
       expect(result.source).toContain('void state_test_derivatives')
       
       // Check for RK4 integration (inline code, not a function call)
-      expect(result.source).toContain('/* RK4 Integration (Runge-Kutta 4th order) */')
-      expect(result.source).toContain('/* Calculate k1 = f(t, y) */')
-      expect(result.source).toContain('/* Calculate k2 = f(t + h/2, y + h/2 * k1) */')
+      expect(result.source).toContain('RK4 Integration (Runge-Kutta 4th order)')
+      expect(result.source).toContain('/* Calculate k1 = f(t, y) from the major-step evaluation */')
+      expect(result.source).toContain('/* Calculate k2 = f(t0 + half_h, y + half_h * k1) */')
+      // Each later stage re-evaluates the algebra at the stage state, then restores the model
+      expect(result.source.match(/state_test_evaluate_algebraic\(model\);/g)!.length).toBeGreaterThanOrEqual(4)
+      expect(result.source).toContain('*model = rk4_major;')
     })
 
     test('handles nested subsystems correctly', () => {

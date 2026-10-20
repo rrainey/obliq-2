@@ -164,7 +164,7 @@ Each phase adds native-codegen tests to `__tests__/reference-models/` that fly t
 3. **Convenience blocks:** quaternion multiply, inverse and normalise; vector min/max. Each can be built from existing blocks first and promoted to a block if the diagram gets unreadable.
 4. **PID anti-windup:** a clamped discrete accumulator, built from Unit Delay + Limit.
 5. **Deferred:** filters with time-varying coefficients (dynamic notch, dynamic LPF, TPA).
-6. **Integration accuracy (found in Phase 2):** obliq's RK4 is stage-accurate only for a block's own state terms, such as a transfer function's poles. An integrator fed through other blocks gets one derivative per step, which is effectively forward Euler. The plant runs at 1 kHz, where this is accurate enough. The quaternion is renormalised in the model (q/|q| downstream, plus a 10/s pull back to unit norm). True RK4 needs the algebra re-evaluated at each stage. That is a codegen change, and it would shift existing results such as Saturn IB.
+6. **Integration accuracy (found in Phase 2, fixed):** obliq's RK4 used to be stage-accurate only for a block's own state terms, such as a transfer function's poles. An integrator fed through other blocks got one derivative per step, which is effectively forward Euler. Codegen v32 re-evaluates the algebra at each RK4 stage on the model and then restores the major-step snapshot, so discrete states, logged samples and outputs are unaffected (`__tests__/codegen/rk4-stage-evaluation.test.ts` checks fourth-order convergence). The quaternion is still renormalised in the model, because no integrator preserves |q| = 1 exactly.
 
 **Fixed while building the plant:**
 

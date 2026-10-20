@@ -158,9 +158,9 @@ function buildFrameSheet(): SheetBuilder {
   s.wire(Bm, mRotor, 0)
   s.wire(T, mRotor, 1)
 
-  // Attitude. obliq integrates signals that pass through other blocks with
-  // one derivative per step, so the quaternion is renormalized: everything
-  // downstream uses q_n = q/|q|, and q_dot pulls the state back to unit norm.
+  // Attitude. Numerical integration does not preserve |q| = 1 exactly, so the
+  // quaternion is renormalized: everything downstream uses q_n = q/|q|, and
+  // q_dot pulls the state back to unit norm.
   const q = s.add('integrator', 'q', { initialValue: [[1], [0], [0], [0]] })
   const qNorm = s.add('mag', 'qNorm')
   s.wire(q, qNorm)
