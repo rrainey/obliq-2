@@ -6,6 +6,8 @@
   - A subsystem you haven't resized grows to fit its name: wide enough for one line, up to 260 px, wrapping beyond that.
   - A resized subsystem keeps its size, and the name wraps inside it. Resizing won't shrink it below what the name needs.
   - Hide Name returns it to the plain icon at the original size. Other blocks keep their small name above.
+  - **PDF export** matches: subsystems print the cube icon (now as vector art, not the "Subsys" stand-in) with the bold name below it inside the block.
+- **Fixed: black canvas on light-mode systems.** The page background followed the operating system's light/dark preference, with the condition inverted. On a light-mode OS the canvas showed black behind white blocks, and block names were unreadable. Page colours now follow the app's own light/dark setting.
 
 ## What's New in 3.2.0
 

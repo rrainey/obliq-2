@@ -12,7 +12,13 @@ import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from 'pdf-lib'
 import type { BlockData } from '@/components/BlockNode'
 import type { WireData } from '@/components/Wire'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
-import { getBlockWidth, getBlockHeight, portOffsetY } from '@/lib/layout/blockGeometry'
+import {
+  getBlockWidth,
+  getBlockHeight,
+  portOffsetY,
+  hasSubsystemName,
+  SUBSYSTEM_NAME_LABEL,
+} from '@/lib/layout/blockGeometry'
 import { getGlyphSpec, needsRaster } from './blockGlyphs'
 import { parseType } from '@/lib/typeValidator'
 import { resolvePageSize, type PageOrientation } from './pageSizes'
@@ -524,6 +530,33 @@ export function wrapText(text: string, font: PDFFont, size: number, maxWidth: nu
   return lines
 }
 
+/** Tabler IconCube (MIT), 24-unit viewBox, stroked: the canvas' subsystem symbol. */
+const CUBE_ICON_PATHS = [
+  'M21 16.008v-8.018a1.98 1.98 0 0 0 -1 -1.717l-7 -4.008a2.016 2.016 0 0 0 -2 0l-7 4.008c-.619 .355 -1 1.01 -1 1.718v8.018c0 .709 .381 1.363 1 1.717l7 4.008a2.016 2.016 0 0 0 2 0l7 -4.008c.619 -.355 1 -1.01 1 -1.718',
+  'M12 22v-10',
+  'M12 12l8.73 -5.04',
+  'M3.27 6.96l8.73 5.04',
+]
+
+/**
+ * wrapText, plus breaking any single word wider than the line across lines,
+ * like the canvas' overflow-wrap: anywhere.
+ */
+export function wrapBreakingWords(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const out: string[] = []
+  for (const line of wrapText(text, font, size, maxWidth)) {
+    let rest = line
+    while (rest.length > 1 && font.widthOfTextAtSize(rest, size) > maxWidth) {
+      let n = rest.length - 1
+      while (n > 1 && font.widthOfTextAtSize(rest.slice(0, n), size) > maxWidth) n--
+      out.push(rest.slice(0, n))
+      rest = rest.slice(n)
+    }
+    out.push(rest)
+  }
+  return out
+}
+
 /**
  * The owning subsystem's path, i.e. the page's breadcrumb without the sheet
  * name on the end. Null for a top-level sheet, which has no subsystem above it
@@ -879,13 +912,52 @@ export async function renderModelToPdf(
       // showName means "show", matching the canvas: blocks saved before the
       // setting existed keep printing their names.
       const nameSize = Math.max(4, NAME_FONT_SIZE * scale)
-      if (nameSize >= 3.5 && block.parameters?.showName !== false) {
+      const nameInside = hasSubsystemName(block)
+      if (nameSize >= 3.5 && block.parameters?.showName !== false && !nameInside) {
         const name = fitBlockName(block.name || '', helv, nameSize, w * 1.4)
         const nameW = helv.widthOfTextAtSize(name, nameSize)
         p.drawText(name, {
           x: x + (w - nameW) / 2, y: yTop + 2,
           size: nameSize, font: helv, color: BLACK,
         })
+      }
+
+      // A subsystem prints its name inside the body, large and bold below its
+      // symbol, laid out as the canvas does: icon and name centred together
+      // in the padded interior.
+      let symbolCy = h / 2 // symbol centre, below the block's top edge
+      if (nameInside) {
+        const L = SUBSYSTEM_NAME_LABEL
+        const inset = L.paddingPx + L.borderPx
+        const fontSize = L.fontPx * scale
+        const lines = wrapBreakingWords(block.name || '', helvBold, fontSize, (m.width - 2 * inset) * scale)
+        const contentH = L.iconPx + L.gapPx + lines.length * L.lineHeightPx
+        const contentTop = inset + Math.max(0, (m.height - 2 * inset - contentH) / 2)
+        symbolCy = (contentTop + L.iconPx / 2) * scale
+        lines.forEach((line, i) => {
+          const lineTop = contentTop + L.iconPx + L.gapPx + i * L.lineHeightPx
+          const lw = helvBold.widthOfTextAtSize(line, fontSize)
+          p.drawText(line, {
+            x: x + (w - lw) / 2,
+            y: yTop - (lineTop + L.lineHeightPx / 2) * scale - fontSize * 0.35,
+            size: fontSize, font: helvBold, color: BLACK,
+          })
+        })
+      }
+
+      // Subsystems draw the canvas' cube icon as vector paths rather than the
+      // "Subsys" text stand-in.
+      if (block.type === 'subsystem') {
+        const iconScale = scale // the 24-unit icon is drawn at 24 px, like the canvas
+        for (const d of CUBE_ICON_PATHS) {
+          p.drawSvgPath(d, {
+            x: x + w / 2 - 12 * iconScale,
+            y: yTop - symbolCy + 12 * iconScale,
+            scale: iconScale,
+            borderColor: BLACK,
+            borderWidth: 1.5,
+          })
+        }
       }
 
       // Symbol inside the body.
@@ -898,7 +970,7 @@ export async function renderModelToPdf(
         }
       }
       const symSize = Math.max(3, (spec.fontSize ?? 10) * scale)
-      if (spec.text && symSize >= 3) {
+      if (spec.text && symSize >= 3 && block.type !== 'subsystem') {
         const font = spec.mono ? mono : helv
         if (spec.kind === 'raster' || needsRaster(spec.text)) {
           const raster = await getRaster(spec.text, spec.fontSize ?? 10)
@@ -907,7 +979,7 @@ export async function renderModelToPdf(
             const drawW = drawH * (raster.width / raster.height)
             p.drawImage(raster.img, {
               x: x + (w - drawW) / 2,
-              y: yTop - h / 2 - drawH / 2,
+              y: yTop - symbolCy - drawH / 2,
               width: Math.min(drawW, w * 0.9),
               height: drawH,
             })
@@ -915,7 +987,7 @@ export async function renderModelToPdf(
             const fallback = fitInBlock(transliterate(spec.text), font, symSize, w * 0.9)
             const fw = font.widthOfTextAtSize(fallback, symSize)
             p.drawText(fallback, {
-              x: x + (w - fw) / 2, y: yTop - h / 2 - symSize * 0.35,
+              x: x + (w - fw) / 2, y: yTop - symbolCy - symSize * 0.35,
               size: symSize, font, color: BLACK,
             })
           }
@@ -923,7 +995,7 @@ export async function renderModelToPdf(
           const text = fitInBlock(spec.text, font, symSize, w * 0.9)
           const tw = font.widthOfTextAtSize(text, symSize)
           p.drawText(text, {
-            x: x + (w - tw) / 2, y: yTop - h / 2 - symSize * 0.35,
+            x: x + (w - tw) / 2, y: yTop - symbolCy - symSize * 0.35,
             size: symSize, font, color: BLACK,
           })
         }

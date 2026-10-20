@@ -3,7 +3,7 @@ import { buildFullPlan, buildExportPlan, applyScope } from '@/lib/export/sheetTr
 import {
   renderModelToPdf, DEFAULT_PDF_OPTIONS,
   roundedRectPath, terminatorPath, arrowHeadPath, showsPortNames, portLabel,
-  wrapText, subsystemPathOf, sheetNameOf, footerHeightForLines,
+  wrapText, wrapBreakingWords, subsystemPathOf, sheetNameOf, footerHeightForLines,
   wireLineCount, drawLookupPlot, drawTransferFunction, polynomialChunks,
 } from '@/lib/export/pdfRenderer'
 import { resolvePageSize, getPageSize, PAGE_SIZES } from '@/lib/export/pageSizes'
@@ -252,6 +252,14 @@ describe('footer layout', () => {
 
   test('empty text yields no lines', () => {
     expect(wrapText('', helv, 10, 100)).toEqual([])
+  })
+
+  test('subsystem names wrap on words and break a word wider than the block', () => {
+    // helv stub: 5 units per character at size 10
+    expect(wrapBreakingWords('Flight Controller', helv, 10, 60)).toEqual(['Flight', 'Controller'])
+    const broken = wrapBreakingWords('AttitudeEstimator', helv, 10, 40)
+    expect(broken.join('')).toBe('AttitudeEstimator')
+    expect(broken.every(l => l.length * 5 <= 40)).toBe(true)
   })
 
   test('subsystem path is the breadcrumb without the sheet name', () => {
