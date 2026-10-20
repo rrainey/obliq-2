@@ -10,29 +10,8 @@ obliq-2 is a browser-based application, designed for creating and simulating vis
 
 ![Screenshot](images/transp07.png)
 
-## What's New in 3.1.1
+Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
-- **Fixed: "Open Model" sometimes needing two clicks** when running `npm run dev`. Opening the editor made the dev server compile it on demand, and custom webpack chunking (meant for production builds) forced a full page reload that cancelled the navigation. The chunking now applies to production builds only, and the dev server keeps compiled pages for an hour.
-
-## What's New in 3.1.0
-
-- **Sheet overview map.** When the canvas shows less than the whole sheet (zoomed in, or a sheet larger than the window), an overview of the sheet appears in the bottom-right corner with the visible region outlined. Drag in it to pan, and scroll in it to zoom.
-- **Fixed: spurious "Model updated from disk" after Save.** With large models, the save could finish before the file watcher reported it, and the editor mistook its own save for an outside change and reloaded. Outside edits are still detected.
-- **Fixed: wire highlight and block selection showing together.** Selecting a block now clears a "Highlight Connections" net highlight.
-
-## What's New in 3.0.0
-
-Version 3.0.0 makes obliq-2 a **local, single-user application** and substantially improves diagram layout.
-
-- **Supabase replaced by SQLite and plain files.** There is no database server, cloud project or login. Models are JSON files under `~/.config/obliq-2/`, indexed by a local SQLite database (`better-sqlite3`). Each **Save** keeps a version snapshot. Existing Supabase data can be imported with `npm run migrate:supabase` (see [Migrating from the previous Supabase backend](#migrating-from-the-previous-supabase-backend)).
-- **Models as files you can script against.** You can link a model file that lives in another repository. When a model's file changes on disk (a script, the Model Builder API/MCP, or another tab), the editor reloads it or offers **Reload / Keep mine / Save mine as new model**. The disk version is always kept in the version history.
-- **Better automatic layout.** Gotos and Froms sit next to the blocks they connect to, blocks are ordered by the wires that feed them however far back, and wire turns are routed into separate tracks instead of stacking on top of each other (see [Diagram Layout](#diagram-layout)).
-- **Editor refinements.**
-  - A wire's vertical segment can be dragged from anywhere along it.
-  - Simulation settings are saved with the model and take effect on the next run.
-  - Option descriptions appear on hover, focus or click.
-  - The toolbar fits on one row, with exports grouped under **Export**.
-- **Dependency updates.** Next.js 15.5.27 (security fix), Jest 30, and a large reduction in `npm audit` findings.
 
 ## Key Features
 
@@ -43,7 +22,7 @@ Version 3.0.0 makes obliq-2 a **local, single-user application** and substantial
   - Dynamic systems (Integrators and Laplace Transfer Functions)
   - Data operations (1D/2D Lookup Tables)
   - Visualization (Signal Display with plotting)
-  - Signal generation (Source blocks for constants and generators)
+  - Signal generation (Source blocks for constants and generators, seeded Random Noise)
   - Hierarchical composition (Subsystem blocks)
   - Conditional Signal Flow Control
   - Discontinuities (Relay, Rate Limiter, Quantizer, Edge Detect)
@@ -192,6 +171,10 @@ independent adjustments, each of which can be left alone:
 - Token-based authentication for external systems
 - API token management (/tokens page)
 - Includes an MCP server capable of interacting with these APIs
+
+### Reference Models
+- [`reference-models/`](reference-models/) holds example models that are imported once into a new installation's store; existing installations can add them with **My Models → Import Model**
+- **FPV Quadcopter**: a 5-inch quad at Tri-County Aerodrome (48TX), Texas, with motors, battery, ground contact, IMU/magnetometer/barometer models and a Betaflight-style flight controller (acro and angle modes, Mahony estimator). It is built by `scripts/build-fpv-reference-model.ts`; design and sources are in [docs/fpv-reference-model-plan.md](docs/fpv-reference-model-plan.md)
 
 ## Tech Stack
 
