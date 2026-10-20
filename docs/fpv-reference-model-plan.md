@@ -34,7 +34,7 @@ The subject is a typical **5-inch FPV quadcopter**:
 - **Behaviour and equations only, no code:** GPL/LGPL sources (Betaflight, ArduPilot, Crazyflie, Madgwick's legacy C, Corke's MATLAB toolbox).
 - **Not usable:** MathWorks Parrot Minidrone / Drone Reference App. Derivatives are licensed for use with MathWorks products only.
 - **Facts with citation:** parameters taken from papers and datasheets. Do not redistribute datasets that carry no stated license (NeuroBEM, UIUC propeller DB).
-- **Public domain:** WMM2025 (NOAA/BGS) magnetic field values.
+- **Public domain:** WMM2025 (NOAA/BGS) coefficients, evaluated in `scripts/lib/wmm.ts`.
 - **Attribution:** the model's description and `reference-models/README.md` list every source.
 
 ## Model architecture
@@ -164,7 +164,12 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
      - Magnetometer at 100 Hz: C_bn·m_NED plus hard iron, 0.4 µT noise, 0.3 µT LSB.
      - Barometer at 50 Hz: ISA troposphere pressure at 500 m − z, 1.3 Pa noise, and a 30 ms lag that starts at the home pressure.
      - Each rate is its own nested sample scope; the noise sources are seeded Random Noise blocks.
-   - **Field and pressure values:** the magnetic field and the biases are representative values (est.); a real site should use WMM2025. Pressure uses the ISA formula, not the Atmosphere block, whose linear interpolation of the coarse COESA table is off by about 180 Pa near 500 m.
+   - **Site:** Tri-County Aerodrome (48TX), Texas: 33.45192° N, 96.37729° W, field elevation 790 ft (240.8 m, FAA estimate). The NED origin is on the field.
+   - **Magnetic field:** WMM2025 at the site for 2026.80. North 22.891 µT, east 0.910 µT, down 42.325 µT (declination 2.28° E, inclination 61.6°).
+     - It is computed by `scripts/lib/wmm.ts` from NOAA's public-domain coefficients in `scripts/data/`.
+     - That evaluator matches all 100 of NOAA's WMM2025 test values.
+   - **Barometer:** pressure comes from obliq's Atmosphere block, which now evaluates the U.S. Standard Atmosphere 1976 formulae. The estimator inverts the same formulae, so sensor and estimator agree exactly.
+   - **Biases:** the sensor biases are representative values (est.).
    - **Mahony attitude filter:** Kp = 0.25 (Betaflight `imu_dcm_kp` 2500), Ki = 0. The accelerometer is used only while it reads 0.9–1.1 g (Betaflight's accelerometer-health check). The magnetometer correction is projected on the vertical, so it only corrects yaw.
    - **Altitude filter:** second-order complementary filter (ω = 1 rad/s, ζ = 1) of barometric altitude and the accelerometer rotated by the estimate.
    - **Control loop:** the rate PID now flies on the sensor gyro. The estimates are outputs, which angle mode will use.

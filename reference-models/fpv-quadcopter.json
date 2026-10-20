@@ -4,7 +4,7 @@
     "version": "2.2",
     "metadata": {
       "created": "2026-10-19T00:00:00.000Z",
-      "description": "5-inch FPV quadcopter reference model. NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems, and a Betaflight-style acro flight controller at 1 kHz (rates, gyro PT1 filters, rate PID with feed-forward, quad-X mixer with airmode) re-implemented from documented behaviour and defaults. Sensors: IMU (gyro, accelerometer) at 1 kHz, magnetometer at 100 Hz and barometer at 50 Hz with datasheet noise, bias, quantization and range; the controller flies on the sensor gyro and runs a Mahony attitude filter and a baro/accelerometer altitude filter. The Pilot subsystem scripts a roll doublet, a pitch doublet and a yaw step at hover throttle. Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md."
+      "description": "5-inch FPV quadcopter reference model. NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems, and a Betaflight-style acro flight controller at 1 kHz (rates, gyro PT1 filters, rate PID with feed-forward, quad-X mixer with airmode) re-implemented from documented behaviour and defaults. Site: Tri-County Aerodrome (48TX), Texas, 33.45192 N 96.37729 W, elevation 240.8 m; WMM2025 field (2026.8) N/E/D 22.891 / 0.91 / 42.325 uT. Sensors: IMU (gyro, accelerometer) at 1 kHz, magnetometer at 100 Hz and barometer at 50 Hz with datasheet noise, bias, quantization and range; the controller flies on the sensor gyro and runs a Mahony attitude filter and a baro/accelerometer altitude filter. The Pilot subsystem scripts a roll doublet, a pitch doublet and a yaw step at hover throttle. Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md."
     },
     "globalSettings": {
       "simulationTimeStep": 0.0005,
@@ -2210,9 +2210,9 @@
                                   "showName": true,
                                   "signalType": "constant",
                                   "value": [
-                                    0.4305258726915789,
-                                    0.03075184804939849,
-                                    0.9020542094490224
+                                    0.47563496560593577,
+                                    0.018908209283185602,
+                                    0.8794395141877259
                                   ],
                                   "dataType": "double[3]"
                                 }
@@ -2916,7 +2916,7 @@
                                 "parameters": {
                                   "showName": true,
                                   "numInputs": 1,
-                                  "expression": "(1.0 - pow(in(0) / 101325, 0.1902630958088845)) / 0.0000225577"
+                                  "expression": "6356766 * (-44330.76923076923 * (pow(in(0) / 101325, 0.1902632365084836) - 1.0)) / (6356766 - (-44330.76923076923 * (pow(in(0) / 101325, 0.1902632365084836) - 1.0)))"
                                 }
                               },
                               {
@@ -2995,7 +2995,7 @@
                                 },
                                 "parameters": {
                                   "showName": true,
-                                  "initialValue": 500,
+                                  "initialValue": 240.792,
                                   "sampleInterval": 0.001
                                 }
                               },
@@ -5381,7 +5381,7 @@
                                 "type": "orientation_conversion",
                                 "name": "C_bn",
                                 "position": {
-                                  "x": 286,
+                                  "x": 322,
                                   "y": 260
                                 },
                                 "parameters": {
@@ -5401,9 +5401,9 @@
                                   "showName": true,
                                   "signalType": "constant",
                                   "value": [
-                                    21,
-                                    1.5,
-                                    44
+                                    22.891,
+                                    0.91,
+                                    42.325
                                   ],
                                   "dataType": "double[3]"
                                 }
@@ -5413,7 +5413,7 @@
                                 "type": "matrix_multiply",
                                 "name": "FieldInBody",
                                 "position": {
-                                  "x": 452,
+                                  "x": 524,
                                   "y": 332
                                 },
                                 "parameters": {
@@ -5425,7 +5425,7 @@
                                 "type": "source",
                                 "name": "MagBias",
                                 "position": {
-                                  "x": 457,
+                                  "x": 529,
                                   "y": 476
                                 },
                                 "parameters": {
@@ -5462,7 +5462,7 @@
                                 "type": "sum",
                                 "name": "MagSum",
                                 "position": {
-                                  "x": 622,
+                                  "x": 694,
                                   "y": 406
                                 },
                                 "parameters": {
@@ -5476,7 +5476,7 @@
                                 "type": "quantizer",
                                 "name": "MagQuantize",
                                 "position": {
-                                  "x": 782,
+                                  "x": 854,
                                   "y": 414
                                 },
                                 "parameters": {
@@ -5489,7 +5489,7 @@
                                 "type": "output_port",
                                 "name": "mag",
                                 "position": {
-                                  "x": 942,
+                                  "x": 1014,
                                   "y": 424
                                 },
                                 "parameters": {
@@ -5514,7 +5514,7 @@
                                 "targetBlockId": "magn__FieldInBody",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -1
+                                  "midpointOffset": 17
                                 }
                               },
                               {
@@ -5570,7 +5570,7 @@
                               }
                             ],
                             "extents": {
-                              "width": 1242,
+                              "width": 1314,
                               "height": 676
                             }
                           }
@@ -5621,7 +5621,7 @@
                                 "name": "Down",
                                 "position": {
                                   "x": 280,
-                                  "y": 353
+                                  "y": 348
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -5631,17 +5631,31 @@
                                 }
                               },
                               {
-                                "id": "baro__ISAPressure",
+                                "id": "baro__AltitudeMSL",
                                 "type": "evaluate",
-                                "name": "ISAPressure",
+                                "name": "AltitudeMSL",
                                 "position": {
                                   "x": 440,
-                                  "y": 353
+                                  "y": 348
                                 },
                                 "parameters": {
                                   "showName": true,
                                   "numInputs": 1,
-                                  "expression": "101325 * pow(1.0 - 0.0000225577 * (500 - in(0)), 5.25588)"
+                                  "expression": "240.792 - in(0)"
+                                }
+                              },
+                              {
+                                "id": "baro__Atmosphere",
+                                "type": "atmosphere",
+                                "name": "Atmosphere",
+                                "position": {
+                                  "x": 665,
+                                  "y": 330
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "model": "coesa1976",
+                                  "extrapolation": "clamp"
                                 }
                               },
                               {
@@ -5667,8 +5681,8 @@
                                 "type": "sum",
                                 "name": "BaroSum",
                                 "position": {
-                                  "x": 820,
-                                  "y": 363
+                                  "x": 825,
+                                  "y": 368
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -5681,12 +5695,12 @@
                                 "type": "unit_delay",
                                 "name": "BaroPrev",
                                 "position": {
-                                  "x": 1360,
-                                  "y": 374
+                                  "x": 1365,
+                                  "y": 379
                                 },
                                 "parameters": {
                                   "showName": true,
-                                  "initialValue": 95460.834,
+                                  "initialValue": 98465.678,
                                   "sampleInterval": 0.02
                                 }
                               },
@@ -5695,8 +5709,8 @@
                                 "type": "evaluate",
                                 "name": "BaroLag",
                                 "position": {
-                                  "x": 980,
-                                  "y": 374
+                                  "x": 985,
+                                  "y": 379
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -5709,8 +5723,8 @@
                                 "type": "output_port",
                                 "name": "pressure",
                                 "position": {
-                                  "x": 1520,
-                                  "y": 383
+                                  "x": 1525,
+                                  "y": 388
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -5731,52 +5745,59 @@
                                 }
                               },
                               {
-                                "id": "w_2_baro__Down_baro__ISAPressure",
+                                "id": "w_2_baro__Down_baro__AltitudeMSL",
                                 "sourceBlockId": "baro__Down",
                                 "sourcePortIndex": 0,
-                                "targetBlockId": "baro__ISAPressure",
+                                "targetBlockId": "baro__AltitudeMSL",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_3_baro__ISAPressure_baro__BaroSum",
-                                "sourceBlockId": "baro__ISAPressure",
+                                "id": "w_3_baro__AltitudeMSL_baro__Atmosphere",
+                                "sourceBlockId": "baro__AltitudeMSL",
                                 "sourcePortIndex": 0,
+                                "targetBlockId": "baro__Atmosphere",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_4_baro__Atmosphere_baro__BaroSum",
+                                "sourceBlockId": "baro__Atmosphere",
+                                "sourcePortIndex": 2,
                                 "targetBlockId": "baro__BaroSum",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_4_baro__BaroNoise_baro__BaroSum",
+                                "id": "w_5_baro__BaroNoise_baro__BaroSum",
                                 "sourceBlockId": "baro__BaroNoise",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "baro__BaroSum",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 275
+                                  "midpointOffset": 277.5
                                 }
                               },
                               {
-                                "id": "w_5_baro__BaroSum_baro__BaroLag",
+                                "id": "w_6_baro__BaroSum_baro__BaroLag",
                                 "sourceBlockId": "baro__BaroSum",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "baro__BaroLag",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_6_baro__BaroPrev_baro__BaroLag",
+                                "id": "w_7_baro__BaroPrev_baro__BaroLag",
                                 "sourceBlockId": "baro__BaroPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "baro__BaroLag",
                                 "targetPortIndex": 1
                               },
                               {
-                                "id": "w_7_baro__BaroLag_baro__BaroPrev",
+                                "id": "w_8_baro__BaroLag_baro__BaroPrev",
                                 "sourceBlockId": "baro__BaroLag",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "baro__BaroPrev",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_8_baro__BaroLag_baro__pressure",
+                                "id": "w_9_baro__BaroLag_baro__pressure",
                                 "sourceBlockId": "baro__BaroLag",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "baro__pressure",
@@ -5784,7 +5805,7 @@
                               }
                             ],
                             "extents": {
-                              "width": 1820,
+                              "width": 1825,
                               "height": 631
                             }
                           }

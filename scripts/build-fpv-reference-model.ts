@@ -21,6 +21,8 @@ import type { BlockData } from '@/components/BlockNode'
 import type { WireData } from '@/components/Wire'
 import type { Sheet } from '@/lib/simulationTypes'
 import { tuneModelLayout, DEFAULT_TUNE_OPTIONS } from '@/lib/layout/tuneModelLayout'
+import { ussa1976, USSA1976 } from '@/lib/atmosphere/ussa1976'
+import { loadWmm2025, wmmField } from './lib/wmm'
 
 // ---------------------------------------------------------------------------
 // Parameters (kingfisher 5-inch, agile_flight MIT; see the plan for sources)
@@ -72,6 +74,30 @@ export const FC = {
 }
 
 /**
+ * Notional test site: Tri-County Aerodrome (48TX), near Trenton, Texas.
+ * Field elevation 790 ft MSL (FAA, estimated). The NED origin is on the field.
+ */
+export const LOCATION = {
+  name: 'Tri-County Aerodrome (48TX), Texas',
+  latitudeDeg: 33.45192,
+  longitudeDeg: -96.37729,
+  /** m above MSL (790 ft) */
+  elevationM: 790 * 0.3048,
+  /** Decimal year for the magnetic field (2026-10-20) */
+  epoch: 2026.8,
+}
+
+/**
+ * WMM2025 field at the site, NED, µT. The model takes height above the WGS84
+ * ellipsoid; using the MSL elevation (the geoid is about 27 m below the
+ * ellipsoid here) changes the field by well under 0.01 µT.
+ */
+export const SITE_FIELD = (() => {
+  const f = wmmField(loadWmm2025(), LOCATION.latitudeDeg, LOCATION.longitudeDeg, LOCATION.elevationM, LOCATION.epoch)
+  return { ned: [f.x, f.y, f.z].map(v => Number((v / 1000).toFixed(3))), declinationDeg: f.declinationDeg, inclinationDeg: f.inclinationDeg }
+})()
+
+/**
  * Sensor models. Noise values are datasheet figures (TDK ICM-42688-P, iSentek
  * IST8310, Bosch BMP280); turn-on biases and the magnetic field are
  * representative values (est.), not measurements.
@@ -100,8 +126,8 @@ export const SENSORS = {
   },
   mag: {
     ts: 0.01,
-    /** µT in NED: a representative mid-latitude field (est.; use WMM2025 for a real site). */
-    field: [21.0, 1.5, 44.0],
+    /** µT in NED at the site (WMM2025) */
+    field: SITE_FIELD.ned,
     /** µT hard-iron offset (est.) */
     hardIron: [3.0, -2.0, 1.0],
     /** µT RMS */
@@ -112,7 +138,7 @@ export const SENSORS = {
   baro: {
     ts: 0.02,
     /** m above MSL at the NED origin */
-    homeAltitude: 500,
+    homeAltitude: LOCATION.elevationM,
     /** Pa RMS */
     noise: 1.3,
     /** s, first-order sensor/filter lag */
@@ -121,9 +147,8 @@ export const SENSORS = {
   },
 }
 
-/** ISA troposphere: p = p0 (1 - L h)^n and its inverse. */
-const ISA = { p0: 101325, l: 2.25577e-5, n: 5.25588 }
-export const isaPressure = (h: number) => ISA.p0 * Math.pow(1 - ISA.l * h, ISA.n)
+/** Standard-atmosphere pressure (Pa) at geometric altitude z (m): what the Atmosphere block computes. */
+export const standardPressure = (z: number) => ussa1976(z).pressure_Pa
 
 /** Estimators (in the flight controller, at FC.ts). */
 export const ESTIMATOR = {
@@ -456,24 +481,25 @@ function buildBaroSheet(ideal: boolean): SheetBuilder {
   const b = SENSORS.baro
   const down = s.add('selector', 'Down', { indices: [2] })
   s.wire(pos, down)
-  // ISA troposphere pressure at the geometric altitude home - down
-  const p = s.add('evaluate', 'ISAPressure', {
-    numInputs: 1,
-    expression: `${ISA.p0} * pow(1.0 - ${ISA.l} * (${b.homeAltitude} - in(0)), ${ISA.n})`,
-  })
-  s.wire(down, p)
+  // Standard atmosphere at the geometric altitude above MSL: elevation - down
+  const alt = s.add('evaluate', 'AltitudeMSL', { numInputs: 1, expression: `${b.homeAltitude} - in(0)` })
+  s.wire(down, alt)
+  const atm = s.add('atmosphere', 'Atmosphere', { model: 'coesa1976', extrapolation: 'clamp' })
+  s.wire(alt, atm)
+  const p = atm
+  const pPort = 2 // Atmosphere outputs: T, a, P, rho
   if (ideal) {
-    s.output('pressure', p, 'double')
+    s.output('pressure', p, 'double', pPort)
     return s
   }
   const n = noise(s, 'BaroNoise', 1, { stdDev: b.noise, seed: b.seed })
   const sum = s.add('sum', 'BaroSum', { signs: '++', numInputs: 2 })
-  s.wire(p, sum, 0)
+  s.wire(p, sum, 0, pPort)
   s.wire(n, sum, 1)
   // First-order lag y += a (u - y), starting at the home pressure so the
   // sensor does not power up reading vacuum
   const a = b.ts / (b.lag + b.ts)
-  const prev = s.add('unit_delay', 'BaroPrev', { initialValue: Number(isaPressure(b.homeAltitude).toFixed(3)), sampleInterval: b.ts })
+  const prev = s.add('unit_delay', 'BaroPrev', { initialValue: Number(standardPressure(b.homeAltitude).toFixed(3)), sampleInterval: b.ts })
   const lag = s.add('evaluate', 'BaroLag', { numInputs: 2, expression: `in(1) + ${a} * (in(0) - in(1))` })
   s.wire(sum, lag, 0)
   s.wire(prev, lag, 1)
@@ -616,9 +642,14 @@ function buildAltitudeEstimatorSheet(): SheetBuilder {
   const { altOmega: w, altZeta: z } = ESTIMATOR
   const k1 = 2 * z * w, k2 = w * w, ts = FC.ts
 
+  // Pressure altitude: invert the standard atmosphere's lowest layer
+  // (geopotential H from pressure, then geometric z = r0 H / (r0 - H))
+  const { Tb, Lb } = USSA1976.layers[0]
+  const gmr = (USSA1976.g0 * USSA1976.M0) / USSA1976.Rstar
+  const H = `(${Tb / Lb} * (pow(in(0) / ${USSA1976.P0}, ${-Lb / gmr}) - 1.0))`
   const baroAlt = s.add('evaluate', 'BaroAltitude', {
     numInputs: 1,
-    expression: `(1.0 - pow(in(0) / ${ISA.p0}, ${1 / ISA.n})) / ${ISA.l}`,
+    expression: `${USSA1976.r0} * ${H} / (${USSA1976.r0} - ${H})`,
   })
   s.wire(p, baroAlt)
 
@@ -973,6 +1004,8 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
           'NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems, ' +
           'and a Betaflight-style acro flight controller at 1 kHz (rates, gyro PT1 filters, rate PID with feed-forward, ' +
           'quad-X mixer with airmode) re-implemented from documented behaviour and defaults. ' +
+          `Site: ${LOCATION.name}, ${LOCATION.latitudeDeg} N ${-LOCATION.longitudeDeg} W, elevation ${LOCATION.elevationM.toFixed(1)} m; ` +
+          `WMM2025 field (${LOCATION.epoch}) N/E/D ${SITE_FIELD.ned.join(' / ')} uT. ` +
           'Sensors: IMU (gyro, accelerometer) at 1 kHz, magnetometer at 100 Hz and barometer at 50 Hz with datasheet noise, ' +
           'bias, quantization and range; the controller flies on the sensor gyro and runs a Mahony attitude filter and a ' +
           'baro/accelerometer altitude filter. ' +

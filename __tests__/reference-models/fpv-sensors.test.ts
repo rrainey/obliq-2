@@ -10,7 +10,9 @@ import {
   FC,
   FPV,
   HOVER_THROTTLE,
-  isaPressure,
+  LOCATION,
+  SITE_FIELD,
+  standardPressure,
   SENSORS,
   type StickProfile,
 } from '../../scripts/build-fpv-reference-model'
@@ -128,6 +130,15 @@ describe('FPV reference model: sensors and estimators', () => {
     }
   })
 
+  it('the site is 48TX with its WMM2025 field', () => {
+    expect(LOCATION.latitudeDeg).toBe(33.45192)
+    expect(LOCATION.longitudeDeg).toBe(-96.37729)
+    expect(LOCATION.elevationM).toBeCloseTo(240.8, 1)
+    expect(SITE_FIELD.declinationDeg).toBeCloseTo(2.28, 1)
+    expect(SITE_FIELD.inclinationDeg).toBeCloseTo(61.6, 1)
+    expect(SENSORS.mag.field).toEqual(SITE_FIELD.ned)
+  })
+
   it('magnetometer: updates at 100 Hz and reads the rotated field plus hard iron', () => {
     const m = SENSORS.mag
     let changes = 0
@@ -145,7 +156,7 @@ describe('FPV reference model: sensors and estimators', () => {
     }
   })
 
-  it('barometer: 50 Hz ISA pressure with noise and lag', () => {
+  it('barometer: 50 Hz standard-atmosphere pressure (Atmosphere block) with noise and lag', () => {
     const b = SENSORS.baro
     let changes = 0
     for (let i = 1; i < hover.length; i++) {
@@ -155,8 +166,8 @@ describe('FPV reference model: sensors and estimators', () => {
       }
     }
     expect(changes).toBeGreaterThan(140)
-    // 1.3 Pa noise through the lag filter: residual about ISA(h) well under 2 Pa
-    const resid = hover.filter(r => r.t > 0.5).map(r => r.p - isaPressure(trueAltitude(r)))
+    // 1.3 Pa noise through the lag filter: residual about the standard pressure well under 2 Pa
+    const resid = hover.filter(r => r.t > 0.5).map(r => r.p - standardPressure(trueAltitude(r)))
     expect(Math.abs(mean(resid))).toBeLessThan(0.6)
     expect(std(resid)).toBeLessThan(1.3)
   })
