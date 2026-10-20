@@ -4,7 +4,7 @@
     "version": "2.2",
     "metadata": {
       "created": "2026-10-19T00:00:00.000Z",
-      "description": "5-inch FPV quadcopter reference model (in development: perfect sensors). NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems, and a Betaflight-style acro flight controller at 1 kHz (rates, gyro PT1 filters, rate PID with feed-forward, quad-X mixer with airmode) re-implemented from documented behaviour and defaults. The Pilot subsystem scripts a roll doublet, a pitch doublet and a yaw step at hover throttle. Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md."
+      "description": "5-inch FPV quadcopter reference model. NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems, and a Betaflight-style acro flight controller at 1 kHz (rates, gyro PT1 filters, rate PID with feed-forward, quad-X mixer with airmode) re-implemented from documented behaviour and defaults. Sensors: IMU (gyro, accelerometer) at 1 kHz, magnetometer at 100 Hz and barometer at 50 Hz with datasheet noise, bias, quantization and range; the controller flies on the sensor gyro and runs a Mahony attitude filter and a baro/accelerometer altitude filter. The Pilot subsystem scripts a roll doublet, a pitch doublet and a yaw step at hover throttle. Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md."
     },
     "globalSettings": {
       "simulationTimeStep": 0.0005,
@@ -25,7 +25,7 @@
             "name": "MotorCmdSplit",
             "position": {
               "x": 100,
-              "y": 422
+              "y": -581
             },
             "parameters": {
               "showName": true,
@@ -41,7 +41,7 @@
             "name": "Pilot",
             "position": {
               "x": 100,
-              "y": 278
+              "y": 1219
             },
             "parameters": {
               "showName": true,
@@ -311,19 +311,25 @@
             "type": "subsystem",
             "name": "FlightController",
             "position": {
-              "x": 894,
-              "y": 330
+              "x": 1148,
+              "y": 1221
             },
             "parameters": {
               "showName": true,
               "inputPorts": [
                 "sticks",
-                "gyro"
+                "gyro",
+                "accel",
+                "mag",
+                "pressure"
               ],
               "outputPorts": [
                 "motors",
                 "setpoint",
-                "gyro_dps"
+                "gyro_dps",
+                "euler_est",
+                "altitude_est",
+                "quat_est"
               ],
               "showPortNames": true,
               "codeGenStrategy": "flatten",
@@ -337,8 +343,8 @@
                       "type": "input_port",
                       "name": "sticks",
                       "position": {
-                        "x": 100,
-                        "y": 320
+                        "x": 102,
+                        "y": 657
                       },
                       "parameters": {
                         "showName": true,
@@ -351,8 +357,8 @@
                       "type": "input_port",
                       "name": "gyro",
                       "position": {
-                        "x": 100,
-                        "y": 464
+                        "x": 102,
+                        "y": 406
                       },
                       "parameters": {
                         "showName": true,
@@ -361,12 +367,54 @@
                       }
                     },
                     {
+                      "id": "fc__accel",
+                      "type": "input_port",
+                      "name": "accel",
+                      "position": {
+                        "x": 102,
+                        "y": 156
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "accel",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "fc__mag",
+                      "type": "input_port",
+                      "name": "mag",
+                      "position": {
+                        "x": 102,
+                        "y": 281
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "mag",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "fc__pressure",
+                      "type": "input_port",
+                      "name": "pressure",
+                      "position": {
+                        "x": 100,
+                        "y": 31
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "pressure",
+                        "dataType": "double"
+                      }
+                    },
+                    {
                       "id": "fc__Rates",
                       "type": "subsystem",
                       "name": "Rates",
                       "position": {
-                        "x": 280,
-                        "y": 310
+                        "x": 284,
+                        "y": 647
                       },
                       "parameters": {
                         "showName": true,
@@ -597,8 +645,8 @@
                       "type": "subsystem",
                       "name": "GyroFilters",
                       "position": {
-                        "x": 280,
-                        "y": 454
+                        "x": 284,
+                        "y": 503
                       },
                       "parameters": {
                         "showName": true,
@@ -742,8 +790,8 @@
                       "type": "subsystem",
                       "name": "RatePID",
                       "position": {
-                        "x": 440,
-                        "y": 357
+                        "x": 444,
+                        "y": 579
                       },
                       "parameters": {
                         "showName": true,
@@ -1395,8 +1443,8 @@
                       "type": "subsystem",
                       "name": "Mixer",
                       "position": {
-                        "x": 600,
-                        "y": 368
+                        "x": 604,
+                        "y": 590
                       },
                       "parameters": {
                         "showName": true,
@@ -1949,12 +1997,1252 @@
                       }
                     },
                     {
+                      "id": "fc__AttitudeEstimator",
+                      "type": "subsystem",
+                      "name": "AttitudeEstimator",
+                      "position": {
+                        "x": 284,
+                        "y": 215
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputPorts": [
+                          "gyro",
+                          "accel",
+                          "mag"
+                        ],
+                        "outputPorts": [
+                          "quat",
+                          "euler"
+                        ],
+                        "showPortNames": true,
+                        "codeGenStrategy": "flatten",
+                        "sheets": [
+                          {
+                            "id": "att",
+                            "name": "AttitudeEstimator",
+                            "blocks": [
+                              {
+                                "id": "att__gyro",
+                                "type": "input_port",
+                                "name": "gyro",
+                                "position": {
+                                  "x": 100,
+                                  "y": 546
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "gyro",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "att__accel",
+                                "type": "input_port",
+                                "name": "accel",
+                                "position": {
+                                  "x": 100,
+                                  "y": 149
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "accel",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "att__mag",
+                                "type": "input_port",
+                                "name": "mag",
+                                "position": {
+                                  "x": 100,
+                                  "y": 403
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "mag",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "att__qPrev",
+                                "type": "unit_delay",
+                                "name": "qPrev",
+                                "position": {
+                                  "x": 1620,
+                                  "y": 366
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": [
+                                    [
+                                      1
+                                    ],
+                                    [
+                                      0
+                                    ],
+                                    [
+                                      0
+                                    ],
+                                    [
+                                      0
+                                    ]
+                                  ],
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "att__C_bn",
+                                "type": "orientation_conversion",
+                                "name": "C_bn",
+                                "position": {
+                                  "x": 1840,
+                                  "y": 366
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "conversionType": "quat_to_dcm"
+                                }
+                              },
+                              {
+                                "id": "att__UpNED",
+                                "type": "source",
+                                "name": "UpNED",
+                                "position": {
+                                  "x": 1840,
+                                  "y": 222
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    0,
+                                    0,
+                                    -1
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "att__UpEstimated",
+                                "type": "matrix_multiply",
+                                "name": "UpEstimated",
+                                "position": {
+                                  "x": 2060,
+                                  "y": 294
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__UpMeasuredNorm",
+                                "type": "mag",
+                                "name": "UpMeasuredNorm",
+                                "position": {
+                                  "x": 280,
+                                  "y": 184
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__UpMeasured",
+                                "type": "divide",
+                                "name": "UpMeasured",
+                                "position": {
+                                  "x": 550,
+                                  "y": 106
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__AccelError",
+                                "type": "cross",
+                                "name": "AccelError",
+                                "position": {
+                                  "x": 2230,
+                                  "y": 228
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__AccelHealthy",
+                                "type": "evaluate",
+                                "name": "AccelHealthy",
+                                "position": {
+                                  "x": 440,
+                                  "y": 250
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 1,
+                                  "expression": "(in(0) > 8.82598 && in(0) < 10.78731) ? 1.0 : 0.0"
+                                }
+                              },
+                              {
+                                "id": "att__AccelErrorGated",
+                                "type": "multiply",
+                                "name": "AccelErrorGated",
+                                "position": {
+                                  "x": 2390,
+                                  "y": 239
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "att__FieldDirectionNED",
+                                "type": "source",
+                                "name": "FieldDirectionNED",
+                                "position": {
+                                  "x": 1780,
+                                  "y": 510
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    0.4305258726915789,
+                                    0.03075184804939849,
+                                    0.9020542094490224
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "att__FieldEstimated",
+                                "type": "matrix_multiply",
+                                "name": "FieldEstimated",
+                                "position": {
+                                  "x": 2060,
+                                  "y": 438
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__FieldMeasuredNorm",
+                                "type": "mag",
+                                "name": "FieldMeasuredNorm",
+                                "position": {
+                                  "x": 280,
+                                  "y": 404
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__FieldMeasured",
+                                "type": "divide",
+                                "name": "FieldMeasured",
+                                "position": {
+                                  "x": 550,
+                                  "y": 394
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__MagError",
+                                "type": "cross",
+                                "name": "MagError",
+                                "position": {
+                                  "x": 2230,
+                                  "y": 372
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__MagErrorAlongUp",
+                                "type": "dot",
+                                "name": "MagErrorAlongUp",
+                                "position": {
+                                  "x": 2390,
+                                  "y": 383
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__MagYawError",
+                                "type": "multiply",
+                                "name": "MagYawError",
+                                "position": {
+                                  "x": 2550,
+                                  "y": 316
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "att__Error",
+                                "type": "sum",
+                                "name": "Error",
+                                "position": {
+                                  "x": 2710,
+                                  "y": 305
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "++",
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "att__Kp",
+                                "type": "scale",
+                                "name": "Kp",
+                                "position": {
+                                  "x": 2870,
+                                  "y": 305
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 0.25
+                                }
+                              },
+                              {
+                                "id": "att__CorrectedRate",
+                                "type": "sum",
+                                "name": "CorrectedRate",
+                                "position": {
+                                  "x": 280,
+                                  "y": 548
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "++",
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "att__pqr",
+                                "type": "demux",
+                                "name": "pqr",
+                                "position": {
+                                  "x": 550,
+                                  "y": 538
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "outputCount": 3,
+                                  "inputDimensions": [
+                                    3
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "att__q_dot",
+                                "type": "body2quaternion_rates",
+                                "name": "q_dot",
+                                "position": {
+                                  "x": 820,
+                                  "y": 493
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__Ts",
+                                "type": "scale",
+                                "name": "Ts",
+                                "position": {
+                                  "x": 980,
+                                  "y": 511
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 0.001
+                                }
+                              },
+                              {
+                                "id": "att__qIntegrate",
+                                "type": "sum",
+                                "name": "qIntegrate",
+                                "position": {
+                                  "x": 1140,
+                                  "y": 500
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "++",
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "att__qNorm",
+                                "type": "mag",
+                                "name": "qNorm",
+                                "position": {
+                                  "x": 1300,
+                                  "y": 511
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__q",
+                                "type": "divide",
+                                "name": "q",
+                                "position": {
+                                  "x": 1460,
+                                  "y": 500
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "att__Euler",
+                                "type": "orientation_conversion",
+                                "name": "Euler",
+                                "position": {
+                                  "x": 1620,
+                                  "y": 630
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "conversionType": "quat_to_euler"
+                                }
+                              },
+                              {
+                                "id": "att__quat",
+                                "type": "output_port",
+                                "name": "quat",
+                                "position": {
+                                  "x": 3030,
+                                  "y": 514
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "quat",
+                                  "dataType": "double[4][1]"
+                                }
+                              },
+                              {
+                                "id": "att__euler",
+                                "type": "output_port",
+                                "name": "euler",
+                                "position": {
+                                  "x": 3030,
+                                  "y": 639
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "euler",
+                                  "dataType": "double[3]"
+                                }
+                              }
+                            ],
+                            "connections": [
+                              {
+                                "id": "w_1_att__qPrev_att__C_bn",
+                                "sourceBlockId": "att__qPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__C_bn",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_2_att__C_bn_att__UpEstimated",
+                                "sourceBlockId": "att__C_bn",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__UpEstimated",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 34
+                                }
+                              },
+                              {
+                                "id": "w_3_att__UpNED_att__UpEstimated",
+                                "sourceBlockId": "att__UpNED",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__UpEstimated",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 26
+                                }
+                              },
+                              {
+                                "id": "w_4_att__accel_att__UpMeasuredNorm",
+                                "sourceBlockId": "att__accel",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__UpMeasuredNorm",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -4
+                                }
+                              },
+                              {
+                                "id": "w_5_att__accel_att__UpMeasured",
+                                "sourceBlockId": "att__accel",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__UpMeasured",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -139
+                                }
+                              },
+                              {
+                                "id": "w_6_att__UpMeasuredNorm_att__UpMeasured",
+                                "sourceBlockId": "att__UpMeasuredNorm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__UpMeasured",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -63
+                                }
+                              },
+                              {
+                                "id": "w_7_att__UpMeasured_att__AccelError",
+                                "sourceBlockId": "att__UpMeasured",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__AccelError",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 578
+                                }
+                              },
+                              {
+                                "id": "w_8_att__UpEstimated_att__AccelError",
+                                "sourceBlockId": "att__UpEstimated",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__AccelError",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -4
+                                }
+                              },
+                              {
+                                "id": "w_9_att__UpMeasuredNorm_att__AccelHealthy",
+                                "sourceBlockId": "att__UpMeasuredNorm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__AccelHealthy",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -8
+                                }
+                              },
+                              {
+                                "id": "w_10_att__AccelError_att__AccelErrorGated",
+                                "sourceBlockId": "att__AccelError",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__AccelErrorGated",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_11_att__AccelHealthy_att__AccelErrorGated",
+                                "sourceBlockId": "att__AccelHealthy",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__AccelErrorGated",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_12_att__C_bn_att__FieldEstimated",
+                                "sourceBlockId": "att__C_bn",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__FieldEstimated",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 34
+                                }
+                              },
+                              {
+                                "id": "w_13_att__FieldDirectionNED_att__FieldEstimated",
+                                "sourceBlockId": "att__FieldDirectionNED",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__FieldEstimated",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 12
+                                }
+                              },
+                              {
+                                "id": "w_14_att__mag_att__FieldMeasuredNorm",
+                                "sourceBlockId": "att__mag",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__FieldMeasuredNorm",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 4
+                                }
+                              },
+                              {
+                                "id": "w_15_att__mag_att__FieldMeasured",
+                                "sourceBlockId": "att__mag",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__FieldMeasured",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 25
+                                }
+                              },
+                              {
+                                "id": "w_16_att__FieldMeasuredNorm_att__FieldMeasured",
+                                "sourceBlockId": "att__FieldMeasuredNorm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__FieldMeasured",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_17_att__FieldMeasured_att__MagError",
+                                "sourceBlockId": "att__FieldMeasured",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__MagError",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -654
+                                }
+                              },
+                              {
+                                "id": "w_18_att__FieldEstimated_att__MagError",
+                                "sourceBlockId": "att__FieldEstimated",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__MagError",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 4
+                                }
+                              },
+                              {
+                                "id": "w_19_att__MagError_att__MagErrorAlongUp",
+                                "sourceBlockId": "att__MagError",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__MagErrorAlongUp",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_20_att__UpEstimated_att__MagErrorAlongUp",
+                                "sourceBlockId": "att__UpEstimated",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__MagErrorAlongUp",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 80
+                                }
+                              },
+                              {
+                                "id": "w_21_att__UpEstimated_att__MagYawError",
+                                "sourceBlockId": "att__UpEstimated",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__MagYawError",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_22_att__MagErrorAlongUp_att__MagYawError",
+                                "sourceBlockId": "att__MagErrorAlongUp",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__MagYawError",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_23_att__AccelErrorGated_att__Error",
+                                "sourceBlockId": "att__AccelErrorGated",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__Error",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 80
+                                }
+                              },
+                              {
+                                "id": "w_24_att__MagYawError_att__Error",
+                                "sourceBlockId": "att__MagYawError",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__Error",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_25_att__Error_att__Kp",
+                                "sourceBlockId": "att__Error",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__Kp",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_26_att__gyro_att__CorrectedRate",
+                                "sourceBlockId": "att__gyro",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__CorrectedRate",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_27_att__Kp_att__CorrectedRate",
+                                "sourceBlockId": "att__Kp",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__CorrectedRate",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_28_att__CorrectedRate_att__pqr",
+                                "sourceBlockId": "att__CorrectedRate",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__pqr",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -47
+                                }
+                              },
+                              {
+                                "id": "w_29_att__qPrev_att__q_dot",
+                                "sourceBlockId": "att__qPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__q_dot",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_30_att__pqr_att__q_dot",
+                                "sourceBlockId": "att__pqr",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__q_dot",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 43
+                                }
+                              },
+                              {
+                                "id": "w_31_att__pqr_att__q_dot",
+                                "sourceBlockId": "att__pqr",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "att__q_dot",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 59
+                                }
+                              },
+                              {
+                                "id": "w_32_att__pqr_att__q_dot",
+                                "sourceBlockId": "att__pqr",
+                                "sourcePortIndex": 2,
+                                "targetBlockId": "att__q_dot",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": 67
+                                }
+                              },
+                              {
+                                "id": "w_33_att__q_dot_att__Ts",
+                                "sourceBlockId": "att__q_dot",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__Ts",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_34_att__qPrev_att__qIntegrate",
+                                "sourceBlockId": "att__qPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__qIntegrate",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_35_att__Ts_att__qIntegrate",
+                                "sourceBlockId": "att__Ts",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__qIntegrate",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_36_att__qIntegrate_att__qNorm",
+                                "sourceBlockId": "att__qIntegrate",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__qNorm",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_37_att__qIntegrate_att__q",
+                                "sourceBlockId": "att__qIntegrate",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__q",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 80
+                                }
+                              },
+                              {
+                                "id": "w_38_att__qNorm_att__q",
+                                "sourceBlockId": "att__qNorm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__q",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_39_att__q_att__qPrev",
+                                "sourceBlockId": "att__q",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__qPrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_40_att__q_att__Euler",
+                                "sourceBlockId": "att__q",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__Euler",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_41_att__q_att__quat",
+                                "sourceBlockId": "att__q",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__quat",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 705
+                                }
+                              },
+                              {
+                                "id": "w_42_att__Euler_att__euler",
+                                "sourceBlockId": "att__Euler",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "att__euler",
+                                "targetPortIndex": 0
+                              }
+                            ],
+                            "extents": {
+                              "width": 3330,
+                              "height": 839
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "id": "fc__AltitudeEstimator",
+                      "type": "subsystem",
+                      "name": "AltitudeEstimator",
+                      "position": {
+                        "x": 444,
+                        "y": 95
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputPorts": [
+                          "accel",
+                          "quat",
+                          "pressure"
+                        ],
+                        "outputPorts": [
+                          "altitude",
+                          "climb_rate"
+                        ],
+                        "showPortNames": true,
+                        "codeGenStrategy": "flatten",
+                        "sheets": [
+                          {
+                            "id": "alt",
+                            "name": "AltitudeEstimator",
+                            "blocks": [
+                              {
+                                "id": "alt__accel",
+                                "type": "input_port",
+                                "name": "accel",
+                                "position": {
+                                  "x": 102,
+                                  "y": 378
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "accel",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "alt__quat",
+                                "type": "input_port",
+                                "name": "quat",
+                                "position": {
+                                  "x": 102,
+                                  "y": 253
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "quat",
+                                  "dataType": "double[4][1]"
+                                }
+                              },
+                              {
+                                "id": "alt__pressure",
+                                "type": "input_port",
+                                "name": "pressure",
+                                "position": {
+                                  "x": 100,
+                                  "y": 503
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "pressure",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "alt__BaroAltitude",
+                                "type": "evaluate",
+                                "name": "BaroAltitude",
+                                "position": {
+                                  "x": 284,
+                                  "y": 439
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 1,
+                                  "expression": "(1.0 - pow(in(0) / 101325, 0.1902630958088845)) / 0.0000225577"
+                                }
+                              },
+                              {
+                                "id": "alt__C_bn",
+                                "type": "orientation_conversion",
+                                "name": "C_bn",
+                                "position": {
+                                  "x": 394,
+                                  "y": 295
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "conversionType": "quat_to_dcm"
+                                }
+                              },
+                              {
+                                "id": "alt__C_nb",
+                                "type": "transpose",
+                                "name": "C_nb",
+                                "position": {
+                                  "x": 664,
+                                  "y": 350
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "alt__ForceNED",
+                                "type": "matrix_multiply",
+                                "name": "ForceNED",
+                                "position": {
+                                  "x": 824,
+                                  "y": 360
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "alt__ForceDown",
+                                "type": "selector",
+                                "name": "ForceDown",
+                                "position": {
+                                  "x": 994,
+                                  "y": 360
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "indices": [
+                                    2
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "alt__AccelUp",
+                                "type": "evaluate",
+                                "name": "AccelUp",
+                                "position": {
+                                  "x": 1154,
+                                  "y": 360
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 1,
+                                  "expression": "-(in(0) + 9.80665)"
+                                }
+                              },
+                              {
+                                "id": "alt__hPrev",
+                                "type": "unit_delay",
+                                "name": "hPrev",
+                                "position": {
+                                  "x": 2320,
+                                  "y": 400
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": 500,
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "alt__vPrev",
+                                "type": "unit_delay",
+                                "name": "vPrev",
+                                "position": {
+                                  "x": 1780,
+                                  "y": 422
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": 0,
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "alt__ClimbRate",
+                                "type": "evaluate",
+                                "name": "ClimbRate",
+                                "position": {
+                                  "x": 1400,
+                                  "y": 352
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 4,
+                                  "expression": "in(0) + 0.001 * (in(1) + 1 * (in(2) - in(3)))"
+                                }
+                              },
+                              {
+                                "id": "alt__Altitude",
+                                "type": "evaluate",
+                                "name": "Altitude",
+                                "position": {
+                                  "x": 1940,
+                                  "y": 414
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 3,
+                                  "expression": "in(0) + 0.001 * (in(1) + 2 * (in(2) - in(0)))"
+                                }
+                              },
+                              {
+                                "id": "alt__altitude",
+                                "type": "output_port",
+                                "name": "altitude",
+                                "position": {
+                                  "x": 2488,
+                                  "y": 453
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "altitude",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "alt__climb_rate",
+                                "type": "output_port",
+                                "name": "climb_rate",
+                                "position": {
+                                  "x": 2480,
+                                  "y": 328
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "climb_rate",
+                                  "dataType": "double"
+                                }
+                              }
+                            ],
+                            "connections": [
+                              {
+                                "id": "w_1_alt__pressure_alt__BaroAltitude",
+                                "sourceBlockId": "alt__pressure",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__BaroAltitude",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 4
+                                }
+                              },
+                              {
+                                "id": "w_2_alt__quat_alt__C_bn",
+                                "sourceBlockId": "alt__quat",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__C_bn",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -58
+                                }
+                              },
+                              {
+                                "id": "w_3_alt__C_bn_alt__C_nb",
+                                "sourceBlockId": "alt__C_bn",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__C_nb",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 55
+                                }
+                              },
+                              {
+                                "id": "w_4_alt__C_nb_alt__ForceNED",
+                                "sourceBlockId": "alt__C_nb",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__ForceNED",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_5_alt__accel_alt__ForceNED",
+                                "sourceBlockId": "alt__accel",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__ForceNED",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 271
+                                }
+                              },
+                              {
+                                "id": "w_6_alt__ForceNED_alt__ForceDown",
+                                "sourceBlockId": "alt__ForceNED",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__ForceDown",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_7_alt__ForceDown_alt__AccelUp",
+                                "sourceBlockId": "alt__ForceDown",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__AccelUp",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_8_alt__vPrev_alt__ClimbRate",
+                                "sourceBlockId": "alt__vPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__ClimbRate",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_9_alt__AccelUp_alt__ClimbRate",
+                                "sourceBlockId": "alt__AccelUp",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__ClimbRate",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_10_alt__BaroAltitude_alt__ClimbRate",
+                                "sourceBlockId": "alt__BaroAltitude",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__ClimbRate",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 368
+                                }
+                              },
+                              {
+                                "id": "w_11_alt__hPrev_alt__ClimbRate",
+                                "sourceBlockId": "alt__hPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__ClimbRate",
+                                "targetPortIndex": 3
+                              },
+                              {
+                                "id": "w_12_alt__hPrev_alt__Altitude",
+                                "sourceBlockId": "alt__hPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__Altitude",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_13_alt__vPrev_alt__Altitude",
+                                "sourceBlockId": "alt__vPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__Altitude",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_14_alt__BaroAltitude_alt__Altitude",
+                                "sourceBlockId": "alt__BaroAltitude",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__Altitude",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 638
+                                }
+                              },
+                              {
+                                "id": "w_15_alt__ClimbRate_alt__vPrev",
+                                "sourceBlockId": "alt__ClimbRate",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__vPrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_16_alt__Altitude_alt__hPrev",
+                                "sourceBlockId": "alt__Altitude",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__hPrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_17_alt__Altitude_alt__altitude",
+                                "sourceBlockId": "alt__Altitude",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__altitude",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -84
+                                }
+                              },
+                              {
+                                "id": "w_18_alt__ClimbRate_alt__climb_rate",
+                                "sourceBlockId": "alt__ClimbRate",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "alt__climb_rate",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -350
+                                }
+                              }
+                            ],
+                            "extents": {
+                              "width": 2788,
+                              "height": 703
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
                       "id": "fc__motors",
                       "type": "output_port",
                       "name": "motors",
                       "position": {
-                        "x": 762,
-                        "y": 378
+                        "x": 782,
+                        "y": 599
                       },
                       "parameters": {
                         "showName": true,
@@ -1967,8 +3255,8 @@
                       "type": "output_port",
                       "name": "setpoint",
                       "position": {
-                        "x": 760,
-                        "y": 252
+                        "x": 780,
+                        "y": 724
                       },
                       "parameters": {
                         "showName": true,
@@ -1981,13 +3269,55 @@
                       "type": "output_port",
                       "name": "gyro_dps",
                       "position": {
-                        "x": 760,
-                        "y": 503
+                        "x": 780,
+                        "y": 474
                       },
                       "parameters": {
                         "showName": true,
                         "portName": "gyro_dps",
                         "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "fc__euler_est",
+                      "type": "output_port",
+                      "name": "euler_est",
+                      "position": {
+                        "x": 776,
+                        "y": 349
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "euler_est",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "fc__altitude_est",
+                      "type": "output_port",
+                      "name": "altitude_est",
+                      "position": {
+                        "x": 764,
+                        "y": 99
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "altitude_est",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "fc__quat_est",
+                      "type": "output_port",
+                      "name": "quat_est",
+                      "position": {
+                        "x": 780,
+                        "y": 224
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "quat_est",
+                        "dataType": "double[4][1]"
                       }
                     }
                   ],
@@ -2004,7 +3334,10 @@
                       "sourceBlockId": "fc__gyro",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__GyroFilters",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 9
+                      }
                     },
                     {
                       "id": "w_3_fc__Rates_fc__RatePID",
@@ -2013,7 +3346,7 @@
                       "targetBlockId": "fc__RatePID",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -4
+                        "midpointOffset": 12
                       }
                     },
                     {
@@ -2040,45 +3373,132 @@
                       "targetBlockId": "fc__Mixer",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 80
+                        "midpointOffset": 92
                       }
                     },
                     {
-                      "id": "w_7_fc__Mixer_fc__motors",
+                      "id": "w_7_fc__gyro_fc__AttitudeEstimator",
+                      "sourceBlockId": "fc__gyro",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AttitudeEstimator",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 9
+                      }
+                    },
+                    {
+                      "id": "w_8_fc__accel_fc__AttitudeEstimator",
+                      "sourceBlockId": "fc__accel",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AttitudeEstimator",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -7
+                      }
+                    },
+                    {
+                      "id": "w_9_fc__mag_fc__AttitudeEstimator",
+                      "sourceBlockId": "fc__mag",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AttitudeEstimator",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": 1
+                      }
+                    },
+                    {
+                      "id": "w_10_fc__accel_fc__AltitudeEstimator",
+                      "sourceBlockId": "fc__accel",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AltitudeEstimator",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -87
+                      }
+                    },
+                    {
+                      "id": "w_11_fc__AttitudeEstimator_fc__AltitudeEstimator",
+                      "sourceBlockId": "fc__AttitudeEstimator",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AltitudeEstimator",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_12_fc__pressure_fc__AltitudeEstimator",
+                      "sourceBlockId": "fc__pressure",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AltitudeEstimator",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": 68
+                      }
+                    },
+                    {
+                      "id": "w_13_fc__Mixer_fc__motors",
                       "sourceBlockId": "fc__Mixer",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__motors",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_8_fc__Rates_fc__setpoint",
+                      "id": "w_14_fc__Rates_fc__setpoint",
                       "sourceBlockId": "fc__Rates",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__setpoint",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -8
+                        "midpointOffset": -156
                       }
                     },
                     {
-                      "id": "w_9_fc__GyroFilters_fc__gyro_dps",
+                      "id": "w_15_fc__GyroFilters_fc__gyro_dps",
                       "sourceBlockId": "fc__GyroFilters",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__gyro_dps",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 8
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_16_fc__AttitudeEstimator_fc__euler_est",
+                      "sourceBlockId": "fc__AttitudeEstimator",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "fc__euler_est",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -10
+                      }
+                    },
+                    {
+                      "id": "w_17_fc__AltitudeEstimator_fc__altitude_est",
+                      "sourceBlockId": "fc__AltitudeEstimator",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__altitude_est",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_18_fc__AttitudeEstimator_fc__quat_est",
+                      "sourceBlockId": "fc__AttitudeEstimator",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__quat_est",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -20
                       }
                     }
                   ],
                   "extents": {
-                    "width": 1062,
-                    "height": 703
+                    "width": 1082,
+                    "height": 924
                   }
                 }
               ],
-              "width": 170,
-              "height": 140,
+              "width": 180,
+              "height": 180,
               "sampleTimeSec": 0.001
             }
           },
@@ -2088,7 +3508,7 @@
             "name": "Motor_RR",
             "position": {
               "x": 260,
-              "y": 120
+              "y": -811
             },
             "parameters": {
               "showName": true,
@@ -2293,7 +3713,7 @@
             "name": "Motor_FR",
             "position": {
               "x": 260,
-              "y": 280
+              "y": -651
             },
             "parameters": {
               "showName": true,
@@ -2319,7 +3739,7 @@
             "name": "Motor_RL",
             "position": {
               "x": 260,
-              "y": 440
+              "y": -491
             },
             "parameters": {
               "showName": true,
@@ -2345,7 +3765,7 @@
             "name": "Motor_FL",
             "position": {
               "x": 260,
-              "y": 600
+              "y": -331
             },
             "parameters": {
               "showName": true,
@@ -2371,7 +3791,7 @@
             "name": "Thrusts",
             "position": {
               "x": 484,
-              "y": 440
+              "y": -4
             },
             "parameters": {
               "showName": true,
@@ -2387,7 +3807,7 @@
             "name": "RotorSpeeds",
             "position": {
               "x": 484,
-              "y": 260
+              "y": -1159
             },
             "parameters": {
               "showName": true,
@@ -2403,7 +3823,7 @@
             "name": "Frame",
             "position": {
               "x": 654,
-              "y": 270
+              "y": -84
             },
             "parameters": {
               "showName": true,
@@ -3482,12 +4902,1096 @@
             }
           },
           {
+            "id": "main__Sensors",
+            "type": "subsystem",
+            "name": "Sensors",
+            "position": {
+              "x": 894,
+              "y": 539
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [
+                "pos_ned",
+                "quat",
+                "omega",
+                "specific_force"
+              ],
+              "outputPorts": [
+                "gyro",
+                "accel",
+                "mag",
+                "pressure"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "flatten",
+              "sheets": [
+                {
+                  "id": "sensors",
+                  "name": "Sensors",
+                  "blocks": [
+                    {
+                      "id": "sensors__pos_ned",
+                      "type": "input_port",
+                      "name": "pos_ned",
+                      "position": {
+                        "x": 126,
+                        "y": 190
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "pos_ned",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "sensors__quat",
+                      "type": "input_port",
+                      "name": "quat",
+                      "position": {
+                        "x": 126,
+                        "y": 565
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "quat",
+                        "dataType": "double[4][1]"
+                      }
+                    },
+                    {
+                      "id": "sensors__omega",
+                      "type": "input_port",
+                      "name": "omega",
+                      "position": {
+                        "x": 126,
+                        "y": 315
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "omega",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "sensors__specific_force",
+                      "type": "input_port",
+                      "name": "specific_force",
+                      "position": {
+                        "x": 100,
+                        "y": 440
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "specific_force",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "sensors__IMU",
+                      "type": "subsystem",
+                      "name": "IMU",
+                      "position": {
+                        "x": 332,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputPorts": [
+                          "omega",
+                          "specific_force"
+                        ],
+                        "outputPorts": [
+                          "gyro",
+                          "accel"
+                        ],
+                        "showPortNames": true,
+                        "codeGenStrategy": "flatten",
+                        "sheets": [
+                          {
+                            "id": "imu",
+                            "name": "IMU",
+                            "blocks": [
+                              {
+                                "id": "imu__omega",
+                                "type": "input_port",
+                                "name": "omega",
+                                "position": {
+                                  "x": 150,
+                                  "y": 440
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "omega",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "imu__specific_force",
+                                "type": "input_port",
+                                "name": "specific_force",
+                                "position": {
+                                  "x": 124,
+                                  "y": 27
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "specific_force",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "imu__GyroBias",
+                                "type": "source",
+                                "name": "GyroBias",
+                                "position": {
+                                  "x": 100,
+                                  "y": 565
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    0.005235987755982988,
+                                    -0.003490658503988659,
+                                    0.0017453292519943296
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "imu__GyroNoise",
+                                "type": "random_noise",
+                                "name": "GyroNoise",
+                                "position": {
+                                  "x": 160,
+                                  "y": 709
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "distribution": "gaussian",
+                                  "mean": 0,
+                                  "sampleTime": 0,
+                                  "dataType": "double[3]",
+                                  "amplitudeMode": "density",
+                                  "noiseDensity": 0.000048869219055841225,
+                                  "seed": 101
+                                }
+                              },
+                              {
+                                "id": "imu__GyroSum",
+                                "type": "sum",
+                                "name": "GyroSum",
+                                "position": {
+                                  "x": 380,
+                                  "y": 560
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "+++",
+                                  "numInputs": 3
+                                }
+                              },
+                              {
+                                "id": "imu__GyroQuantize",
+                                "type": "quantizer",
+                                "name": "GyroQuantize",
+                                "position": {
+                                  "x": 540,
+                                  "y": 568
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "quantum": 0.0010652644360316954
+                                }
+                              },
+                              {
+                                "id": "imu__GyroRange",
+                                "type": "limit",
+                                "name": "GyroRange",
+                                "position": {
+                                  "x": 700,
+                                  "y": 568
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "lowerLimit": -34.90658503988659,
+                                  "upperLimit": 34.90658503988659
+                                }
+                              },
+                              {
+                                "id": "imu__AccelBias",
+                                "type": "source",
+                                "name": "AccelBias",
+                                "position": {
+                                  "x": 130,
+                                  "y": 152
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    0.02,
+                                    -0.03,
+                                    0.05
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "imu__AccelNoise",
+                                "type": "random_noise",
+                                "name": "AccelNoise",
+                                "position": {
+                                  "x": 160,
+                                  "y": 296
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "distribution": "gaussian",
+                                  "mean": 0,
+                                  "sampleTime": 0,
+                                  "dataType": "double[3]",
+                                  "amplitudeMode": "density",
+                                  "noiseDensity": 0.0006864654999999999,
+                                  "seed": 102
+                                }
+                              },
+                              {
+                                "id": "imu__AccelSum",
+                                "type": "sum",
+                                "name": "AccelSum",
+                                "position": {
+                                  "x": 380,
+                                  "y": 147
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "+++",
+                                  "numInputs": 3
+                                }
+                              },
+                              {
+                                "id": "imu__AccelQuantize",
+                                "type": "quantizer",
+                                "name": "AccelQuantize",
+                                "position": {
+                                  "x": 540,
+                                  "y": 155
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "quantum": 0.0047884033203125
+                                }
+                              },
+                              {
+                                "id": "imu__AccelRange",
+                                "type": "limit",
+                                "name": "AccelRange",
+                                "position": {
+                                  "x": 700,
+                                  "y": 155
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "lowerLimit": -156.9064,
+                                  "upperLimit": 156.9064
+                                }
+                              },
+                              {
+                                "id": "imu__gyro",
+                                "type": "output_port",
+                                "name": "gyro",
+                                "position": {
+                                  "x": 860,
+                                  "y": 578
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "gyro",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "imu__accel",
+                                "type": "output_port",
+                                "name": "accel",
+                                "position": {
+                                  "x": 860,
+                                  "y": 165
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "accel",
+                                  "dataType": "double[3]"
+                                }
+                              }
+                            ],
+                            "connections": [
+                              {
+                                "id": "w_1_imu__omega_imu__GyroSum",
+                                "sourceBlockId": "imu__omega",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__GyroSum",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 29
+                                }
+                              },
+                              {
+                                "id": "w_2_imu__GyroBias_imu__GyroSum",
+                                "sourceBlockId": "imu__GyroBias",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__GyroSum",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 12
+                                }
+                              },
+                              {
+                                "id": "w_3_imu__GyroNoise_imu__GyroSum",
+                                "sourceBlockId": "imu__GyroNoise",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__GyroSum",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 50
+                                }
+                              },
+                              {
+                                "id": "w_4_imu__GyroSum_imu__GyroQuantize",
+                                "sourceBlockId": "imu__GyroSum",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__GyroQuantize",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_5_imu__GyroQuantize_imu__GyroRange",
+                                "sourceBlockId": "imu__GyroQuantize",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__GyroRange",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_6_imu__specific_force_imu__AccelSum",
+                                "sourceBlockId": "imu__specific_force",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__AccelSum",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -8
+                                }
+                              },
+                              {
+                                "id": "w_7_imu__AccelBias_imu__AccelSum",
+                                "sourceBlockId": "imu__AccelBias",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__AccelSum",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 3
+                                }
+                              },
+                              {
+                                "id": "w_8_imu__AccelNoise_imu__AccelSum",
+                                "sourceBlockId": "imu__AccelNoise",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__AccelSum",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 26
+                                }
+                              },
+                              {
+                                "id": "w_9_imu__AccelSum_imu__AccelQuantize",
+                                "sourceBlockId": "imu__AccelSum",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__AccelQuantize",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_10_imu__AccelQuantize_imu__AccelRange",
+                                "sourceBlockId": "imu__AccelQuantize",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__AccelRange",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_11_imu__GyroRange_imu__gyro",
+                                "sourceBlockId": "imu__GyroRange",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__gyro",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_12_imu__AccelRange_imu__accel",
+                                "sourceBlockId": "imu__AccelRange",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "imu__accel",
+                                "targetPortIndex": 0
+                              }
+                            ],
+                            "extents": {
+                              "width": 1160,
+                              "height": 909
+                            }
+                          }
+                        ],
+                        "sampleTimeSec": 0.001
+                      }
+                    },
+                    {
+                      "id": "sensors__Magnetometer",
+                      "type": "subsystem",
+                      "name": "Magnetometer",
+                      "position": {
+                        "x": 332,
+                        "y": 556
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputPorts": [
+                          "quat"
+                        ],
+                        "outputPorts": [
+                          "mag"
+                        ],
+                        "showPortNames": true,
+                        "codeGenStrategy": "flatten",
+                        "sheets": [
+                          {
+                            "id": "magn",
+                            "name": "Magnetometer",
+                            "blocks": [
+                              {
+                                "id": "magn__quat",
+                                "type": "input_port",
+                                "name": "quat",
+                                "position": {
+                                  "x": 100,
+                                  "y": 270
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "quat",
+                                  "dataType": "double[4][1]"
+                                }
+                              },
+                              {
+                                "id": "magn__C_bn",
+                                "type": "orientation_conversion",
+                                "name": "C_bn",
+                                "position": {
+                                  "x": 286,
+                                  "y": 260
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "conversionType": "quat_to_dcm"
+                                }
+                              },
+                              {
+                                "id": "magn__EarthField",
+                                "type": "source",
+                                "name": "EarthField",
+                                "position": {
+                                  "x": 280,
+                                  "y": 404
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    21,
+                                    1.5,
+                                    44
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "magn__FieldInBody",
+                                "type": "matrix_multiply",
+                                "name": "FieldInBody",
+                                "position": {
+                                  "x": 452,
+                                  "y": 332
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "magn__MagBias",
+                                "type": "source",
+                                "name": "MagBias",
+                                "position": {
+                                  "x": 457,
+                                  "y": 476
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    3,
+                                    -2,
+                                    1
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "magn__MagNoise",
+                                "type": "random_noise",
+                                "name": "MagNoise",
+                                "position": {
+                                  "x": 110,
+                                  "y": 434
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "distribution": "gaussian",
+                                  "mean": 0,
+                                  "sampleTime": 0,
+                                  "dataType": "double[3]",
+                                  "stdDev": 0.4,
+                                  "seed": 103
+                                }
+                              },
+                              {
+                                "id": "magn__MagSum",
+                                "type": "sum",
+                                "name": "MagSum",
+                                "position": {
+                                  "x": 622,
+                                  "y": 406
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "+++",
+                                  "numInputs": 3
+                                }
+                              },
+                              {
+                                "id": "magn__MagQuantize",
+                                "type": "quantizer",
+                                "name": "MagQuantize",
+                                "position": {
+                                  "x": 782,
+                                  "y": 414
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "quantum": 0.3
+                                }
+                              },
+                              {
+                                "id": "magn__mag",
+                                "type": "output_port",
+                                "name": "mag",
+                                "position": {
+                                  "x": 942,
+                                  "y": 424
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "mag",
+                                  "dataType": "double[3]"
+                                }
+                              }
+                            ],
+                            "connections": [
+                              {
+                                "id": "w_1_magn__quat_magn__C_bn",
+                                "sourceBlockId": "magn__quat",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "magn__C_bn",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_2_magn__C_bn_magn__FieldInBody",
+                                "sourceBlockId": "magn__C_bn",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "magn__FieldInBody",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -1
+                                }
+                              },
+                              {
+                                "id": "w_3_magn__EarthField_magn__FieldInBody",
+                                "sourceBlockId": "magn__EarthField",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "magn__FieldInBody",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 4
+                                }
+                              },
+                              {
+                                "id": "w_4_magn__FieldInBody_magn__MagSum",
+                                "sourceBlockId": "magn__FieldInBody",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "magn__MagSum",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -4
+                                }
+                              },
+                              {
+                                "id": "w_5_magn__MagBias_magn__MagSum",
+                                "sourceBlockId": "magn__MagBias",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "magn__MagSum",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 6.5
+                                }
+                              },
+                              {
+                                "id": "w_6_magn__MagNoise_magn__MagSum",
+                                "sourceBlockId": "magn__MagNoise",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "magn__MagSum",
+                                "targetPortIndex": 2
+                              },
+                              {
+                                "id": "w_7_magn__MagSum_magn__MagQuantize",
+                                "sourceBlockId": "magn__MagSum",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "magn__MagQuantize",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_8_magn__MagQuantize_magn__mag",
+                                "sourceBlockId": "magn__MagQuantize",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "magn__mag",
+                                "targetPortIndex": 0
+                              }
+                            ],
+                            "extents": {
+                              "width": 1242,
+                              "height": 676
+                            }
+                          }
+                        ],
+                        "sampleTimeSec": 0.01
+                      }
+                    },
+                    {
+                      "id": "sensors__Barometer",
+                      "type": "subsystem",
+                      "name": "Barometer",
+                      "position": {
+                        "x": 332,
+                        "y": 181
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputPorts": [
+                          "pos_ned"
+                        ],
+                        "outputPorts": [
+                          "pressure"
+                        ],
+                        "showPortNames": true,
+                        "codeGenStrategy": "flatten",
+                        "sheets": [
+                          {
+                            "id": "baro",
+                            "name": "Barometer",
+                            "blocks": [
+                              {
+                                "id": "baro__pos_ned",
+                                "type": "input_port",
+                                "name": "pos_ned",
+                                "position": {
+                                  "x": 100,
+                                  "y": 306
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "pos_ned",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "baro__Down",
+                                "type": "selector",
+                                "name": "Down",
+                                "position": {
+                                  "x": 280,
+                                  "y": 353
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "indices": [
+                                    2
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "baro__ISAPressure",
+                                "type": "evaluate",
+                                "name": "ISAPressure",
+                                "position": {
+                                  "x": 440,
+                                  "y": 353
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 1,
+                                  "expression": "101325 * pow(1.0 - 0.0000225577 * (500 - in(0)), 5.25588)"
+                                }
+                              },
+                              {
+                                "id": "baro__BaroNoise",
+                                "type": "random_noise",
+                                "name": "BaroNoise",
+                                "position": {
+                                  "x": 110,
+                                  "y": 431
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "distribution": "gaussian",
+                                  "mean": 0,
+                                  "sampleTime": 0,
+                                  "dataType": "double",
+                                  "stdDev": 1.3,
+                                  "seed": 104
+                                }
+                              },
+                              {
+                                "id": "baro__BaroSum",
+                                "type": "sum",
+                                "name": "BaroSum",
+                                "position": {
+                                  "x": 820,
+                                  "y": 363
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "++",
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "baro__BaroPrev",
+                                "type": "unit_delay",
+                                "name": "BaroPrev",
+                                "position": {
+                                  "x": 1360,
+                                  "y": 374
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": 95460.834,
+                                  "sampleInterval": 0.02
+                                }
+                              },
+                              {
+                                "id": "baro__BaroLag",
+                                "type": "evaluate",
+                                "name": "BaroLag",
+                                "position": {
+                                  "x": 980,
+                                  "y": 374
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 2,
+                                  "expression": "in(1) + 0.39999999999999997 * (in(0) - in(1))"
+                                }
+                              },
+                              {
+                                "id": "baro__pressure",
+                                "type": "output_port",
+                                "name": "pressure",
+                                "position": {
+                                  "x": 1520,
+                                  "y": 383
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "pressure",
+                                  "dataType": "double"
+                                }
+                              }
+                            ],
+                            "connections": [
+                              {
+                                "id": "w_1_baro__pos_ned_baro__Down",
+                                "sourceBlockId": "baro__pos_ned",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "baro__Down",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_2_baro__Down_baro__ISAPressure",
+                                "sourceBlockId": "baro__Down",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "baro__ISAPressure",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_3_baro__ISAPressure_baro__BaroSum",
+                                "sourceBlockId": "baro__ISAPressure",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "baro__BaroSum",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_4_baro__BaroNoise_baro__BaroSum",
+                                "sourceBlockId": "baro__BaroNoise",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "baro__BaroSum",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 275
+                                }
+                              },
+                              {
+                                "id": "w_5_baro__BaroSum_baro__BaroLag",
+                                "sourceBlockId": "baro__BaroSum",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "baro__BaroLag",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_6_baro__BaroPrev_baro__BaroLag",
+                                "sourceBlockId": "baro__BaroPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "baro__BaroLag",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_7_baro__BaroLag_baro__BaroPrev",
+                                "sourceBlockId": "baro__BaroLag",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "baro__BaroPrev",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_8_baro__BaroLag_baro__pressure",
+                                "sourceBlockId": "baro__BaroLag",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "baro__pressure",
+                                "targetPortIndex": 0
+                              }
+                            ],
+                            "extents": {
+                              "width": 1820,
+                              "height": 631
+                            }
+                          }
+                        ],
+                        "sampleTimeSec": 0.02
+                      }
+                    },
+                    {
+                      "id": "sensors__gyro",
+                      "type": "output_port",
+                      "name": "gyro",
+                      "position": {
+                        "x": 494,
+                        "y": 315
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "gyro",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "sensors__accel",
+                      "type": "output_port",
+                      "name": "accel",
+                      "position": {
+                        "x": 494,
+                        "y": 440
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "accel",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "sensors__mag",
+                      "type": "output_port",
+                      "name": "mag",
+                      "position": {
+                        "x": 494,
+                        "y": 565
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "mag",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "sensors__pressure",
+                      "type": "output_port",
+                      "name": "pressure",
+                      "position": {
+                        "x": 492,
+                        "y": 190
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "pressure",
+                        "dataType": "double"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_sensors__omega_sensors__IMU",
+                      "sourceBlockId": "sensors__omega",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sensors__IMU",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 9
+                      }
+                    },
+                    {
+                      "id": "w_2_sensors__specific_force_sensors__IMU",
+                      "sourceBlockId": "sensors__specific_force",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sensors__IMU",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_3_sensors__quat_sensors__Magnetometer",
+                      "sourceBlockId": "sensors__quat",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sensors__Magnetometer",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_4_sensors__pos_ned_sensors__Barometer",
+                      "sourceBlockId": "sensors__pos_ned",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sensors__Barometer",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_5_sensors__IMU_sensors__gyro",
+                      "sourceBlockId": "sensors__IMU",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sensors__gyro",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -5
+                      }
+                    },
+                    {
+                      "id": "w_6_sensors__IMU_sensors__accel",
+                      "sourceBlockId": "sensors__IMU",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "sensors__accel",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 3
+                      }
+                    },
+                    {
+                      "id": "w_7_sensors__Magnetometer_sensors__mag",
+                      "sourceBlockId": "sensors__Magnetometer",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sensors__mag",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_8_sensors__Barometer_sensors__pressure",
+                      "sourceBlockId": "sensors__Barometer",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "sensors__pressure",
+                      "targetPortIndex": 0
+                    }
+                  ],
+                  "extents": {
+                    "width": 794,
+                    "height": 765
+                  }
+                }
+              ],
+              "width": 170,
+              "height": 150
+            }
+          },
+          {
+            "id": "main__imu_gyro",
+            "type": "output_port",
+            "name": "imu_gyro",
+            "position": {
+              "x": 1456,
+              "y": -535
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "imu_gyro",
+              "dataType": "double[3]"
+            }
+          },
+          {
+            "id": "main__imu_accel",
+            "type": "output_port",
+            "name": "imu_accel",
+            "position": {
+              "x": 1452,
+              "y": -285
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "imu_accel",
+              "dataType": "double[3]"
+            }
+          },
+          {
+            "id": "main__mag",
+            "type": "output_port",
+            "name": "mag",
+            "position": {
+              "x": 1458,
+              "y": 109
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "mag",
+              "dataType": "double[3]"
+            }
+          },
+          {
+            "id": "main__pressure",
+            "type": "output_port",
+            "name": "pressure",
+            "position": {
+              "x": 1456,
+              "y": 234
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "pressure",
+              "dataType": "double"
+            }
+          },
+          {
             "id": "main__pos_ned",
             "type": "output_port",
             "name": "pos_ned",
             "position": {
-              "x": 1166,
-              "y": 27
+              "x": 1458,
+              "y": -929
             },
             "parameters": {
               "showName": true,
@@ -3500,8 +6004,8 @@
             "type": "output_port",
             "name": "vel_ned",
             "position": {
-              "x": 1166,
-              "y": 565
+              "x": 1458,
+              "y": -660
             },
             "parameters": {
               "showName": true,
@@ -3514,8 +6018,8 @@
             "type": "output_port",
             "name": "quat",
             "position": {
-              "x": 1166,
-              "y": 296
+              "x": 1458,
+              "y": -410
             },
             "parameters": {
               "showName": true,
@@ -3528,8 +6032,8 @@
             "type": "output_port",
             "name": "euler",
             "position": {
-              "x": 1166,
-              "y": -348
+              "x": 1458,
+              "y": -16
             },
             "parameters": {
               "showName": true,
@@ -3542,8 +6046,8 @@
             "type": "output_port",
             "name": "omega",
             "position": {
-              "x": 1166,
-              "y": -98
+              "x": 1458,
+              "y": 359
             },
             "parameters": {
               "showName": true,
@@ -3556,8 +6060,8 @@
             "type": "output_port",
             "name": "accel",
             "position": {
-              "x": 1166,
-              "y": -617
+              "x": 1458,
+              "y": 484
             },
             "parameters": {
               "showName": true,
@@ -3570,8 +6074,8 @@
             "type": "output_port",
             "name": "motor_omega",
             "position": {
-              "x": 1152,
-              "y": -223
+              "x": 1444,
+              "y": -1198
             },
             "parameters": {
               "showName": true,
@@ -3584,8 +6088,8 @@
             "type": "output_port",
             "name": "motor_cmd",
             "position": {
-              "x": 1160,
-              "y": 690
+              "x": 1452,
+              "y": 609
             },
             "parameters": {
               "showName": true,
@@ -3598,8 +6102,8 @@
             "type": "output_port",
             "name": "rate_setpoint",
             "position": {
-              "x": 1144,
-              "y": 959
+              "x": 1436,
+              "y": 878
             },
             "parameters": {
               "showName": true,
@@ -3612,8 +6116,8 @@
             "type": "output_port",
             "name": "gyro_dps",
             "position": {
-              "x": 1164,
-              "y": 1228
+              "x": 1456,
+              "y": 1147
             },
             "parameters": {
               "showName": true,
@@ -3622,12 +6126,54 @@
             }
           },
           {
+            "id": "main__euler_est",
+            "type": "output_port",
+            "name": "euler_est",
+            "position": {
+              "x": 1452,
+              "y": 1560
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "euler_est",
+              "dataType": "double[3]"
+            }
+          },
+          {
+            "id": "main__altitude_est",
+            "type": "output_port",
+            "name": "altitude_est",
+            "position": {
+              "x": 1440,
+              "y": 1685
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "altitude_est",
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "main__quat_est",
+            "type": "output_port",
+            "name": "quat_est",
+            "position": {
+              "x": 1456,
+              "y": 1954
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "quat_est",
+              "dataType": "double[4][1]"
+            }
+          },
+          {
             "id": "main__Position",
             "type": "signal_display",
             "name": "Position",
             "position": {
-              "x": 1176,
-              "y": 152
+              "x": 1468,
+              "y": -804
             },
             "parameters": {
               "showName": true,
@@ -3639,8 +6185,8 @@
             "type": "signal_display",
             "name": "Attitude",
             "position": {
-              "x": 1176,
-              "y": -492
+              "x": 1468,
+              "y": -160
             },
             "parameters": {
               "showName": true,
@@ -3652,8 +6198,8 @@
             "type": "signal_display",
             "name": "RotorSpeed",
             "position": {
-              "x": 1176,
-              "y": 421
+              "x": 1468,
+              "y": -1073
             },
             "parameters": {
               "showName": true,
@@ -3665,8 +6211,8 @@
             "type": "signal_display",
             "name": "RateSetpoint",
             "position": {
-              "x": 1176,
-              "y": 1084
+              "x": 1468,
+              "y": 1003
             },
             "parameters": {
               "showName": true,
@@ -3678,8 +6224,8 @@
             "type": "signal_display",
             "name": "GyroRate",
             "position": {
-              "x": 1176,
-              "y": 1353
+              "x": 1468,
+              "y": 1272
             },
             "parameters": {
               "showName": true,
@@ -3691,8 +6237,34 @@
             "type": "signal_display",
             "name": "MotorCommand",
             "position": {
-              "x": 1176,
-              "y": 815
+              "x": 1468,
+              "y": 734
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "main__AttitudeEstimate",
+            "type": "signal_display",
+            "name": "AttitudeEstimate",
+            "position": {
+              "x": 1468,
+              "y": 1416
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "main__AltitudeEstimate",
+            "type": "signal_display",
+            "name": "AltitudeEstimate",
+            "position": {
+              "x": 1468,
+              "y": 1810
             },
             "parameters": {
               "showName": true,
@@ -3706,10 +6278,7 @@
             "sourceBlockId": "main__Pilot",
             "sourcePortIndex": 0,
             "targetBlockId": "main__FlightController",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -325
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_2_main__FlightController_main__MotorCmdSplit",
@@ -3725,7 +6294,7 @@
             "targetBlockId": "main__Motor_RR",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -16
+              "midpointOffset": -12
             }
           },
           {
@@ -3735,7 +6304,7 @@
             "targetBlockId": "main__Motor_FR",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 16
+              "midpointOffset": 4
             }
           },
           {
@@ -3745,7 +6314,7 @@
             "targetBlockId": "main__Motor_RL",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 0
+              "midpointOffset": 12
             }
           },
           {
@@ -3755,7 +6324,7 @@
             "targetBlockId": "main__Motor_FL",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 8
+              "midpointOffset": -4
             }
           },
           {
@@ -3765,7 +6334,7 @@
             "targetBlockId": "main__Thrusts",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4
+              "midpointOffset": 28
             }
           },
           {
@@ -3775,7 +6344,7 @@
             "targetBlockId": "main__RotorSpeeds",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 20
+              "midpointOffset": -28
             }
           },
           {
@@ -3785,7 +6354,7 @@
             "targetBlockId": "main__Thrusts",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -20
+              "midpointOffset": 12
             }
           },
           {
@@ -3805,7 +6374,7 @@
             "targetBlockId": "main__Thrusts",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": 12
+              "midpointOffset": -4
             }
           },
           {
@@ -3815,7 +6384,7 @@
             "targetBlockId": "main__RotorSpeeds",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -28
+              "midpointOffset": 4
             }
           },
           {
@@ -3825,7 +6394,7 @@
             "targetBlockId": "main__Thrusts",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": 28
+              "midpointOffset": -20
             }
           },
           {
@@ -3835,7 +6404,7 @@
             "targetBlockId": "main__RotorSpeeds",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": 4
+              "midpointOffset": 20
             }
           },
           {
@@ -3843,185 +6412,342 @@
             "sourceBlockId": "main__Thrusts",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Frame",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_16_main__Frame_main__Sensors",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Sensors",
             "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 12
+            }
+          },
+          {
+            "id": "w_17_main__Frame_main__Sensors",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__Sensors",
+            "targetPortIndex": 1,
             "routing": {
               "midpointOffset": 4
             }
           },
           {
-            "id": "w_16_main__Frame_main__FlightController",
+            "id": "w_18_main__Frame_main__Sensors",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 4,
-            "targetBlockId": "main__FlightController",
-            "targetPortIndex": 1,
+            "targetBlockId": "main__Sensors",
+            "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": 16
+              "midpointOffset": -4
             }
           },
           {
-            "id": "w_17_main__Frame_main__pos_ned",
+            "id": "w_19_main__Frame_main__Sensors",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 5,
+            "targetBlockId": "main__Sensors",
+            "targetPortIndex": 3,
+            "routing": {
+              "midpointOffset": -12
+            }
+          },
+          {
+            "id": "w_20_main__Sensors_main__FlightController",
+            "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__FlightController",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 28
+            }
+          },
+          {
+            "id": "w_21_main__Sensors_main__FlightController",
+            "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__FlightController",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": 20
+            }
+          },
+          {
+            "id": "w_22_main__Sensors_main__FlightController",
+            "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__FlightController",
+            "targetPortIndex": 3,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_23_main__Sensors_main__FlightController",
+            "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__FlightController",
+            "targetPortIndex": 4,
+            "routing": {
+              "midpointOffset": -28
+            }
+          },
+          {
+            "id": "w_24_main__Sensors_main__imu_gyro",
+            "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__imu_gyro",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -126
+            }
+          },
+          {
+            "id": "w_25_main__Sensors_main__imu_accel",
+            "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__imu_accel",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 92
+            }
+          },
+          {
+            "id": "w_26_main__Sensors_main__mag",
+            "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__mag",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 113
+            }
+          },
+          {
+            "id": "w_27_main__Sensors_main__pressure",
+            "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__pressure",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 146
+            }
+          },
+          {
+            "id": "w_28_main__Frame_main__pos_ned",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 0,
             "targetBlockId": "main__pos_ned",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 114
+              "midpointOffset": -270
             }
           },
           {
-            "id": "w_18_main__Frame_main__vel_ned",
+            "id": "w_29_main__Frame_main__vel_ned",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 1,
             "targetBlockId": "main__vel_ned",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -136
+              "midpointOffset": -50
             }
           },
           {
-            "id": "w_19_main__Frame_main__quat",
+            "id": "w_30_main__Frame_main__quat",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 2,
             "targetBlockId": "main__quat",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -128
-            }
-          },
-          {
-            "id": "w_20_main__Frame_main__euler",
-            "sourceBlockId": "main__Frame",
-            "sourcePortIndex": 3,
-            "targetBlockId": "main__euler",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -144
-            }
-          },
-          {
-            "id": "w_21_main__Frame_main__omega",
-            "sourceBlockId": "main__Frame",
-            "sourcePortIndex": 4,
-            "targetBlockId": "main__omega",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -120
-            }
-          },
-          {
-            "id": "w_22_main__Frame_main__accel",
-            "sourceBlockId": "main__Frame",
-            "sourcePortIndex": 5,
-            "targetBlockId": "main__accel",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -152
-            }
-          },
-          {
-            "id": "w_23_main__RotorSpeeds_main__motor_omega",
-            "sourceBlockId": "main__RotorSpeeds",
-            "sourcePortIndex": 0,
-            "targetBlockId": "main__motor_omega",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -253
-            }
-          },
-          {
-            "id": "w_24_main__FlightController_main__motor_cmd",
-            "sourceBlockId": "main__FlightController",
-            "sourcePortIndex": 0,
-            "targetBlockId": "main__motor_cmd",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 0
-            }
-          },
-          {
-            "id": "w_25_main__FlightController_main__rate_setpoint",
-            "sourceBlockId": "main__FlightController",
-            "sourcePortIndex": 1,
-            "targetBlockId": "main__rate_setpoint",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -8
-            }
-          },
-          {
-            "id": "w_26_main__FlightController_main__gyro_dps",
-            "sourceBlockId": "main__FlightController",
-            "sourcePortIndex": 2,
-            "targetBlockId": "main__gyro_dps",
             "targetPortIndex": 0,
             "routing": {
               "midpointOffset": -26
             }
           },
           {
-            "id": "w_27_main__Frame_main__Position",
-            "sourceBlockId": "main__Frame",
-            "sourcePortIndex": 0,
-            "targetBlockId": "main__Position",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 109
-            }
-          },
-          {
-            "id": "w_28_main__Frame_main__Attitude",
+            "id": "w_31_main__Frame_main__euler",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 3,
-            "targetBlockId": "main__Attitude",
+            "targetBlockId": "main__euler",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -149
+              "midpointOffset": 254
             }
           },
           {
-            "id": "w_29_main__RotorSpeeds_main__RotorSpeed",
+            "id": "w_32_main__Frame_main__omega",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 4,
+            "targetBlockId": "main__omega",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -18
+            }
+          },
+          {
+            "id": "w_33_main__Frame_main__accel",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 5,
+            "targetBlockId": "main__accel",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -42
+            }
+          },
+          {
+            "id": "w_34_main__RotorSpeeds_main__motor_omega",
             "sourceBlockId": "main__RotorSpeeds",
             "sourcePortIndex": 0,
-            "targetBlockId": "main__RotorSpeed",
+            "targetBlockId": "main__motor_omega",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 245
+              "midpointOffset": 357
             }
           },
           {
-            "id": "w_30_main__FlightController_main__RateSetpoint",
+            "id": "w_35_main__FlightController_main__motor_cmd",
             "sourceBlockId": "main__FlightController",
-            "sourcePortIndex": 1,
-            "targetBlockId": "main__RateSetpoint",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -24
-            }
-          },
-          {
-            "id": "w_31_main__FlightController_main__GyroRate",
-            "sourceBlockId": "main__FlightController",
-            "sourcePortIndex": 2,
-            "targetBlockId": "main__GyroRate",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__motor_cmd",
             "targetPortIndex": 0,
             "routing": {
               "midpointOffset": -32
             }
           },
           {
-            "id": "w_32_main__FlightController_main__MotorCommand",
+            "id": "w_36_main__FlightController_main__rate_setpoint",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__rate_setpoint",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 16
+            }
+          },
+          {
+            "id": "w_37_main__FlightController_main__gyro_dps",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__gyro_dps",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 22
+            }
+          },
+          {
+            "id": "w_38_main__FlightController_main__euler_est",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__euler_est",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 32
+            }
+          },
+          {
+            "id": "w_39_main__FlightController_main__altitude_est",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 4,
+            "targetBlockId": "main__altitude_est",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -2
+            }
+          },
+          {
+            "id": "w_40_main__FlightController_main__quat_est",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 5,
+            "targetBlockId": "main__quat_est",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -50
+            }
+          },
+          {
+            "id": "w_41_main__Frame_main__Position",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Position",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -275
+            }
+          },
+          {
+            "id": "w_42_main__Frame_main__Attitude",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__Attitude",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 249
+            }
+          },
+          {
+            "id": "w_43_main__RotorSpeeds_main__RotorSpeed",
+            "sourceBlockId": "main__RotorSpeeds",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__RotorSpeed",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 345
+            }
+          },
+          {
+            "id": "w_44_main__FlightController_main__RateSetpoint",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__RateSetpoint",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 0
+            }
+          },
+          {
+            "id": "w_45_main__FlightController_main__GyroRate",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__GyroRate",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 16
+            }
+          },
+          {
+            "id": "w_46_main__FlightController_main__MotorCommand",
             "sourceBlockId": "main__FlightController",
             "sourcePortIndex": 0,
             "targetBlockId": "main__MotorCommand",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -8
+              "midpointOffset": -40
+            }
+          },
+          {
+            "id": "w_47_main__FlightController_main__AttitudeEstimate",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__AttitudeEstimate",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 24
+            }
+          },
+          {
+            "id": "w_48_main__FlightController_main__AltitudeEstimate",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 4,
+            "targetBlockId": "main__AltitudeEstimate",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -16
             }
           }
         ],
         "extents": {
-          "width": 1476,
-          "height": 1553
+          "width": 1768,
+          "height": 2154
         }
       }
     ]

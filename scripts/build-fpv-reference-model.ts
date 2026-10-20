@@ -72,6 +72,69 @@ export const FC = {
 }
 
 /**
+ * Sensor models. Noise values are datasheet figures (TDK ICM-42688-P, iSentek
+ * IST8310, Bosch BMP280); turn-on biases and the magnetic field are
+ * representative values (est.), not measurements.
+ */
+export const SENSORS = {
+  imu: { ts: 0.001 },
+  gyro: {
+    /** rad/s/√Hz (2.8 mdps/√Hz) */
+    density: 2.8e-3 * (Math.PI / 180),
+    /** rad/s, turn-on bias (est. ~0.1–0.3 dps) */
+    bias: [0.3, -0.2, 0.1].map(d => d * (Math.PI / 180)),
+    /** ±2000 dps, 16-bit */
+    range: 2000 * (Math.PI / 180),
+    lsb: (4000 / 65536) * (Math.PI / 180),
+    seed: 101,
+  },
+  accel: {
+    /** m/s²/√Hz (70 µg/√Hz) */
+    density: 70e-6 * 9.80665,
+    /** m/s², turn-on bias (est. ~2–5 mg) */
+    bias: [0.02, -0.03, 0.05],
+    /** ±16 g, 16-bit */
+    range: 16 * 9.80665,
+    lsb: (32 * 9.80665) / 65536,
+    seed: 102,
+  },
+  mag: {
+    ts: 0.01,
+    /** µT in NED: a representative mid-latitude field (est.; use WMM2025 for a real site). */
+    field: [21.0, 1.5, 44.0],
+    /** µT hard-iron offset (est.) */
+    hardIron: [3.0, -2.0, 1.0],
+    /** µT RMS */
+    noise: 0.4,
+    lsb: 0.3,
+    seed: 103,
+  },
+  baro: {
+    ts: 0.02,
+    /** m above MSL at the NED origin */
+    homeAltitude: 500,
+    /** Pa RMS */
+    noise: 1.3,
+    /** s, first-order sensor/filter lag */
+    lag: 0.03,
+    seed: 104,
+  },
+}
+
+/** ISA troposphere: p = p0 (1 - L h)^n and its inverse. */
+const ISA = { p0: 101325, l: 2.25577e-5, n: 5.25588 }
+export const isaPressure = (h: number) => ISA.p0 * Math.pow(1 - ISA.l * h, ISA.n)
+
+/** Estimators (in the flight controller, at FC.ts). */
+export const ESTIMATOR = {
+  /** Mahony proportional gain, 1/s (Betaflight imu_dcm_kp 2500 / 10000). */
+  mahonyKp: 0.25,
+  /** Altitude complementary filter: natural frequency (rad/s) and damping. */
+  altOmega: 1.0,
+  altZeta: 1.0,
+}
+
+/**
  * Quad-X mixer [roll, pitch, yaw] per motor (RR, FR, RL, FL), in FRD axes:
  * +roll raises the left motors, +pitch (nose up) the front motors, +yaw (nose
  * right) the CCW props. Betaflight's own table uses its pitch sign convention,
@@ -165,7 +228,9 @@ const subsystem = (
 /** Block sizes so port labels stay legible. */
 const MOTOR_SIZE = { width: 140, height: 80 }
 const FRAME_SIZE = { width: 160, height: 260 }
-const FC_SIZE = { width: 170, height: 140 }
+const FC_SIZE = { width: 180, height: 180 }
+const SENSORS_SIZE = { width: 170, height: 150 }
+const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'altitude_est', 'quat_est']
 
 // ---------------------------------------------------------------------------
 // Motor / ESC / propeller (one definition, referenced by the other three)
@@ -324,6 +389,266 @@ function buildPilotSheet(sticks: StickProfile): SheetBuilder {
     s.wire(lut, mux, i)
   })
   s.output('sticks', mux, 'double[4]')
+  return s
+}
+
+
+// ---------------------------------------------------------------------------
+// Sensors (read the true plant state; ideal = no noise, bias or quantization)
+
+function noise(s: SheetBuilder, name: string, width: number, params: Record<string, unknown>): string {
+  return s.add('random_noise', name, { distribution: 'gaussian', mean: 0, sampleTime: 0, dataType: width > 1 ? `double[${width}]` : 'double', ...params })
+}
+
+/** y = clamp(quantize(x + bias + noise)), or y = x when ideal. */
+function corrupt(
+  s: SheetBuilder,
+  prefix: string,
+  x: string,
+  width: number,
+  opts: { bias?: number[]; noise: Record<string, unknown>; lsb: number; range?: number },
+  ideal: boolean
+): string {
+  if (ideal) return x
+  const parts = [x]
+  if (opts.bias) parts.push(s.constant(`${prefix}Bias`, opts.bias, `double[${width}]`))
+  parts.push(noise(s, `${prefix}Noise`, width, opts.noise))
+  const sum = s.add('sum', `${prefix}Sum`, { signs: '+'.repeat(parts.length), numInputs: parts.length })
+  parts.forEach((id, i) => s.wire(id, sum, i))
+  const q = s.add('quantizer', `${prefix}Quantize`, { quantum: opts.lsb })
+  s.wire(sum, q)
+  if (opts.range === undefined) return q
+  const lim = s.add('limit', `${prefix}Range`, { lowerLimit: -opts.range, upperLimit: opts.range })
+  s.wire(q, lim)
+  return lim
+}
+
+function buildImuSheet(ideal: boolean): SheetBuilder {
+  const s = new SheetBuilder('imu', 'IMU')
+  const w = s.input('omega', 'double[3]')
+  const f = s.input('specific_force', 'double[3]')
+  const g = SENSORS.gyro, a = SENSORS.accel
+  const gyro = corrupt(s, 'Gyro', w, 3, { bias: g.bias, noise: { amplitudeMode: 'density', noiseDensity: g.density, seed: g.seed }, lsb: g.lsb, range: g.range }, ideal)
+  const acc = corrupt(s, 'Accel', f, 3, { bias: a.bias, noise: { amplitudeMode: 'density', noiseDensity: a.density, seed: a.seed }, lsb: a.lsb, range: a.range }, ideal)
+  s.output('gyro', gyro, 'double[3]')
+  s.output('accel', acc, 'double[3]')
+  return s
+}
+
+function buildMagSheet(ideal: boolean): SheetBuilder {
+  const s = new SheetBuilder('magn', 'Magnetometer')
+  const q = s.input('quat', 'double[4][1]')
+  const m = SENSORS.mag
+  const cbn = s.add('orientation_conversion', 'C_bn', { conversionType: 'quat_to_dcm' })
+  s.wire(q, cbn)
+  const field = s.constant('EarthField', m.field, 'double[3]')
+  const body = s.add('matrix_multiply', 'FieldInBody')
+  s.wire(cbn, body, 0)
+  s.wire(field, body, 1)
+  const out = corrupt(s, 'Mag', body, 3, { bias: m.hardIron, noise: { stdDev: m.noise, seed: m.seed }, lsb: m.lsb }, ideal)
+  s.output('mag', out, 'double[3]')
+  return s
+}
+
+function buildBaroSheet(ideal: boolean): SheetBuilder {
+  const s = new SheetBuilder('baro', 'Barometer')
+  const pos = s.input('pos_ned', 'double[3]')
+  const b = SENSORS.baro
+  const down = s.add('selector', 'Down', { indices: [2] })
+  s.wire(pos, down)
+  // ISA troposphere pressure at the geometric altitude home - down
+  const p = s.add('evaluate', 'ISAPressure', {
+    numInputs: 1,
+    expression: `${ISA.p0} * pow(1.0 - ${ISA.l} * (${b.homeAltitude} - in(0)), ${ISA.n})`,
+  })
+  s.wire(down, p)
+  if (ideal) {
+    s.output('pressure', p, 'double')
+    return s
+  }
+  const n = noise(s, 'BaroNoise', 1, { stdDev: b.noise, seed: b.seed })
+  const sum = s.add('sum', 'BaroSum', { signs: '++', numInputs: 2 })
+  s.wire(p, sum, 0)
+  s.wire(n, sum, 1)
+  // First-order lag y += a (u - y), starting at the home pressure so the
+  // sensor does not power up reading vacuum
+  const a = b.ts / (b.lag + b.ts)
+  const prev = s.add('unit_delay', 'BaroPrev', { initialValue: Number(isaPressure(b.homeAltitude).toFixed(3)), sampleInterval: b.ts })
+  const lag = s.add('evaluate', 'BaroLag', { numInputs: 2, expression: `in(1) + ${a} * (in(0) - in(1))` })
+  s.wire(sum, lag, 0)
+  s.wire(prev, lag, 1)
+  s.wire(lag, prev)
+  s.output('pressure', lag, 'double')
+  return s
+}
+
+function buildSensorsSheet(ideal: boolean): SheetBuilder {
+  const s = new SheetBuilder('sensors', 'Sensors')
+  const pos = s.input('pos_ned', 'double[3]')
+  const quat = s.input('quat', 'double[4][1]')
+  const omega = s.input('omega', 'double[3]')
+  const force = s.input('specific_force', 'double[3]')
+  const imu = s.add('subsystem', 'IMU', { ...subsystem(['omega', 'specific_force'], ['gyro', 'accel'], buildImuSheet(ideal)), sampleTimeSec: SENSORS.imu.ts })
+  s.wire(omega, imu, 0)
+  s.wire(force, imu, 1)
+  const mag = s.add('subsystem', 'Magnetometer', { ...subsystem(['quat'], ['mag'], buildMagSheet(ideal)), sampleTimeSec: SENSORS.mag.ts })
+  s.wire(quat, mag)
+  const baro = s.add('subsystem', 'Barometer', { ...subsystem(['pos_ned'], ['pressure'], buildBaroSheet(ideal)), sampleTimeSec: SENSORS.baro.ts })
+  s.wire(pos, baro)
+  s.output('gyro', imu, 'double[3]', 0)
+  s.output('accel', imu, 'double[3]', 1)
+  s.output('mag', mag, 'double[3]')
+  s.output('pressure', baro, 'double')
+  return s
+}
+
+// ---------------------------------------------------------------------------
+// Estimators
+
+/** Normalize a vector or column vector: v / |v|. Returns the unit vector and the magnitude block. */
+function normalizeWithNorm(s: SheetBuilder, name: string, v: string): { unit: string; norm: string } {
+  const norm = s.add('mag', `${name}Norm`)
+  s.wire(v, norm)
+  const unit = s.add('divide', name)
+  s.wire(v, unit, 0)
+  s.wire(norm, unit, 1)
+  return { unit, norm }
+}
+
+const normalize = (s: SheetBuilder, name: string, v: string) => normalizeWithNorm(s, name, v).unit
+
+/**
+ * Mahony explicit complementary filter (Mahony, Hamel & Pflimlin 2008):
+ * w_c = w_gyro + Kp (a x v_a + ((m x v_m) . v_a) v_a), q+ = norm(q + Ts/2 q ⊗ [0, w_c]).
+ * The magnetometer correction is projected on the estimated vertical so it
+ * only corrects yaw. A multirotor's accelerometer mostly sees thrust along
+ * body -z, so tilted flight pulls the estimate toward level; that drift (the
+ * familiar FPV horizon drift) is real behaviour, not a modelling error.
+ */
+function buildAttitudeEstimatorSheet(): SheetBuilder {
+  const s = new SheetBuilder('att', 'AttitudeEstimator')
+  const gyro = s.input('gyro', 'double[3]')
+  const acc = s.input('accel', 'double[3]')
+  const mag = s.input('mag', 'double[3]')
+  const qPrev = s.add('unit_delay', 'qPrev', { initialValue: [[1], [0], [0], [0]], sampleInterval: FC.ts })
+  const cbn = s.add('orientation_conversion', 'C_bn', { conversionType: 'quat_to_dcm' })
+  s.wire(qPrev, cbn)
+
+  // Gravity: the accelerometer measures "up" (specific force opposes gravity)
+  const upRef = s.constant('UpNED', [0, 0, -1], 'double[3]')
+  const upEst = s.add('matrix_multiply', 'UpEstimated')
+  s.wire(cbn, upEst, 0)
+  s.wire(upRef, upEst, 1)
+  const { unit: upMeas, norm: accNorm } = normalizeWithNorm(s, 'UpMeasured', acc)
+  const eAccRaw = s.add('cross', 'AccelError')
+  s.wire(upMeas, eAccRaw, 0)
+  s.wire(upEst, eAccRaw, 1)
+  // As in Betaflight, trust the accelerometer only while it reads about 1 g
+  const g = FPV.gravity
+  const accOk = s.add('evaluate', 'AccelHealthy', {
+    numInputs: 1,
+    expression: `(in(0) > ${(0.9 * g).toFixed(5)} && in(0) < ${(1.1 * g).toFixed(5)}) ? 1.0 : 0.0`,
+  })
+  s.wire(accNorm, accOk)
+  const eAcc = s.add('multiply', 'AccelErrorGated', { numInputs: 2 })
+  s.wire(eAccRaw, eAcc, 0)
+  s.wire(accOk, eAcc, 1)
+
+  // Heading: compare measured and predicted field directions, yaw part only
+  const m = SENSORS.mag.field
+  const mn = Math.hypot(...m)
+  const fieldRef = s.constant('FieldDirectionNED', m.map(x => x / mn), 'double[3]')
+  const fieldEst = s.add('matrix_multiply', 'FieldEstimated')
+  s.wire(cbn, fieldEst, 0)
+  s.wire(fieldRef, fieldEst, 1)
+  const fieldMeas = normalize(s, 'FieldMeasured', mag)
+  const eMag = s.add('cross', 'MagError')
+  s.wire(fieldMeas, eMag, 0)
+  s.wire(fieldEst, eMag, 1)
+  const yawPart = s.add('dot', 'MagErrorAlongUp')
+  s.wire(eMag, yawPart, 0)
+  s.wire(upEst, yawPart, 1)
+  const eYaw = s.add('multiply', 'MagYawError', { numInputs: 2 })
+  s.wire(upEst, eYaw, 0)
+  s.wire(yawPart, eYaw, 1)
+
+  const err = s.add('sum', 'Error', { signs: '++', numInputs: 2 })
+  s.wire(eAcc, err, 0)
+  s.wire(eYaw, err, 1)
+  const kp = s.add('scale', 'Kp', { gain: ESTIMATOR.mahonyKp })
+  s.wire(err, kp)
+  const wc = s.add('sum', 'CorrectedRate', { signs: '++', numInputs: 2 })
+  s.wire(gyro, wc, 0)
+  s.wire(kp, wc, 1)
+
+  const pqr = s.add('demux', 'pqr', { outputCount: 3, inputDimensions: [3] })
+  s.wire(wc, pqr)
+  const qDot = s.add('body2quaternion_rates', 'q_dot')
+  s.wire(qPrev, qDot, 0)
+  s.wire(pqr, qDot, 1, 0)
+  s.wire(pqr, qDot, 2, 1)
+  s.wire(pqr, qDot, 3, 2)
+  const step = s.add('scale', 'Ts', { gain: FC.ts })
+  s.wire(qDot, step)
+  const qSum = s.add('sum', 'qIntegrate', { signs: '++', numInputs: 2 })
+  s.wire(qPrev, qSum, 0)
+  s.wire(step, qSum, 1)
+  const q = normalize(s, 'q', qSum)
+  s.wire(q, qPrev)
+
+  const euler = s.add('orientation_conversion', 'Euler', { conversionType: 'quat_to_euler' })
+  s.wire(q, euler)
+  s.output('quat', q, 'double[4][1]')
+  s.output('euler', euler, 'double[3]')
+  return s
+}
+
+/**
+ * Vertical complementary filter: integrates the accelerometer's vertical
+ * acceleration (rotated with the attitude estimate) and corrects with the
+ * barometric altitude through gains k1 = 2 zeta w, k2 = w^2.
+ */
+function buildAltitudeEstimatorSheet(): SheetBuilder {
+  const s = new SheetBuilder('alt', 'AltitudeEstimator')
+  const acc = s.input('accel', 'double[3]')
+  const q = s.input('quat', 'double[4][1]')
+  const p = s.input('pressure', 'double')
+  const { altOmega: w, altZeta: z } = ESTIMATOR
+  const k1 = 2 * z * w, k2 = w * w, ts = FC.ts
+
+  const baroAlt = s.add('evaluate', 'BaroAltitude', {
+    numInputs: 1,
+    expression: `(1.0 - pow(in(0) / ${ISA.p0}, ${1 / ISA.n})) / ${ISA.l}`,
+  })
+  s.wire(p, baroAlt)
+
+  const cbn = s.add('orientation_conversion', 'C_bn', { conversionType: 'quat_to_dcm' })
+  s.wire(q, cbn)
+  const cnb = s.add('transpose', 'C_nb')
+  s.wire(cbn, cnb)
+  const fNed = s.add('matrix_multiply', 'ForceNED')
+  s.wire(cnb, fNed, 0)
+  s.wire(acc, fNed, 1)
+  const fDown = s.add('selector', 'ForceDown', { indices: [2] })
+  s.wire(fNed, fDown)
+  const aUp = s.add('evaluate', 'AccelUp', { numInputs: 1, expression: `-(in(0) + ${FPV.gravity})` })
+  s.wire(fDown, aUp)
+
+  const hPrev = s.add('unit_delay', 'hPrev', { initialValue: SENSORS.baro.homeAltitude, sampleInterval: ts })
+  const vPrev = s.add('unit_delay', 'vPrev', { initialValue: 0, sampleInterval: ts })
+  const v = s.add('evaluate', 'ClimbRate', { numInputs: 4, expression: `in(0) + ${ts} * (in(1) + ${k2} * (in(2) - in(3)))` })
+  s.wire(vPrev, v, 0)
+  s.wire(aUp, v, 1)
+  s.wire(baroAlt, v, 2)
+  s.wire(hPrev, v, 3)
+  const h = s.add('evaluate', 'Altitude', { numInputs: 3, expression: `in(0) + ${ts} * (in(1) + ${k1} * (in(2) - in(0)))` })
+  s.wire(hPrev, h, 0)
+  s.wire(vPrev, h, 1)
+  s.wire(baroAlt, h, 2)
+  s.wire(v, vPrev)
+  s.wire(h, hPrev)
+  s.output('altitude', h, 'double')
+  s.output('climb_rate', v, 'double')
   return s
 }
 
@@ -493,6 +818,9 @@ function buildFlightControllerSheet(): SheetBuilder {
   const s = new SheetBuilder('fc', 'FlightController')
   const sticks = s.input('sticks', 'double[4]')
   const gyro = s.input('gyro', 'double[3]')
+  const acc = s.input('accel', 'double[3]')
+  const mag = s.input('mag', 'double[3]')
+  const pressure = s.input('pressure', 'double')
   const rates = s.add('subsystem', 'Rates', subsystem(['sticks'], ['setpoint', 'throttle'], buildRatesSheet()))
   s.wire(sticks, rates)
   const filt = s.add('subsystem', 'GyroFilters', subsystem(['gyro'], ['gyro_dps'], buildGyroFilterSheet()))
@@ -503,9 +831,20 @@ function buildFlightControllerSheet(): SheetBuilder {
   const mixer = s.add('subsystem', 'Mixer', subsystem(['pid', 'throttle'], ['motors'], buildMixerSheet()))
   s.wire(pid, mixer, 0, 0)
   s.wire(rates, mixer, 1, 1)
+  const att = s.add('subsystem', 'AttitudeEstimator', subsystem(['gyro', 'accel', 'mag'], ['quat', 'euler'], buildAttitudeEstimatorSheet()))
+  s.wire(gyro, att, 0)
+  s.wire(acc, att, 1)
+  s.wire(mag, att, 2)
+  const alt = s.add('subsystem', 'AltitudeEstimator', subsystem(['accel', 'quat', 'pressure'], ['altitude', 'climb_rate'], buildAltitudeEstimatorSheet()))
+  s.wire(acc, alt, 0)
+  s.wire(att, alt, 1, 0)
+  s.wire(pressure, alt, 2)
   s.output('motors', mixer, 'double[4]')
   s.output('setpoint', rates, 'double[3]')
   s.output('gyro_dps', filt, 'double[3]')
+  s.output('euler_est', att, 'double[3]', 1)
+  s.output('altitude_est', alt, 'double', 0)
+  s.output('quat_est', att, 'double[4][1]', 0)
   return s
 }
 
@@ -523,6 +862,8 @@ export interface FpvModelOptions {
   sticks?: StickProfile
   /** Initial body rates (rad/s), e.g. to test disturbance rejection. */
   initialOmega?: number[]
+  /** 'ideal' sensors report the true state exactly (no noise, bias or quantization). */
+  sensors?: 'modelled' | 'ideal'
 }
 
 export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data: Record<string, unknown> } {
@@ -536,7 +877,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   } else {
     const pilot = main.add('subsystem', 'Pilot', subsystem([], ['sticks'], buildPilotSheet(opts.sticks ?? DEMO_STICKS)))
     fc = main.add('subsystem', 'FlightController', {
-      ...subsystem(['sticks', 'gyro'], ['motors', 'setpoint', 'gyro_dps'], buildFlightControllerSheet(), FC_SIZE),
+      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure'], FC_OUTPUTS, buildFlightControllerSheet(), FC_SIZE),
       sampleTimeSec: FC.ts,
     })
     main.wire(pilot, fc, 0)
@@ -574,8 +915,20 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
 
   const frame = main.add('subsystem', 'Frame', subsystem(['thrust'], FRAME_OUTPUTS, buildFrameSheet(opts.initialOmega), FRAME_SIZE))
   main.wire(thrustVec, frame)
-  // Perfect sensors for now: the controller reads the true body rates
-  if (fc) main.wire(frame, fc, 1, 4)
+  if (fc) {
+    const sensors = main.add('subsystem', 'Sensors', subsystem(
+      ['pos_ned', 'quat', 'omega', 'specific_force'], ['gyro', 'accel', 'mag', 'pressure'],
+      buildSensorsSheet(opts.sensors === 'ideal'), SENSORS_SIZE))
+    main.wire(frame, sensors, 0, 0)
+    main.wire(frame, sensors, 1, 2)
+    main.wire(frame, sensors, 2, 4)
+    main.wire(frame, sensors, 3, 5)
+    for (let i = 0; i < 4; i++) main.wire(sensors, fc, i + 1, i)
+    main.output('imu_gyro', sensors, 'double[3]', 0)
+    main.output('imu_accel', sensors, 'double[3]', 1)
+    main.output('mag', sensors, 'double[3]', 2)
+    main.output('pressure', sensors, 'double', 3)
+  }
 
   FRAME_OUTPUTS.forEach((name, i) => main.output(name, frame, FRAME_OUTPUT_TYPES[i]!, i))
   main.output('motor_omega', omegaVec, 'double[4]')
@@ -583,6 +936,9 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     main.output('motor_cmd', fc, 'double[4]', 0)
     main.output('rate_setpoint', fc, 'double[3]', 1)
     main.output('gyro_dps', fc, 'double[3]', 2)
+    main.output('euler_est', fc, 'double[3]', 3)
+    main.output('altitude_est', fc, 'double', 4)
+    main.output('quat_est', fc, 'double[4][1]', 5)
   }
 
   const displays: Array<[string, string, number]> = [
@@ -590,7 +946,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     ['Attitude', frame, 3],
     ['RotorSpeed', omegaVec, 0],
   ]
-  if (fc) displays.push(['RateSetpoint', fc, 1], ['GyroRate', fc, 2], ['MotorCommand', fc, 0])
+  if (fc) displays.push(['RateSetpoint', fc, 1], ['GyroRate', fc, 2], ['MotorCommand', fc, 0], ['AttitudeEstimate', fc, 3], ['AltitudeEstimate', fc, 4])
   else displays.push(['BodyRates', frame, 4])
   for (const [label, from, port] of displays) {
     const d = main.add('signal_display', label, { maxSamples: 10000 })
@@ -613,10 +969,13 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
       metadata: {
         created: '2026-10-19T00:00:00.000Z',
         description:
-          '5-inch FPV quadcopter reference model (in development: perfect sensors). ' +
+          '5-inch FPV quadcopter reference model. ' +
           'NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems, ' +
           'and a Betaflight-style acro flight controller at 1 kHz (rates, gyro PT1 filters, rate PID with feed-forward, ' +
           'quad-X mixer with airmode) re-implemented from documented behaviour and defaults. ' +
+          'Sensors: IMU (gyro, accelerometer) at 1 kHz, magnetometer at 100 Hz and barometer at 50 Hz with datasheet noise, ' +
+          'bias, quantization and range; the controller flies on the sensor gyro and runs a Mahony attitude filter and a ' +
+          'baro/accelerometer altitude filter. ' +
           'The Pilot subsystem scripts a roll doublet, a pitch doublet and a yaw step at hover throttle. ' +
           'Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; ' +
           'equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md.',

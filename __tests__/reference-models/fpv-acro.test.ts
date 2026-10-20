@@ -1,7 +1,7 @@
 /**
  * FPV quadcopter reference model, Phase 3: Betaflight-style acro flight
  * controller (rates, gyro filters, rate PID with feed-forward, quad-X mixer
- * with airmode) flying the plant with perfect sensors.
+ * with airmode) flying the plant with ideal sensors.
  *
  * Each scenario builds the model with its own stick profile (or initial body
  * rates), compiles it to native C and logs every plant step.
@@ -34,7 +34,8 @@ interface Row {
 }
 
 function fly(name: string, opts: { sticks?: StickProfile; initialOmega?: number[] }, seconds: number) {
-  const model = buildFpvModel(opts)
+  // Ideal sensors: these tests check the controller, not the sensor models
+  const model = buildFpvModel({ ...opts, sensors: 'ideal' })
   const n = Math.round(seconds / FPV.dt)
   const result = compileAndRunNative({
     modelName: `fpv_${name}`,

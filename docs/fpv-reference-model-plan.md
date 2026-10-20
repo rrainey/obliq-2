@@ -1,6 +1,6 @@
 # FPV Quadcopter Reference Model: Plan
 
-Status: in progress. Phase 0 (noise block) and the reference-model packaging come first.
+Status: Phases 0–4 complete; Phase 5 (v2) remains.
 Decisions recorded 2026-10-19.
 
 ## Goal
@@ -158,8 +158,23 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
      - Yaw has only propeller drag torque, so its loop is slow and I-dominated: about 65% overshoot and a 0.6 s ring that settles roughly 2 s after a step.
      - Adding rotor-inertia reaction torque (v2) should make yaw more realistic.
      - Airmode holds full-stick rates at zero throttle while keeping motors inside idle..full.
-4. **Sensors and estimator.** Add the noise-driven IMU, magnetometer and barometer models, the Mahony filter and the altitude filter. Verify attitude-estimate error bounds in hover and during a manoeuvre.
-5. **Angle mode and battery (v2).** Also: rotor-inertia reaction torque (yaw), ground contact, motors starting at rest on the ground.
+4. **Sensors and estimator.** ✅ Done: `__tests__/reference-models/fpv-sensors.test.ts`.
+   - **Sensors subsystem:**
+     - IMU at 1 kHz: gyro 2.8 mdps/√Hz, accelerometer 70 µg/√Hz; turn-on biases; 16-bit quantisation; ±2000 dps and ±16 g ranges.
+     - Magnetometer at 100 Hz: C_bn·m_NED plus hard iron, 0.4 µT noise, 0.3 µT LSB.
+     - Barometer at 50 Hz: ISA troposphere pressure at 500 m − z, 1.3 Pa noise, and a 30 ms lag that starts at the home pressure.
+     - Each rate is its own nested sample scope; the noise sources are seeded Random Noise blocks.
+   - **Field and pressure values:** the magnetic field and the biases are representative values (est.); a real site should use WMM2025. Pressure uses the ISA formula, not the Atmosphere block, whose linear interpolation of the coarse COESA table is off by about 180 Pa near 500 m.
+   - **Mahony attitude filter:** Kp = 0.25 (Betaflight `imu_dcm_kp` 2500), Ki = 0. The accelerometer is used only while it reads 0.9–1.1 g (Betaflight's accelerometer-health check). The magnetometer correction is projected on the vertical, so it only corrects yaw.
+   - **Altitude filter:** second-order complementary filter (ω = 1 rad/s, ζ = 1) of barometric altitude and the accelerometer rotated by the estimate.
+   - **Control loop:** the rate PID now flies on the sensor gyro. The estimates are outputs, which angle mode will use.
+   - **Results:**
+     - Altitude estimate within 0.5 m through the demo's 13 m sink.
+     - Attitude estimate within 2° in hover. The steady error is |gyro bias|/Kp ≈ 1.5°, since Ki = 0.
+     - During the flips, the estimate drifts 6–10° toward level. A multirotor accelerometer sees thrust, not gravity, so tilted flight reads as "level"; this is the familiar FPV horizon drift. Once drag pushes |a| above 1.1 g the gate stops the correction.
+     - A rotation-rate gate on the accelerometer, or an integral term, would reduce the drift.
+   - **Deferred:** slow random-walk gyro bias (negligible over seconds), axis misalignment and scale errors, IMU lever arm.
+5. **Angle mode and battery (v2).** Also: rotor-inertia reaction torque (yaw), ground contact, motors starting at rest on the ground, and a cleaner top-level layout (group the 17 model outputs).
 
 Each phase adds native-codegen tests to `__tests__/reference-models/` that fly the model for a few seconds and assert physical invariants.
 
