@@ -1,6 +1,6 @@
 # obliq-2 Change Log
 
-## Unreleased
+## What's New in 3.2.1
 
 - **Subsystem names are easier to read.** A subsystem now shows its name inside the block, in large bold text (250% of the usual block-name size) centred below its icon.
   - A subsystem you haven't resized grows to fit its name: wide enough for one line, up to 260 px, wrapping beyond that.
