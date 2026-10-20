@@ -111,7 +111,7 @@ Defaults: center 70 °/s, max 670 °/s, expo 0.
 - Motor order follows Betaflight's quad X: 0 rear-right, 1 front-right, 2 rear-left, 3 front-left. Rotor positions are x = ±0.0775 m, y = ±0.10 m.
 - Front-right and rear-left props spin CCW seen from above. Their reaction torque yaws the nose right (+M_z).
 - Motor command is in [0, 1], with ω_cmd = ω_max·cmd, so thrust ∝ cmd². Hover is cmd = √(mg/4/T_max) ≈ 0.4651.
-- **Mixer sign for Phase 3:** in FRD, positive pitch (nose up, +M_y) needs more thrust at the front. That is the opposite sign to the pitch column of Betaflight's table, which uses Betaflight's own axis convention, so our mixer's pitch column is negated.
+- **Mixer sign:** in FRD, positive pitch (nose up, +M_y) needs more thrust at the front. That is the opposite sign to the pitch column of Betaflight's table, which uses Betaflight's own axis convention, so our mixer's pitch column is negated (`MIXER` in the builder).
 
 ## Phase 0: Random Noise block
 
@@ -147,11 +147,19 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
    - Verify hover equilibrium: ω ≈ 1085 rad/s per rotor, zero acceleration.
    - Verify the step responses of the motor lag.
    - Check that thrust and torque signs match the mixer convention.
-3. **Flight controller (acro).** Add the rates, gyro filters, rate PID and mixer, with perfect sensors.
-   - Verify a hover hold and roll/pitch/yaw rate steps that track the setpoint.
-   - Verify motor saturation and airmode behaviour.
+3. **Flight controller (acro).** Add the rates, gyro filters, rate PID and mixer, with perfect sensors. ✅ Done: `__tests__/reference-models/fpv-acro.test.ts`.
+   - **Timing:** the plant steps at 0.5 ms (2 kHz). The `FlightController` subsystem runs at 1 ms (1 kHz) through `sampleTimeSec`, so its outputs hold for two plant steps.
+   - **Structure:** it contains the Rates, GyroFilters, RatePID and Mixer sheets. The PT1 filters and derivatives are discrete transfer functions, and the I term is a unit-delay accumulator.
+   - **Pilot:** the `Pilot` subsystem scripts sticks from time-indexed lookup tables: a roll doublet, a pitch doublet, then a yaw step at hover throttle.
+   - **Stick axes are body-rate commands in FRD:** +roll rolls right, +pitch is nose up (pull-back), +yaw is nose right.
+   - **Feed-forward scaling:** Betaflight's feed-forward coefficient is `FEEDFORWARD_SCALE × F / 100`. Leaving out the /100 makes FF 100× too strong, which shows as 5× rate overshoot.
+   - **Results with the default gains:**
+     - Roll and pitch track 185 °/s, with about 29% overshoot for a 50 ms stick ramp (41% for an instant step), and settle in about 0.1 s.
+     - Yaw has only propeller drag torque, so its loop is slow and I-dominated: about 65% overshoot and a 0.6 s ring that settles roughly 2 s after a step.
+     - Adding rotor-inertia reaction torque (v2) should make yaw more realistic.
+     - Airmode holds full-stick rates at zero throttle while keeping motors inside idle..full.
 4. **Sensors and estimator.** Add the noise-driven IMU, magnetometer and barometer models, the Mahony filter and the altitude filter. Verify attitude-estimate error bounds in hover and during a manoeuvre.
-5. **Angle mode and battery (v2).**
+5. **Angle mode and battery (v2).** Also: rotor-inertia reaction torque (yaw), ground contact, motors starting at rest on the ground.
 
 Each phase adds native-codegen tests to `__tests__/reference-models/` that fly the model for a few seconds and assert physical invariants.
 

@@ -41,7 +41,7 @@ describe('FPV reference model: plant', () => {
   let outDir: string | undefined
 
   beforeAll(() => {
-    const model = buildFpvModel()
+    const model = buildFpvModel({ openLoop: true })
     const names = Object.keys(SCENARIOS)
     const cmds = names.map(n => `{${SCENARIOS[n]!.join(', ')}}`).join(',\n    ')
     const result = compileAndRunNative({
@@ -56,7 +56,7 @@ describe('FPV reference model: plant', () => {
     fpv_init(&model, ${FPV.dt});
     for (int k = 0; k < 4; ++k) model.signals.MotorCmd[k] = cmds[s][k];
     fpv_seed_from_inputs(&model);
-    for (int i = 0; i < 2000; ++i) {
+    for (int i = 0; i < (int)llround(2.0 / ${FPV.dt}); ++i) {
       fpv_step(&model);
       /* Outputs were published at the start of the step, at time - dt */
       const double t = model.time - model.dt;
@@ -101,7 +101,7 @@ describe('FPV reference model: plant', () => {
   })
 
   it('validates in the editor with no errors or warnings (references and loop integrators are typed)', () => {
-    const result = validateMultiSheetTypeCompatibility((buildFpvModel().data as any).sheets)
+    const result = validateMultiSheetTypeCompatibility((buildFpvModel({ openLoop: true }).data as any).sheets)
     expect(result.errors.map(e => e.message)).toEqual([])
     expect(result.warnings.map(w => w.message)).toEqual([])
   })

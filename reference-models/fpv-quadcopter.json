@@ -4,10 +4,10 @@
     "version": "2.2",
     "metadata": {
       "created": "2026-10-19T00:00:00.000Z",
-      "description": "5-inch FPV quadcopter reference model (in development: plant only). NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems. Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md."
+      "description": "5-inch FPV quadcopter reference model (in development: perfect sensors). NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems, and a Betaflight-style acro flight controller at 1 kHz (rates, gyro PT1 filters, rate PID with feed-forward, quad-X mixer with airmode) re-implemented from documented behaviour and defaults. The Pilot subsystem scripts a roll doublet, a pitch doublet and a yaw step at hover throttle. Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md."
     },
     "globalSettings": {
-      "simulationTimeStep": 0.001,
+      "simulationTimeStep": 0.0005,
       "simulationDuration": 5,
       "integrationAlgorithm": "rk4",
       "debugMath": false
@@ -20,32 +20,12 @@
         "name": "Main",
         "blocks": [
           {
-            "id": "main__MotorCmd",
-            "type": "source",
-            "name": "MotorCmd",
-            "position": {
-              "x": 100,
-              "y": 368
-            },
-            "parameters": {
-              "showName": true,
-              "signalType": "constant",
-              "value": [
-                0.465106,
-                0.465106,
-                0.465106,
-                0.465106
-              ],
-              "dataType": "double[4]"
-            }
-          },
-          {
             "id": "main__MotorCmdSplit",
             "type": "demux",
             "name": "MotorCmdSplit",
             "position": {
-              "x": 380,
-              "y": 350
+              "x": 100,
+              "y": 422
             },
             "parameters": {
               "showName": true,
@@ -56,11 +36,2058 @@
             }
           },
           {
+            "id": "main__Pilot",
+            "type": "subsystem",
+            "name": "Pilot",
+            "position": {
+              "x": 100,
+              "y": 278
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [],
+              "outputPorts": [
+                "sticks"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "flatten",
+              "sheets": [
+                {
+                  "id": "pilot",
+                  "name": "Pilot",
+                  "blocks": [
+                    {
+                      "id": "pilot__Time",
+                      "type": "clock",
+                      "name": "Time",
+                      "position": {
+                        "x": 100,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "pilot__Sticks",
+                      "type": "mux",
+                      "name": "Sticks",
+                      "position": {
+                        "x": 420,
+                        "y": 350
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "rows": 4,
+                        "cols": 1,
+                        "baseType": "double",
+                        "outputType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "pilot__RollStick",
+                      "type": "lookup_1d",
+                      "name": "RollStick",
+                      "position": {
+                        "x": 260,
+                        "y": 152
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1,
+                          1.05,
+                          1.5,
+                          1.55,
+                          2,
+                          2.05
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          0.5,
+                          0.5,
+                          -0.5,
+                          -0.5,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__PitchStick",
+                      "type": "lookup_1d",
+                      "name": "PitchStick",
+                      "position": {
+                        "x": 260,
+                        "y": 296
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          2.5,
+                          2.55,
+                          3,
+                          3.05,
+                          3.5,
+                          3.55
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          0.5,
+                          0.5,
+                          -0.5,
+                          -0.5,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__YawStick",
+                      "type": "lookup_1d",
+                      "name": "YawStick",
+                      "position": {
+                        "x": 260,
+                        "y": 440
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          4,
+                          4.05,
+                          4.5,
+                          4.55
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          0.5,
+                          0.5,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__ThrottleStick",
+                      "type": "lookup_1d",
+                      "name": "ThrottleStick",
+                      "position": {
+                        "x": 260,
+                        "y": 584
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          0.434,
+                          0.434
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__sticks",
+                      "type": "output_port",
+                      "name": "sticks",
+                      "position": {
+                        "x": 590,
+                        "y": 378
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "sticks",
+                        "dataType": "double[4]"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_pilot__Time_pilot__RollStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__RollStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_2_pilot__RollStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__RollStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_3_pilot__Time_pilot__PitchStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__PitchStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_4_pilot__PitchStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__PitchStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -12
+                      }
+                    },
+                    {
+                      "id": "w_5_pilot__Time_pilot__YawStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__YawStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_6_pilot__YawStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__YawStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_7_pilot__Time_pilot__ThrottleStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__ThrottleStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_8_pilot__ThrottleStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__ThrottleStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": 12
+                      }
+                    },
+                    {
+                      "id": "w_9_pilot__Sticks_pilot__sticks",
+                      "sourceBlockId": "pilot__Sticks",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__sticks",
+                      "targetPortIndex": 0
+                    }
+                  ],
+                  "extents": {
+                    "width": 890,
+                    "height": 784
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "main__FlightController",
+            "type": "subsystem",
+            "name": "FlightController",
+            "position": {
+              "x": 894,
+              "y": 330
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [
+                "sticks",
+                "gyro"
+              ],
+              "outputPorts": [
+                "motors",
+                "setpoint",
+                "gyro_dps"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "flatten",
+              "sheets": [
+                {
+                  "id": "fc",
+                  "name": "FlightController",
+                  "blocks": [
+                    {
+                      "id": "fc__sticks",
+                      "type": "input_port",
+                      "name": "sticks",
+                      "position": {
+                        "x": 100,
+                        "y": 320
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "sticks",
+                        "dataType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "fc__gyro",
+                      "type": "input_port",
+                      "name": "gyro",
+                      "position": {
+                        "x": 100,
+                        "y": 464
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "gyro",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "fc__Rates",
+                      "type": "subsystem",
+                      "name": "Rates",
+                      "position": {
+                        "x": 280,
+                        "y": 310
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputPorts": [
+                          "sticks"
+                        ],
+                        "outputPorts": [
+                          "setpoint",
+                          "throttle"
+                        ],
+                        "showPortNames": true,
+                        "codeGenStrategy": "flatten",
+                        "sheets": [
+                          {
+                            "id": "rates",
+                            "name": "Rates",
+                            "blocks": [
+                              {
+                                "id": "rates__sticks",
+                                "type": "input_port",
+                                "name": "sticks",
+                                "position": {
+                                  "x": 100,
+                                  "y": 409
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "sticks",
+                                  "dataType": "double[4]"
+                                }
+                              },
+                              {
+                                "id": "rates__StickSplit",
+                                "type": "demux",
+                                "name": "StickSplit",
+                                "position": {
+                                  "x": 280,
+                                  "y": 381
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "outputCount": 4,
+                                  "inputDimensions": [
+                                    4
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "rates__Setpoint",
+                                "type": "mux",
+                                "name": "Setpoint",
+                                "position": {
+                                  "x": 820,
+                                  "y": 360
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "rows": 3,
+                                  "cols": 1,
+                                  "baseType": "double",
+                                  "outputType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "rates__RollRate",
+                                "type": "evaluate",
+                                "name": "RollRate",
+                                "position": {
+                                  "x": 440,
+                                  "y": 224
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 1,
+                                  "expression": "70 * in(0) + 600 * fabs(in(0)) * (pow(in(0), 5) * 0 + in(0) * 1)"
+                                }
+                              },
+                              {
+                                "id": "rates__PitchRate",
+                                "type": "evaluate",
+                                "name": "PitchRate",
+                                "position": {
+                                  "x": 440,
+                                  "y": 368
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 1,
+                                  "expression": "70 * in(0) + 600 * fabs(in(0)) * (pow(in(0), 5) * 0 + in(0) * 1)"
+                                }
+                              },
+                              {
+                                "id": "rates__YawRate",
+                                "type": "evaluate",
+                                "name": "YawRate",
+                                "position": {
+                                  "x": 440,
+                                  "y": 512
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 1,
+                                  "expression": "70 * in(0) + 600 * fabs(in(0)) * (pow(in(0), 5) * 0 + in(0) * 1)"
+                                }
+                              },
+                              {
+                                "id": "rates__setpoint",
+                                "type": "output_port",
+                                "name": "setpoint",
+                                "position": {
+                                  "x": 990,
+                                  "y": 378
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "setpoint",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "rates__throttle",
+                                "type": "output_port",
+                                "name": "throttle",
+                                "position": {
+                                  "x": 990,
+                                  "y": 503
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "throttle",
+                                  "dataType": "double"
+                                }
+                              }
+                            ],
+                            "connections": [
+                              {
+                                "id": "w_1_rates__sticks_rates__StickSplit",
+                                "sourceBlockId": "rates__sticks",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "rates__StickSplit",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_2_rates__StickSplit_rates__RollRate",
+                                "sourceBlockId": "rates__StickSplit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "rates__RollRate",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -8
+                                }
+                              },
+                              {
+                                "id": "w_3_rates__RollRate_rates__Setpoint",
+                                "sourceBlockId": "rates__RollRate",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "rates__Setpoint",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -4
+                                }
+                              },
+                              {
+                                "id": "w_4_rates__StickSplit_rates__PitchRate",
+                                "sourceBlockId": "rates__StickSplit",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "rates__PitchRate",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 8
+                                }
+                              },
+                              {
+                                "id": "w_5_rates__PitchRate_rates__Setpoint",
+                                "sourceBlockId": "rates__PitchRate",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "rates__Setpoint",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_6_rates__StickSplit_rates__YawRate",
+                                "sourceBlockId": "rates__StickSplit",
+                                "sourcePortIndex": 2,
+                                "targetBlockId": "rates__YawRate",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_7_rates__YawRate_rates__Setpoint",
+                                "sourceBlockId": "rates__YawRate",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "rates__Setpoint",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 4
+                                }
+                              },
+                              {
+                                "id": "w_8_rates__Setpoint_rates__setpoint",
+                                "sourceBlockId": "rates__Setpoint",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "rates__setpoint",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_9_rates__StickSplit_rates__throttle",
+                                "sourceBlockId": "rates__StickSplit",
+                                "sourcePortIndex": 3,
+                                "targetBlockId": "rates__throttle",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 275
+                                }
+                              }
+                            ],
+                            "extents": {
+                              "width": 1290,
+                              "height": 712
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "id": "fc__GyroFilters",
+                      "type": "subsystem",
+                      "name": "GyroFilters",
+                      "position": {
+                        "x": 280,
+                        "y": 454
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputPorts": [
+                          "gyro"
+                        ],
+                        "outputPorts": [
+                          "gyro_dps"
+                        ],
+                        "showPortNames": true,
+                        "codeGenStrategy": "flatten",
+                        "sheets": [
+                          {
+                            "id": "gyro",
+                            "name": "GyroFilters",
+                            "blocks": [
+                              {
+                                "id": "gyro__gyro",
+                                "type": "input_port",
+                                "name": "gyro",
+                                "position": {
+                                  "x": 100,
+                                  "y": 378
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "gyro",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "gyro__RadToDeg",
+                                "type": "scale",
+                                "name": "RadToDeg",
+                                "position": {
+                                  "x": 280,
+                                  "y": 368
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 57.29577951308232
+                                }
+                              },
+                              {
+                                "id": "gyro__GyroLPF1",
+                                "type": "discrete_transform",
+                                "name": "GyroLPF1",
+                                "position": {
+                                  "x": 440,
+                                  "y": 368
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numerator": [
+                                    0.6110154703516573,
+                                    0
+                                  ],
+                                  "denominator": [
+                                    1,
+                                    -0.38898452964834274
+                                  ],
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "gyro__GyroLPF2",
+                                "type": "discrete_transform",
+                                "name": "GyroLPF2",
+                                "position": {
+                                  "x": 620,
+                                  "y": 368
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numerator": [
+                                    0.7585469929947761,
+                                    0
+                                  ],
+                                  "denominator": [
+                                    1,
+                                    -0.24145300700522387
+                                  ],
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "gyro__gyro_dps",
+                                "type": "output_port",
+                                "name": "gyro_dps",
+                                "position": {
+                                  "x": 800,
+                                  "y": 378
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "gyro_dps",
+                                  "dataType": "double[3]"
+                                }
+                              }
+                            ],
+                            "connections": [
+                              {
+                                "id": "w_1_gyro__gyro_gyro__RadToDeg",
+                                "sourceBlockId": "gyro__gyro",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gyro__RadToDeg",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_2_gyro__RadToDeg_gyro__GyroLPF1",
+                                "sourceBlockId": "gyro__RadToDeg",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gyro__GyroLPF1",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_3_gyro__GyroLPF1_gyro__GyroLPF2",
+                                "sourceBlockId": "gyro__GyroLPF1",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gyro__GyroLPF2",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_4_gyro__GyroLPF2_gyro__gyro_dps",
+                                "sourceBlockId": "gyro__GyroLPF2",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gyro__gyro_dps",
+                                "targetPortIndex": 0
+                              }
+                            ],
+                            "extents": {
+                              "width": 1100,
+                              "height": 578
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "id": "fc__RatePID",
+                      "type": "subsystem",
+                      "name": "RatePID",
+                      "position": {
+                        "x": 440,
+                        "y": 357
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputPorts": [
+                          "setpoint",
+                          "gyro_dps"
+                        ],
+                        "outputPorts": [
+                          "pid"
+                        ],
+                        "showPortNames": true,
+                        "codeGenStrategy": "flatten",
+                        "sheets": [
+                          {
+                            "id": "pid",
+                            "name": "RatePID",
+                            "blocks": [
+                              {
+                                "id": "pid__setpoint",
+                                "type": "input_port",
+                                "name": "setpoint",
+                                "position": {
+                                  "x": 100,
+                                  "y": 444
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "setpoint",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "pid__gyro_dps",
+                                "type": "input_port",
+                                "name": "gyro_dps",
+                                "position": {
+                                  "x": 100,
+                                  "y": 239
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "gyro_dps",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "pid__RateError",
+                                "type": "sum",
+                                "name": "RateError",
+                                "position": {
+                                  "x": 344,
+                                  "y": 296
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "+-",
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "pid__Kp",
+                                "type": "source",
+                                "name": "Kp",
+                                "position": {
+                                  "x": 284,
+                                  "y": 8
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    1.441305,
+                                    1.505363,
+                                    1.441305
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "pid__P",
+                                "type": "multiply",
+                                "name": "P",
+                                "position": {
+                                  "x": 614,
+                                  "y": 29
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "pid__KiTs",
+                                "type": "source",
+                                "name": "KiTs",
+                                "position": {
+                                  "x": 284,
+                                  "y": 728
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    0.019550480000000002,
+                                    0.020528004,
+                                    0.019550480000000002
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "pid__IIncrement",
+                                "type": "multiply",
+                                "name": "IIncrement",
+                                "position": {
+                                  "x": 614,
+                                  "y": 605
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "pid__IPrev",
+                                "type": "unit_delay",
+                                "name": "IPrev",
+                                "position": {
+                                  "x": 1170,
+                                  "y": 593
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": [
+                                    0,
+                                    0,
+                                    0
+                                  ],
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "pid__IAccumulate",
+                                "type": "sum",
+                                "name": "IAccumulate",
+                                "position": {
+                                  "x": 824,
+                                  "y": 433
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "++",
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "pid__I",
+                                "type": "limit",
+                                "name": "I",
+                                "position": {
+                                  "x": 984,
+                                  "y": 432
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "lowerLimit": -400,
+                                  "upperLimit": 400
+                                }
+                              },
+                              {
+                                "id": "pid__DtermLPF",
+                                "type": "discrete_transform",
+                                "name": "DtermLPF",
+                                "position": {
+                                  "x": 334,
+                                  "y": 152
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numerator": [
+                                    0.4851936006580783,
+                                    0
+                                  ],
+                                  "denominator": [
+                                    1,
+                                    -0.5148063993419216
+                                  ],
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "pid__GyroRateOfChange",
+                                "type": "discrete_transform",
+                                "name": "GyroRateOfChange",
+                                "position": {
+                                  "x": 604,
+                                  "y": 317
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numerator": [
+                                    1,
+                                    -1
+                                  ],
+                                  "denominator": [
+                                    0.001,
+                                    0
+                                  ],
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "pid__Kd",
+                                "type": "source",
+                                "name": "Kd",
+                                "position": {
+                                  "x": 564,
+                                  "y": 173
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    -0.01587,
+                                    -0.017986,
+                                    0
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "pid__D",
+                                "type": "multiply",
+                                "name": "D",
+                                "position": {
+                                  "x": 824,
+                                  "y": 289
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "pid__SetpointRateOfChange",
+                                "type": "discrete_transform",
+                                "name": "SetpointRateOfChange",
+                                "position": {
+                                  "x": 334,
+                                  "y": 584
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numerator": [
+                                    1,
+                                    -1
+                                  ],
+                                  "denominator": [
+                                    0.001,
+                                    0
+                                  ],
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "pid__Kff",
+                                "type": "source",
+                                "name": "Kff",
+                                "position": {
+                                  "x": 284,
+                                  "y": 440
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    0.0165048,
+                                    0.017192500000000003,
+                                    0.0165048
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "pid__FF",
+                                "type": "multiply",
+                                "name": "FF",
+                                "position": {
+                                  "x": 614,
+                                  "y": 461
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "pid__PIDSum",
+                                "type": "sum",
+                                "name": "PIDSum",
+                                "position": {
+                                  "x": 1170,
+                                  "y": 263
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "++++",
+                                  "numInputs": 4
+                                }
+                              },
+                              {
+                                "id": "pid__PIDSumMax",
+                                "type": "source",
+                                "name": "PIDSumMax",
+                                "position": {
+                                  "x": 1156,
+                                  "y": 119
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    500,
+                                    500,
+                                    400
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "pid__PIDSumMin",
+                                "type": "source",
+                                "name": "PIDSumMin",
+                                "position": {
+                                  "x": 1144,
+                                  "y": 443
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    -500,
+                                    -500,
+                                    -400
+                                  ],
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "pid__PIDSumLimit",
+                                "type": "saturation_dynamic",
+                                "name": "PIDSumLimit",
+                                "position": {
+                                  "x": 1356,
+                                  "y": 273
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "pid__MixerScaling",
+                                "type": "scale",
+                                "name": "MixerScaling",
+                                "position": {
+                                  "x": 1516,
+                                  "y": 281
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 0.001
+                                }
+                              },
+                              {
+                                "id": "pid__pid",
+                                "type": "output_port",
+                                "name": "pid",
+                                "position": {
+                                  "x": 1676,
+                                  "y": 290
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "pid",
+                                  "dataType": "double[3]"
+                                }
+                              }
+                            ],
+                            "connections": [
+                              {
+                                "id": "w_1_pid__setpoint_pid__RateError",
+                                "sourceBlockId": "pid__setpoint",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__RateError",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -26
+                                }
+                              },
+                              {
+                                "id": "w_2_pid__gyro_dps_pid__RateError",
+                                "sourceBlockId": "pid__gyro_dps",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__RateError",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -34
+                                }
+                              },
+                              {
+                                "id": "w_3_pid__Kp_pid__P",
+                                "sourceBlockId": "pid__Kp",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__P",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -37
+                                }
+                              },
+                              {
+                                "id": "w_4_pid__RateError_pid__P",
+                                "sourceBlockId": "pid__RateError",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__P",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -15
+                                }
+                              },
+                              {
+                                "id": "w_5_pid__KiTs_pid__IIncrement",
+                                "sourceBlockId": "pid__KiTs",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__IIncrement",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -13
+                                }
+                              },
+                              {
+                                "id": "w_6_pid__RateError_pid__IIncrement",
+                                "sourceBlockId": "pid__RateError",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__IIncrement",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -15
+                                }
+                              },
+                              {
+                                "id": "w_7_pid__IPrev_pid__IAccumulate",
+                                "sourceBlockId": "pid__IPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__IAccumulate",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_8_pid__IIncrement_pid__IAccumulate",
+                                "sourceBlockId": "pid__IIncrement",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__IAccumulate",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 33
+                                }
+                              },
+                              {
+                                "id": "w_9_pid__IAccumulate_pid__I",
+                                "sourceBlockId": "pid__IAccumulate",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__I",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 8
+                                }
+                              },
+                              {
+                                "id": "w_10_pid__I_pid__IPrev",
+                                "sourceBlockId": "pid__I",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__IPrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -9
+                                }
+                              },
+                              {
+                                "id": "w_11_pid__gyro_dps_pid__DtermLPF",
+                                "sourceBlockId": "pid__gyro_dps",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__DtermLPF",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -29
+                                }
+                              },
+                              {
+                                "id": "w_12_pid__DtermLPF_pid__GyroRateOfChange",
+                                "sourceBlockId": "pid__DtermLPF",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__GyroRateOfChange",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 25
+                                }
+                              },
+                              {
+                                "id": "w_13_pid__Kd_pid__D",
+                                "sourceBlockId": "pid__Kd",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__D",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -8
+                                }
+                              },
+                              {
+                                "id": "w_14_pid__GyroRateOfChange_pid__D",
+                                "sourceBlockId": "pid__GyroRateOfChange",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__D",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 20
+                                }
+                              },
+                              {
+                                "id": "w_15_pid__setpoint_pid__SetpointRateOfChange",
+                                "sourceBlockId": "pid__setpoint",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__SetpointRateOfChange",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -21
+                                }
+                              },
+                              {
+                                "id": "w_16_pid__Kff_pid__FF",
+                                "sourceBlockId": "pid__Kff",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__FF",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -29
+                                }
+                              },
+                              {
+                                "id": "w_17_pid__SetpointRateOfChange_pid__FF",
+                                "sourceBlockId": "pid__SetpointRateOfChange",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__FF",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 4
+                                }
+                              },
+                              {
+                                "id": "w_18_pid__P_pid__PIDSum",
+                                "sourceBlockId": "pid__P",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__PIDSum",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 4
+                                }
+                              },
+                              {
+                                "id": "w_19_pid__I_pid__PIDSum",
+                                "sourceBlockId": "pid__I",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__PIDSum",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -9
+                                }
+                              },
+                              {
+                                "id": "w_20_pid__D_pid__PIDSum",
+                                "sourceBlockId": "pid__D",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__PIDSum",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 63
+                                }
+                              },
+                              {
+                                "id": "w_21_pid__FF_pid__PIDSum",
+                                "sourceBlockId": "pid__FF",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__PIDSum",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": 12
+                                }
+                              },
+                              {
+                                "id": "w_22_pid__PIDSumMax_pid__PIDSumLimit",
+                                "sourceBlockId": "pid__PIDSumMax",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__PIDSumLimit",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 2
+                                }
+                              },
+                              {
+                                "id": "w_23_pid__PIDSum_pid__PIDSumLimit",
+                                "sourceBlockId": "pid__PIDSum",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__PIDSumLimit",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_24_pid__PIDSumMin_pid__PIDSumLimit",
+                                "sourceBlockId": "pid__PIDSumMin",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__PIDSumLimit",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 4
+                                }
+                              },
+                              {
+                                "id": "w_25_pid__PIDSumLimit_pid__MixerScaling",
+                                "sourceBlockId": "pid__PIDSumLimit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__MixerScaling",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_26_pid__MixerScaling_pid__pid",
+                                "sourceBlockId": "pid__MixerScaling",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "pid__pid",
+                                "targetPortIndex": 0
+                              }
+                            ],
+                            "extents": {
+                              "width": 1976,
+                              "height": 928
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "id": "fc__Mixer",
+                      "type": "subsystem",
+                      "name": "Mixer",
+                      "position": {
+                        "x": 600,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputPorts": [
+                          "pid",
+                          "throttle"
+                        ],
+                        "outputPorts": [
+                          "motors"
+                        ],
+                        "showPortNames": true,
+                        "codeGenStrategy": "flatten",
+                        "sheets": [
+                          {
+                            "id": "mixer",
+                            "name": "Mixer",
+                            "blocks": [
+                              {
+                                "id": "mixer__pid",
+                                "type": "input_port",
+                                "name": "pid",
+                                "position": {
+                                  "x": 150,
+                                  "y": 372
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "pid",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "mixer__throttle",
+                                "type": "input_port",
+                                "name": "throttle",
+                                "position": {
+                                  "x": 148,
+                                  "y": 497
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "throttle",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "mixer__MixerTable",
+                                "type": "source",
+                                "name": "MixerTable",
+                                "position": {
+                                  "x": 100,
+                                  "y": 228
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": [
+                                    [
+                                      -1,
+                                      -1,
+                                      -1
+                                    ],
+                                    [
+                                      -1,
+                                      1,
+                                      1
+                                    ],
+                                    [
+                                      1,
+                                      -1,
+                                      1
+                                    ],
+                                    [
+                                      1,
+                                      1,
+                                      -1
+                                    ]
+                                  ],
+                                  "dataType": "double[4][3]"
+                                }
+                              },
+                              {
+                                "id": "mixer__MotorMix",
+                                "type": "matrix_multiply",
+                                "name": "MotorMix",
+                                "position": {
+                                  "x": 380,
+                                  "y": 334
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "mixer__MixSplit",
+                                "type": "demux",
+                                "name": "MixSplit",
+                                "position": {
+                                  "x": 550,
+                                  "y": 382
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "outputCount": 4,
+                                  "inputDimensions": [
+                                    4
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "mixer__MixMax",
+                                "type": "evaluate",
+                                "name": "MixMax",
+                                "position": {
+                                  "x": 710,
+                                  "y": 292
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 4,
+                                  "expression": "fmax(fmax(in(0), in(1)), fmax(in(2), in(3)))"
+                                }
+                              },
+                              {
+                                "id": "mixer__MixMin",
+                                "type": "evaluate",
+                                "name": "MixMin",
+                                "position": {
+                                  "x": 710,
+                                  "y": 472
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 4,
+                                  "expression": "fmin(fmin(in(0), in(1)), fmin(in(2), in(3)))"
+                                }
+                              },
+                              {
+                                "id": "mixer__MixRange",
+                                "type": "evaluate",
+                                "name": "MixRange",
+                                "position": {
+                                  "x": 1090,
+                                  "y": 289
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 2,
+                                  "expression": "fmax(1.0, in(0) - in(1))"
+                                }
+                              },
+                              {
+                                "id": "mixer__MixNormalized",
+                                "type": "divide",
+                                "name": "MixNormalized",
+                                "position": {
+                                  "x": 1488,
+                                  "y": 278
+                                },
+                                "parameters": {
+                                  "showName": true
+                                }
+                              },
+                              {
+                                "id": "mixer__AirmodeThrottle",
+                                "type": "evaluate",
+                                "name": "AirmodeThrottle",
+                                "position": {
+                                  "x": 1378,
+                                  "y": 422
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 4,
+                                  "expression": "(in(3) > 1.0) ? 0.5 : fmin(fmax(in(0), -in(2)), 1.0 - in(1))"
+                                }
+                              },
+                              {
+                                "id": "mixer__MixSpread",
+                                "type": "evaluate",
+                                "name": "MixSpread",
+                                "position": {
+                                  "x": 1129,
+                                  "y": 470
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 2,
+                                  "expression": "in(0) - in(1)"
+                                }
+                              },
+                              {
+                                "id": "mixer__ThrottlePlusMix",
+                                "type": "sum",
+                                "name": "ThrottlePlusMix",
+                                "position": {
+                                  "x": 1758,
+                                  "y": 359
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "++",
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "mixer__MotorRange",
+                                "type": "limit",
+                                "name": "MotorRange",
+                                "position": {
+                                  "x": 1918,
+                                  "y": 359
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "lowerLimit": 0,
+                                  "upperLimit": 1
+                                }
+                              },
+                              {
+                                "id": "mixer__IdleToFull",
+                                "type": "scale",
+                                "name": "IdleToFull",
+                                "position": {
+                                  "x": 2078,
+                                  "y": 359
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 0.945
+                                }
+                              },
+                              {
+                                "id": "mixer__MotorIdle",
+                                "type": "source",
+                                "name": "MotorIdle",
+                                "position": {
+                                  "x": 2078,
+                                  "y": 503
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signalType": "constant",
+                                  "value": 0.055,
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "mixer__MotorOutput",
+                                "type": "sum",
+                                "name": "MotorOutput",
+                                "position": {
+                                  "x": 2238,
+                                  "y": 431
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "++",
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "mixer__motors",
+                                "type": "output_port",
+                                "name": "motors",
+                                "position": {
+                                  "x": 2398,
+                                  "y": 441
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "motors",
+                                  "dataType": "double[4]"
+                                }
+                              }
+                            ],
+                            "connections": [
+                              {
+                                "id": "w_1_mixer__MixerTable_mixer__MotorMix",
+                                "sourceBlockId": "mixer__MixerTable",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MotorMix",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -4
+                                }
+                              },
+                              {
+                                "id": "w_2_mixer__pid_mixer__MotorMix",
+                                "sourceBlockId": "mixer__pid",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MotorMix",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 29
+                                }
+                              },
+                              {
+                                "id": "w_3_mixer__MotorMix_mixer__MixSplit",
+                                "sourceBlockId": "mixer__MotorMix",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MixSplit",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_4_mixer__MixSplit_mixer__MixMax",
+                                "sourceBlockId": "mixer__MixSplit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MixMax",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -8
+                                }
+                              },
+                              {
+                                "id": "w_5_mixer__MixSplit_mixer__MixMin",
+                                "sourceBlockId": "mixer__MixSplit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MixMin",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -8
+                                }
+                              },
+                              {
+                                "id": "w_6_mixer__MixSplit_mixer__MixMax",
+                                "sourceBlockId": "mixer__MixSplit",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "mixer__MixMax",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_7_mixer__MixSplit_mixer__MixMin",
+                                "sourceBlockId": "mixer__MixSplit",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "mixer__MixMin",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_8_mixer__MixSplit_mixer__MixMax",
+                                "sourceBlockId": "mixer__MixSplit",
+                                "sourcePortIndex": 2,
+                                "targetBlockId": "mixer__MixMax",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 8
+                                }
+                              },
+                              {
+                                "id": "w_9_mixer__MixSplit_mixer__MixMin",
+                                "sourceBlockId": "mixer__MixSplit",
+                                "sourcePortIndex": 2,
+                                "targetBlockId": "mixer__MixMin",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 8
+                                }
+                              },
+                              {
+                                "id": "w_10_mixer__MixSplit_mixer__MixMax",
+                                "sourceBlockId": "mixer__MixSplit",
+                                "sourcePortIndex": 3,
+                                "targetBlockId": "mixer__MixMax",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": -16
+                                }
+                              },
+                              {
+                                "id": "w_11_mixer__MixSplit_mixer__MixMin",
+                                "sourceBlockId": "mixer__MixSplit",
+                                "sourcePortIndex": 3,
+                                "targetBlockId": "mixer__MixMin",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": -16
+                                }
+                              },
+                              {
+                                "id": "w_12_mixer__MixMax_mixer__MixRange",
+                                "sourceBlockId": "mixer__MixMax",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MixRange",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -4
+                                }
+                              },
+                              {
+                                "id": "w_13_mixer__MixMin_mixer__MixRange",
+                                "sourceBlockId": "mixer__MixMin",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MixRange",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 4
+                                }
+                              },
+                              {
+                                "id": "w_14_mixer__MotorMix_mixer__MixNormalized",
+                                "sourceBlockId": "mixer__MotorMix",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MixNormalized",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -469
+                                }
+                              },
+                              {
+                                "id": "w_15_mixer__MixRange_mixer__MixNormalized",
+                                "sourceBlockId": "mixer__MixRange",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MixNormalized",
+                                "targetPortIndex": 1
+                              },
+                              {
+                                "id": "w_16_mixer__throttle_mixer__AirmodeThrottle",
+                                "sourceBlockId": "mixer__throttle",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__AirmodeThrottle",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -129
+                                }
+                              },
+                              {
+                                "id": "w_17_mixer__MixMax_mixer__AirmodeThrottle",
+                                "sourceBlockId": "mixer__MixMax",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__AirmodeThrottle",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -148
+                                }
+                              },
+                              {
+                                "id": "w_18_mixer__MixMin_mixer__AirmodeThrottle",
+                                "sourceBlockId": "mixer__MixMin",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__AirmodeThrottle",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 144
+                                }
+                              },
+                              {
+                                "id": "w_19_mixer__MixMax_mixer__MixSpread",
+                                "sourceBlockId": "mixer__MixMax",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MixSpread",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -23.5
+                                }
+                              },
+                              {
+                                "id": "w_20_mixer__MixMin_mixer__MixSpread",
+                                "sourceBlockId": "mixer__MixMin",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MixSpread",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -15.5
+                                }
+                              },
+                              {
+                                "id": "w_21_mixer__MixSpread_mixer__AirmodeThrottle",
+                                "sourceBlockId": "mixer__MixSpread",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__AirmodeThrottle",
+                                "targetPortIndex": 3
+                              },
+                              {
+                                "id": "w_22_mixer__MixNormalized_mixer__ThrottlePlusMix",
+                                "sourceBlockId": "mixer__MixNormalized",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__ThrottlePlusMix",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 51
+                                }
+                              },
+                              {
+                                "id": "w_23_mixer__AirmodeThrottle_mixer__ThrottlePlusMix",
+                                "sourceBlockId": "mixer__AirmodeThrottle",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__ThrottlePlusMix",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 4
+                                }
+                              },
+                              {
+                                "id": "w_24_mixer__ThrottlePlusMix_mixer__MotorRange",
+                                "sourceBlockId": "mixer__ThrottlePlusMix",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MotorRange",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_25_mixer__MotorRange_mixer__IdleToFull",
+                                "sourceBlockId": "mixer__MotorRange",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__IdleToFull",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_26_mixer__IdleToFull_mixer__MotorOutput",
+                                "sourceBlockId": "mixer__IdleToFull",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MotorOutput",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -4
+                                }
+                              },
+                              {
+                                "id": "w_27_mixer__MotorIdle_mixer__MotorOutput",
+                                "sourceBlockId": "mixer__MotorIdle",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__MotorOutput",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 4
+                                }
+                              },
+                              {
+                                "id": "w_28_mixer__MotorOutput_mixer__motors",
+                                "sourceBlockId": "mixer__MotorOutput",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "mixer__motors",
+                                "targetPortIndex": 0
+                              }
+                            ],
+                            "extents": {
+                              "width": 2698,
+                              "height": 703
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "id": "fc__motors",
+                      "type": "output_port",
+                      "name": "motors",
+                      "position": {
+                        "x": 762,
+                        "y": 378
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "motors",
+                        "dataType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "fc__setpoint",
+                      "type": "output_port",
+                      "name": "setpoint",
+                      "position": {
+                        "x": 760,
+                        "y": 252
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "setpoint",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "fc__gyro_dps",
+                      "type": "output_port",
+                      "name": "gyro_dps",
+                      "position": {
+                        "x": 760,
+                        "y": 503
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "gyro_dps",
+                        "dataType": "double[3]"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_fc__sticks_fc__Rates",
+                      "sourceBlockId": "fc__sticks",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__Rates",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_2_fc__gyro_fc__GyroFilters",
+                      "sourceBlockId": "fc__gyro",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__GyroFilters",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_3_fc__Rates_fc__RatePID",
+                      "sourceBlockId": "fc__Rates",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__RatePID",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_4_fc__GyroFilters_fc__RatePID",
+                      "sourceBlockId": "fc__GyroFilters",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__RatePID",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_5_fc__RatePID_fc__Mixer",
+                      "sourceBlockId": "fc__RatePID",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__Mixer",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_6_fc__Rates_fc__Mixer",
+                      "sourceBlockId": "fc__Rates",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "fc__Mixer",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 80
+                      }
+                    },
+                    {
+                      "id": "w_7_fc__Mixer_fc__motors",
+                      "sourceBlockId": "fc__Mixer",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__motors",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_8_fc__Rates_fc__setpoint",
+                      "sourceBlockId": "fc__Rates",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__setpoint",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -8
+                      }
+                    },
+                    {
+                      "id": "w_9_fc__GyroFilters_fc__gyro_dps",
+                      "sourceBlockId": "fc__GyroFilters",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__gyro_dps",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 8
+                      }
+                    }
+                  ],
+                  "extents": {
+                    "width": 1062,
+                    "height": 703
+                  }
+                }
+              ],
+              "width": 170,
+              "height": 140,
+              "sampleTimeSec": 0.001
+            }
+          },
+          {
             "id": "main__Motor_RR",
             "type": "subsystem",
             "name": "Motor_RR",
             "position": {
-              "x": 540,
+              "x": 260,
               "y": 120
             },
             "parameters": {
@@ -265,7 +2292,7 @@
             "type": "subsystem",
             "name": "Motor_FR",
             "position": {
-              "x": 540,
+              "x": 260,
               "y": 280
             },
             "parameters": {
@@ -291,7 +2318,7 @@
             "type": "subsystem",
             "name": "Motor_RL",
             "position": {
-              "x": 540,
+              "x": 260,
               "y": 440
             },
             "parameters": {
@@ -317,7 +2344,7 @@
             "type": "subsystem",
             "name": "Motor_FL",
             "position": {
-              "x": 540,
+              "x": 260,
               "y": 600
             },
             "parameters": {
@@ -343,7 +2370,7 @@
             "type": "mux",
             "name": "Thrusts",
             "position": {
-              "x": 764,
+              "x": 484,
               "y": 440
             },
             "parameters": {
@@ -359,7 +2386,7 @@
             "type": "mux",
             "name": "RotorSpeeds",
             "position": {
-              "x": 764,
+              "x": 484,
               "y": 260
             },
             "parameters": {
@@ -375,7 +2402,7 @@
             "type": "subsystem",
             "name": "Frame",
             "position": {
-              "x": 934,
+              "x": 654,
               "y": 270
             },
             "parameters": {
@@ -1459,8 +3486,8 @@
             "type": "output_port",
             "name": "pos_ned",
             "position": {
-              "x": 1188,
-              "y": -16
+              "x": 1166,
+              "y": 27
             },
             "parameters": {
               "showName": true,
@@ -1473,8 +3500,8 @@
             "type": "output_port",
             "name": "vel_ned",
             "position": {
-              "x": 1188,
-              "y": 253
+              "x": 1166,
+              "y": 565
             },
             "parameters": {
               "showName": true,
@@ -1487,8 +3514,8 @@
             "type": "output_port",
             "name": "quat",
             "position": {
-              "x": 1188,
-              "y": 378
+              "x": 1166,
+              "y": 296
             },
             "parameters": {
               "showName": true,
@@ -1501,8 +3528,8 @@
             "type": "output_port",
             "name": "euler",
             "position": {
-              "x": 1188,
-              "y": 647
+              "x": 1166,
+              "y": -348
             },
             "parameters": {
               "showName": true,
@@ -1515,8 +3542,8 @@
             "type": "output_port",
             "name": "omega",
             "position": {
-              "x": 1188,
-              "y": 916
+              "x": 1166,
+              "y": -98
             },
             "parameters": {
               "showName": true,
@@ -1529,8 +3556,8 @@
             "type": "output_port",
             "name": "accel",
             "position": {
-              "x": 1188,
-              "y": 1041
+              "x": 1166,
+              "y": -617
             },
             "parameters": {
               "showName": true,
@@ -1543,8 +3570,8 @@
             "type": "output_port",
             "name": "motor_omega",
             "position": {
-              "x": 1174,
-              "y": -285
+              "x": 1152,
+              "y": -223
             },
             "parameters": {
               "showName": true,
@@ -1553,12 +3580,54 @@
             }
           },
           {
+            "id": "main__motor_cmd",
+            "type": "output_port",
+            "name": "motor_cmd",
+            "position": {
+              "x": 1160,
+              "y": 690
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "motor_cmd",
+              "dataType": "double[4]"
+            }
+          },
+          {
+            "id": "main__rate_setpoint",
+            "type": "output_port",
+            "name": "rate_setpoint",
+            "position": {
+              "x": 1144,
+              "y": 959
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "rate_setpoint",
+              "dataType": "double[3]"
+            }
+          },
+          {
+            "id": "main__gyro_dps",
+            "type": "output_port",
+            "name": "gyro_dps",
+            "position": {
+              "x": 1164,
+              "y": 1228
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "gyro_dps",
+              "dataType": "double[3]"
+            }
+          },
+          {
             "id": "main__Position",
             "type": "signal_display",
             "name": "Position",
             "position": {
-              "x": 1198,
-              "y": 109
+              "x": 1176,
+              "y": 152
             },
             "parameters": {
               "showName": true,
@@ -1570,21 +3639,8 @@
             "type": "signal_display",
             "name": "Attitude",
             "position": {
-              "x": 1198,
-              "y": 503
-            },
-            "parameters": {
-              "showName": true,
-              "maxSamples": 10000
-            }
-          },
-          {
-            "id": "main__BodyRates",
-            "type": "signal_display",
-            "name": "BodyRates",
-            "position": {
-              "x": 1198,
-              "y": 772
+              "x": 1176,
+              "y": -492
             },
             "parameters": {
               "showName": true,
@@ -1596,8 +3652,47 @@
             "type": "signal_display",
             "name": "RotorSpeed",
             "position": {
-              "x": 1198,
-              "y": -160
+              "x": 1176,
+              "y": 421
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "main__RateSetpoint",
+            "type": "signal_display",
+            "name": "RateSetpoint",
+            "position": {
+              "x": 1176,
+              "y": 1084
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "main__GyroRate",
+            "type": "signal_display",
+            "name": "GyroRate",
+            "position": {
+              "x": 1176,
+              "y": 1353
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "main__MotorCommand",
+            "type": "signal_display",
+            "name": "MotorCommand",
+            "position": {
+              "x": 1176,
+              "y": 815
             },
             "parameters": {
               "showName": true,
@@ -1607,54 +3702,64 @@
         ],
         "connections": [
           {
-            "id": "w_1_main__MotorCmd_main__MotorCmdSplit",
-            "sourceBlockId": "main__MotorCmd",
+            "id": "w_1_main__Pilot_main__FlightController",
+            "sourceBlockId": "main__Pilot",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__FlightController",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -325
+            }
+          },
+          {
+            "id": "w_2_main__FlightController_main__MotorCmdSplit",
+            "sourceBlockId": "main__FlightController",
             "sourcePortIndex": 0,
             "targetBlockId": "main__MotorCmdSplit",
             "targetPortIndex": 0
           },
           {
-            "id": "w_2_main__MotorCmdSplit_main__Motor_RR",
+            "id": "w_3_main__MotorCmdSplit_main__Motor_RR",
             "sourceBlockId": "main__MotorCmdSplit",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Motor_RR",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -12
+              "midpointOffset": -16
             }
           },
           {
-            "id": "w_3_main__MotorCmdSplit_main__Motor_FR",
+            "id": "w_4_main__MotorCmdSplit_main__Motor_FR",
             "sourceBlockId": "main__MotorCmdSplit",
             "sourcePortIndex": 1,
             "targetBlockId": "main__Motor_FR",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 4
+              "midpointOffset": 16
             }
           },
           {
-            "id": "w_4_main__MotorCmdSplit_main__Motor_RL",
+            "id": "w_5_main__MotorCmdSplit_main__Motor_RL",
             "sourceBlockId": "main__MotorCmdSplit",
             "sourcePortIndex": 2,
             "targetBlockId": "main__Motor_RL",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 12
+              "midpointOffset": 0
             }
           },
           {
-            "id": "w_5_main__MotorCmdSplit_main__Motor_FL",
+            "id": "w_6_main__MotorCmdSplit_main__Motor_FL",
             "sourceBlockId": "main__MotorCmdSplit",
             "sourcePortIndex": 3,
             "targetBlockId": "main__Motor_FL",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4
+              "midpointOffset": 8
             }
           },
           {
-            "id": "w_6_main__Motor_RR_main__Thrusts",
+            "id": "w_7_main__Motor_RR_main__Thrusts",
             "sourceBlockId": "main__Motor_RR",
             "sourcePortIndex": 1,
             "targetBlockId": "main__Thrusts",
@@ -1664,7 +3769,7 @@
             }
           },
           {
-            "id": "w_7_main__Motor_RR_main__RotorSpeeds",
+            "id": "w_8_main__Motor_RR_main__RotorSpeeds",
             "sourceBlockId": "main__Motor_RR",
             "sourcePortIndex": 0,
             "targetBlockId": "main__RotorSpeeds",
@@ -1674,7 +3779,7 @@
             }
           },
           {
-            "id": "w_8_main__Motor_FR_main__Thrusts",
+            "id": "w_9_main__Motor_FR_main__Thrusts",
             "sourceBlockId": "main__Motor_FR",
             "sourcePortIndex": 1,
             "targetBlockId": "main__Thrusts",
@@ -1684,7 +3789,7 @@
             }
           },
           {
-            "id": "w_9_main__Motor_FR_main__RotorSpeeds",
+            "id": "w_10_main__Motor_FR_main__RotorSpeeds",
             "sourceBlockId": "main__Motor_FR",
             "sourcePortIndex": 0,
             "targetBlockId": "main__RotorSpeeds",
@@ -1694,7 +3799,7 @@
             }
           },
           {
-            "id": "w_10_main__Motor_RL_main__Thrusts",
+            "id": "w_11_main__Motor_RL_main__Thrusts",
             "sourceBlockId": "main__Motor_RL",
             "sourcePortIndex": 1,
             "targetBlockId": "main__Thrusts",
@@ -1704,7 +3809,7 @@
             }
           },
           {
-            "id": "w_11_main__Motor_RL_main__RotorSpeeds",
+            "id": "w_12_main__Motor_RL_main__RotorSpeeds",
             "sourceBlockId": "main__Motor_RL",
             "sourcePortIndex": 0,
             "targetBlockId": "main__RotorSpeeds",
@@ -1714,7 +3819,7 @@
             }
           },
           {
-            "id": "w_12_main__Motor_FL_main__Thrusts",
+            "id": "w_13_main__Motor_FL_main__Thrusts",
             "sourceBlockId": "main__Motor_FL",
             "sourcePortIndex": 1,
             "targetBlockId": "main__Thrusts",
@@ -1724,7 +3829,7 @@
             }
           },
           {
-            "id": "w_13_main__Motor_FL_main__RotorSpeeds",
+            "id": "w_14_main__Motor_FL_main__RotorSpeeds",
             "sourceBlockId": "main__Motor_FL",
             "sourcePortIndex": 0,
             "targetBlockId": "main__RotorSpeeds",
@@ -1734,7 +3839,7 @@
             }
           },
           {
-            "id": "w_14_main__Thrusts_main__Frame",
+            "id": "w_15_main__Thrusts_main__Frame",
             "sourceBlockId": "main__Thrusts",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Frame",
@@ -1744,119 +3849,179 @@
             }
           },
           {
-            "id": "w_15_main__Frame_main__pos_ned",
+            "id": "w_16_main__Frame_main__FlightController",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 4,
+            "targetBlockId": "main__FlightController",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 16
+            }
+          },
+          {
+            "id": "w_17_main__Frame_main__pos_ned",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 0,
             "targetBlockId": "main__pos_ned",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -19
+              "midpointOffset": 114
             }
           },
           {
-            "id": "w_16_main__Frame_main__vel_ned",
+            "id": "w_18_main__Frame_main__vel_ned",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 1,
             "targetBlockId": "main__vel_ned",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 5
+              "midpointOffset": -136
             }
           },
           {
-            "id": "w_17_main__Frame_main__quat",
+            "id": "w_19_main__Frame_main__quat",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 2,
             "targetBlockId": "main__quat",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -11
+              "midpointOffset": -128
             }
           },
           {
-            "id": "w_18_main__Frame_main__euler",
+            "id": "w_20_main__Frame_main__euler",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 3,
             "targetBlockId": "main__euler",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 13
+              "midpointOffset": -144
             }
           },
           {
-            "id": "w_19_main__Frame_main__omega",
+            "id": "w_21_main__Frame_main__omega",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 4,
             "targetBlockId": "main__omega",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -3
+              "midpointOffset": -120
             }
           },
           {
-            "id": "w_20_main__Frame_main__accel",
+            "id": "w_22_main__Frame_main__accel",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 5,
             "targetBlockId": "main__accel",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -27
+              "midpointOffset": -152
             }
           },
           {
-            "id": "w_21_main__RotorSpeeds_main__motor_omega",
+            "id": "w_23_main__RotorSpeeds_main__motor_omega",
             "sourceBlockId": "main__RotorSpeeds",
             "sourcePortIndex": 0,
             "targetBlockId": "main__motor_omega",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -124
+              "midpointOffset": -253
             }
           },
           {
-            "id": "w_22_main__Frame_main__Position",
-            "sourceBlockId": "main__Frame",
+            "id": "w_24_main__FlightController_main__motor_cmd",
+            "sourceBlockId": "main__FlightController",
             "sourcePortIndex": 0,
-            "targetBlockId": "main__Position",
+            "targetBlockId": "main__motor_cmd",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -24
+              "midpointOffset": 0
             }
           },
           {
-            "id": "w_23_main__Frame_main__Attitude",
-            "sourceBlockId": "main__Frame",
-            "sourcePortIndex": 3,
-            "targetBlockId": "main__Attitude",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 8
-            }
-          },
-          {
-            "id": "w_24_main__Frame_main__BodyRates",
-            "sourceBlockId": "main__Frame",
-            "sourcePortIndex": 4,
-            "targetBlockId": "main__BodyRates",
+            "id": "w_25_main__FlightController_main__rate_setpoint",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__rate_setpoint",
             "targetPortIndex": 0,
             "routing": {
               "midpointOffset": -8
             }
           },
           {
-            "id": "w_25_main__RotorSpeeds_main__RotorSpeed",
+            "id": "w_26_main__FlightController_main__gyro_dps",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__gyro_dps",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -26
+            }
+          },
+          {
+            "id": "w_27_main__Frame_main__Position",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Position",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 109
+            }
+          },
+          {
+            "id": "w_28_main__Frame_main__Attitude",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__Attitude",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -149
+            }
+          },
+          {
+            "id": "w_29_main__RotorSpeeds_main__RotorSpeed",
             "sourceBlockId": "main__RotorSpeeds",
             "sourcePortIndex": 0,
             "targetBlockId": "main__RotorSpeed",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -136
+              "midpointOffset": 245
+            }
+          },
+          {
+            "id": "w_30_main__FlightController_main__RateSetpoint",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__RateSetpoint",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -24
+            }
+          },
+          {
+            "id": "w_31_main__FlightController_main__GyroRate",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__GyroRate",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -32
+            }
+          },
+          {
+            "id": "w_32_main__FlightController_main__MotorCommand",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__MotorCommand",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -8
             }
           }
         ],
         "extents": {
-          "width": 1498,
-          "height": 1241
+          "width": 1476,
+          "height": 1553
         }
       }
     ]
