@@ -407,13 +407,13 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     type: 'atmosphere',
     displayName: 'Atmosphere',
     category: 'Aerospace',
-    description: '1976 COESA atmosphere vs geometric altitude (m). Four outputs: temperature_K, pressure_Pa, density_kgpm3, speed_of_sound_mps. Build q̄ = ½ρV² in the model.',
+    description: 'U.S. Standard Atmosphere 1976 (COESA) vs geometric altitude (m), from the standard\'s layer formulae (valid -5 to 86 km). Four outputs in order: temperature_K, speed_of_sound_mps, pressure_Pa, density_kgpm3. Build q̄ = ½ρV² in the model.',
     parameters: {
       model: { type: 'string', description: "'coesa1976' | 'table'", default: 'coesa1976' },
       extrapolation: { type: 'string', description: "'clamp' | 'extrapolate'", default: 'clamp' }
     },
     inputs: ['altitude_m'],
-    outputs: ['temperature_K', 'pressure_Pa', 'density_kgpm3', 'speed_of_sound_mps']
+    outputs: ['temperature_K', 'speed_of_sound_mps', 'pressure_Pa', 'density_kgpm3']
   },
   {
     type: 'limit',

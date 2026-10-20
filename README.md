@@ -108,7 +108,7 @@ Version 3.0.0 makes obliq-2 a **local, single-user application** and substantial
 | `orientation_conversion` | Orientation Conversion | Aerospace | Converts between Euler angles, DCM, and Quaternion (AIAA convention) |
 | `units_conversion` | Units Conversion | Aerospace | Converts between SI and Imperial units |
 | `body2quaternion_rates` | Body2Quat Rates | Aerospace | Converts body angular rates to quaternion rates |
-| `atmosphere` | Atmosphere | Aerospace | 1976 COESA atmosphere: T, a, P, ρ versus geometric altitude (m) |
+| `atmosphere` | Atmosphere | Aerospace | U.S. Standard Atmosphere 1976 (COESA) from its layer formulae: T, a, P, ρ versus geometric altitude (m), −5 to 86 km |
 | `comment` | Comment | Annotation | Text annotation with Markdown and LaTeX math support |
 
 Two further block types are supported by simulation and code generation but are

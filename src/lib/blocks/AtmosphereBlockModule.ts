@@ -1,6 +1,7 @@
 // lib/blocks/AtmosphereBlockModule.ts
 //
-// Atmosphere model (v1): table-based COESA 1976 profile.
+// Atmosphere model: U.S. Standard Atmosphere 1976 (COESA) from its defining
+// formulae (see lib/atmosphere/ussa1976.ts), or a user-supplied table.
 //
 // Ports (match MathWorks / aerolib COESA Atmosphere Model order):
 //   in  [0] altitude_m (geometric altitude above MSL, meters)
@@ -12,12 +13,15 @@
 // Parameters:
 //   model: 'coesa1976' | 'table'  (default coesa1976)
 //   extrapolation: 'clamp' | 'extrapolate'
+//     coesa1976: clamp the altitude to the formulae's range (-5 km .. 86 km),
+//                or continue the end layers' formulae beyond it
+//     table:     clamp to the table ends, or extrapolate linearly
 //   (table mode) altitudeBreakpoints, temperatureValues, pressureValues,
 //                densityValues, speedOfSoundValues
 
 import { BlockData } from '@/components/BlockNode'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
-import { COESA_1976_TABLE } from '@/lib/atmosphere/coesa1976Tables'
+import { USSA1976, LAYER_BASE_PRESSURES } from '@/lib/atmosphere/ussa1976'
 
 const OUT_SUFFIXES = [
   'temperature_K',
@@ -39,12 +43,57 @@ export class AtmosphereBlockModule implements IBlockModule {
         speed_of_sound_mps: (block.parameters.speedOfSoundValues || []) as number[]
       }
     }
-    return COESA_1976_TABLE
+    return null
+  }
+
+  /** U.S. Standard Atmosphere 1976 layer formulae (same as ussa1976() in TypeScript). */
+  private generateStandardAtmosphere(block: BlockData, hIn: string, outs: string[]): string {
+    const baseName = BlockModuleUtils.sanitizeIdentifier(block.name)
+    const p = `${baseName}_atm`
+    const clamp = (block.parameters?.extrapolation || 'clamp') === 'clamp'
+    const L = USSA1976.layers
+    const n = L.length
+    const num = (x: number) => (Number.isInteger(x) ? `${x}.0` : String(x))
+    const list = (xs: readonly number[]) => xs.map(num).join(', ')
+    const { g0, Rstar, M0, r0, gamma, zMin, zMax } = USSA1976
+
+    let code = `    // Atmosphere block: ${block.name} (U.S. Standard Atmosphere 1976 formulae${clamp ? `, altitude clamped to ${zMin}..${zMax} m` : ''})\n`
+    code += `    {\n`
+    code += `        static const double ${p}_Hb[${n}] = { ${list(L.map(l => l.Hb))} };\n`
+    code += `        static const double ${p}_Tb[${n}] = { ${list(L.map(l => l.Tb))} };\n`
+    code += `        static const double ${p}_Lb[${n}] = { ${list(L.map(l => l.Lb))} };\n`
+    code += `        static const double ${p}_Pb[${n}] = { ${LAYER_BASE_PRESSURES.map(x => x.toPrecision(17)).join(', ')} };\n`
+    code += `        const double ${p}_gmr = ${num(g0)} * ${num(M0)} / ${num(Rstar)};\n`
+    code += clamp
+      ? `        const double ${p}_z = fmin(${num(zMax)}, fmax(${num(zMin)}, ${hIn}));\n`
+      : `        const double ${p}_z = ${hIn};\n`
+    code += `        const double ${p}_H = ${num(r0)} * ${p}_z / (${num(r0)} + ${p}_z); /* geopotential altitude */\n`
+    code += `        int ${p}_b = 0;\n`
+    code += `        while (${p}_b < ${n - 1} && ${p}_H >= ${p}_Hb[${p}_b + 1]) ${p}_b++;\n`
+    code += `        const double ${p}_dH = ${p}_H - ${p}_Hb[${p}_b];\n`
+    code += `        const double ${p}_T = ${p}_Tb[${p}_b] + ${p}_Lb[${p}_b] * ${p}_dH;\n`
+    code += `        const double ${p}_P = (${p}_Lb[${p}_b] == 0.0)\n`
+    code += `            ? ${p}_Pb[${p}_b] * exp(-${p}_gmr * ${p}_dH / ${p}_Tb[${p}_b])\n`
+    code += `            : ${p}_Pb[${p}_b] * pow(${p}_Tb[${p}_b] / ${p}_T, ${p}_gmr / ${p}_Lb[${p}_b]);\n`
+    code += `        ${outs[0]} = ${p}_T;\n`
+    code += `        ${outs[1]} = sqrt(${num(gamma)} * ${num(Rstar)} * ${p}_T / ${num(M0)});\n`
+    code += `        ${outs[2]} = ${p}_P;\n`
+    code += `        ${outs[3]} = ${p}_P * ${num(M0)} / (${num(Rstar)} * ${p}_T);\n`
+    code += `    }\n`
+    return code
   }
 
   generateComputation(block: BlockData, inputs: string[], inputTypes?: string[]): string {
     const baseName = BlockModuleUtils.sanitizeIdentifier(block.name)
+    const outs0 = OUT_SUFFIXES.map(s => `model->signals.${baseName}_${s}`)
     const table = this.getTable(block)
+    if (!table) {
+      if (inputs.length === 0) {
+        return `    // Atmosphere block: ${block.name} (no altitude input: sea level)\n` +
+          `    ${outs0[0]} = 288.15;\n    ${outs0[1]} = 340.294;\n    ${outs0[2]} = 101325.0;\n    ${outs0[3]} = 1.225;\n`
+      }
+      return this.generateStandardAtmosphere(block, inputs[0]!, outs0)
+    }
     const n = Math.min(
       table.altitude_m.length,
       table.temperature_K.length,
@@ -56,7 +105,7 @@ export class AtmosphereBlockModule implements IBlockModule {
 
     const outs = OUT_SUFFIXES.map(s => `model->signals.${baseName}_${s}`)
 
-    let code = `    // Atmosphere block: ${block.name} (COESA table, n=${n})\n`
+    let code = `    // Atmosphere block: ${block.name} (custom table, n=${n})\n`
 
     if (inputs.length === 0 || n < 2) {
       code += `    ${outs[0]} = 288.15;\n` // T

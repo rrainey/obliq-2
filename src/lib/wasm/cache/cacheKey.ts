@@ -48,8 +48,10 @@ import type { ModelParameter } from '@/lib/modelSchema'
  *        major-step snapshot restored (v27 dropped the stage evaluations because
  *        they stored extra samples; the restore undoes that). Also segregated
  *        module derivatives read the stage state; Random Noise block.
+ * - v33: Atmosphere block computes the 1976 standard atmosphere from its
+ *        layer formulae (was a coarse, partly inaccurate table).
  */
-const CODEGEN_VERSION = 'v32'
+const CODEGEN_VERSION = 'v33'
 
 export interface ModelStructure {
   sheets: Sheet[]

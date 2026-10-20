@@ -27,15 +27,16 @@ export default function AtmosphereConfig({ block, onUpdate, onClose }: Atmospher
     <Modal opened={true} onClose={onClose} title={`Configure Atmosphere: ${block.name}`} size="md" centered>
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          1976 COESA atmosphere vs geometric altitude (m). Outputs: temperature (K), pressure (Pa),
-          density (kg/m³), speed of sound (m/s). Build dynamic pressure as ½ ρ V² in the model.
+          U.S. Standard Atmosphere 1976 (COESA) at geometric altitude (m), computed from the standard's
+          layer formulae (valid −5 km to 86 km). Outputs, in order: temperature (K), speed of sound (m/s),
+          pressure (Pa), density (kg/m³). Build dynamic pressure as ½ ρ V² in the model.
         </Text>
         <Select
           label="Model"
           value={model}
           onChange={(v) => setModel(v || 'coesa1976')}
           data={[
-            { value: 'coesa1976', label: 'COESA 1976 (embedded table, 0–80 km)' },
+            { value: 'coesa1976', label: 'COESA / U.S. Standard Atmosphere 1976 (formulae, −5 to 86 km)' },
             { value: 'table', label: 'Custom table (set breakpoints in parameters)' }
           ]}
         />
@@ -44,8 +45,8 @@ export default function AtmosphereConfig({ block, onUpdate, onClose }: Atmospher
           value={extrapolation}
           onChange={(v) => setExtrapolation(v || 'clamp')}
           data={[
-            { value: 'clamp', label: 'Clamp to table ends' },
-            { value: 'extrapolate', label: 'Linear extrapolate' }
+            { value: 'clamp', label: 'Clamp to the valid range (or the table ends)' },
+            { value: 'extrapolate', label: 'Extrapolate (continue the end layers, or linearly for a table)' }
           ]}
         />
         <Group justify="flex-end">

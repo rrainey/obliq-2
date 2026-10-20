@@ -3,7 +3,8 @@
 import { AtmosphereBlockModule } from '@/lib/blocks/AtmosphereBlockModule'
 import { BlockData } from '@/components/BlockNode'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
-import { lookupAtmosphere, COESA_1976_TABLE } from '@/lib/atmosphere/coesa1976Tables'
+import { ussa1976, ussa1976PressureAltitude, LAYER_BASE_PRESSURES } from '@/lib/atmosphere/ussa1976'
+import { cleanupNativeDir, compileAndRunNative } from './support/nativeCgen'
 import { CodeGenerator } from '@/lib/codegen/CodeGenerator'
 import { propagateSignalTypes } from '@/lib/signalTypePropagation'
 import { getSignalMemberName } from '@/lib/codegen/signalMemberName'
@@ -105,7 +106,7 @@ describe('Atmosphere Block (P7)', () => {
     expect(member).toContain('Atm1_speed_of_sound_mps')
   })
 
-  test('codegen embeds table and writes four signals', () => {
+  test('codegen emits the standard-atmosphere formulae and writes four signals', () => {
     const code = module.generateComputation(
       block(),
       ['model->signals.h'],
@@ -114,36 +115,49 @@ describe('Atmosphere Block (P7)', () => {
     expect(code).toContain('Atmosphere block')
     expect(code).toContain('Atm1_temperature_K')
     expect(code).toContain('Atm1_density_kgpm3')
-    expect(code).toContain('288.15') // sea level T in table
+    expect(code).toContain('288.15') // sea-level temperature
+    expect(code).toContain('U.S. Standard Atmosphere 1976 formulae')
+    expect(code).not.toContain('_y[') // no lookup table
   })
 
-  test('sea level density ≈ 1.225 (P7-H1 JS table)', () => {
-    const a = lookupAtmosphere(0)
-    expect(a.density_kgpm3).toBeCloseTo(1.225, 2)
-    expect(a.temperature_K).toBeCloseTo(288.15, 1)
-    expect(a.pressure_Pa).toBeCloseTo(101325, -2)
+  test('layer base pressures match the 1976 standard (Table 4)', () => {
+    const published = [101325.0, 22632.06, 5474.889, 868.0187, 110.9063, 66.93887, 3.956420]
+    LAYER_BASE_PRESSURES.forEach((p, i) => expect(p / published[i]!).toBeCloseTo(1, 6))
   })
 
-  test('11 km tropopause temperature ≈ 216.65 K (P7-H2)', () => {
-    const a = lookupAtmosphere(11000)
-    expect(a.temperature_K).toBeCloseTo(216.65, 0)
+  test.each([
+    // z (m), T (K), P (Pa), rho (kg/m3): U.S. Standard Atmosphere 1976, geometric altitude
+    [0, 288.15, 101325, 1.225],
+    [1000, 281.651, 89876.3, 1.1117],
+    [5000, 255.676, 54048.3, 0.73643],
+    [10000, 223.252, 26499.9, 0.41351],
+    [11000, 216.774, 22700.0, 0.36480],
+    [20000, 216.65, 5529.31, 0.088910],
+    [32000, 228.49, 889.06, 0.013555],
+    [50000, 270.65, 79.779, 0.0010269],
+    [80000, 198.639, 1.0525, 1.8458e-5],
+    [86000, 186.946, 0.37338, 6.958e-6],
+  ])('standard values at %d m', (z, T, P, rho) => {
+    const a = ussa1976(z)
+    expect(a.temperature_K).toBeCloseTo(T, 2)
+    expect(a.pressure_Pa / P).toBeCloseTo(1, 4)
+    expect(a.density_kgpm3 / rho).toBeCloseTo(1, 3)
   })
 
-  test('pressure decreases with altitude (P7-H3)', () => {
-    const p0 = lookupAtmosphere(0).pressure_Pa
-    const p20 = lookupAtmosphere(20000).pressure_Pa
-    const p50 = lookupAtmosphere(50000).pressure_Pa
-    expect(p0).toBeGreaterThan(p20)
-    expect(p20).toBeGreaterThan(p50)
+  test('sea-level speed of sound is 340.29 m/s', () => {
+    expect(ussa1976(0).speed_of_sound_mps).toBeCloseTo(340.294, 2)
   })
 
-  test('table has matching lengths', () => {
-    const t = COESA_1976_TABLE
-    const n = t.altitude_m.length
-    expect(t.temperature_K.length).toBe(n)
-    expect(t.pressure_Pa.length).toBe(n)
-    expect(t.density_kgpm3.length).toBe(n)
-    expect(t.speed_of_sound_mps.length).toBe(n)
+  test('pressure altitude inverts the pressure profile', () => {
+    for (const z of [-4000, 0, 250, 8000, 15000, 25000, 40000, 60000, 85000]) {
+      expect(ussa1976PressureAltitude(ussa1976(z).pressure_Pa)).toBeCloseTo(z, 6)
+    }
+  })
+
+  test('clamps outside -5..86 km unless extrapolating', () => {
+    expect(ussa1976(120000).pressure_Pa).toBe(ussa1976(86000).pressure_Pa)
+    expect(ussa1976(-8000).pressure_Pa).toBe(ussa1976(-5000).pressure_Pa)
+    expect(ussa1976(-8000, { extrapolate: true }).pressure_Pa).toBeGreaterThan(ussa1976(-5000).pressure_Pa)
   })
 
   test('full codegen multi-output signal names', () => {
@@ -176,8 +190,8 @@ describe('Atmosphere Block (P7)', () => {
       ],
       connections: [
         { id: 'c1', sourceBlockId: 'h', sourcePortIndex: 0, targetBlockId: 'atm', targetPortIndex: 0 },
-        // density is port 2
-        { id: 'c2', sourceBlockId: 'atm', sourcePortIndex: 2, targetBlockId: 'out', targetPortIndex: 0 }
+        // density is port 3 (order T, a, P, rho)
+        { id: 'c2', sourceBlockId: 'atm', sourcePortIndex: 3, targetBlockId: 'out', targetPortIndex: 0 }
       ]
     }]
 
@@ -228,5 +242,49 @@ describe('Atmosphere WASM multi-output signal names', () => {
     expect(result.wasmWrapper).toContain('signals.Atm_speed_of_sound_mps')
     // Must not return bare multi-output base name
     expect(result.wasmWrapper).not.toMatch(/signals\.Atm;/)
+  })
+})
+
+describe('Atmosphere native codegen', () => {
+  let outDir: string | undefined
+  afterAll(() => cleanupNativeDir(outDir))
+
+  test('generated C matches the TypeScript formulae from -5 km to 86 km, clamping beyond', () => {
+    const altitudes = [-6000, -5000, -1234, 0, 500, 5000, 10999, 11000, 19999, 20000, 32000, 47000, 51000, 70999, 71000, 84000, 86000, 90000]
+    const sheets = [{
+      id: 'main', name: 'Main', extents: { width: 800, height: 600 },
+      blocks: [
+        { id: 'h', name: 'h', type: 'input_port', position: { x: 0, y: 0 }, parameters: { portName: 'h', dataType: 'double' } },
+        { id: 'atm', name: 'Atm', type: 'atmosphere', position: { x: 100, y: 0 }, parameters: { model: 'coesa1976', extrapolation: 'clamp' } },
+        ...['T', 'a', 'P', 'rho'].map((n, i) => ({ id: `o${i}`, name: n, type: 'output_port', position: { x: 300, y: 80 * i }, parameters: { portName: n, dataType: 'double' } })),
+      ],
+      connections: [
+        { id: 'w0', sourceBlockId: 'h', sourcePortIndex: 0, targetBlockId: 'atm', targetPortIndex: 0 },
+        ...[0, 1, 2, 3].map(i => ({ id: `w${i + 1}`, sourceBlockId: 'atm', sourcePortIndex: i, targetBlockId: `o${i}`, targetPortIndex: 0 })),
+      ],
+    }]
+    const r = compileAndRunNative({
+      modelName: 'atm_native',
+      sheets: sheets as any,
+      smokeMainBody: `
+  const double hs[${altitudes.length}] = { ${altitudes.join(', ')} };
+  for (int i = 0; i < ${altitudes.length}; ++i) {
+    model.inputs.h = hs[i];
+    atm_native_seed_from_inputs(&model);
+    printf("%.17g %.17g %.17g %.17g\\n", model.outputs.T, model.outputs.a, model.outputs.P, model.outputs.rho);
+  }
+  return 0;
+`,
+    })
+    outDir = r.outDir
+    const rows = r.stdout.trim().split('\n').map(l => l.split(' ').map(Number))
+    altitudes.forEach((z, i) => {
+      const ref = ussa1976(z)
+      const [T, a, P, rho] = rows[i]!
+      expect(T! / ref.temperature_K).toBeCloseTo(1, 12)
+      expect(a! / ref.speed_of_sound_mps).toBeCloseTo(1, 12)
+      expect(P! / ref.pressure_Pa).toBeCloseTo(1, 12)
+      expect(rho! / ref.density_kgpm3).toBeCloseTo(1, 12)
+    })
   })
 })

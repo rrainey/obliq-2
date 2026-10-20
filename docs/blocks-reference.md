@@ -626,24 +626,30 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 ---
 
 ### Atmosphere Block
-**Purpose**: 1976 COESA / US Standard Atmosphere vs geometric altitude.
+**Purpose**: U.S. Standard Atmosphere 1976 (COESA) versus geometric altitude, computed from the standard's defining formulae.
 
-**Input**: `altitude_m` — geometric altitude above MSL (meters)
+**Input**: `altitude_m`, geometric altitude above MSL (meters)
 
-**Outputs** (four scalar ports):
+**Outputs** (four scalar ports, in MathWorks COESA order):
 | Port | Quantity |
 |------|----------|
 | 0 | `temperature_K` |
-| 1 | `pressure_Pa` |
-| 2 | `density_kgpm3` |
-| 3 | `speed_of_sound_mps` |
+| 1 | `speed_of_sound_mps` |
+| 2 | `pressure_Pa` |
+| 3 | `density_kgpm3` |
 
 **Parameters**:
-- `model`: `coesa1976` (embedded 0–80 km table) or `table` (custom breakpoints)
-- `extrapolation`: `clamp` (default) or `extrapolate`
+- `model`: `coesa1976` (formulae, default) or `table` (custom breakpoints, linear interpolation)
+- `extrapolation`: `clamp` (default) or `extrapolate`. For `coesa1976`, `clamp` holds the altitude to the formulae's range of −5 km to 86 km, and `extrapolate` continues the end layers' formulae. For `table`, they clamp to the table ends or extrapolate linearly.
+
+**Model**:
+- Seven layers of linear molecular-scale temperature in geopotential altitude, H = r₀z/(r₀ + z) with r₀ = 6 356 766 m.
+- Hydrostatic pressure in each layer: power law where the lapse rate is non-zero, exponential where the layer is isothermal.
+- ρ = PM₀/(R*T) and a = √(γR*T/M₀), with the 1976 constants (g₀ = 9.80665, R* = 8.31432, M₀ = 0.0289644, γ = 1.4).
+- Below 32 km this is identical to the ICAO/ISO standard atmosphere.
+- The same formulae are available in TypeScript as `ussa1976()` and `ussa1976PressureAltitude()` in `src/lib/atmosphere/ussa1976.ts`.
 
 **Notes**:
-- Linear interpolation between table points
 - Build dynamic pressure as a subsystem: `q = 0.5 * density * mag(V_rel)^2`
 - Mach ≈ `mag(V) / speed_of_sound`
 
