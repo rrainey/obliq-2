@@ -183,7 +183,7 @@ describe('FPV reference model: sensors and estimators', () => {
 
   it('attitude estimate during the demo: tracks the manoeuvres, with bounded accelerometer-induced drift', () => {
     // Before the first manoeuvre
-    for (const r of demo.filter(r => r.t < 1)) expect(qAngle(r.q, r.qEst)).toBeLessThan(2)
+    for (const r of demo.filter(r => r.t < 0.5)) expect(qAngle(r.q, r.qEst)).toBeLessThan(2)
     // During and after the flips the accelerometer (which sees thrust, not
     // gravity) pulls the estimate toward level: several degrees, never runaway
     const worst = Math.max(...demo.map(r => qAngle(r.q, r.qEst)))
@@ -199,8 +199,9 @@ describe('FPV reference model: sensors and estimators', () => {
 
   it('the controller flies on the noisy gyro and still tracks the demo rates', () => {
     const hold = (t0: number, t1: number, k: number) => mean(demo.filter(r => r.t >= t0 && r.t <= t1).map(r => (r.w[k]! * 180) / Math.PI))
-    expect(hold(1.3, 1.5, 0)).toBeCloseTo(185, -1)
-    expect(hold(2.8, 3.0, 1)).toBeCloseTo(185, -1)
+    // Demo roll doublet (acro): +185 then -185 deg/s
+    expect(hold(0.8, 1.0, 0)).toBeCloseTo(185, -1)
+    expect(hold(1.3, 1.5, 0)).toBeCloseTo(-185, -1)
     expect(FC.ts).toBe(SENSORS.imu.ts)
   })
 })

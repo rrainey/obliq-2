@@ -45,6 +45,10 @@ export const FPV = {
   motorTau: 0.033, // s
   maxThrust: 8.5, // N per motor
   linearDrag: [0.3, 0.3, 0.15], // N s/m, body axes
+  /** kg m², spinning part of one motor + 5" propeller (est.: prop ~6e-6, bell ~2.5e-6) */
+  rotorInertia: 8.5e-6,
+  /** Electrical efficiency from battery to shaft power (motor and ESC, est.) */
+  driveEfficiency: 0.8,
   dt: 0.0005, // s, model (plant) step: 2 kHz
 }
 
@@ -71,6 +75,8 @@ export const FC = {
   dtermLpfHz: 150,
   /** Digital idle: lowest motor output while armed. */
   motorIdle: 0.055,
+  /** Angle (self-level) mode: full stick = angleLimitDeg; rate setpoint = gain * angle error (deg/s per deg). */
+  angle: { limitDeg: 60, gain: 5 },
 }
 
 /**
@@ -175,12 +181,44 @@ export const MIXER = [
 /** 1/s: rate at which the quaternion state is pulled back to unit norm (Euler-stable for k·dt < 2). */
 const QUAT_NORM_GAIN = 10
 
+/**
+ * 4S LiPo pack. Open-circuit voltage per cell versus state of charge is a
+ * typical resting-voltage curve for hobby LiPo cells (est.); resistance is
+ * the whole pack's (est. for a 1300 mAh 4S racing pack).
+ */
+export const BATTERY = {
+  cells: 4,
+  capacityAh: 1.3,
+  resistanceOhm: 0.02,
+  initialSoc: 1.0,
+  ocvPerCell: [
+    [0, 3.27], [0.05, 3.61], [0.1, 3.69], [0.2, 3.74], [0.3, 3.77], [0.4, 3.79],
+    [0.5, 3.82], [0.6, 3.87], [0.7, 3.92], [0.8, 3.98], [0.9, 4.06], [1.0, 4.2],
+  ] as Array<[number, number]>,
+  /** V at which the motors reach OMEGA_MAX at full command (a full pack, unloaded) */
+  referenceVoltage: 16.8,
+}
+
 /** Rotor speed at full command, so that full command gives maxThrust. */
 export const OMEGA_MAX = Math.sqrt(FPV.maxThrust / FPV.thrustCoeff)
 /** Per-motor command that holds hover: thrust = m g / 4, and thrust ∝ command². */
 export const HOVER_COMMAND = Math.sqrt((FPV.mass * FPV.gravity) / 4 / FPV.maxThrust)
 /** Throttle stick that gives the hover command through idle + (1 - idle)·throttle. */
-export const HOVER_THROTTLE = (HOVER_COMMAND - FC.motorIdle) / (1 - FC.motorIdle)
+/**
+ * Pack terminal voltage while hovering on a full battery: each motor draws
+ * kappa T w / eta at hover thrust and speed, and V = OCV - I R.
+ */
+export const HOVER_VOLTAGE = (() => {
+  const thrust = (FPV.mass * FPV.gravity) / 4
+  const omega = Math.sqrt(thrust / FPV.thrustCoeff)
+  const power = (4 * FPV.torqueToThrust * thrust * omega) / FPV.driveEfficiency
+  const ocv = BATTERY.cells * BATTERY.ocvPerCell[BATTERY.ocvPerCell.length - 1]![1]
+  let v = ocv
+  for (let i = 0; i < 20; i++) v = ocv - (power / v) * BATTERY.resistanceOhm
+  return v
+})()
+/** Throttle stick that holds hover on a full pack: idle + (1 - idle)·throttle = hover command at that voltage. */
+export const HOVER_THROTTLE = (HOVER_COMMAND * (BATTERY.referenceVoltage / HOVER_VOLTAGE) - FC.motorIdle) / (1 - FC.motorIdle)
 
 /** Piecewise-linear stick inputs over time: [time s, value] pairs per axis. */
 export interface StickProfile {
@@ -188,14 +226,20 @@ export interface StickProfile {
   pitch: Array<[number, number]>
   yaw: Array<[number, number]>
   throttle: Array<[number, number]>
+  /** AUX1 switch: above 0.5 selects angle (self-level) mode; default acro. */
+  aux?: Array<[number, number]>
 }
 
-/** Demo flight: roll doublet, pitch doublet, then a yaw step, at hover throttle. */
+/**
+ * Demo flight at hover throttle: in acro, a roll doublet and a yaw step; then
+ * angle mode from 2.4 s: a 30 deg bank held and released, then an 18 deg pitch.
+ */
 export const DEMO_STICKS: StickProfile = {
-  roll: [[0, 0], [1.0, 0], [1.05, 0.5], [1.5, 0.5], [1.55, -0.5], [2.0, -0.5], [2.05, 0]],
-  pitch: [[0, 0], [2.5, 0], [2.55, 0.5], [3.0, 0.5], [3.05, -0.5], [3.5, -0.5], [3.55, 0]],
-  yaw: [[0, 0], [4.0, 0], [4.05, 0.5], [4.5, 0.5], [4.55, 0]],
+  roll: [[0, 0], [0.5, 0], [0.55, 0.5], [1.0, 0.5], [1.05, -0.5], [1.5, -0.5], [1.55, 0], [2.6, 0], [2.65, 0.5], [3.4, 0.5], [3.45, 0]],
+  pitch: [[0, 0], [3.9, 0], [3.95, 0.3], [4.5, 0.3], [4.55, 0]],
+  yaw: [[0, 0], [1.8, 0], [1.85, 0.5], [2.2, 0.5], [2.25, 0]],
   throttle: [[0, Number(HOVER_THROTTLE.toFixed(4))]],
+  aux: [[0, 0], [2.4, 0], [2.401, 1]],
 }
 
 // ---------------------------------------------------------------------------
@@ -263,10 +307,15 @@ const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'altitude_est
 function buildMotorSheet(): SheetBuilder {
   const s = new SheetBuilder('motor', 'Motor')
   const cmd = s.input('cmd', 'double')
+  const volts = s.input('voltage', 'double')
   const clamp = s.add('limit', 'CmdLimit', { lowerLimit: 0, upperLimit: 1 })
   s.wire(cmd, clamp)
-  const omegaCmd = s.add('scale', 'OmegaMax', { gain: OMEGA_MAX })
-  s.wire(clamp, omegaCmd)
+  // The ESC's speed at a given command scales with supply voltage
+  const cmdV = s.add('multiply', 'CmdTimesVoltage', { numInputs: 2 })
+  s.wire(clamp, cmdV, 0)
+  s.wire(volts, cmdV, 1)
+  const omegaCmd = s.add('scale', 'OmegaMax', { gain: OMEGA_MAX / BATTERY.referenceVoltage })
+  s.wire(cmdV, omegaCmd)
   // First-order rotor-speed lag: omega / omega_cmd = 1 / (tau s + 1)
   const lag = s.add('transfer_function', 'MotorLag', { numerator: [1], denominator: [FPV.motorTau, 1] })
   s.wire(omegaCmd, lag)
@@ -274,18 +323,78 @@ function buildMotorSheet(): SheetBuilder {
   s.wire(lag, sq)
   const thrust = s.add('scale', 'ThrustCoeff', { gain: FPV.thrustCoeff })
   s.wire(sq, thrust)
+  // Rotor angular acceleration, (omega_cmd - omega) / tau: its reaction torque yaws the frame
+  const err = s.add('sum', 'SpeedError', { signs: '+-', numInputs: 2 })
+  s.wire(omegaCmd, err, 0)
+  s.wire(lag, err, 1)
+  const accel = s.add('scale', 'InvTau', { gain: 1 / FPV.motorTau })
+  s.wire(err, accel)
+  // Electrical power drawn: shaft power Q w = kappa T w, over the drive efficiency
+  const tw = s.add('multiply', 'ThrustTimesSpeed', { numInputs: 2 })
+  s.wire(thrust, tw, 0)
+  s.wire(lag, tw, 1)
+  const power = s.add('scale', 'ElectricalPower', { gain: FPV.torqueToThrust / FPV.driveEfficiency })
+  s.wire(tw, power)
   s.output('omega', lag, 'double')
   s.output('thrust', thrust, 'double')
+  s.output('omega_dot', accel, 'double')
+  s.output('power', power, 'double')
+  return s
+}
+
+// ---------------------------------------------------------------------------
+// Battery: open-circuit voltage from state of charge, internal resistance
+
+function buildBatterySheet(): SheetBuilder {
+  const s = new SheetBuilder('battery', 'Battery')
+  const power = s.input('motor_power', 'double[4]')
+  const b = BATTERY
+  const total = s.add('sum', 'TotalPower', { signs: '+', numInputs: 1 })
+  s.wire(power, total)
+  // Current from the previous step's terminal voltage (breaks the V-I loop)
+  const ocv0 = b.cells * b.ocvPerCell[b.ocvPerCell.length - 1]![1]
+  const vPrev = s.add('unit_delay', 'VoltagePrev', { initialValue: ocv0, sampleInterval: 0 })
+  const current = s.add('divide', 'Current')
+  s.wire(total, current, 0)
+  s.wire(vPrev, current, 1)
+  const drain = s.add('scale', 'ChargeRate', { gain: -1 / (3600 * b.capacityAh) })
+  s.wire(current, drain)
+  const soc = s.add('integrator', 'StateOfCharge', { initialValue: b.initialSoc, useLimits: true, lowerLimit: 0, upperLimit: 1 })
+  s.wire(drain, soc)
+  const ocvCell = s.add('lookup_1d', 'CellOCV', {
+    inputValues: b.ocvPerCell.map(p => p[0]),
+    outputValues: b.ocvPerCell.map(p => p[1]),
+    extrapolation: 'clamp',
+  })
+  s.wire(soc, ocvCell)
+  const v = s.add('evaluate', 'TerminalVoltage', { numInputs: 2, expression: `${b.cells} * in(0) - ${b.resistanceOhm} * in(1)` })
+  s.wire(ocvCell, v, 0)
+  s.wire(current, v, 1)
+  s.wire(v, vPrev)
+  // The motors read the previous step's voltage: a segregated subsystem counts
+  // as direct feedthrough, so feeding them the current one would close an
+  // algebraic loop (motor power -> current -> voltage -> motor speed)
+  s.output('voltage', vPrev, 'double')
+  s.output('current', current, 'double')
+  s.output('soc', soc, 'double')
   return s
 }
 
 // ---------------------------------------------------------------------------
 // Rigid body: 6-DOF, quaternion attitude
 
-function buildFrameSheet(initialOmega: number[] = [0, 0, 0]): SheetBuilder {
+/** Scalar-first quaternion (as a 4x1 column) for ZYX Euler angles in degrees. */
+export function eulerToQuat([rollDeg, pitchDeg, yawDeg]: number[]): number[][] {
+  const [r, p, y] = [rollDeg!, pitchDeg!, yawDeg!].map(d => (d * Math.PI) / 360)
+  const [cr, sr, cp, sp, cy, sy] = [Math.cos(r!), Math.sin(r!), Math.cos(p!), Math.sin(p!), Math.cos(y!), Math.sin(y!)]
+  return [[cr * cp * cy + sr * sp * sy], [sr * cp * cy - cr * sp * sy], [cr * sp * cy + sr * cp * sy], [cr * cp * sy - sr * sp * cy]]
+}
+
+function buildFrameSheet(initialOmega: number[] = [0, 0, 0], initialQuat: number[][] = [[1], [0], [0], [0]]): SheetBuilder {
   const s = new SheetBuilder('frame', 'Frame')
   const { mass, inertia, gravity, rotorXY, rotorYawSign, torqueToThrust, linearDrag } = FPV
   const T = s.input('thrust', 'double[4]')
+  const rotorAccel = s.input('rotor_accel', 'double[4]')
 
   // Rotor forces and moments from the four thrusts (allocation matrices)
   const Bf = s.constant('ThrustDirection', [[0, 0, 0, 0], [0, 0, 0, 0], [-1, -1, -1, -1]], 'double[3][4]')
@@ -304,11 +413,17 @@ function buildFrameSheet(initialOmega: number[] = [0, 0, 0]): SheetBuilder {
   const mRotor = s.add('matrix_multiply', 'RotorMoment')
   s.wire(Bm, mRotor, 0)
   s.wire(T, mRotor, 1)
+  // Speeding up a rotor takes torque from the frame: M_z = sum(s_i J_r w_dot_i),
+  // with the same sign as that rotor's drag torque
+  const Bi = s.constant('RotorInertiaTorque', [[0, 0, 0, 0], [0, 0, 0, 0], rotorYawSign.map(sg => sg * FPV.rotorInertia)], 'double[3][4]')
+  const mInertia = s.add('matrix_multiply', 'RotorReactionMoment')
+  s.wire(Bi, mInertia, 0)
+  s.wire(rotorAccel, mInertia, 1)
 
   // Attitude. Numerical integration does not preserve |q| = 1 exactly, so the
   // quaternion is renormalized: everything downstream uses q_n = q/|q|, and
   // q_dot pulls the state back to unit norm.
-  const q = s.add('integrator', 'q', { initialValue: [[1], [0], [0], [0]] })
+  const q = s.add('integrator', 'q', { initialValue: initialQuat })
   const qNorm = s.add('mag', 'qNorm')
   s.wire(q, qNorm)
   const qn = s.add('divide', 'q_n')
@@ -356,9 +471,10 @@ function buildFrameSheet(initialOmega: number[] = [0, 0, 0]): SheetBuilder {
   const gyro = s.add('cross', 'GyroTorque')
   s.wire(omega, gyro, 0)
   s.wire(Jw, gyro, 1)
-  const mNet = s.add('sum', 'M_net', { signs: '+-', numInputs: 2 })
+  const mNet = s.add('sum', 'M_net', { signs: '+-+', numInputs: 3 })
   s.wire(mRotor, mNet, 0)
   s.wire(gyro, mNet, 1)
+  s.wire(mInertia, mNet, 2)
   const wDot = s.add('divide', 'omega_dot')
   s.wire(mNet, wDot, 0)
   s.wire(J, wDot, 1)
@@ -401,10 +517,11 @@ function buildFrameSheet(initialOmega: number[] = [0, 0, 0]): SheetBuilder {
 function buildPilotSheet(sticks: StickProfile): SheetBuilder {
   const s = new SheetBuilder('pilot', 'Pilot')
   const clock = s.add('clock', 'Time')
-  const mux = s.add('mux', 'Sticks', { rows: 4, cols: 1, baseType: 'double', outputType: 'double[4]' })
-  const axes: Array<[keyof StickProfile, string]> = [['roll', 'RollStick'], ['pitch', 'PitchStick'], ['yaw', 'YawStick'], ['throttle', 'ThrottleStick']]
+  const mux = s.add('mux', 'Sticks', { rows: 5, cols: 1, baseType: 'double', outputType: 'double[5]' })
+  const axes: Array<[keyof StickProfile, string]> = [['roll', 'RollStick'], ['pitch', 'PitchStick'], ['yaw', 'YawStick'], ['throttle', 'ThrottleStick'], ['aux', 'AngleModeSwitch']]
   axes.forEach(([axis, name], i) => {
-    const pts = sticks[axis].length > 1 ? sticks[axis] : [sticks[axis][0]!, [sticks[axis][0]![0] + 1, sticks[axis][0]![1]] as [number, number]]
+    const raw = sticks[axis] ?? [[0, 0]]
+    const pts = raw.length > 1 ? raw : [raw[0]!, [raw[0]![0] + 1, raw[0]![1]] as [number, number]]
     const lut = s.add('lookup_1d', name, {
       inputValues: pts.map(p => p[0]),
       outputValues: pts.map(p => p[1]),
@@ -413,7 +530,7 @@ function buildPilotSheet(sticks: StickProfile): SheetBuilder {
     s.wire(clock, lut)
     s.wire(lut, mux, i)
   })
-  s.output('sticks', mux, 'double[4]')
+  s.output('sticks', mux, 'double[5]')
   return s
 }
 
@@ -551,12 +668,12 @@ const normalize = (s: SheetBuilder, name: string, v: string) => normalizeWithNor
  * body -z, so tilted flight pulls the estimate toward level; that drift (the
  * familiar FPV horizon drift) is real behaviour, not a modelling error.
  */
-function buildAttitudeEstimatorSheet(): SheetBuilder {
+function buildAttitudeEstimatorSheet(initialQuat: number[][]): SheetBuilder {
   const s = new SheetBuilder('att', 'AttitudeEstimator')
   const gyro = s.input('gyro', 'double[3]')
   const acc = s.input('accel', 'double[3]')
   const mag = s.input('mag', 'double[3]')
-  const qPrev = s.add('unit_delay', 'qPrev', { initialValue: [[1], [0], [0], [0]], sampleInterval: FC.ts })
+  const qPrev = s.add('unit_delay', 'qPrev', { initialValue: initialQuat, sampleInterval: FC.ts })
   const cbn = s.add('orientation_conversion', 'C_bn', { conversionType: 'quat_to_dcm' })
   s.wire(qPrev, cbn)
 
@@ -703,8 +820,8 @@ const perAxis = (gains: number[], scale: number) => gains.map(g => g * scale)
 
 function buildRatesSheet(): SheetBuilder {
   const s = new SheetBuilder('rates', 'Rates')
-  const sticks = s.input('sticks', 'double[4]')
-  const split = s.add('demux', 'StickSplit', { outputCount: 4, inputDimensions: [4] })
+  const sticks = s.input('sticks', 'double[5]')
+  const split = s.add('demux', 'StickSplit', { outputCount: 5, inputDimensions: [5] })
   s.wire(sticks, split)
   const setpoint = s.add('mux', 'Setpoint', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
   ;['Roll', 'Pitch', 'Yaw'].forEach((axis, i) => {
@@ -717,6 +834,46 @@ function buildRatesSheet(): SheetBuilder {
   })
   s.output('setpoint', setpoint, 'double[3]')
   s.output('throttle', split, 'double', 3)
+  return s
+}
+
+/**
+ * Angle (self-level) mode, after Betaflight's: the roll and pitch sticks set
+ * an angle target (full stick = angleLimitDeg) and the rate setpoint becomes
+ * gain * (target - estimated angle); yaw keeps the acro rate. The AUX switch
+ * selects between this and the acro setpoint.
+ */
+function buildAngleModeSheet(): SheetBuilder {
+  const s = new SheetBuilder('angle', 'AngleMode')
+  const sticks = s.input('sticks', 'double[5]')
+  const euler = s.input('euler_est', 'double[3]')
+  const acro = s.input('acro_setpoint', 'double[3]')
+  const split = s.add('demux', 'StickSplit', { outputCount: 5, inputDimensions: [5] })
+  s.wire(sticks, split)
+  const est = s.add('demux', 'AttitudeSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(euler, est)
+  const acroSplit = s.add('demux', 'AcroSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(acro, acroSplit)
+  const level = s.add('mux', 'LevelSetpoint', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+  const { limitDeg, gain } = FC.angle
+  ;['Roll', 'Pitch'].forEach((axis, i) => {
+    // in(0): stick, in(1): estimated angle (rad)
+    const ev = s.add('evaluate', `${axis}Level`, {
+      numInputs: 2,
+      expression: `${gain} * (${limitDeg} * in(0) - in(1) * ${180 / Math.PI})`,
+    })
+    s.wire(split, ev, 0, i)
+    s.wire(est, ev, 1, i)
+    s.wire(ev, level, i)
+  })
+  s.wire(acroSplit, level, 2, 2)
+  const on = s.add('evaluate', 'AngleModeOn', { numInputs: 1, expression: 'in(0) > 0.5' })
+  s.wire(split, on, 0, 4)
+  const select = s.add('if', 'ModeSelect')
+  s.wire(acro, select, 0)
+  s.wire(on, select, 1)
+  s.wire(level, select, 2)
+  s.output('setpoint', select, 'double[3]')
   return s
 }
 
@@ -845,24 +1002,16 @@ function buildMixerSheet(): SheetBuilder {
   return s
 }
 
-function buildFlightControllerSheet(): SheetBuilder {
+function buildFlightControllerSheet(initialQuat: number[][]): SheetBuilder {
   const s = new SheetBuilder('fc', 'FlightController')
-  const sticks = s.input('sticks', 'double[4]')
+  const sticks = s.input('sticks', 'double[5]')
   const gyro = s.input('gyro', 'double[3]')
   const acc = s.input('accel', 'double[3]')
   const mag = s.input('mag', 'double[3]')
   const pressure = s.input('pressure', 'double')
-  const rates = s.add('subsystem', 'Rates', subsystem(['sticks'], ['setpoint', 'throttle'], buildRatesSheet()))
-  s.wire(sticks, rates)
-  const filt = s.add('subsystem', 'GyroFilters', subsystem(['gyro'], ['gyro_dps'], buildGyroFilterSheet()))
-  s.wire(gyro, filt)
-  const pid = s.add('subsystem', 'RatePID', subsystem(['setpoint', 'gyro_dps'], ['pid'], buildRatePidSheet()))
-  s.wire(rates, pid, 0, 0)
-  s.wire(filt, pid, 1, 0)
-  const mixer = s.add('subsystem', 'Mixer', subsystem(['pid', 'throttle'], ['motors'], buildMixerSheet()))
-  s.wire(pid, mixer, 0, 0)
-  s.wire(rates, mixer, 1, 1)
-  const att = s.add('subsystem', 'AttitudeEstimator', subsystem(['gyro', 'accel', 'mag'], ['quat', 'euler'], buildAttitudeEstimatorSheet()))
+
+  // Estimators
+  const att = s.add('subsystem', 'AttitudeEstimator', subsystem(['gyro', 'accel', 'mag'], ['quat', 'euler'], buildAttitudeEstimatorSheet(initialQuat)))
   s.wire(gyro, att, 0)
   s.wire(acc, att, 1)
   s.wire(mag, att, 2)
@@ -870,8 +1019,27 @@ function buildFlightControllerSheet(): SheetBuilder {
   s.wire(acc, alt, 0)
   s.wire(att, alt, 1, 0)
   s.wire(pressure, alt, 2)
+
+  // Setpoint: acro rates, or angle mode on the AUX switch
+  const rates = s.add('subsystem', 'Rates', subsystem(['sticks'], ['setpoint', 'throttle'], buildRatesSheet()))
+  s.wire(sticks, rates)
+  const angle = s.add('subsystem', 'AngleMode', subsystem(['sticks', 'euler_est', 'acro_setpoint'], ['setpoint'], buildAngleModeSheet()))
+  s.wire(sticks, angle, 0)
+  s.wire(att, angle, 1, 1)
+  s.wire(rates, angle, 2, 0)
+
+  // Rate loop and mixer
+  const filt = s.add('subsystem', 'GyroFilters', subsystem(['gyro'], ['gyro_dps'], buildGyroFilterSheet()))
+  s.wire(gyro, filt)
+  const pid = s.add('subsystem', 'RatePID', subsystem(['setpoint', 'gyro_dps'], ['pid'], buildRatePidSheet()))
+  s.wire(angle, pid, 0, 0)
+  s.wire(filt, pid, 1, 0)
+  const mixer = s.add('subsystem', 'Mixer', subsystem(['pid', 'throttle'], ['motors'], buildMixerSheet()))
+  s.wire(pid, mixer, 0, 0)
+  s.wire(rates, mixer, 1, 1)
+
   s.output('motors', mixer, 'double[4]')
-  s.output('setpoint', rates, 'double[3]')
+  s.output('setpoint', angle, 'double[3]')
   s.output('gyro_dps', filt, 'double[3]')
   s.output('euler_est', att, 'double[3]', 1)
   s.output('altitude_est', alt, 'double', 0)
@@ -883,6 +1051,7 @@ function buildFlightControllerSheet(): SheetBuilder {
 // Top level
 
 export const MOTOR_NAMES = ['Motor_RR', 'Motor_FR', 'Motor_RL', 'Motor_FL']
+const MOTOR_OUTPUTS = ['omega', 'thrust', 'omega_dot', 'power']
 const FRAME_OUTPUTS = ['pos_ned', 'vel_ned', 'quat', 'euler', 'omega', 'accel']
 const FRAME_OUTPUT_TYPES = ['double[3]', 'double[3]', 'double[4][1]', 'double[3]', 'double[3]', 'double[3]']
 
@@ -895,10 +1064,16 @@ export interface FpvModelOptions {
   initialOmega?: number[]
   /** 'ideal' sensors report the true state exactly (no noise, bias or quantization). */
   sensors?: 'modelled' | 'ideal'
+  /**
+   * Initial attitude, ZYX Euler degrees [roll, pitch, yaw]. The attitude
+   * estimator starts aligned to it (as if it had converged before take-off).
+   */
+  initialEuler?: number[]
 }
 
 export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data: Record<string, unknown> } {
   const main = new SheetBuilder('main', 'Main')
+  const initialQuat = eulerToQuat(opts.initialEuler ?? [0, 0, 0])
   const split = main.add('demux', 'MotorCmdSplit', { outputCount: 4, inputDimensions: [4] })
   let fc: string | null = null
   if (opts.openLoop) {
@@ -908,7 +1083,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   } else {
     const pilot = main.add('subsystem', 'Pilot', subsystem([], ['sticks'], buildPilotSheet(opts.sticks ?? DEMO_STICKS)))
     fc = main.add('subsystem', 'FlightController', {
-      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure'], FC_OUTPUTS, buildFlightControllerSheet(), FC_SIZE),
+      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure'], FC_OUTPUTS, buildFlightControllerSheet(initialQuat), FC_SIZE),
       sampleTimeSec: FC.ts,
     })
     main.wire(pilot, fc, 0)
@@ -919,11 +1094,11 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   const motorIds = MOTOR_NAMES.map((name, i) => {
     const params =
       i === 0
-        ? subsystem(['cmd'], ['omega', 'thrust'], motorDef, MOTOR_SIZE)
+        ? subsystem(['cmd', 'voltage'], MOTOR_OUTPUTS, motorDef, MOTOR_SIZE)
         : {
             ...MOTOR_SIZE,
-            inputPorts: ['cmd'],
-            outputPorts: ['omega', 'thrust'],
+            inputPorts: ['cmd', 'voltage'],
+            outputPorts: MOTOR_OUTPUTS,
             showPortNames: true,
             isReference: true,
             referencedSubsystemId: `main__${MOTOR_NAMES[0]}`,
@@ -939,13 +1114,30 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
 
   const thrustVec = main.add('mux', 'Thrusts', { rows: 4, cols: 1, baseType: 'double', outputType: 'double[4]' })
   const omegaVec = main.add('mux', 'RotorSpeeds', { rows: 4, cols: 1, baseType: 'double', outputType: 'double[4]' })
+  const accelVec = main.add('mux', 'RotorAccelerations', { rows: 4, cols: 1, baseType: 'double', outputType: 'double[4]' })
+  const powerVec = main.add('mux', 'MotorPower', { rows: 4, cols: 1, baseType: 'double', outputType: 'double[4]' })
   motorIds.forEach((id, i) => {
     main.wire(id, thrustVec, i, 1)
     main.wire(id, omegaVec, i, 0)
+    main.wire(id, accelVec, i, 2)
+    main.wire(id, powerVec, i, 3)
   })
+  // Supply: the battery model, or (open loop) a fixed reference voltage
+  let supply: string
+  if (opts.openLoop) {
+    supply = main.constant('SupplyVoltage', BATTERY.referenceVoltage, 'double')
+  } else {
+    supply = main.add('subsystem', 'Battery', subsystem(['motor_power'], ['voltage', 'current', 'soc'], buildBatterySheet()))
+    main.wire(powerVec, supply)
+    main.output('battery_voltage', supply, 'double', 0)
+    main.output('battery_current', supply, 'double', 1)
+    main.output('battery_soc', supply, 'double', 2)
+  }
+  motorIds.forEach(id => main.wire(supply, id, 1, 0))
 
-  const frame = main.add('subsystem', 'Frame', subsystem(['thrust'], FRAME_OUTPUTS, buildFrameSheet(opts.initialOmega), FRAME_SIZE))
-  main.wire(thrustVec, frame)
+  const frame = main.add('subsystem', 'Frame', subsystem(['thrust', 'rotor_accel'], FRAME_OUTPUTS, buildFrameSheet(opts.initialOmega, initialQuat), FRAME_SIZE))
+  main.wire(thrustVec, frame, 0)
+  main.wire(accelVec, frame, 1)
   if (fc) {
     const sensors = main.add('subsystem', 'Sensors', subsystem(
       ['pos_ned', 'quat', 'omega', 'specific_force'], ['gyro', 'accel', 'mag', 'pressure'],
@@ -1009,7 +1201,10 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
           'Sensors: IMU (gyro, accelerometer) at 1 kHz, magnetometer at 100 Hz and barometer at 50 Hz with datasheet noise, ' +
           'bias, quantization and range; the controller flies on the sensor gyro and runs a Mahony attitude filter and a ' +
           'baro/accelerometer altitude filter. ' +
-          'The Pilot subsystem scripts a roll doublet, a pitch doublet and a yaw step at hover throttle. ' +
+          'Motors draw from a 4S LiPo battery model (state of charge, internal resistance; speed scales with voltage) and ' +
+          'their rotor-acceleration reaction torque is included. ' +
+          'The Pilot subsystem scripts, at hover throttle, an acro roll doublet and yaw step, then switches to angle ' +
+          '(self-level) mode at 2.4 s for a 30 deg bank and an 18 deg pitch. ' +
           'Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; ' +
           'equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md.',
       },

@@ -9,7 +9,6 @@
 
 import {
   buildFpvModel,
-  DEMO_STICKS,
   FC,
   FPV,
   HOVER_THROTTLE,
@@ -24,6 +23,14 @@ const R2D = 180 / Math.PI
 const thr = Number(HOVER_THROTTLE.toFixed(4))
 const hold = (v: number): Array<[number, number]> => [[0, v]]
 const stepAt = (t: number, v: number): Array<[number, number]> => [[0, 0], [t, 0], [t + 0.001, v]]
+
+/** Acro manoeuvres: roll doublet, pitch doublet, yaw step. */
+const ACRO_DEMO: StickProfile = {
+  roll: [[0, 0], [1.0, 0], [1.05, 0.5], [1.5, 0.5], [1.55, -0.5], [2.0, -0.5], [2.05, 0]],
+  pitch: [[0, 0], [2.5, 0], [2.55, 0.5], [3.0, 0.5], [3.05, -0.5], [3.5, -0.5], [3.55, 0]],
+  yaw: [[0, 0], [4.0, 0], [4.05, 0.5], [4.5, 0.5], [4.55, 0]],
+  throttle: [[0, thr]],
+}
 
 interface Row {
   t: number
@@ -79,7 +86,7 @@ describe('FPV reference model: acro flight controller', () => {
   }
 
   beforeAll(() => {
-    run('demo', {}, 5)
+    run('demo', { sticks: ACRO_DEMO }, 5)
     run('roll', { sticks: { roll: stepAt(0.5, 0.5), pitch: hold(0), yaw: hold(0), throttle: hold(thr) } }, 2)
     run('yaw', { sticks: { roll: hold(0), pitch: hold(0), yaw: stepAt(0.5, 0.5), throttle: hold(thr) } }, 3)
     run('disturb', { initialOmega: [3, -2, 1], sticks: { roll: hold(0), pitch: hold(0), yaw: hold(0), throttle: hold(thr) } }, 2)
@@ -118,13 +125,13 @@ describe('FPV reference model: acro flight controller', () => {
     }
   })
 
-  it('tracks a yaw-rate step more slowly (drag torque only), settling within 5%', () => {
-    // Yaw authority is propeller drag torque alone, so with Betaflight's
-    // default yaw gains (no D) the I term dominates: ~65% overshoot and a
-    // ~0.6 s ring that settles about 2 s after the step.
+  it('tracks a yaw-rate step: rotor spin-up torque gives a fast rise, drag torque holds the rate', () => {
+    // Without the rotor-inertia reaction torque the yaw loop (drag torque only)
+    // overshot ~65% and rang for 2 s; with it, yaw behaves like a real quad.
     const rows = runs['yaw']!
-    expect(maxOf(between(rows, 0.5, 3).map(r => r.w[2]!))).toBeLessThan(185 * 1.8)
-    for (const r of between(rows, 2.5, 3)) expect(Math.abs(r.w[2]! - 185)).toBeLessThan(0.05 * 185)
+    expect(at(rows, 0.55).w[2]).toBeGreaterThan(120)
+    expect(Math.max(...between(rows, 0.5, 3).map(r => r.w[2]!))).toBeLessThan(185 * 1.15)
+    for (const r of between(rows, 1.1, 3)) expect(Math.abs(r.w[2]! - 185)).toBeLessThan(0.03 * 185)
   })
 
   it('damps a body-rate disturbance', () => {
@@ -134,8 +141,7 @@ describe('FPV reference model: acro flight controller', () => {
     const r = at(rows, 0.3)
     expect(Math.abs(r.w[0]!)).toBeLessThan(2)
     expect(Math.abs(r.w[1]!)).toBeLessThan(2)
-    // Yaw rings down more slowly
-    for (const late of between(rows, 1.7, 2)) for (const w of late.w) expect(Math.abs(w)).toBeLessThan(5)
+    for (const late of between(rows, 1.0, 2)) for (const w of late.w) expect(Math.abs(w)).toBeLessThan(2)
   })
 
   it('roll and pitch doublets return the vehicle to level', () => {
@@ -172,9 +178,8 @@ describe('FPV reference model: acro flight controller', () => {
     expect(changes).toBeGreaterThan(50)
   })
 
-  it('the demo flies the scripted manoeuvres', () => {
+  it('flies the scripted acro manoeuvres', () => {
     const rows = runs['demo']!
-    expect(DEMO_STICKS.roll.length).toBeGreaterThan(2)
     expect(at(rows, 1.4).w[0]).toBeCloseTo(185, 0)
     expect(at(rows, 1.9).w[0]).toBeCloseTo(-185, 0)
     expect(at(rows, 2.9).w[1]).toBeCloseTo(185, 0)

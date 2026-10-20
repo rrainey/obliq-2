@@ -1,6 +1,6 @@
 # FPV Quadcopter Reference Model: Plan
 
-Status: Phases 0–4 complete; Phase 5 (v2) remains.
+Status: Phases 0–5 complete, except ground contact and the top-level layout tidy (see Phase 5).
 Decisions recorded 2026-10-19.
 
 ## Goal
@@ -179,7 +179,24 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
      - During the flips, the estimate drifts 6–10° toward level. A multirotor accelerometer sees thrust, not gravity, so tilted flight reads as "level"; this is the familiar FPV horizon drift. Once drag pushes |a| above 1.1 g the gate stops the correction.
      - A rotation-rate gate on the accelerometer, or an integral term, would reduce the drift.
    - **Deferred:** slow random-walk gyro bias (negligible over seconds), axis misalignment and scale errors, IMU lever arm.
-5. **Angle mode and battery (v2).** Also: rotor-inertia reaction torque (yaw), ground contact, motors starting at rest on the ground, and a cleaner top-level layout (group the 17 model outputs).
+5. **Angle mode, battery and rotor inertia (v2).** ✅ Done, except as noted: `fpv-angle.test.ts`, `fpv-battery.test.ts`.
+   - **Rotor-inertia reaction torque:**
+     - M_z += Σ sᵢ·J_r·ω̇ᵢ, with J_r = 8.5×10⁻⁶ kg·m² (est.: 5" prop about 6×10⁻⁶ plus motor bell about 2.5×10⁻⁶). Each motor outputs ω̇ = (ω_cmd − ω)/τ.
+     - Yaw steps now rise to 150 °/s in 50 ms with about 8% overshoot, settling within 3% by 0.6 s. Before, it was 65% overshoot and a 2 s ring.
+   - **Angle mode** on an AUX switch (fifth pilot channel):
+     - The stick sets an angle target (full stick 60°), and the rate setpoint is 5 × (target − estimated angle) °/s. Yaw stays a rate command.
+     - It levels from a 25°/−15° tilt within 1 s, which acro does not.
+     - It holds a 30° bank by the estimate. The true bank is 0–6° steeper, because the accelerometer sees thrust and the estimate creeps toward level.
+     - The demo switches to angle mode at 2.4 s.
+     - The `initialEuler` build option sets the initial attitude and aligns the estimator to it.
+   - **Battery:**
+     - 4S 1300 mAh LiPo: a resting-voltage-versus-state-of-charge table (est.), 0.02 Ω pack resistance (est.), and state of charge integrated from current.
+     - Each motor draws κTω/η (η = 0.8, est.). Motor speed at a given command scales with V/16.8 V.
+     - Hover draws about 7.3 A and sags the pack to 16.65 V. The pilot's hover throttle (0.438) accounts for this.
+     - The motors read the previous step's voltage. A segregated subsystem counts as direct feedthrough on every port, so feeding the current voltage made an algebraic loop. obliq broke that loop at an arbitrary block, so one motor saw a different voltage and the symmetric hover tumbled slightly.
+   - **Not done:**
+     - **Ground contact,** starting at rest on the ground. This needs Betaflight-style arming and I-term handling on the ground to behave sensibly, not just a contact force.
+     - **Top-level layout tidy:** group the 20 model outputs.
 
 Each phase adds native-codegen tests to `__tests__/reference-models/` that fly the model for a few seconds and assert physical invariants.
 
@@ -193,6 +210,8 @@ Each phase adds native-codegen tests to `__tests__/reference-models/` that fly t
 4. **PID anti-windup:** a clamped discrete accumulator, built from Unit Delay + Limit.
 5. **Deferred:** filters with time-varying coefficients (dynamic notch, dynamic LPF, TPA).
 6. **Integration accuracy (found in Phase 2, fixed):** obliq's RK4 used to be stage-accurate only for a block's own state terms, such as a transfer function's poles. An integrator fed through other blocks got one derivative per step, which is effectively forward Euler. Codegen v32 re-evaluates the algebra at each RK4 stage on the model and then restores the major-step snapshot, so discrete states, logged samples and outputs are unaffected (`__tests__/codegen/rk4-stage-evaluation.test.ts` checks fourth-order convergence). The quaternion is still renormalised in the model, because no integrator preserves |q| = 1 exactly.
+
+7. **Algebraic loops through segregated subsystems** are broken silently at an arbitrary point. In the FPV battery loop this gave one motor a different supply voltage from the other three. A validation warning would help.
 
 **Fixed while building the plant:**
 

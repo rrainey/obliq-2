@@ -126,6 +126,8 @@ export function parseResultLine(stdout: string, key: string): number {
 }
 
 export function cleanupNativeDir(outDir: string | undefined): void {
+  // KEEP_NATIVE=1 keeps the generated project for inspection
+  if (process.env.KEEP_NATIVE) return
   if (!outDir) return
   try {
     fs.rmSync(outDir, { recursive: true, force: true })
