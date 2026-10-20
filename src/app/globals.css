@@ -12,6 +12,18 @@
   --orange-wheel: #f58634ff;
   --background: #ffffff;
   --foreground: #171717;
+  --default-text-color: #505050;
+  --default-input-color: #202020;
+}
+
+/* Page colors follow the app's color scheme (Mantine's light/dark setting),
+   not the OS preference: the canvas is transparent in light mode, so the page
+   background shows through it. */
+[data-mantine-color-scheme="dark"] {
+  --background: var(--mantine-color-body);
+  --foreground: var(--mantine-color-text);
+  --default-text-color: var(--mantine-color-text);
+  --default-input-color: var(--mantine-color-text);
 }
 
 @theme inline {
@@ -19,15 +31,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --default-text-color: #505050;
-    --default-input-color: #202020;
-  }
 }
 
 body {
