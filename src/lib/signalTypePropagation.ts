@@ -2339,7 +2339,8 @@ function getBlockInputPortCount(block: BlockData): number {
       return 0
     case 'subsystem':
       // Don't count enable port in regular input count
-      return block.parameters?.inputPorts?.length || 1
+      // A subsystem may have no inputs (e.g. a signal generator)
+      return Array.isArray(block.parameters?.inputPorts) ? block.parameters.inputPorts.length : 1
     case 'sheet_label_sink':
       return 1
     case 'sheet_label_source':

@@ -151,7 +151,8 @@ function getRequiredInputCount(block: { type: string; parameters?: Record<string
     case 'square':
       return 1
     case 'subsystem':
-      return 1 // Default, but depends on configuration
+      // One per declared input port; a subsystem may have none
+      return Array.isArray(block.parameters?.inputPorts) ? (block.parameters.inputPorts as unknown[]).length : 1
     default:
       return 0
   }
