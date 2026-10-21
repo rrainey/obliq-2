@@ -1,6 +1,6 @@
 # Testing Generated Code: Assertions, a Test Runner, and Model References
 
-Status: decisions confirmed. Part A milestones 1–3 are implemented; A4 and Part B are not yet (October 2026).
+Status: decisions confirmed. Part A (milestones 1–4) is implemented; Part B is not yet (October 2026).
 
 ## Goal
 
@@ -133,12 +133,7 @@ npm run obliq:test -- [model name | model id | path.json] ... [--all] [--json] [
    - multi-rate models.
 2. WASM exports, Run results, the Test Results panel and block badges.
 3. `obliq:test` with `--json` and `--junit`.
-4. Add Assert-based tests to the FPV reference model's Telemetry sheet. Examples:
-   - it arms;
-   - it reaches the commanded altitude within a set error;
-   - attitude follows the stick within a set error.
-
-   This exercises the feature end to end, and gives the CHANGELOG a concrete example.
+4. ✅ Done: the FPV reference model has a **Tests** sheet with 11 Assert blocks that check the demo flight. They cover arming, the climb, each manoeuvre, the estimators, the battery and staying upright. A separate sheet, rather than Telemetry, keeps the scopes readable and previews the split in B8.5.
 
 ---
 
@@ -236,9 +231,12 @@ This allows scripted test-model generation, as the FPV builder does today.
 3. Version pinning UI, the dependency table and delete/export warnings.
 4. Model Builder and MCP support.
 5. **Reference example:** split the FPV quadcopter into:
-   - a deployable flight controller model;
-   - a test model, the current sim with the airframe, sensors and Assert blocks;
-   - one or two focused tests, such as a rate-loop step response against the controller alone.
+   - **an FPV vehicle model:** the frame and body dynamics, motors, battery, sensors and flight controller. The pilot's sticks come in as top-level Input Ports, and the telemetry goes out as Output Ports.
+   - **test models that embed it:**
+     - the current demo flight: its Pilot stick profile, Telemetry scopes, and the Tests sheet's Asserts;
+     - one or two focused tests, such as an acro rate step or a hover hold, each with its own stick inputs, duration and Asserts.
+
+   Later, the flight controller could become its own model inside the vehicle, as a nested reference.
 
    This depends on reference-model seeding learning to remap model ids between the seeded files.
 

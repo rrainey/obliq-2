@@ -14,6 +14,7 @@
   - Each model is built natively with the host C compiler and runs with its saved duration, time step and integrator. A stop-on-failure Assert ends the run, as in the editor.
   - It prints a summary with each failure's time and value. `--json` gives machine-readable results, and `--junit <file>` writes JUnit XML for CI.
   - Exit code 0 means every Assert passed. 1 means one failed, was not checked, or a named model has none. 2 means a model could not be found, built or run.
+- **The FPV reference model has tests.** A new **Tests** sheet has 11 Assert blocks that check the demo flight: arming, the climb, the bank, pitch and yaw manoeuvres, the attitude and altitude estimators against the true state, battery voltage, and staying upright. Run them in the editor, or with `npm run obliq:test -- reference-models/fpv-quadcopter.json`. Existing installations get the new version by importing that file again.
 - **Fixed: runs could be one step short.** The step count was `floor(duration / step)`, which loses a step when the division comes out just under a whole number (0.3 / 0.1 = 2.9999…). Runs now use the rounded count. Server-side runs used `ceil` and could take an extra step; they now match.
 
 ## What's New in 3.2.2

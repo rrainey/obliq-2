@@ -4,7 +4,7 @@
     "version": "2.2",
     "metadata": {
       "created": "2026-10-19T00:00:00.000Z",
-      "description": "5-inch FPV quadcopter reference model. NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems, and a Betaflight-style acro flight controller at 1 kHz (rates, gyro PT1 filters, rate PID with feed-forward, quad-X mixer with airmode) re-implemented from documented behaviour and defaults. Site: Tri-County Aerodrome (48TX), Texas, 33.45192 N 96.37729 W, elevation 240.8 m; WMM2025 field (2026.8) N/E/D 22.891 / 0.91 / 42.325 uT. Sensors: IMU (gyro, accelerometer) at 1 kHz, magnetometer at 100 Hz and barometer at 50 Hz with datasheet noise, bias, quantization and range; the controller flies on the sensor gyro and runs a Mahony attitude filter and a baro/accelerometer altitude filter. Motors draw from a 4S LiPo battery model (state of charge, internal resistance; speed scales with voltage) and their rotor-acceleration reaction torque is included. Ground contact (spring-damper legs) and Betaflight-style arming: the Pilot subsystem arms at 0.25 s, takes off from rest on the field, hovers, then in angle (self-level) mode flies a 24 deg bank, an 18 deg forward pitch and a yaw turn. Model outputs and scopes are on the Telemetry sheet (run results show there). Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md."
+      "description": "5-inch FPV quadcopter reference model. NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems, and a Betaflight-style acro flight controller at 1 kHz (rates, gyro PT1 filters, rate PID with feed-forward, quad-X mixer with airmode) re-implemented from documented behaviour and defaults. Site: Tri-County Aerodrome (48TX), Texas, 33.45192 N 96.37729 W, elevation 240.8 m; WMM2025 field (2026.8) N/E/D 22.891 / 0.91 / 42.325 uT. Sensors: IMU (gyro, accelerometer) at 1 kHz, magnetometer at 100 Hz and barometer at 50 Hz with datasheet noise, bias, quantization and range; the controller flies on the sensor gyro and runs a Mahony attitude filter and a baro/accelerometer altitude filter. Motors draw from a 4S LiPo battery model (state of charge, internal resistance; speed scales with voltage) and their rotor-acceleration reaction torque is included. Ground contact (spring-damper legs) and Betaflight-style arming: the Pilot subsystem arms at 0.25 s, takes off from rest on the field, hovers, then in angle (self-level) mode flies a 24 deg bank, an 18 deg forward pitch and a yaw turn. Model outputs and scopes are on the Telemetry sheet (run results show there). Assert blocks on the Tests sheet check the flight: arming, the climb, each manoeuvre, the estimators and the battery (npm run obliq:test -- \"FPV Quadcopter\"). Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md."
     },
     "globalSettings": {
       "simulationTimeStep": 0.0005,
@@ -9671,6 +9671,623 @@
         "extents": {
           "width": 708,
           "height": 2422
+        }
+      },
+      {
+        "id": "tests",
+        "name": "Tests",
+        "blocks": [
+          {
+            "id": "tests__From_motor_cmd",
+            "type": "sheet_label_source",
+            "name": "From_motor_cmd",
+            "position": {
+              "x": 102,
+              "y": -136
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "motor_cmd"
+            }
+          },
+          {
+            "id": "tests__From_pos_ned",
+            "type": "sheet_label_source",
+            "name": "From_pos_ned",
+            "position": {
+              "x": 106,
+              "y": 776
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_ned"
+            }
+          },
+          {
+            "id": "tests__From_euler",
+            "type": "sheet_label_source",
+            "name": "From_euler",
+            "position": {
+              "x": 120,
+              "y": 514
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "euler"
+            }
+          },
+          {
+            "id": "tests__EulerDeg",
+            "type": "scale",
+            "name": "EulerDeg",
+            "position": {
+              "x": 300,
+              "y": 514
+            },
+            "parameters": {
+              "showName": true,
+              "gain": 57.2958
+            }
+          },
+          {
+            "id": "tests__EulerEstimateDeg",
+            "type": "scale",
+            "name": "EulerEstimateDeg",
+            "position": {
+              "x": 300,
+              "y": 933
+            },
+            "parameters": {
+              "showName": true,
+              "gain": 57.2958
+            }
+          },
+          {
+            "id": "tests__From_euler_est",
+            "type": "sheet_label_source",
+            "name": "From_euler_est",
+            "position": {
+              "x": 102,
+              "y": 933
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "euler_est"
+            }
+          },
+          {
+            "id": "tests__RollPitch",
+            "type": "selector",
+            "name": "RollPitch",
+            "position": {
+              "x": 493,
+              "y": 608
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "id": "tests__Down",
+            "type": "selector",
+            "name": "Down",
+            "position": {
+              "x": 300,
+              "y": 776
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                2
+              ]
+            }
+          },
+          {
+            "id": "tests__HeightAboveField",
+            "type": "evaluate",
+            "name": "HeightAboveField",
+            "position": {
+              "x": 483,
+              "y": 1088
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "-in(0)"
+            }
+          },
+          {
+            "id": "tests__TrueAltitude",
+            "type": "evaluate",
+            "name": "TrueAltitude",
+            "position": {
+              "x": 460,
+              "y": 464
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "240.792 - in(0)"
+            }
+          },
+          {
+            "id": "tests__DisarmedMotorsOff",
+            "type": "assert",
+            "name": "DisarmedMotorsOff",
+            "position": {
+              "x": 685,
+              "y": -64
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "checkFrom": 0,
+              "checkUntil": 0.24,
+              "onFailure": "record",
+              "lower": 0,
+              "upper": 0
+            }
+          },
+          {
+            "id": "tests__ArmedMotorsAtIdle",
+            "type": "assert",
+            "name": "ArmedMotorsAtIdle",
+            "position": {
+              "x": 685,
+              "y": -208
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "checkFrom": 0.3,
+              "checkUntil": null,
+              "onFailure": "record",
+              "lower": 0.054999999,
+              "upper": 1
+            }
+          },
+          {
+            "id": "tests__ClimbsAfterTakeoff",
+            "type": "assert",
+            "name": "ClimbsAfterTakeoff",
+            "position": {
+              "x": 685,
+              "y": 1088
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "checkFrom": 1.5,
+              "checkUntil": null,
+              "onFailure": "record",
+              "lower": 1,
+              "upper": null
+            }
+          },
+          {
+            "id": "tests__LevelClimb",
+            "type": "assert",
+            "name": "LevelClimb",
+            "position": {
+              "x": 685,
+              "y": 512
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "checkFrom": 0.6,
+              "checkUntil": 2,
+              "onFailure": "record",
+              "lower": -2,
+              "upper": 2
+            }
+          },
+          {
+            "id": "tests__Roll",
+            "type": "selector",
+            "name": "Roll",
+            "position": {
+              "x": 493,
+              "y": 176
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                0
+              ]
+            }
+          },
+          {
+            "id": "tests__BankFollowsStick",
+            "type": "assert",
+            "name": "BankFollowsStick",
+            "position": {
+              "x": 685,
+              "y": 224
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "checkFrom": 2.6,
+              "checkUntil": 2.8,
+              "onFailure": "record",
+              "lower": 22,
+              "upper": 26.5
+            }
+          },
+          {
+            "id": "tests__Pitch",
+            "type": "selector",
+            "name": "Pitch",
+            "position": {
+              "x": 493,
+              "y": 32
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                1
+              ]
+            }
+          },
+          {
+            "id": "tests__PitchFollowsStick",
+            "type": "assert",
+            "name": "PitchFollowsStick",
+            "position": {
+              "x": 685,
+              "y": 80
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "checkFrom": 3.6,
+              "checkUntil": 3.8,
+              "onFailure": "record",
+              "lower": -19.5,
+              "upper": -15.5
+            }
+          },
+          {
+            "id": "tests__Yaw",
+            "type": "selector",
+            "name": "Yaw",
+            "position": {
+              "x": 493,
+              "y": 800
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                2
+              ]
+            }
+          },
+          {
+            "id": "tests__YawTurnCompletes",
+            "type": "assert",
+            "name": "YawTurnCompletes",
+            "position": {
+              "x": 685,
+              "y": 800
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "checkFrom": 4.7,
+              "checkUntil": null,
+              "onFailure": "record",
+              "lower": 80,
+              "upper": 100
+            }
+          },
+          {
+            "id": "tests__AttitudeEstimateTracks",
+            "type": "assert",
+            "name": "AttitudeEstimateTracks",
+            "position": {
+              "x": 685,
+              "y": 944
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "near",
+              "checkFrom": 0,
+              "checkUntil": null,
+              "onFailure": "record",
+              "absTol": 5,
+              "relTol": 0
+            }
+          },
+          {
+            "id": "tests__From_altitude_est",
+            "type": "sheet_label_source",
+            "name": "From_altitude_est",
+            "position": {
+              "x": 473,
+              "y": 320
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "altitude_est"
+            }
+          },
+          {
+            "id": "tests__AltitudeEstimateTracks",
+            "type": "assert",
+            "name": "AltitudeEstimateTracks",
+            "position": {
+              "x": 685,
+              "y": 368
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "near",
+              "checkFrom": 0,
+              "checkUntil": null,
+              "onFailure": "record",
+              "absTol": 0.5,
+              "relTol": 0
+            }
+          },
+          {
+            "id": "tests__From_battery_voltage",
+            "type": "sheet_label_source",
+            "name": "From_battery_voltage",
+            "position": {
+              "x": 100,
+              "y": -352
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "battery_voltage"
+            }
+          },
+          {
+            "id": "tests__BatteryAboveCutoff",
+            "type": "assert",
+            "name": "BatteryAboveCutoff",
+            "position": {
+              "x": 685,
+              "y": -352
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "checkFrom": 0,
+              "checkUntil": null,
+              "onFailure": "record",
+              "lower": 14,
+              "upper": null
+            }
+          },
+          {
+            "id": "tests__StaysUpright",
+            "type": "assert",
+            "name": "StaysUpright",
+            "position": {
+              "x": 685,
+              "y": 656
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "checkFrom": 0,
+              "checkUntil": null,
+              "onFailure": "stop",
+              "lower": -60,
+              "upper": 60
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_tests__From_euler_tests__EulerDeg",
+            "sourceBlockId": "tests__From_euler",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__EulerDeg",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_2_tests__From_euler_est_tests__EulerEstimateDeg",
+            "sourceBlockId": "tests__From_euler_est",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__EulerEstimateDeg",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_3_tests__EulerDeg_tests__RollPitch",
+            "sourceBlockId": "tests__EulerDeg",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RollPitch",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -8.5
+            }
+          },
+          {
+            "id": "w_4_tests__From_pos_ned_tests__Down",
+            "sourceBlockId": "tests__From_pos_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__Down",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_5_tests__Down_tests__HeightAboveField",
+            "sourceBlockId": "tests__Down",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__HeightAboveField",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -19.5
+            }
+          },
+          {
+            "id": "w_6_tests__Down_tests__TrueAltitude",
+            "sourceBlockId": "tests__Down",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrueAltitude",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -8
+            }
+          },
+          {
+            "id": "w_7_tests__From_motor_cmd_tests__DisarmedMotorsOff",
+            "sourceBlockId": "tests__From_motor_cmd",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__DisarmedMotorsOff",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -31.5
+            }
+          },
+          {
+            "id": "w_8_tests__From_motor_cmd_tests__ArmedMotorsAtIdle",
+            "sourceBlockId": "tests__From_motor_cmd",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ArmedMotorsAtIdle",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -31.5
+            }
+          },
+          {
+            "id": "w_9_tests__HeightAboveField_tests__ClimbsAfterTakeoff",
+            "sourceBlockId": "tests__HeightAboveField",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ClimbsAfterTakeoff",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_10_tests__RollPitch_tests__LevelClimb",
+            "sourceBlockId": "tests__RollPitch",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__LevelClimb",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 32
+            }
+          },
+          {
+            "id": "w_11_tests__EulerDeg_tests__Roll",
+            "sourceBlockId": "tests__EulerDeg",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__Roll",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -8.5
+            }
+          },
+          {
+            "id": "w_12_tests__Roll_tests__BankFollowsStick",
+            "sourceBlockId": "tests__Roll",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__BankFollowsStick",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 8
+            }
+          },
+          {
+            "id": "w_13_tests__EulerDeg_tests__Pitch",
+            "sourceBlockId": "tests__EulerDeg",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__Pitch",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -8.5
+            }
+          },
+          {
+            "id": "w_14_tests__Pitch_tests__PitchFollowsStick",
+            "sourceBlockId": "tests__Pitch",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__PitchFollowsStick",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 0
+            }
+          },
+          {
+            "id": "w_15_tests__EulerDeg_tests__Yaw",
+            "sourceBlockId": "tests__EulerDeg",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__Yaw",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -8.5
+            }
+          },
+          {
+            "id": "w_16_tests__Yaw_tests__YawTurnCompletes",
+            "sourceBlockId": "tests__Yaw",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__YawTurnCompletes",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_17_tests__EulerEstimateDeg_tests__AttitudeEstimateTracks",
+            "sourceBlockId": "tests__EulerEstimateDeg",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__AttitudeEstimateTracks",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_18_tests__EulerDeg_tests__AttitudeEstimateTracks",
+            "sourceBlockId": "tests__EulerDeg",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__AttitudeEstimateTracks",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -104.5
+            }
+          },
+          {
+            "id": "w_19_tests__From_altitude_est_tests__AltitudeEstimateTracks",
+            "sourceBlockId": "tests__From_altitude_est",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__AltitudeEstimateTracks",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 6
+            }
+          },
+          {
+            "id": "w_20_tests__TrueAltitude_tests__AltitudeEstimateTracks",
+            "sourceBlockId": "tests__TrueAltitude",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__AltitudeEstimateTracks",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 8
+            }
+          },
+          {
+            "id": "w_21_tests__From_battery_voltage_tests__BatteryAboveCutoff",
+            "sourceBlockId": "tests__From_battery_voltage",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__BatteryAboveCutoff",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_22_tests__RollPitch_tests__StaysUpright",
+            "sourceBlockId": "tests__RollPitch",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__StaysUpright",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 32
+            }
+          }
+        ],
+        "extents": {
+          "width": 985,
+          "height": 1288
         }
       }
     ]

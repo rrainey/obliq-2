@@ -262,6 +262,38 @@ export const DEMO_STICKS: StickProfile = {
 }
 
 /**
+ * Pass/fail limits for the default demo flight, checked by the Assert blocks
+ * on the Tests sheet. Windows sit inside each manoeuvre's hold, after it has
+ * settled; limits leave a margin of a degree or two around the flown values.
+ */
+export const DEMO_TESTS = {
+  /** Motors stay off until the arm switch (0.25 s); after it, at least idle */
+  armTime: 0.25,
+  /** Height above the field from 1.5 s (1.45 m flown) */
+  climbFrom: 1.5,
+  minHeightM: 1.0,
+  /** Roll and pitch while climbing on the throttle alone */
+  levelWindow: [0.6, 2.0] as [number, number],
+  levelDeg: 2,
+  /** Angle mode: 0.4 roll stick held 2.1–2.8 s commands a 24 deg bank */
+  bankWindow: [2.6, 2.8] as [number, number],
+  bankDeg: [22, 26.5] as [number, number],
+  /** −0.3 pitch stick held 3.2–3.8 s commands 18 deg nose-down */
+  pitchWindow: [3.6, 3.8] as [number, number],
+  pitchDeg: [-19.5, -15.5] as [number, number],
+  /** The yaw stick (4.15–4.6 s) turns the heading about 90 deg */
+  yawFrom: 4.7,
+  yawDeg: [80, 100] as [number, number],
+  /** The estimators against the true state, over the whole flight */
+  attitudeEstimateDeg: 5,
+  altitudeEstimateM: 0.5,
+  /** 3.5 V per cell under load */
+  minBatteryV: 4 * 3.5,
+  /** Roll or pitch beyond this ends the run (stop on failure) */
+  uprightDeg: 60,
+}
+
+/**
  * Airborne demo (start at altitude, armed) at hover throttle: in acro, a roll
  * doublet and a yaw step; then angle mode from 2.4 s: a 30 deg bank held and
  * released, then an 18 deg pitch.
@@ -1326,7 +1358,11 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     telemetry.wire(published.get(signal)!, d)
   }
 
+  // The default demo flight carries its pass/fail checks on a Tests sheet
+  const isDefaultDemo =
+    !!fc && opts.sticks === undefined && !opts.initialAltitude && !opts.initialEuler && !opts.initialOmega
   let sheets: Sheet[] = [main.sheet(), telemetry.sheet()]
+  if (isDefaultDemo) sheets.push(buildTestsSheet().sheet())
   sheets = tuneModelLayout(sheets as any, null, {
     ...DEFAULT_TUNE_OPTIONS,
     cleanUpLayout: true,
@@ -1356,6 +1392,8 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
           'Ground contact (spring-damper legs) and Betaflight-style arming: the Pilot subsystem arms at 0.25 s, takes off ' +
           'from rest on the field, hovers, then in angle (self-level) mode flies a 24 deg bank, an 18 deg forward pitch and a ' +
           'yaw turn. Model outputs and scopes are on the Telemetry sheet (run results show there). ' +
+          'Assert blocks on the Tests sheet check the flight: arming, the climb, each manoeuvre, the estimators and the ' +
+          'battery (npm run obliq:test -- "FPV Quadcopter"). ' +
           'Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; ' +
           'equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md.',
       },
@@ -1373,6 +1411,56 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
 }
 
 /** Grow each sheet's extents to cover its laid-out blocks. */
+/**
+ * The Tests sheet: Assert blocks that check the default demo flight against
+ * DEMO_TESTS, fed by sheet labels from Main like the Telemetry sheet.
+ */
+function buildTestsSheet(): SheetBuilder {
+  const t = DEMO_TESTS
+  const s = new SheetBuilder('tests', 'Tests')
+  // Rounded so the Scale blocks stay readable; 4e-7 relative error is far
+  // inside every limit
+  const R2D = Number((180 / Math.PI).toFixed(4))
+  const from = (signal: string) => s.add('sheet_label_source', `From_${signal}`, { signalName: signal })
+  const pick = (name: string, src: string, indices: number[]) => {
+    const id = s.add('selector', name, { indices })
+    s.wire(src, id)
+    return id
+  }
+  const check = (name: string, input: string, params: Record<string, unknown>, expected?: string) => {
+    const id = s.add('assert', name, { mode: 'bounds', checkFrom: 0, checkUntil: null, onFailure: 'record', ...params })
+    s.wire(input, id, 0)
+    if (expected) s.wire(expected, id, 1)
+  }
+
+  const motorCmd = from('motor_cmd')
+  const pos = from('pos_ned')
+  const euler = from('euler')
+  const eulerDeg = s.add('scale', 'EulerDeg', { gain: R2D })
+  s.wire(euler, eulerDeg)
+  const eulerEstDeg = s.add('scale', 'EulerEstimateDeg', { gain: R2D })
+  s.wire(from('euler_est'), eulerEstDeg)
+  const rollPitch = pick('RollPitch', eulerDeg, [0, 1])
+  const down = pick('Down', pos, [2])
+  const height = s.add('evaluate', 'HeightAboveField', { numInputs: 1, expression: '-in(0)' })
+  s.wire(down, height)
+  const trueAltitude = s.add('evaluate', 'TrueAltitude', { numInputs: 1, expression: `${SENSORS.baro.homeAltitude} - in(0)` })
+  s.wire(down, trueAltitude)
+
+  check('DisarmedMotorsOff', motorCmd, { lower: 0, upper: 0, checkUntil: t.armTime - 0.01 })
+  check('ArmedMotorsAtIdle', motorCmd, { lower: FC.motorIdle - 1e-9, upper: 1, checkFrom: t.armTime + 0.05 })
+  check('ClimbsAfterTakeoff', height, { lower: t.minHeightM, upper: null, checkFrom: t.climbFrom })
+  check('LevelClimb', rollPitch, { lower: -t.levelDeg, upper: t.levelDeg, checkFrom: t.levelWindow[0], checkUntil: t.levelWindow[1] })
+  check('BankFollowsStick', pick('Roll', eulerDeg, [0]), { lower: t.bankDeg[0], upper: t.bankDeg[1], checkFrom: t.bankWindow[0], checkUntil: t.bankWindow[1] })
+  check('PitchFollowsStick', pick('Pitch', eulerDeg, [1]), { lower: t.pitchDeg[0], upper: t.pitchDeg[1], checkFrom: t.pitchWindow[0], checkUntil: t.pitchWindow[1] })
+  check('YawTurnCompletes', pick('Yaw', eulerDeg, [2]), { lower: t.yawDeg[0], upper: t.yawDeg[1], checkFrom: t.yawFrom })
+  check('AttitudeEstimateTracks', eulerEstDeg, { mode: 'near', absTol: t.attitudeEstimateDeg, relTol: 0 }, eulerDeg)
+  check('AltitudeEstimateTracks', from('altitude_est'), { mode: 'near', absTol: t.altitudeEstimateM, relTol: 0 }, trueAltitude)
+  check('BatteryAboveCutoff', from('battery_voltage'), { lower: t.minBatteryV, upper: null })
+  check('StaysUpright', rollPitch, { lower: -t.uprightDeg, upper: t.uprightDeg, onFailure: 'stop' })
+  return s
+}
+
 function fitExtents(sheets: Sheet[]): void {
   for (const sheet of sheets) {
     let w = 400, h = 300
