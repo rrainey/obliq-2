@@ -687,3 +687,63 @@ export const deleteParameterTool: ToolWithHandler = {
     }
   }
 };
+export const addModelReferenceTool: ToolWithHandler = {
+  name: 'add_model_reference',
+  description: `Add a Model Reference block: a block that embeds another saved model, the way a test model embeds the model under test.
+
+The block's input and output ports are the referenced model's top-level Input Port and Output Port blocks (returned as "ports"); connect to them by index in that order. The referenced model is read when this model is built or simulated, so later edits to it are picked up (or pin a saved version). Its parameters join this model's; a parameter with the same name but a different value is an error at build time.`,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      modelId: { type: 'string', description: 'ID of the model to add the block to' },
+      sheetId: { type: 'string', description: 'ID of the sheet' },
+      referencedModelId: { type: 'string', description: 'ID of the model to embed (not this model)' },
+      version: { type: 'number', description: 'A saved version to pin; omit for the latest save' },
+      name: { type: 'string', description: 'Block name (default: the referenced model\'s name)' },
+      position: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' } } }
+    },
+    required: ['modelId', 'sheetId', 'referencedModelId']
+  },
+  handler: async (args: any) => {
+    try {
+      const { modelId, sheetId, referencedModelId, version, name, position } = args;
+      const response = await modelBuilderClient.addModelReference(modelId, sheetId, referencedModelId, version, name, position);
+      if (!response.success) {
+        return { success: false, error: response.error || 'Failed to add model reference' };
+      }
+      const data = response.data as any;
+      return { success: true, blockId: data?.block?.id, block: data?.block, ports: data?.ports };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+};
+
+export const setModelReferenceTool: ToolWithHandler = {
+  name: 'set_model_reference',
+  description: `Point a Model Reference block at another model, or change the version it uses (a saved version number to pin, or null for the latest save). Wires follow port names; if wires use ports the new model does not have, this fails unless dropMissingWires is true.`,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      modelId: { type: 'string', description: 'ID of the model holding the block' },
+      blockId: { type: 'string', description: 'ID of the Model Reference block' },
+      referencedModelId: { type: 'string', description: 'ID of the model to embed (default: unchanged)' },
+      version: { type: ['number', 'null'], description: 'Saved version to pin, or null for the latest save (default: unchanged)' },
+      dropMissingWires: { type: 'boolean', description: 'Remove wires to ports the model does not have' }
+    },
+    required: ['modelId', 'blockId']
+  },
+  handler: async (args: any) => {
+    try {
+      const { modelId, blockId, ...opts } = args;
+      const response = await modelBuilderClient.setModelReference(modelId, blockId, opts);
+      if (!response.success) {
+        return { success: false, error: response.error || 'Failed to update model reference' };
+      }
+      const data = response.data as any;
+      return { success: true, block: data?.block, ports: data?.ports, removedWires: data?.removedWires };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+};

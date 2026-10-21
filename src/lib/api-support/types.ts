@@ -29,6 +29,8 @@ export const ModelBuilderActions = {
   LIST_BLOCKS: 'listBlocks',
   GET_BLOCK: 'getBlock',
   ADD_BLOCK: 'addBlock',
+  ADD_MODEL_REFERENCE: 'addModelReference',
+  SET_MODEL_REFERENCE: 'setModelReference',
   UPDATE_BLOCK_POSITION: 'updateBlockPosition',
   UPDATE_BLOCK_NAME: 'updateBlockName',
   UPDATE_BLOCK_PARAMETERS: 'updateBlockParameters',

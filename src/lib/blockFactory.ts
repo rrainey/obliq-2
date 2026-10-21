@@ -2,6 +2,7 @@
 // Unified block creation factory used by both UI and Model Builder API
 
 import { BlockType, BlockTypes, blockTypeRegistry, generateDynamicPorts } from './blockTypeRegistry';
+import { isModelReference } from '@/lib/modelReferences';
 
 /**
  * Position for a block on the canvas
@@ -585,6 +586,10 @@ export function createSubsystemBlock(
  */
 export function syncSubsystemPortsFromSheets(subsystemBlock: BlockData): void {
   if (subsystemBlock.type !== BlockTypes.SUBSYSTEM || !subsystemBlock.parameters?.sheets) {
+    return;
+  }
+  // A model reference's ports come from the referenced model, not its (empty) sheets
+  if (isModelReference(subsystemBlock)) {
     return;
   }
 

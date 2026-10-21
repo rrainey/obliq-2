@@ -5,3 +5,4 @@ export { handleListBlocks, handleGetBlock, handleGetBlockPorts } from './read';
 export { handleAddBlock } from './write';
 export { handleUpdateBlockPosition, handleUpdateBlockName, handleUpdateBlockParameters } from './update';
 export { handleDeleteBlock } from './delete';
+export { handleAddModelReference, handleSetModelReference } from './model-reference';

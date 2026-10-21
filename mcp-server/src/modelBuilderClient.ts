@@ -211,6 +211,23 @@ export class ModelBuilderAPIClient {
     });
   }
 
+  // Model references: a block that embeds another saved model
+  async addModelReference(modelId: string, sheetId: string, referencedModelId: string, version?: number | null, name?: string, position?: any) {
+    return this.request('POST', '', {
+      action: 'addModelReference',
+      modelId,
+      sheetId,
+      referencedModelId,
+      version: version ?? null,
+      name,
+      position
+    });
+  }
+
+  async setModelReference(modelId: string, blockId: string, opts: { referencedModelId?: string; version?: number | null; dropMissingWires?: boolean }) {
+    return this.request('PUT', '', { action: 'setModelReference', modelId, blockId, ...opts });
+  }
+
   async updateBlock(modelId: string, sheetId: string, blockId: string, updates: any) {
     // Handle different update types - process all provided updates
     let lastResponse: any = { success: false, error: 'No valid updates provided' };
