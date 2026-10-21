@@ -346,6 +346,19 @@ node verify-setup.js
 npm run obliq:test -- --all
 ```
 
+### Dependency audit
+
+`npm audit --omit=dev` reports no vulnerabilities in the packages the app runs on.
+
+A full `npm audit` reports 5 "high" findings. They are one advisory, [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm): deeply nested glob patterns can exhaust the stack in `braces` (a denial of service). npm counts every package on the path to it: `eslint-config-next → @next/eslint-plugin-next → fast-glob → micromatch → braces`. It is accepted for now, because:
+
+- **Lint tooling only.** It is reached only by lint tooling, a development dependency that is not part of the app.
+- **No untrusted input.** The glob patterns it handles come from this repository's own configuration.
+- **No fixed release.** No fixed `braces` release exists yet (3.0.3 is the latest).
+- **The suggested fix is worse.** `npm audit fix --force` would downgrade `eslint-config-next` to the Next 14 config, which does not match Next 15 or the ESLint 9 setup here.
+
+To check only what ships, use `npm audit --omit=dev`. Once `braces` (or Next's lint plugin) publishes a fix, `npm update` clears the finding.
+
 ## Project Structure
 
 ```
