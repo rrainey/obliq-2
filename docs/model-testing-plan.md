@@ -1,6 +1,6 @@
 # Testing Generated Code: Assertions, a Test Runner, and Model References
 
-Status: plan, decisions confirmed, not yet implemented (October 2026).
+Status: decisions confirmed. Part A milestones 1–3 are implemented; A4 and Part B are not yet (October 2026).
 
 ## Goal
 

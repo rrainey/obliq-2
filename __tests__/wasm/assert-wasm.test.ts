@@ -19,6 +19,7 @@ import {
   summarizeAsserts,
   wasmStopRequested,
 } from '@/lib/simulation/assertResults'
+import { runModelTests } from '@/lib/testing/modelTestRunner'
 import { Sheet } from '@/lib/simulationTypes'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
@@ -135,6 +136,44 @@ describeIfDocker('Assert blocks in the WASM simulation build', () => {
     expect(findStoppingAssert(results)).toMatchObject({ blockId: 'stop', name: 'Limit' })
     expect(findStoppingAssert(results)!.time).toBeCloseTo(1, 9)
     expect(summarizeAsserts(results)).toEqual({ passed: 1, failed: 2, notChecked: 1 })
+  })
+
+  test('the native test runner and the WASM build give the same results', async () => {
+    // Noise into an integrator (a random walk), checked against bounds it crosses
+    const sheets = sheet(
+      [
+        b('n', 'random_noise', 'Noise', { mean: 0, stdDev: 1, seed: 7 }),
+        b('i', 'integrator', 'Walk', { initialCondition: 0 }),
+        b('a1', 'assert', 'WalkBounded', { mode: 'bounds', lower: -0.05, upper: 0.05 }),
+        b('a2', 'assert', 'WalkLoose', { mode: 'bounds', lower: -10, upper: 10 }),
+      ],
+      [w('w1', 'n', 'i'), w('w2', 'i', 'a1'), w('w3', 'i', 'a2')]
+    )
+    const dt = 0.01
+    const steps = simulationStepCount(5, dt)
+    const mod = await buildModule('walk_wasm', sheets, dir)
+    mod._wasm_init(dt)
+    for (let i = 0; i < steps; i++) mod._wasm_step(dt)
+    const wasm = readWasmAssertResults(mod)
+
+    const native = runModelTests({
+      name: 'walk_native',
+      data: { sheets, globalSettings: { simulationTimeStep: dt, simulationDuration: 5, integrationAlgorithm: 'rk4' } },
+    })
+    expect(native.status).toBe('failed')
+    const strip = (r: typeof wasm) => r.map(({ blockId, status, checks, failures, firstFailTime, firstFailValue, worstViolation }) =>
+      ({ blockId, status, checks, failures, firstFailTime, firstFailValue, worstViolation }))
+    const nativeRows = strip(native.asserts)
+    const wasmRows = strip(wasm)
+    expect(wasmRows.map(r => [r.blockId, r.status, r.checks, r.failures])).toEqual(nativeRows.map(r => [r.blockId, r.status, r.checks, r.failures]))
+    wasmRows.forEach((r, k) => {
+      const n = nativeRows[k]!
+      for (const key of ['firstFailTime', 'firstFailValue', 'worstViolation'] as const) {
+        if (n[key] === null) expect(r[key]).toBeNull()
+        else expect(r[key]!).toBeCloseTo(n[key]!, 9)
+      }
+    })
+    expect(wasmRows.find(r => r.blockId === 'a1')!.status).toBe('failed')
   })
 
   test('a model without Asserts reports none and never requests a stop', async () => {

@@ -81,6 +81,7 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 | `subsystem` | Subsystem | Hierarchical | Encapsulates another sheet as a reusable block |
 | `signal_display` | Signal Display | Sinks | Real-time signal visualization during simulation |
 | `signal_logger` | Signal Logger | Sinks | Logs signal values for CSV export |
+| `assert` | Assert | Sinks | Test check: fails when its input leaves bounds, differs from an expected input, or is false; can stop the run |
 | `no_connection` | No Connection | Sinks | Marks a signal as intentionally unused |
 | `sheet_label_sink` | Sheet Label Sink | Sheet Labels | Receives signal for wireless routing within a sheet |
 | `sheet_label_source` | Sheet Label Source | Sheet Labels | Outputs signal from corresponding sheet label sink |
@@ -151,6 +152,18 @@ independent adjustments, each of which can be left alone:
 - Configurable time steps, duration, and integration methods, saved with the model
 - Signal logging with CSV export capability
 - Support for both continuous and discrete-time systems
+
+### Testing Models
+- **Assert blocks** check a signal at every step: within bounds, near an expected signal, or true. After a run the toolbar shows how many passed, with a Test Results panel and pass/fail marks on the blocks.
+- **`npm run obliq:test`** runs models' Asserts from the command line, natively, with each model's saved simulation settings:
+
+  ```bash
+  npm run obliq:test -- "My Model"           # by name, id, or a model JSON file
+  npm run obliq:test -- --all --junit out.xml  # every stored model with Asserts, JUnit for CI
+  ```
+
+  It exits 0 when every Assert passed, 1 when one failed (or a named model has none), and 2 when a model could not be found, built or run. It needs a C compiler (`$CC`, else `cc`). Add `--json` for machine-readable results.
+- Exported C keeps Assert checks behind `OBLIQ_ASSERTS`, off by default.
 
 ### Code Generation
 - **PlatformIO-compatible C code** generation
@@ -323,6 +336,9 @@ npm run test:wasm
 
 # Quick Docker / storage / SQLite check
 node verify-setup.js
+
+# Run models' Assert blocks (see Testing Models)
+npm run obliq:test -- --all
 ```
 
 ## Project Structure
@@ -445,7 +461,8 @@ obliq-2/
 └── scripts/                          # Command-line tools
     ├── obliq-link.ts                 # npm run obliq:link — link/list/unlink model files
     ├── migrate-from-supabase.ts      # npm run migrate:supabase — one-time import from 2.x
-    └── obliq-cgen.ts                 # npm run obliq:cgen — C code from a model JSON file
+    ├── obliq-cgen.ts                 # npm run obliq:cgen — C code from a model JSON file
+    └── obliq-test.ts                 # npm run obliq:test — run models' Assert blocks
 ```
 
 ## Testing

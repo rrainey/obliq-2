@@ -451,7 +451,7 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 - NaN always fails.
 - No output.
 
-**Results**: after a run, the toolbar shows how many Asserts passed. Click it for a Test Results panel listing each Assert's status, first failure and failed/checked step counts. Clicking a row shows that block. Each Assert block also shows a mark (✓ passed, ✕ failed, – not checked); the marks and the toolbar fade once the model changes. The automations API's `simulate` action, and the MCP `run_simulation` tool, return the results as `asserts`.
+**Results**: after a run, the toolbar shows how many Asserts passed. Click it for a Test Results panel listing each Assert's status, first failure and failed/checked step counts. Clicking a row shows that block. Each Assert block also shows a mark (✓ passed, ✕ failed, – not checked); the marks and the toolbar fade once the model changes. The automations API's `simulate` action, and the MCP `run_simulation` tool, return the results as `asserts`. From the command line, `npm run obliq:test -- <model>` runs a model's Asserts natively with its saved simulation settings (see the README's Testing Models section).
 
 **Behaviour**:
 - The check runs once per major time step at the step's start time. Blocks inside a subsystem with a sample time check only on its sample hits.

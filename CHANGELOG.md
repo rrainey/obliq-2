@@ -9,6 +9,11 @@
   - After a run, the toolbar shows how many Asserts passed. Clicking it opens a Test Results panel listing each Assert's status and first failure; clicking a row shows the block. Assert blocks show a pass/fail mark. Marks and summary fade once you change the model.
   - A run stopped by an Assert says which one and when, and plots end there.
   - The automations API's `simulate` action, and so the MCP `run_simulation` tool, returns Assert results.
+- **`npm run obliq:test`**: runs models' Assert blocks from the command line.
+  - Name the models by name, id or JSON file path, or use `--all` for every stored model that has Asserts.
+  - Each model is built natively with the host C compiler and runs with its saved duration, time step and integrator. A stop-on-failure Assert ends the run, as in the editor.
+  - It prints a summary with each failure's time and value. `--json` gives machine-readable results, and `--junit <file>` writes JUnit XML for CI.
+  - Exit code 0 means every Assert passed. 1 means one failed, was not checked, or a named model has none. 2 means a model could not be found, built or run.
 - **Fixed: runs could be one step short.** The step count was `floor(duration / step)`, which loses a step when the division comes out just under a whole number (0.3 / 0.1 = 2.9999…). Runs now use the rounded count. Server-side runs used `ceil` and could take an extra step; they now match.
 
 ## What's New in 3.2.2

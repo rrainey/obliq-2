@@ -32,6 +32,7 @@ import {
 } from '@/lib/subsystemReference'
 import { generateBlockId } from '@/lib/blockFactory'
 import type { TestRunResults } from '@/lib/simulation/assertResults'
+import { DEFAULT_GLOBAL_SETTINGS, normalizeGlobalSettings, type SimulationGlobalSettings } from '@/lib/globalSettings'
 
 export interface Sheet {
   id: string
@@ -44,32 +45,11 @@ export interface Sheet {
   }
 }
 
-/** Model-level simulation settings, persisted as `data.globalSettings`. */
-export interface SimulationGlobalSettings {
-  simulationTimeStep: number
-  simulationDuration: number
-  integrationAlgorithm: 'euler' | 'rk4'
-  debugMath: boolean
-}
-
-export const DEFAULT_GLOBAL_SETTINGS: SimulationGlobalSettings = {
-  simulationTimeStep: 0.01,
-  simulationDuration: 10.0,
-  integrationAlgorithm: 'rk4',
-  debugMath: false
-}
-
-/** Fill in defaults for missing/invalid fields of a stored `globalSettings`. */
-export function normalizeGlobalSettings(raw: any): SimulationGlobalSettings {
-  const positive = (v: unknown, fallback: number) =>
-    typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : fallback
-  return {
-    simulationTimeStep: positive(raw?.simulationTimeStep, DEFAULT_GLOBAL_SETTINGS.simulationTimeStep),
-    simulationDuration: positive(raw?.simulationDuration, DEFAULT_GLOBAL_SETTINGS.simulationDuration),
-    integrationAlgorithm: raw?.integrationAlgorithm === 'euler' ? 'euler' : 'rk4',
-    debugMath: !!raw?.debugMath
-  }
-}
+export {
+  DEFAULT_GLOBAL_SETTINGS,
+  normalizeGlobalSettings,
+  type SimulationGlobalSettings
+} from '@/lib/globalSettings'
 
 export interface ModelState {
   // Model data

@@ -27,6 +27,7 @@
     "as205:compare": "tsx scripts/compare-as205.ts",
     "as205:compare-final": "tsx scripts/compare-final-json.ts",
     "obliq:cgen": "tsx scripts/obliq-cgen.ts",
+    "obliq:test": "tsx scripts/obliq-test.ts",
     "obliq:regen-saturnib-plant": "bash scripts/regen-saturnib-obliq-plant.sh",
     "mdl:ir": "npm --prefix ../mdl2obliq run mdl:ir --",
     "mdl:emit": "npm --prefix ../mdl2obliq run mdl:emit --",
