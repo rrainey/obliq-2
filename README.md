@@ -1,17 +1,16 @@
 # obliq-2
 
-A web-based visual modeling and simulation tool that enables users to construct, test, and simulate block diagram models directly in the browser, then generate C code for embedded deployment.
+Construct, test, and simulate block diagram models directly in your browser, then generate C code for embedded deployment.
 
-> **Important Note**: This project was almost entirely generated using Claude Opus and Sonnet 4 LLMs.  It is an exploration of how LLMs might help humans generate code - the code this application generates and the overall security of the application have not been formally verified. **In short, you'd be crazy to try to use this application for anything other than research.**
+> **Important Note**: This project was almost entirely generated using Claude Opus and Sonnet 4 LLMs.  It is an exploration of how LLMs might help humans generate code - the code this application generates and the overall security of the application have not been formally verified. **In short, while a lot of serious work has gone into this project its readiness for high stakes applications remains to be proved. Use it at your own risk.**
 
 ## Overview
 
-obliq-2 is a browser-based application, designed for creating and simulating visual block diagram models. Users can drag and drop various block types onto a canvas, connect them with wires to define signal flow, run simulations to see how signals propagate through the system, and generate PlatformIO-compatible C code for deployment on embedded systems.
+obliq-2 is a browser-based application, designed for creating and simulating visual block diagram models. Drag and drop various block types onto a canvas, connect them with wires to define signal flow, run simulations to see how signals propagate through the system, and generate PlatformIO-compatible C code for deployment on embedded systems.
 
 ![Screenshot](images/transp07.png)
 
 Release notes are in [CHANGELOG.md](CHANGELOG.md).
-
 
 ## Key Features
 
@@ -90,13 +89,6 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 | `body2quaternion_rates` | Body2Quat Rates | Aerospace | Converts body angular rates to quaternion rates |
 | `atmosphere` | Atmosphere | Aerospace | U.S. Standard Atmosphere 1976 (COESA) from its layer formulae: T, a, P, ρ versus geometric altitude (m), −5 to 86 km |
 | `comment` | Comment | Annotation | Text annotation with Markdown and LaTeX math support |
-
-Two further block types are supported by simulation and code generation but are
-**not offered in the block palette** — they exist so that models converted from
-Simulink round-trip correctly:
-
-| Block Type | Description |
-|------------|-------------|
 | `saturation_dynamic` | Element-wise `clamp(u, lo, up)`, with the limits supplied as signals rather than parameters |
 | `inertia_diag_pack` | Packs principal-axis inertia and its derivative into `[Ixx, Iyy, Izz, İxx, İyy, İzz]` for aerolib mass properties |
 
