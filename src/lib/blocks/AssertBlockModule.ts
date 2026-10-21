@@ -91,7 +91,9 @@ export class AssertBlockModule implements IBlockModule {
       elementCode += `                const double as_viol = 1.0;\n`
     }
     elementCode += `                if (!as_ok) {\n`
-    elementCode += `                    if (!as_fail) { as_val = as_v; as_idx = as_i * ${uShape.cols} + as_j; }\n`
+    // Element index for vectors and matrices; -1 for a scalar
+    const indexExpr = uShape.kind === 'scalar' ? '-1' : `as_i * ${uShape.cols} + as_j`
+    elementCode += `                    if (!as_fail) { as_val = as_v; as_idx = ${indexExpr}; }\n`
     elementCode += `                    as_fail = 1;\n`
     elementCode += `                    /* NaN violation counts as infinitely bad */\n`
     elementCode += `                    if (!(as_viol <= as_worst)) as_worst = isnan(as_viol) ? INFINITY : as_viol;\n`
@@ -153,7 +155,7 @@ export class AssertBlockModule implements IBlockModule {
       `    unsigned long ${name}_failures; /* Assert: steps failed */`,
       `    double ${name}_first_fail_time;`,
       `    double ${name}_first_fail_value;`,
-      `    int ${name}_first_fail_index; /* flat element index of the first failure */`,
+      `    int ${name}_first_fail_index; /* flat element index of the first failure; -1 for a scalar */`,
       `    double ${name}_worst_violation;`,
     ]
   }

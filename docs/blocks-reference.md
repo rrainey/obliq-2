@@ -451,6 +451,8 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 - NaN always fails.
 - No output.
 
+**Results**: after a run, the toolbar shows how many Asserts passed. Click it for a Test Results panel listing each Assert's status, first failure and failed/checked step counts. Clicking a row shows that block. Each Assert block also shows a mark (✓ passed, ✕ failed, – not checked); the marks and the toolbar fade once the model changes. The automations API's `simulate` action, and the MCP `run_simulation` tool, return the results as `asserts`.
+
 **Behaviour**:
 - The check runs once per major time step at the step's start time. Blocks inside a subsystem with a sample time check only on its sample hits.
 - RK4 intermediate stages are never checked.
@@ -460,7 +462,7 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 - All check code is inside `#ifdef OBLIQ_ASSERTS`. Exported code leaves it undefined, so deployed code carries no test logic unless you define it.
 - With it defined, the model provides:
   - `<model>_assert_count()`;
-  - `<model>_assert_result(model, i, &result)`, which fills an `obliq_assert_result_t` with the status (not checked, passed or failed), checked and failed step counts, the first failure's time, value and element index, and the worst violation;
+  - `<model>_assert_result(model, i, &result)`, which fills an `obliq_assert_result_t` with the status (not checked, passed or failed), checked and failed step counts, the first failure's time, value and element index (−1 for a scalar), and the worst violation;
   - `<model>_stop_requested(model)`.
 - Assert blocks inside segregated subsystems and subsystem references are not checked yet, and code generation warns about them.
 

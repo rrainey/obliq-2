@@ -359,6 +359,8 @@ async function handleSimulate(
       timePoints,
       outputPorts: result.outputs || {},
       signals: result.signals || {},
+      // Assert blocks: present when the model has any
+      ...(result.asserts ? { asserts: result.asserts, stoppedByAssert: result.stoppedByAssert ?? null } : {}),
       config: {
         timeStep: simConfig.timeStep,
         duration: simConfig.duration

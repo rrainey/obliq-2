@@ -16,6 +16,7 @@
  */
 
 import type { SignalValue } from '@/lib/modelSchema'
+import { AssertResult, readWasmAssertResults, wasmStopRequested } from './assertResults'
 
 /**
  * Configuration for WASM simulation
@@ -587,6 +588,28 @@ export class WasmSimulationEngine {
     }
 
     return loggerValues
+  }
+
+  /**
+   * Runs up to `numSteps` steps, ending early after a step in which an Assert
+   * set to stop on failure failed. Returns the number of steps run.
+   */
+  runSteps(numSteps: number): number {
+    for (let i = 0; i < numSteps; i++) {
+      this.step()
+      if (this.stopRequested()) return i + 1
+    }
+    return numSteps
+  }
+
+  /** Whether an Assert set to stop on failure has failed */
+  stopRequested(): boolean {
+    return wasmStopRequested(this.module)
+  }
+
+  /** Assert block results of the current run */
+  getAssertResults(): AssertResult[] {
+    return this.module ? readWasmAssertResults(this.module) : []
   }
 
   /**

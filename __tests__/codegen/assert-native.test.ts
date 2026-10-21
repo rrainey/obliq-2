@@ -176,6 +176,7 @@ describe('Assert native codegen', () => {
         expect(r.firstFailValue).toBeCloseTo(1.51, 9)
         expect(r.failures).toBe(149) // t = 1.51 … 2.99
         expect(r.worst).toBeCloseTo(2.99 - 1.505, 9)
+        expect(r.firstFailIndex).toBe(-1) // scalar: no element index
         expect(r.stops).toBe(0)
       })
 

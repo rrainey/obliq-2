@@ -10,7 +10,7 @@ import {
 
 export const runSimulationTool: ToolWithHandler = {
   name: 'run_simulation',
-  description: 'Run a WASM-compiled simulation on a model. The model is compiled to WebAssembly and executed server-side for high performance.',
+  description: 'Run a WASM-compiled simulation on a model. The model is compiled to WebAssembly and executed server-side for high performance. When the model has Assert blocks, the result includes their pass/fail results as asserts.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -115,6 +115,8 @@ export const runSimulationTool: ToolWithHandler = {
         timePoints: data.timePoints,
         outputPorts: data.outputPorts || {},
         signals: data.signals || {},
+        // Assert block results (present when the model has Assert blocks)
+        ...(data.asserts ? { asserts: data.asserts, stoppedByAssert: data.stoppedByAssert ?? null } : {}),
         // Include performance metrics from WASM execution
         performance: data.performance
       };

@@ -52,8 +52,10 @@ import type { ModelParameter } from '@/lib/modelSchema'
  *        layer formulae (was a coarse, partly inaccurate table).
  * - v34: WASM wrapper resolves sheet labels across top-level sheets (scopes
  *        and outputs fed by a From on another sheet); M_PI fallback.
+ * - v35: Assert blocks are checked (OBLIQ_ASSERTS) and their results and the
+ *        stop request are exported from the wrapper.
  */
-const CODEGEN_VERSION = 'v34'
+const CODEGEN_VERSION = 'v35'
 
 export interface ModelStructure {
   sheets: Sheet[]

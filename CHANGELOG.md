@@ -6,7 +6,10 @@
   - It checks once per time step, inside an optional time window. Vectors and matrices are checked element by element.
   - On failure it either records and continues, or stops the simulation.
   - Generated C keeps all check code behind `OBLIQ_ASSERTS`, so exported code has no test logic unless you define it. With it defined, the model reports each Assert's result: passed, failed or not checked, plus the first failure's time and value.
-  - Browser simulations don't check Asserts yet. Results in the editor and a command-line test runner come next.
+  - After a run, the toolbar shows how many Asserts passed. Clicking it opens a Test Results panel listing each Assert's status and first failure; clicking a row shows the block. Assert blocks show a pass/fail mark. Marks and summary fade once you change the model.
+  - A run stopped by an Assert says which one and when, and plots end there.
+  - The automations API's `simulate` action, and so the MCP `run_simulation` tool, returns Assert results.
+- **Fixed: runs could be one step short.** The step count was `floor(duration / step)`, which loses a step when the division comes out just under a whole number (0.3 / 0.1 = 2.9999…). Runs now use the rounded count. Server-side runs used `ceil` and could take an extra step; they now match.
 
 ## What's New in 3.2.2
 

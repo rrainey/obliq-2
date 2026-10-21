@@ -31,6 +31,7 @@ import {
   isSubsystemReference,
 } from '@/lib/subsystemReference'
 import { generateBlockId } from '@/lib/blockFactory'
+import type { TestRunResults } from '@/lib/simulation/assertResults'
 
 export interface Sheet {
   id: string
@@ -106,6 +107,11 @@ export interface ModelState {
   
   // Simulation state
   globalSimulationResults: Map<string, SimulationResults> | null
+  /**
+   * Assert results of the last run. `stale` turns true once the model's
+   * behaviour changes (moving blocks does not count).
+   */
+  testResults: (TestRunResults & { behaviourHash: string; stale: boolean }) | null
   currentSheetSimulationResults: SimulationResults | null 
   simulationResults: SimulationResults | null
   isSimulating: boolean
@@ -214,6 +220,9 @@ export interface ModelActions {
   setIsSimulating: (simulating: boolean) => void
   setOutputPortValues: (values: Map<string, SignalValue > | null | undefined) => void
   setGlobalSimulationResults: (results: Map<string, SimulationResults>) => void
+  setTestResults: (results: TestRunResults | null) => void
+  /** Marks the test results stale if the model's behaviour changed since the run */
+  checkTestResultsStale: () => void
   clearGlobalSimulationResults: () => void
   
   // Composite actions
@@ -343,6 +352,7 @@ export const useModelStore = create<ModelStore>()(
     lastAutoSave: null,
     hasAutosavedEdits: false,
     globalSimulationResults: null,
+    testResults: null,
     currentSheetSimulationResults: null,
     isDirty: false,
     lastSavedHash: null,
@@ -1495,6 +1505,30 @@ export const useModelStore = create<ModelStore>()(
       })
     },
 
+    setTestResults: (results) => {
+      if (!results) {
+        set({ testResults: null })
+        return
+      }
+      const s = get()
+      set({
+        testResults: {
+          ...results,
+          behaviourHash: createBehaviourHash(s.sheets, s.activeSheetId, s.blocks, s.wires, s.globalSettings, s.parameters),
+          stale: false
+        }
+      })
+    },
+
+    checkTestResultsStale: () => {
+      const s = get()
+      if (!s.testResults || s.testResults.stale) return
+      const hash = createBehaviourHash(s.sheets, s.activeSheetId, s.blocks, s.wires, s.globalSettings, s.parameters)
+      if (hash !== s.testResults.behaviourHash) {
+        set({ testResults: { ...s.testResults, stale: true } })
+      }
+    },
+
     clearGlobalSimulationResults: () => {
       set({
         globalSimulationResults: null,
@@ -1676,6 +1710,7 @@ export const useModelStore = create<ModelStore>()(
           sheets,
           activeSheetId: firstSheetId,
           parameters,  // Feature 1: Load parameters
+          testResults: null,
           globalSettings: normalizeGlobalSettings(versionData.data.globalSettings),
           blocks: firstSheet?.blocks || [],
           wires: firstSheet?.connections || [],
@@ -1699,6 +1734,51 @@ export const useModelStore = create<ModelStore>()(
     }
   }))
 )
+
+/**
+ * Hash of what a simulation depends on: block types, names, parameters and
+ * wiring on every sheet (the active sheet from its working copy), plus the
+ * simulation settings and model parameters. Positions and sizes are left out.
+ */
+function createBehaviourHash(
+  sheets: Sheet[],
+  activeSheetId: string,
+  activeBlocks: BlockData[],
+  activeWires: WireData[],
+  globalSettings: SimulationGlobalSettings,
+  parameters: ModelParameter[]
+): string {
+  const blocksOf = (blocks: BlockData[]): unknown[] =>
+    blocks.map(b => {
+      const { sheets: nested, ...rest } = (b.parameters || {}) as Record<string, unknown>
+      return {
+        id: b.id,
+        type: b.type,
+        name: b.name,
+        parameters: rest,
+        sheets: Array.isArray(nested) ? sheetsOf(nested as Sheet[]) : undefined
+      }
+    })
+  const sheetsOf = (list: Sheet[]): unknown[] =>
+    list.map(sheet => {
+      const active = sheet.id === activeSheetId
+      return {
+        id: sheet.id,
+        blocks: blocksOf(active ? activeBlocks : sheet.blocks),
+        connections: active ? activeWires : sheet.connections
+      }
+    })
+  return stringHash(JSON.stringify({ globalSettings, parameters, sheets: sheetsOf(sheets) }))
+}
+
+function stringHash(s: string): string {
+  let hash = 0
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5) - hash) + s.charCodeAt(i)
+    hash = hash & hash
+  }
+  return hash.toString(36)
+}
 
 function createModelHash(sheets: Sheet[], globalSettings: SimulationGlobalSettings): string {
   // Create a deterministic string representation of the model
@@ -1973,6 +2053,22 @@ export const useHasUnsavedChanges = () => useModelStore((state: ModelStore) => {
   
   return hasBlockChanges || hasWireChanges
 })
+
+// Test results go stale when the model's behaviour changes. Checked after
+// edits settle, so dragging a block does not hash the model on every frame.
+let staleCheckTimer: ReturnType<typeof setTimeout> | null = null
+useModelStore.subscribe(
+  s => [s.sheets, s.blocks, s.wires, s.globalSettings, s.parameters] as const,
+  () => {
+    if (!useModelStore.getState().testResults) return
+    if (staleCheckTimer) clearTimeout(staleCheckTimer)
+    staleCheckTimer = setTimeout(() => {
+      staleCheckTimer = null
+      useModelStore.getState().checkTestResultsStale()
+    }, 300)
+  },
+  { equalityFn: (a, b) => a.every((v, i) => v === b[i]) }
+)
 
 export const useSimulationStatus = () => useModelStore((state: ModelStore) => ({
   isSimulating: state.isSimulating,

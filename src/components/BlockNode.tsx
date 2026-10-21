@@ -10,6 +10,7 @@ import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, 
 import { useComputedColorScheme } from '@mantine/core'
 import CommentNode from './CommentNode'
 import { useModelStore } from '@/lib/modelStore'
+import AssertStatusBadge from './AssertStatusBadge'
 import { isResizable, RESIZE_MIN_WIDTH, RESIZE_SNAP } from '@/lib/blocks/resizableBlocks'
 import * as BlockGeometry from '@/lib/layout/blockGeometry'
 
@@ -1211,6 +1212,9 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             )}
           </div>
         )}
+
+        {/* Assert pass/fail mark from the last run */}
+        {data.type === 'assert' && <AssertStatusBadge blockId={data.id} />}
 
         {/* Sum block input signs */}
         {data.type === 'sum' && sumSigns && sumSigns.map((sign: any, index: number) => (

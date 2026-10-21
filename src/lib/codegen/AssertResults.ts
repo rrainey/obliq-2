@@ -59,7 +59,7 @@ typedef struct {
     unsigned long failures;      /* steps failed */
     double first_fail_time;      /* -1 when none */
     double first_fail_value;
-    int first_fail_index;        /* flat element index, -1 when none */
+    int first_fail_index;        /* flat element index; -1 for a scalar or when none */
     double worst_violation;      /* largest amount outside the condition */
 } obliq_assert_result_t;
 #endif

@@ -17,6 +17,8 @@
  * - 'cleanup': Clean up resources
  */
 
+import { readWasmAssertResults, simulationStepCount, wasmStopRequested } from './assertResults'
+
 // Worker state
 let wasmModule: any = null
 let isInitialized = false
@@ -25,13 +27,13 @@ let shouldStop = false
 
 // Types for message protocol
 interface WorkerMessage {
-  type: 'init' | 'run' | 'step' | 'stop' | 'getResults' | 'cleanup'
+  type: 'init' | 'run' | 'step' | 'stop' | 'getResults' | 'getAssertResults' | 'cleanup'
   payload?: any
   requestId?: string
 }
 
 interface WorkerResponse {
-  type: 'ready' | 'initialized' | 'progress' | 'complete' | 'stepped' | 'results' | 'stopped' | 'cleaned' | 'error'
+  type: 'ready' | 'initialized' | 'progress' | 'complete' | 'stepped' | 'results' | 'assertResults' | 'stopped' | 'cleaned' | 'error'
   payload?: any
   requestId?: string
   error?: string
@@ -129,16 +131,24 @@ async function runSimulation(config: {
   shouldStop = false
 
   const { timeStep, duration, progressInterval = 100 } = config
-  const numSteps = Math.floor(duration / timeStep)
+  const numSteps = simulationStepCount(duration, timeStep)
 
   // Initialize simulation
   wasmModule._wasm_init(timeStep)
+  let stepsRun = 0
+  let stoppedByAssert = false
 
   let lastProgressUpdate = Date.now()
   const progressUpdateMs = 50 // Send progress updates every 50ms
 
   for (let i = 0; i < numSteps && !shouldStop; i++) {
     wasmModule._wasm_step(timeStep)
+    stepsRun++
+    // An Assert set to stop on failure ends the run after the failing step
+    if (wasmStopRequested(wasmModule)) {
+      stoppedByAssert = true
+      break
+    }
 
     // Send progress updates periodically (but not every step)
     const now = Date.now()
@@ -169,7 +179,8 @@ async function runSimulation(config: {
       type: 'complete',
       payload: {
         finalTime: wasmModule._wasm_get_time(),
-        totalSteps: numSteps
+        totalSteps: stepsRun,
+        stoppedByAssert
       }
     })
   }
@@ -335,6 +346,15 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
         postResponse({
           type: 'results',
           payload: { sampleData: dataArray },
+          requestId
+        })
+        break
+      }
+
+      case 'getAssertResults': {
+        postResponse({
+          type: 'assertResults',
+          payload: { results: wasmModule ? readWasmAssertResults(wasmModule) : [] },
           requestId
         })
         break

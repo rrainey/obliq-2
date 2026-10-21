@@ -9,6 +9,13 @@ import { WireData } from '@/components/Wire'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
 import { getWasmPreference, createWorkerSimulation, isWorkerSimulationAvailable, type SimulationProgress } from '@/lib/simulation/SimulationEngineFactory'
 import { WasmSimulationEngine } from '@/lib/simulation/WasmSimulationEngine'
+import {
+  AssertResult,
+  findStoppingAssert,
+  formatSimTime,
+  simulationStepCount,
+  summarizeAsserts
+} from '@/lib/simulation/assertResults'
 import type { SimulationWorkerManager } from '@/lib/simulation/SimulationWorkerManager'
 import { convertWasmToUIFormat, WasmDataCollector } from '@/lib/simulation/WasmResultConverter'
 import {
@@ -67,6 +74,7 @@ import UnitsConversionConfig from '@/components/UnitsConversionConfig'
 import CommentConfig from '@/components/CommentConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
+import TestResultsButton from '@/components/TestResultsButton'
 import ExportPdfDialog from '@/components/ExportPdfDialog'
 import { tuneModelLayout, type TuneLayoutOptions } from '@/lib/layout/tuneModelLayout'
 import { buildExportPlan } from '@/lib/export/sheetTree'
@@ -1068,6 +1076,11 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       }
 
       let allResults: Map<string, any>
+      // Assert results, and the steps actually run (fewer when an Assert stops the run)
+      let assertResults: AssertResult[] = []
+      const numSteps = simulationStepCount(config.duration, config.timeStep)
+      let stepsRun = numSteps
+      useModelStore.getState().setTestResults(null)
 
       // WASM execution path - always recompile before running
 
@@ -1253,13 +1266,15 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
             // Retrieve results
             const sampleData = await worker.getResults()
+            assertResults = await worker.getAssertResults()
+            stepsRun = result.totalSteps
 
             // Convert to UI format
             allResults = convertWasmToUIFormat(
               sampleData,
               sheets,
               config.timeStep,
-              config.duration
+              stepsRun * config.timeStep
             )
 
             // Cleanup
@@ -1301,12 +1316,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                 compiledWasmToUse.metadata
               )
               await wasmEngine.initialize(config.timeStep)
-              const numSteps = Math.floor(config.duration / config.timeStep)
-              for (let i = 0; i < numSteps; i++) {
-                wasmEngine.step()
-              }
+              stepsRun = wasmEngine.runSteps(numSteps)
               const sampleData = wasmEngine.getSampleData()
-              allResults = convertWasmToUIFormat(sampleData, sheets, config.timeStep, config.duration)
+              assertResults = wasmEngine.getAssertResults()
+              allResults = convertWasmToUIFormat(sampleData, sheets, config.timeStep, stepsRun * config.timeStep)
               wasmEngine.cleanup()
               wasmEngine.destroy()
             } catch (mainThreadError) {
@@ -1331,20 +1344,18 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
             await wasmEngine.initialize(config.timeStep)
 
             // Run simulation (no data collection during steps)
-            const numSteps = Math.floor(config.duration / config.timeStep)
-            for (let i = 0; i < numSteps; i++) {
-              wasmEngine.step()
-            }
+            stepsRun = wasmEngine.runSteps(numSteps)
 
             // Retrieve all sample data at once from internal buffers
             const sampleData = wasmEngine.getSampleData()
+            assertResults = wasmEngine.getAssertResults()
 
             // Convert to UI format
             allResults = convertWasmToUIFormat(
               sampleData,
               sheets,
               config.timeStep,
-              config.duration
+              stepsRun * config.timeStep
             )
 
             // Cleanup allocated memory
@@ -1382,12 +1393,38 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         })
       }
 
-      notifications.show({
-        title: 'Simulation completed',
-        message: 'Simulation ran successfully across all sheets',
-        color: 'green',
-        icon: <IconCircleCheck size={20} />
-      })
+      const stoppedBy = findStoppingAssert(assertResults)
+      if (assertResults.length > 0) {
+        useModelStore.getState().setTestResults({ results: assertResults, stoppedBy, stepsRun })
+      }
+      const tests = summarizeAsserts(assertResults)
+      if (stoppedBy) {
+        notifications.show({
+          title: 'Simulation stopped by an Assert',
+          message: `Stopped at t = ${formatSimTime(stoppedBy.time)} s: Assert "${stoppedBy.name}" failed`,
+          color: 'red',
+          icon: <IconAlertCircle size={20} />,
+          autoClose: 8000
+        })
+      } else if (tests.failed > 0 || tests.notChecked > 0) {
+        notifications.show({
+          title: 'Simulation completed',
+          message: `Tests: ${tests.passed} passed, ${tests.failed} failed` +
+            (tests.notChecked > 0 ? `, ${tests.notChecked} not checked` : ''),
+          color: tests.failed > 0 ? 'red' : 'yellow',
+          icon: <IconAlertCircle size={20} />,
+          autoClose: 8000
+        })
+      } else {
+        notifications.show({
+          title: 'Simulation completed',
+          message: assertResults.length > 0
+            ? `All ${assertResults.length} tests passed`
+            : 'Simulation ran successfully across all sheets',
+          color: 'green',
+          icon: <IconCircleCheck size={20} />
+        })
+      }
 
     } catch (error) {
       console.error('Simulation error:', error)
@@ -2050,6 +2087,18 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                 {isCompiling ? 'Compiling...' : isSimulating ? 'Running...' : compactHeader ? 'Run' : 'Run Simulation'}
               </Button>
             )}
+
+            {/* Assert results of the last run (hidden when the model has no Asserts) */}
+            <TestResultsButton
+              iconOnly={compactHeader}
+              onNavigate={({ blockId, sheetId }) => {
+                if (sheetId && sheetId !== activeSheetId) {
+                  switchToSheet(sheetId)
+                }
+                setSelectedBlockId(blockId)
+                requestFocus({ blockId, sheetId })
+              }}
+            />
 
             <Menu position="bottom-end" withinPortal>
               <Menu.Target>

@@ -19,6 +19,7 @@
  */
 
 import type { SignalValue } from '@/lib/modelSchema'
+import type { AssertResult } from './assertResults'
 
 /**
  * Simulation progress information
@@ -56,13 +57,15 @@ export interface SimulationResult {
   totalSteps: number
   /** Whether simulation was stopped early */
   wasStopped: boolean
+  /** Whether an Assert set to stop on failure ended the run */
+  stoppedByAssert?: boolean
 }
 
 /**
  * Message types for worker communication
  */
-type WorkerMessageType = 'init' | 'run' | 'step' | 'stop' | 'getResults' | 'cleanup'
-type WorkerResponseType = 'ready' | 'initialized' | 'progress' | 'complete' | 'stepped' | 'results' | 'stopped' | 'cleaned' | 'error'
+type WorkerMessageType = 'init' | 'run' | 'step' | 'stop' | 'getResults' | 'getAssertResults' | 'cleanup'
+type WorkerResponseType = 'ready' | 'initialized' | 'progress' | 'complete' | 'stepped' | 'results' | 'assertResults' | 'stopped' | 'cleaned' | 'error'
 
 interface PendingRequest {
   resolve: (value: any) => void
@@ -166,6 +169,10 @@ export class SimulationWorkerManager {
         // Convert array back to Map
         const sampleData = new Map<string, SignalValue[]>(payload.sampleData)
         this.resolveRequest(requestId, sampleData)
+        break
+
+      case 'assertResults':
+        this.resolveRequest(requestId, payload.results)
         break
 
       case 'cleaned':
@@ -340,6 +347,17 @@ export class SimulationWorkerManager {
     }
 
     return this.sendMessage('getResults')
+  }
+
+  /**
+   * Get the Assert block results of the last run
+   */
+  async getAssertResults(): Promise<AssertResult[]> {
+    if (!this.isInitialized) {
+      throw new Error('Worker not initialized. Call initialize() first.')
+    }
+
+    return this.sendMessage('getAssertResults')
   }
 
   /**

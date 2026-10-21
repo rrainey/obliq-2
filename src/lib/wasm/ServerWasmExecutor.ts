@@ -13,6 +13,14 @@
 
 import { generateCacheKey } from './cache/cacheKey'
 import { getStorage, type ModelData, type ModelRecord } from '../server/storage'
+import {
+  AssertResult,
+  TestRunResults,
+  findStoppingAssert,
+  readWasmAssertResults,
+  simulationStepCount,
+  wasmStopRequested
+} from '@/lib/simulation/assertResults'
 
 /**
  * Result of a server-side simulation
@@ -43,6 +51,10 @@ export interface SimulationResult {
     average: number
     data?: number[]  // Full time series if requested
   }>
+
+  // Assert block results, and whether one stopped the run
+  asserts?: AssertResult[]
+  stoppedByAssert?: TestRunResults['stoppedBy']
 
   // Model info
   modelName?: string
@@ -212,7 +224,8 @@ export async function executeServerSimulation(
 
     // Run simulation
     const execStart = Date.now()
-    const numSteps = Math.ceil(duration / timeStep)
+    const numSteps = simulationStepCount(duration, timeStep)
+    let stepsRun = 0
 
     // Time series collection (if requested)
     const timeSeries: Record<string, number[]> = {}
@@ -225,6 +238,7 @@ export async function executeServerSimulation(
     // Execute simulation steps
     for (let step = 0; step < numSteps; step++) {
       module1._wasm_step(timeStep)
+      stepsRun++
 
       // Collect time series data
       if (includeTimeSeries && step % sampleRate === 0) {
@@ -232,7 +246,11 @@ export async function executeServerSimulation(
           timeSeries[name].push(module1._wasm_get_output(index))
         })
       }
+
+      // An Assert set to stop on failure ends the run after the failing step
+      if (wasmStopRequested(module1)) break
     }
+    const asserts = readWasmAssertResults(module1)
 
     const execTime = Date.now() - execStart
     const finalTime = module1._wasm_get_time()
@@ -293,8 +311,9 @@ export async function executeServerSimulation(
       totalTimeMs: Date.now() - startTime,
       cacheHit: compileResult.cacheHit,
       finalTime,
-      timeSteps: numSteps,
+      timeSteps: stepsRun,
       outputs,
+      ...(asserts.length > 0 ? { asserts, stoppedByAssert: findStoppingAssert(asserts) } : {}),
       signals: Object.keys(signals).length > 0 ? signals : undefined,
       modelName: model.name,
       blockCount: blocks.length,

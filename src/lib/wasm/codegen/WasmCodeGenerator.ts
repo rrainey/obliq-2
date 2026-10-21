@@ -44,7 +44,8 @@ export class WasmCodeGenerator extends CodeGenerator {
   private wasmOptions: Required<WasmCodeGenerationOptions>
 
   constructor(options: WasmCodeGenerationOptions = {}) {
-    super(options)
+    // Simulation builds check Assert blocks; exported C does not
+    super({ ...options, asserts: options.asserts ?? true })
     this.wasmOptions = {
       ...this.options,
       includeEmscriptenExports: options.includeEmscriptenExports ?? true,
@@ -611,6 +612,9 @@ static int ${sanitizedName}_wasm_needs_seed = 1;
     // Output port info functions (for enumerating and displaying output port values)
     wrapper += this.generateOutputPortInfoFunctions(sanitizedName, outputMap)
 
+    // Assert results and the stop request
+    wrapper += this.generateAssertWrapperFunctions(sanitizedName)
+
     // Cleanup function (always generate, but conditionally call C cleanup based on what was actually generated)
     wrapper += this.generateWasmCleanupFunction(sanitizedName, hasCleanupFunction)
 
@@ -800,6 +804,63 @@ ${keepalive}double wasm_get_output(int index) {
     code += `}\n\n`
 
     return code
+  }
+
+  /**
+   * Assert results for the simulation runner. Numbers come through one
+   * accessor (field 0 status, 1 checks, 2 failures, 3 first failure time,
+   * 4 first failure value, 5 first failure element, 6 worst violation,
+   * 7 stops on failure) and strings through another (0 name, 1 qualified
+   * name, 2 block id), to keep the export list short.
+   */
+  private generateAssertWrapperFunctions(modelName: string): string {
+    const keepalive = this.wasmOptions.includeEmscriptenExports ? 'EMSCRIPTEN_KEEPALIVE\n' : ''
+    if (!this.options.asserts) {
+      return `${keepalive}int wasm_get_assert_count(void) { return 0; }
+${keepalive}double wasm_get_assert_number(int index, int field) { (void)index; (void)field; return 0.0; }
+${keepalive}const char* wasm_get_assert_text(int index, int field) { (void)index; (void)field; return NULL; }
+${keepalive}int wasm_stop_requested(void) { return 0; }
+
+`
+    }
+    return `// Assert results (see ${modelName}_assert_result)
+${keepalive}int wasm_get_assert_count(void) {
+    return ${modelName}_assert_count();
+}
+
+${keepalive}double wasm_get_assert_number(int index, int field) {
+    obliq_assert_result_t r;
+    if (${modelName}_assert_result(&${modelName}_instance, index, &r) != 0) return 0.0;
+    switch (field) {
+        case 0: return (double)r.status;
+        case 1: return (double)r.checks;
+        case 2: return (double)r.failures;
+        case 3: return r.first_fail_time;
+        case 4: return r.first_fail_value;
+        case 5: return (double)r.first_fail_index;
+        case 6: return r.worst_violation;
+        case 7: return (double)r.stops_on_failure;
+        default: return 0.0;
+    }
+}
+
+${keepalive}const char* wasm_get_assert_text(int index, int field) {
+    obliq_assert_result_t r;
+    if (${modelName}_assert_result(&${modelName}_instance, index, &r) != 0) return NULL;
+    switch (field) {
+        case 0: return r.name;
+        case 1: return r.qualified_name;
+        case 2: return r.block_id;
+        default: return NULL;
+    }
+}
+
+// Non-zero once an Assert set to stop on failure has failed
+${keepalive}int wasm_stop_requested(void) {
+    return ${modelName}_stop_requested(&${modelName}_instance);
+}
+
+`
   }
 
   /**
