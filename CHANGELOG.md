@@ -1,6 +1,6 @@
 # obliq-2 Change Log
 
-## Unreleased
+## What's New in 3.3.0
 
 - **Assert block** (Display & Logging): a test check that records whether its input ever left bounds, differed from an expected value, or was false. See [docs/model-testing-plan.md](docs/model-testing-plan.md) for the testing features this starts.
   - It checks once per time step, inside an optional time window. Vectors and matrices are checked element by element.
