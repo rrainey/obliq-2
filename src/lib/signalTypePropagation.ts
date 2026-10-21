@@ -6,6 +6,8 @@ import { areTypesCompatible, getTypeCompatibilityError, parseType, ParsedType, t
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
 import { collectSheetsRecursive } from './sheetLabelUtils'
 import { collectAllBlocksFromSheets, isSubsystemReference, resolveSubsystemSheets } from './subsystemReference'
+import { isModelReference } from './modelReferences'
+import { expandedInnerBlocks, expandedReferenceSheets } from './referencedModels'
 
 /**
  * Every block of the model while a propagation runs, so a subsystem reference
@@ -13,12 +15,18 @@ import { collectAllBlocksFromSheets, isSubsystemReference, resolveSubsystemSheet
  */
 let modelBlocksForReferences: BlockData[] | null = null
 
-/** A subsystem's sheets; a reference uses its definition's. */
+/**
+ * A subsystem's sheets. A subsystem reference uses its definition's; a model
+ * reference the referenced model's, expanded as code generation does.
+ */
 function subsystemSheets(block: BlockData): any[] {
+  if (isModelReference(block)) return expandedReferenceSheets(block)
   const own = block.parameters?.sheets
   if (Array.isArray(own) && own.length > 0) return own
   if (isSubsystemReference(block) && modelBlocksForReferences) {
-    return resolveSubsystemSheets(block, modelBlocksForReferences)
+    const found = resolveSubsystemSheets(block, modelBlocksForReferences)
+    // A reference inside a model reference: its definition is in the expanded copy
+    return found.length > 0 ? found : resolveSubsystemSheets(block, expandedInnerBlocks() as BlockData[])
   }
   return Array.isArray(own) ? own : []
 }
@@ -1392,6 +1400,22 @@ function propagateSheetCached(
   return result
 }
 
+/**
+ * A multi-sheet subsystem (or a model reference to a multi-sheet model) is
+ * typed across all of its sheets, so an output port fed by a sheet label from
+ * another of its sheets resolves. Keyed on the sheets array, like
+ * propagateSheetCached.
+ */
+const multiSheetSubsystemCache = new WeakMap<any[], TypePropagationResult>()
+
+function propagateSubsystemSheetsCached(sheets: any[]): TypePropagationResult {
+  const hit = multiSheetSubsystemCache.get(sheets)
+  if (hit) return hit
+  const result = propagateAllSheets(sheets)
+  multiSheetSubsystemCache.set(sheets, result)
+  return result
+}
+
 function getSubsystemOutputType(
   subsystemBlock: BlockData,
   outputPortName: string,
@@ -1442,10 +1466,10 @@ function getSubsystemOutputType(
 
           if (!sourceType) {
             debugLog(`    Running recursive propagation on subsystem sheet...`)
-            const subsystemResult = propagateSheetCached(
-              sheet.blocks,
-              sheet.connections
-            )
+            const subsystemResult =
+              sheets.length > 1
+                ? propagateSubsystemSheetsCached(sheets)
+                : propagateSheetCached(sheet.blocks, sheet.connections)
             for (const [key, type] of subsystemResult.blockOutputTypes) {
               blockOutputTypes.set(`${subsystemBlock.id}:${key}`, type)
             }

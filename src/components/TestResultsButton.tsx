@@ -60,7 +60,10 @@ export default function TestResultsButton({ iconOnly, onNavigate }: TestResultsB
 
   const go = (blockId: string) => {
     setOpen(false)
-    onNavigate({ blockId, sheetId: findSheetOfBlock(useModelStore.getState().sheets, blockId) })
+    const sheets = useModelStore.getState().sheets
+    // An Assert inside a referenced model ("<reference id>~<id>"): show the reference
+    const target = findSheetOfBlock(sheets, blockId) ? blockId : blockId.split('~')[0]!
+    onNavigate({ blockId: target, sheetId: findSheetOfBlock(sheets, target) })
   }
 
   return (

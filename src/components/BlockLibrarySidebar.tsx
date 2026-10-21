@@ -308,6 +308,14 @@ const blockTypes: BlockType[] = [
     vectorSupport: 'full'
   },
   {
+    id: 'model_reference',
+    name: 'Model Reference',
+    category: 'Hierarchy',
+    description: 'Embed another saved model',
+    icon: '🔗',
+    vectorSupport: 'full'
+  },
+  {
     id: 'sheet_label_sink',
     name: 'Sheet Label Sink',
     category: 'Sheet Labels',

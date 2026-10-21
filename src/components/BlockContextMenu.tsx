@@ -6,6 +6,8 @@ import { useEffect, useRef } from 'react'
 import { BlockData } from './BlockNode'
 import { Sheet } from '@/lib/modelStore'
 import { isResizable } from '@/lib/blocks/resizableBlocks'
+import { modelRefOf } from '@/lib/modelReferences'
+import { modelEditorUrl } from './ModelReferenceConfig'
 
 interface BlockContextMenuProps {
   nodeId: string
@@ -86,6 +88,19 @@ export default function BlockContextMenu({
       >
         Properties...
       </button>
+
+      {/* A model reference opens its model in a new tab */}
+      {modelRefOf(block) && (
+        <button
+          className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+          onClick={() => {
+            const ref = modelRefOf(block)!
+            window.open(modelEditorUrl(ref.modelId, ref.version), '_blank', 'noopener')
+          }}
+        >
+          Open Model ↗
+        </button>
+      )}
 
       {/* Rename menu item */}
       {onRenameClick && (

@@ -32,6 +32,13 @@ import {
 } from '@/lib/subsystemReference'
 import { generateBlockId } from '@/lib/blockFactory'
 import type { TestRunResults } from '@/lib/simulation/assertResults'
+import { isModelReference, modelInterface, modelRefOf, remapReferencePorts } from '@/lib/modelReferences'
+import {
+  ReferencedModelEntry,
+  collectModelRefs,
+  modelRefKey,
+  publishReferencedModels
+} from '@/lib/referencedModels'
 import { DEFAULT_GLOBAL_SETTINGS, normalizeGlobalSettings, type SimulationGlobalSettings } from '@/lib/globalSettings'
 
 export interface Sheet {
@@ -92,6 +99,8 @@ export interface ModelState {
    * behaviour changes (moving blocks does not count).
    */
   testResults: (TestRunResults & { behaviourHash: string; stale: boolean }) | null
+  /** Models that model references point at, by modelRefKey (not saved) */
+  referencedModels: Record<string, ReferencedModelEntry>
   currentSheetSimulationResults: SimulationResults | null 
   simulationResults: SimulationResults | null
   isSimulating: boolean
@@ -201,6 +210,17 @@ export interface ModelActions {
   setOutputPortValues: (values: Map<string, SignalValue > | null | undefined) => void
   setGlobalSimulationResults: (results: Map<string, SimulationResults>) => void
   setTestResults: (results: TestRunResults | null) => void
+  /**
+   * Load the models this model references (and those they reference), then
+   * update reference blocks whose model's ports changed. `refresh` reloads
+   * the given model ids even if already loaded.
+   */
+  loadReferencedModels: (refresh?: string[]) => Promise<void>
+  /**
+   * Update model reference blocks to their models' current ports. Wires to
+   * removed ports are dropped only for the block id given.
+   */
+  applyReferencedInterfaces: (dropMissingWiresFor?: string) => { removedWires: number }
   /** Marks the test results stale if the model's behaviour changed since the run */
   checkTestResultsStale: () => void
   clearGlobalSimulationResults: () => void
@@ -230,7 +250,7 @@ function syncSubsystemPortsFromSheets(subsystemBlock: BlockData): void {
     return
   }
   // A reference has no sheets of its own; its ports come from its definition
-  if (isSubsystemReference(subsystemBlock)) {
+  if (isSubsystemReference(subsystemBlock) || isModelReference(subsystemBlock)) {
     return
   }
 
@@ -333,6 +353,7 @@ export const useModelStore = create<ModelStore>()(
     hasAutosavedEdits: false,
     globalSimulationResults: null,
     testResults: null,
+    referencedModels: {},
     currentSheetSimulationResults: null,
     isDirty: false,
     lastSavedHash: null,
@@ -1500,6 +1521,108 @@ export const useModelStore = create<ModelStore>()(
       })
     },
 
+    loadReferencedModels: async (refresh = []) => {
+      const entries: Record<string, ReferencedModelEntry> = { ...get().referencedModels }
+      for (const key of Object.keys(entries)) {
+        if (refresh.includes(entries[key]!.modelId)) delete entries[key]
+      }
+      const queue = collectModelRefs(get().sheets)
+      const seen = new Set<string>()
+      while (queue.length > 0) {
+        const ref = queue.shift()!
+        const key = modelRefKey(ref)
+        if (seen.has(key)) continue
+        seen.add(key)
+        let entry = entries[key]
+        if (!entry) {
+          entry = await fetchReferencedModel(ref)
+          entries[key] = entry
+        }
+        if (entry.status === 'ok' && entry.data) queue.push(...collectModelRefs(entry.data.sheets))
+      }
+      set({ referencedModels: entries })
+      publishReferencedModels(entries)
+
+      get().applyReferencedInterfaces()
+    },
+
+    applyReferencedInterfaces: (dropMissingWiresFor) => {
+      // Reference blocks follow their model's ports (wires re-indexed by name).
+      // A block whose wires use a port the model no longer has is left as it
+      // is (validation and the build report it), unless it is named in
+      // `dropMissingWiresFor`: then those wires are removed.
+      const entries = get().referencedModels
+      get().saveCurrentSheetData()
+      const { sheets, activeSheetId } = get()
+      let activeSheet: Sheet | null = null
+      let removedWires = 0
+      const update = (list: Sheet[]): Sheet[] => {
+        let listChanged = false
+        const next = list.map(sheet => {
+          let connections = sheet.connections
+          let sheetChanged = false
+          const blocks = sheet.blocks.map(block => {
+            let nb = block
+            const ref = modelRefOf(block)
+            const entry = ref ? entries[modelRefKey(ref)] : undefined
+            if (ref && entry?.status === 'ok' && entry.data) {
+              const iface = modelInterface(entry.data)
+              const p = block.parameters || {}
+              const samePorts =
+                JSON.stringify(iface.inputs) === JSON.stringify(p.inputPorts || []) &&
+                JSON.stringify(iface.outputs) === JSON.stringify(p.outputPorts || [])
+              if (!samePorts) {
+                let r = remapReferencePorts(connections, block, iface)
+                if (r.missing.length > 0 && dropMissingWiresFor === block.id) {
+                  // Drop the wires to ports that are gone, then re-index the rest
+                  const gone = new Set(r.missing.map(m => `${m.kind}:${m.port}`))
+                  const cachedIn: string[] = p.inputPorts || []
+                  const cachedOut: string[] = p.outputPorts || []
+                  const kept = connections.filter(c => {
+                    const drop =
+                      (c.targetBlockId === block.id && gone.has(`input:${cachedIn[c.targetPortIndex] ?? `#${c.targetPortIndex + 1}`}`)) ||
+                      (c.sourceBlockId === block.id && gone.has(`output:${cachedOut[c.sourcePortIndex] ?? `#${c.sourcePortIndex + 1}`}`))
+                    if (drop) removedWires++
+                    return !drop
+                  })
+                  r = remapReferencePorts(kept, block, iface)
+                }
+                if (r.missing.length === 0) {
+                  connections = r.connections
+                  nb = { ...block, parameters: { ...p, inputPorts: iface.inputs, outputPorts: iface.outputs, modelRefName: entry.name } }
+                }
+              } else if (p.modelRefName !== entry.name) {
+                nb = { ...block, parameters: { ...p, modelRefName: entry.name } }
+              }
+            }
+            const inner = nb.parameters?.sheets
+            if (Array.isArray(inner) && inner.length > 0) {
+              const updated = update(inner as Sheet[])
+              if (updated !== inner) nb = { ...nb, parameters: { ...nb.parameters, sheets: updated } }
+            }
+            if (nb !== block) sheetChanged = true
+            return nb
+          })
+          if (!sheetChanged && connections === sheet.connections) return sheet
+          const s = { ...sheet, blocks, connections }
+          if (s.id === activeSheetId) activeSheet = s
+          listChanged = true
+          return s
+        })
+        return listChanged ? next : list
+      }
+      const updatedSheets = update(sheets)
+      if (updatedSheets !== sheets) {
+        const active = activeSheet as Sheet | null
+        set({
+          sheets: updatedSheets,
+          isDirty: true,
+          ...(active ? { blocks: active.blocks, wires: active.connections } : {})
+        })
+      }
+      return { removedWires }
+    },
+
     checkTestResultsStale: () => {
       const s = get()
       if (!s.testResults || s.testResults.stale) return
@@ -1691,6 +1814,7 @@ export const useModelStore = create<ModelStore>()(
           activeSheetId: firstSheetId,
           parameters,  // Feature 1: Load parameters
           testResults: null,
+          referencedModels: {},
           globalSettings: normalizeGlobalSettings(versionData.data.globalSettings),
           blocks: firstSheet?.blocks || [],
           wires: firstSheet?.connections || [],
@@ -2033,6 +2157,35 @@ export const useHasUnsavedChanges = () => useModelStore((state: ModelStore) => {
   
   return hasBlockChanges || hasWireChanges
 })
+
+/** Fetch one referenced model (its current file, or a saved version). */
+async function fetchReferencedModel(ref: { modelId: string; version: number | null }): Promise<ReferencedModelEntry> {
+  const key = modelRefKey(ref)
+  try {
+    const current = await modelApi.getCurrent(ref.modelId)
+    const base = {
+      key,
+      modelId: ref.modelId,
+      version: ref.version,
+      name: current.model.name,
+      latestVersion: current.model.latest_version
+    }
+    if (ref.version === null) {
+      return { ...base, status: 'ok', data: current.data, hash: current.hash }
+    }
+    const v = await modelApi.getVersion(ref.modelId, ref.version)
+    return { ...base, status: 'ok', data: v.data, hash: `v${ref.version}` }
+  } catch (e) {
+    const notFound = e instanceof ModelApiError && e.isNotFound
+    return {
+      key,
+      modelId: ref.modelId,
+      version: ref.version,
+      status: notFound ? 'missing' : 'error',
+      error: e instanceof Error ? e.message : String(e)
+    }
+  }
+}
 
 // Test results go stale when the model's behaviour changes. Checked after
 // edits settle, so dragging a block does not hash the model on every frame.

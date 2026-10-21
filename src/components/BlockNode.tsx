@@ -6,11 +6,13 @@ import { memo, CSSProperties, useCallback, useEffect, useRef, useState } from 'r
 import { Handle, Position, NodeProps, useStore } from 'reactflow'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
-import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, IconCube, IconClockCog, IconActivity, IconChecklist, IconX } from '@tabler/icons-react'
+import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, IconCube, IconClockCog, IconActivity, IconChecklist, IconPackageImport, IconX } from '@tabler/icons-react'
 import { useComputedColorScheme } from '@mantine/core'
 import CommentNode from './CommentNode'
 import { useModelStore } from '@/lib/modelStore'
 import AssertStatusBadge from './AssertStatusBadge'
+import ModelReferenceBadge from './ModelReferenceBadge'
+import { isModelReference } from '@/lib/modelReferences'
 import { isResizable, RESIZE_MIN_WIDTH, RESIZE_SNAP } from '@/lib/blocks/resizableBlocks'
 import * as BlockGeometry from '@/lib/layout/blockGeometry'
 
@@ -222,6 +224,11 @@ const getBlockSymbol = (data: BlockNodeData) => {
   // Assert: a checklist
   if (data.type === 'assert') {
     return <IconChecklist size={24} stroke={1.5} />
+  }
+
+  // Model reference: another saved model, embedded
+  if (isModelReference(data)) {
+    return <IconPackageImport size={24} stroke={1.5} />
   }
 
   // Handle subsystem with Tabler icon
@@ -1215,6 +1222,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
 
         {/* Assert pass/fail mark from the last run */}
         {data.type === 'assert' && <AssertStatusBadge blockId={data.id} />}
+        {/* Model reference: version / missing badge */}
+        {isModelReference(data) && <ModelReferenceBadge data={data} />}
 
         {/* Sum block input signs */}
         {data.type === 'sum' && sumSigns && sumSigns.map((sign: any, index: number) => (

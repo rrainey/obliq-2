@@ -75,6 +75,10 @@ import CommentConfig from '@/components/CommentConfig'
 
 import ModelValidationButton from '@/components/ModelValidationButton'
 import TestResultsButton from '@/components/TestResultsButton'
+import ModelReferenceConfig from '@/components/ModelReferenceConfig'
+import { isModelReference } from '@/lib/modelReferences'
+import { collectModelRefs, modelRefKey } from '@/lib/referencedModels'
+import { useReferencedModelUpdates } from '@/hooks/useReferencedModelUpdates'
 import ExportPdfDialog from '@/components/ExportPdfDialog'
 import { tuneModelLayout, type TuneLayoutOptions } from '@/lib/layout/tuneModelLayout'
 import { buildExportPlan } from '@/lib/export/sheetTree'
@@ -234,6 +238,18 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
   // Enable auto-save only for latest version and when model is fully loaded
   useAutoSave(!isOlderVersion && !modelLoading && !!model)
+
+  // Load the models this model references whenever the set of references
+  // changes (on load, reload, or when a reference is added or retargeted),
+  // and reload them when they change in another tab.
+  const modelRefSignature = useModelStore(state =>
+    collectModelRefs(state.sheets).map(modelRefKey).sort().join(',')
+  )
+  useEffect(() => {
+    if (!model || modelLoading || !modelRefSignature) return
+    useModelStore.getState().loadReferencedModels()
+  }, [model?.id, modelLoading, modelRefSignature])
+  useReferencedModelUpdates(!!model && !modelLoading && !!modelRefSignature)
 
   // Watch the model file on disk. Edits from scripts, the Model Builder API/MCP,
   // or another tab change its hash; compare with the hash this editor loaded.
@@ -658,16 +674,48 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleCanvasDrop = (x: number, y: number, blockType: string) => {
+    // A model reference is a subsystem whose contents are another saved model
+    const isModelRef = blockType === 'model_reference'
     // Use the unified block factory for consistent block creation
     // This handles all default parameters and special cases like subsystem sheet creation
-    const newBlock = createBlock(blockType, {
+    let newBlock = createBlock(isModelRef ? 'subsystem' : blockType, {
       position: { x, y },
       existingBlockCount: blocks.length + 1
     }) as BlockData
+    if (isModelRef) {
+      const taken = new Set(blocks.map(b => b.name))
+      let n = 1
+      while (taken.has(`ModelRef${n}`)) n++
+      newBlock = {
+        ...newBlock,
+        name: `ModelRef${n}`,
+        parameters: { ...newBlock.parameters, sheets: [], inputPorts: [], outputPorts: [], modelRef: { modelId: '', version: null } }
+      }
+    }
 
     addBlock(newBlock)
     updateCurrentSheet({ blocks: [...blocks, newBlock] })
-    console.log('Block added:', newBlock)
+    // Choose the model straight away
+    if (isModelRef) setConfigBlock(newBlock)
+  }
+
+  const handleModelReferenceUpdate = async (parameters: Record<string, any>, opts: { dropMissingWires: boolean }) => {
+    if (!configBlock) return
+    const blockId = configBlock.id
+    updateBlock(blockId, { parameters })
+    saveCurrentSheetData()
+    setIsDirty(true)
+    // Load the (new) model, then take its ports; wires follow by port name
+    const store = useModelStore.getState()
+    await store.loadReferencedModels()
+    const { removedWires } = store.applyReferencedInterfaces(opts.dropMissingWires ? blockId : undefined)
+    if (removedWires > 0) {
+      notifications.show({
+        title: 'Wires removed',
+        message: `${removedWires} wire${removedWires === 1 ? '' : 's'} used ports the referenced model no longer has.`,
+        color: 'orange',
+      })
+    }
   }
 
   const handleBlockMove = (blockId: string, position: { x: number; y: number }) => {
@@ -2646,7 +2694,19 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               onClose={() => setConfigBlock(null)}
             />
           )}
-          {configBlock.type === 'subsystem' && (
+          {configBlock.type === 'subsystem' && isModelReference(configBlock) && (
+            <ModelReferenceConfig
+              block={configBlock}
+              currentModelId={model?.id}
+              connectedPorts={{
+                inputs: wires.filter(w => w.targetBlockId === configBlock.id).map(w => w.targetPortIndex),
+                outputs: wires.filter(w => w.sourceBlockId === configBlock.id).map(w => w.sourcePortIndex),
+              }}
+              onUpdate={handleModelReferenceUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'subsystem' && !isModelReference(configBlock) && (
             <SubsystemConfig
               block={configBlock}
               availableSheets={sheets.filter(s => s.id !== activeSheetId)}

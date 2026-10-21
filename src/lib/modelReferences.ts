@@ -63,13 +63,15 @@ export interface ModelInterface {
   outputs: string[]
 }
 
-/** Whether a block is a model reference. */
+/** Whether a block is a model reference (possibly with no model chosen yet). */
 export function isModelReference(block: any): boolean {
-  return block?.type === 'subsystem' && typeof block?.parameters?.modelRef?.modelId === 'string'
+  const ref = block?.parameters?.modelRef
+  return block?.type === 'subsystem' && !!ref && typeof ref === 'object'
 }
 
+/** The model a reference points at; null when none is chosen. */
 export function modelRefOf(block: any): ModelRef | null {
-  if (!isModelReference(block)) return null
+  if (!isModelReference(block) || !block.parameters.modelRef.modelId) return null
   const v = block.parameters.modelRef.version
   return { modelId: block.parameters.modelRef.modelId, version: typeof v === 'number' && v > 0 ? v : null }
 }
@@ -160,9 +162,10 @@ export function expandModelReferences<T extends ModelDataLike>(
       let connections = sheet.connections || []
       const blocks = (sheet.blocks || []).map((block: any) => {
         if (isModelReference(block)) {
-          const ref = modelRefOf(block)!
-          const key = refKey(ref)
           const where = `Model reference "${block.name}"`
+          const ref = modelRefOf(block)
+          if (!ref) throw new ModelReferenceError(`${where} has no model selected`)
+          const key = refKey(ref)
           const loopAt = chain.findIndex(c => c.key === key)
           if (loopAt >= 0) {
             const names = [...chain.slice(loopAt).map(c => c.name), chain[loopAt]!.name]
@@ -226,32 +229,49 @@ function sameParameter(a: any, b: any): boolean {
 
 /**
  * Re-index the wires on a reference block from its cached port lists to the
- * referenced model's current interface, by port name.
+ * referenced model's current interface, by port name. Returns the new
+ * connections and the names (or #n) of ports the wires use that no longer
+ * exist; those wires are left unchanged.
  */
-function remapPorts(connections: any[], block: any, iface: ModelInterface, where: string, model: string): any[] {
+export function remapReferencePorts(
+  connections: any[],
+  block: any,
+  iface: ModelInterface
+): { connections: any[]; missing: Array<{ kind: 'input' | 'output'; port: string }> } {
   const cachedIn: string[] = block.parameters?.inputPorts || []
   const cachedOut: string[] = block.parameters?.outputPorts || []
-  const map = (index: number, cached: string[], current: string[], kind: 'input' | 'output') => {
+  const missing: Array<{ kind: 'input' | 'output'; port: string }> = []
+  const map = (index: number, cached: string[], current: string[], kind: 'input' | 'output'): number => {
     // Without a cached list (a new block), indices already follow the interface
     const name = cached.length > 0 ? cached[index] : current[index]
     const at = name === undefined ? -1 : current.indexOf(name)
     if (at < 0) {
-      throw new ModelReferenceError(
-        `${where}: a wire uses ${kind} port ${name === undefined ? `#${index + 1}` : `"${name}"`}, which model "${model}" no longer has`
-      )
+      missing.push({ kind, port: name === undefined ? `#${index + 1}` : name })
+      return index
     }
     return at
   }
-  return connections.map(c => {
-    let next = c
+  const next = connections.map(c => {
+    let n = c
     if (c.targetBlockId === block.id && c.targetPortIndex >= 0) {
-      next = { ...next, targetPortIndex: map(c.targetPortIndex, cachedIn, iface.inputs, 'input') }
+      n = { ...n, targetPortIndex: map(c.targetPortIndex, cachedIn, iface.inputs, 'input') }
     }
     if (c.sourceBlockId === block.id && c.sourcePortIndex >= 0) {
-      next = { ...next, sourcePortIndex: map(c.sourcePortIndex, cachedOut, iface.outputs, 'output') }
+      n = { ...n, sourcePortIndex: map(c.sourcePortIndex, cachedOut, iface.outputs, 'output') }
     }
-    return next
+    return n
   })
+  return { connections: next, missing }
+}
+
+function remapPorts(connections: any[], block: any, iface: ModelInterface, where: string, model: string): any[] {
+  const r = remapReferencePorts(connections, block, iface)
+  if (r.missing.length > 0) {
+    const m = r.missing[0]!
+    const port = m.port.startsWith('#') ? m.port : `"${m.port}"`
+    throw new ModelReferenceError(`${where}: a wire uses ${m.kind} port ${port}, which model "${model}" no longer has`)
+  }
+  return r.connections
 }
 
 /** Prefix ids (blocks, sheets, connections, subsystem references) and sheet label names. */
