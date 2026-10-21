@@ -16,7 +16,7 @@ import {
 } from '@/lib/modelReferences'
 import { CodeGenerator } from '@/lib/codegen/CodeGenerator'
 import { openStorage } from '@/lib/server/storage'
-import { storageModelLoader } from '@/lib/server/modelReferenceLoader'
+import { findModelDependents, storageModelLoader } from '@/lib/server/modelReferenceLoader'
 import { resolveTestTargets } from '@/lib/testing/resolveTestTargets'
 import { runModelTests } from '@/lib/testing/modelTestRunner'
 import { cleanupNativeDir, compileAndRunNative } from './support/nativeCgen'
@@ -168,6 +168,33 @@ describe('store-backed references', () => {
       expect(v1.data.parameters![0].value).toBe(2)
       expect(latest.hash).not.toBe(v1.hash)
       expect(() => load({ modelId: plantId, version: 9 })).toThrow(/model "Plant" has no version 9/)
+    } finally {
+      storage.db.close()
+    }
+  })
+
+  test('a reference whose id is unknown falls back to the one model with its recorded name', () => {
+    const storage = openStorage(home, { referenceModelsDir: null })
+    try {
+      const load = storageModelLoader(storage)
+      expect(load({ modelId: 'imported-elsewhere', version: null, name: 'Plant' }).id).toBe(plantId)
+      expect(() => load({ modelId: 'imported-elsewhere', version: null, name: 'Nope' })).toThrow(
+        /the referenced model "Nope" \(imported-elsewhere\) does not exist/
+      )
+      // Ambiguous names do not resolve
+      const twin = storage.models.create({ name: 'Plant', data: plantModel(9) as any }).id
+      expect(() => load({ modelId: 'imported-elsewhere', version: null, name: 'Plant' })).toThrow(/does not exist/)
+      storage.models.delete(twin)
+    } finally {
+      storage.db.close()
+    }
+  })
+
+  test('dependents: models whose current file references a model', () => {
+    const storage = openStorage(home, { referenceModelsDir: null })
+    try {
+      expect(findModelDependents(storage, plantId)).toEqual([{ id: harnessId, name: 'Harness', versions: [null] }])
+      expect(findModelDependents(storage, harnessId)).toEqual([])
     } finally {
       storage.db.close()
     }

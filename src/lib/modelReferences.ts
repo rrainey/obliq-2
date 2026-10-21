@@ -28,6 +28,12 @@ export interface ModelRef {
   modelId: string
   /** null: the model's current saved file */
   version: number | null
+  /**
+   * The model's name when the reference was made. When no model has the id
+   * (the referenced model was imported or seeded, so it got a new id), the
+   * one model with exactly this name is used instead.
+   */
+  name?: string
 }
 
 export interface ReferencedModel {
@@ -72,8 +78,13 @@ export function isModelReference(block: any): boolean {
 /** The model a reference points at; null when none is chosen. */
 export function modelRefOf(block: any): ModelRef | null {
   if (!isModelReference(block) || !block.parameters.modelRef.modelId) return null
-  const v = block.parameters.modelRef.version
-  return { modelId: block.parameters.modelRef.modelId, version: typeof v === 'number' && v > 0 ? v : null }
+  const r = block.parameters.modelRef
+  const v = r.version
+  return {
+    modelId: r.modelId,
+    version: typeof v === 'number' && v > 0 ? v : null,
+    ...(typeof r.name === 'string' && r.name ? { name: r.name } : {}),
+  }
 }
 
 const portName = (b: any): string => String(b.parameters?.portName || b.name)

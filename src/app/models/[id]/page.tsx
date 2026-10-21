@@ -1024,6 +1024,20 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
+
+    // The export does not carry the models this one references
+    const refs = collectModelRefs(sheets)
+    if (refs.length > 0) {
+      const loaded = useModelStore.getState().referencedModels
+      const names = [...new Set(refs.map(r => loaded[modelRefKey(r)]?.name || r.modelId))]
+      notifications.show({
+        title: 'Export the referenced models too',
+        message: `This model references ${names.map(n => `"${n}"`).join(', ')}. ` +
+          'Export and import those as well; after importing, choose them again in each Model Reference block.',
+        color: 'yellow',
+        autoClose: 10000
+      })
+    }
   }
 
   const handleRunSimulation = async () => {

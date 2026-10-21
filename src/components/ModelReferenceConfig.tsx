@@ -87,7 +87,7 @@ export default function ModelReferenceConfig({ block, currentModelId, connectedP
     onUpdate(
       {
         ...p,
-        modelRef: { modelId, version: effectiveVersion },
+        modelRef: { modelId, version: effectiveVersion, name: selected.name },
         modelRefName: selected.name,
         sheets: [],
         codeGenStrategy: undefined,

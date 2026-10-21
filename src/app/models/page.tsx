@@ -32,6 +32,7 @@ import {
   Box,
   Badge,
   Tooltip,
+  Alert,
   useMantineColorScheme,
   useComputedColorScheme
 } from '@mantine/core'
@@ -65,6 +66,8 @@ export default function ModelsPage() {
   const [newModelName, setNewModelName] = useState('')
   const [showRenameDialog, setShowRenameDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  // Models that reference the one being deleted (null while checking)
+  const [deleteDependents, setDeleteDependents] = useState<Array<{ id: string; name: string }> | null>(null)
   const [showDuplicateDialog, setShowDuplicateDialog] = useState(false)
   const [selectedModel, setSelectedModel] = useState<Model | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -179,7 +182,9 @@ export default function ModelsPage() {
 
   const openDeleteDialog = (model: Model) => {
     setSelectedModel(model)
+    setDeleteDependents(null)
     setShowDeleteDialog(true)
+    modelApi.dependents(model.id).then(setDeleteDependents).catch(() => setDeleteDependents([]))
   }
 
   const openDuplicateDialog = (model: Model) => {
@@ -692,6 +697,14 @@ export default function ModelsPage() {
               The linked file <code>{selectedModel.file_path}</code> is not deleted; only its Obliq
               version history and autosave are removed.
             </Text>
+          )}
+          {deleteDependents && deleteDependents.length > 0 && (
+            <Alert color="orange" variant="light" title="Other models use this model">
+              {deleteDependents.map(d => d.name).join(', ')}{' '}
+              {deleteDependents.length === 1 ? 'embeds' : 'embed'} it through a model reference. After deleting,{' '}
+              {deleteDependents.length === 1 ? 'that reference shows' : 'those references show'} “missing” and{' '}
+              {deleteDependents.length === 1 ? 'that model' : 'those models'} will not build until you choose another model.
+            </Alert>
           )}
           <Group justify="flex-end">
             <Button

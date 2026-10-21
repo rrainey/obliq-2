@@ -117,4 +117,11 @@ export const modelApi = {
 
   /** URL of the Server-Sent Events stream of file status changes (use with EventSource). */
   eventsUrl: (id: string) => `${base(id)}/events`,
+
+  /** Models whose current file references this one (model references) */
+  dependents: (id: string) =>
+    request<{ dependents: Array<{ id: string; name: string; versions: Array<number | null> }> }>(
+      'GET',
+      `${base(id)}/dependents`
+    ).then(r => r.dependents),
 }

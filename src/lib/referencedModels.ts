@@ -29,6 +29,8 @@ export interface ReferencedModelEntry {
   /** The model's latest saved version (for "newer version available") */
   latestVersion?: number
   error?: string
+  /** No model had the reference's id; this one, with the recorded name, was used */
+  reboundTo?: string
 }
 
 export const modelRefKey = (r: ModelRef) => `${r.modelId}@${r.version ?? 'latest'}`

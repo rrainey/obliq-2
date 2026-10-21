@@ -1567,7 +1567,12 @@ export const useModelStore = create<ModelStore>()(
             const entry = ref ? entries[modelRefKey(ref)] : undefined
             if (ref && entry?.status === 'ok' && entry.data) {
               const iface = modelInterface(entry.data)
-              const p = block.parameters || {}
+              let p = block.parameters || {}
+              // Found by name after its id changed (import, seeding): keep the new id
+              if (entry.reboundTo && p.modelRef?.modelId !== entry.reboundTo) {
+                p = { ...p, modelRef: { ...p.modelRef, modelId: entry.reboundTo, name: entry.name } }
+                nb = { ...block, parameters: p }
+              }
               const samePorts =
                 JSON.stringify(iface.inputs) === JSON.stringify(p.inputPorts || []) &&
                 JSON.stringify(iface.outputs) === JSON.stringify(p.outputPorts || [])
@@ -1593,6 +1598,10 @@ export const useModelStore = create<ModelStore>()(
                 }
               } else if (p.modelRefName !== entry.name) {
                 nb = { ...block, parameters: { ...p, modelRefName: entry.name } }
+              }
+              // Keep the recorded name current, for the name fallback
+              if (nb.parameters?.modelRef && nb.parameters.modelRef.name !== entry.name) {
+                nb = { ...nb, parameters: { ...nb.parameters, modelRef: { ...nb.parameters.modelRef, name: entry.name } } }
               }
             }
             const inner = nb.parameters?.sheets
@@ -2159,21 +2168,34 @@ export const useHasUnsavedChanges = () => useModelStore((state: ModelStore) => {
 })
 
 /** Fetch one referenced model (its current file, or a saved version). */
-async function fetchReferencedModel(ref: { modelId: string; version: number | null }): Promise<ReferencedModelEntry> {
+async function fetchReferencedModel(ref: { modelId: string; version: number | null; name?: string }): Promise<ReferencedModelEntry> {
   const key = modelRefKey(ref)
   try {
-    const current = await modelApi.getCurrent(ref.modelId)
+    let id = ref.modelId
+    let reboundTo: string | undefined
+    let current
+    try {
+      current = await modelApi.getCurrent(id)
+    } catch (e) {
+      // Imported or seeded models get new ids: use the one model with the recorded name
+      if (!(e instanceof ModelApiError && e.isNotFound) || !ref.name) throw e
+      const byName = (await modelApi.list()).filter(m => m.name === ref.name)
+      if (byName.length !== 1) throw e
+      id = reboundTo = byName[0]!.id
+      current = await modelApi.getCurrent(id)
+    }
     const base = {
       key,
       modelId: ref.modelId,
       version: ref.version,
       name: current.model.name,
-      latestVersion: current.model.latest_version
+      latestVersion: current.model.latest_version,
+      ...(reboundTo ? { reboundTo } : {})
     }
     if (ref.version === null) {
       return { ...base, status: 'ok', data: current.data, hash: current.hash }
     }
-    const v = await modelApi.getVersion(ref.modelId, ref.version)
+    const v = await modelApi.getVersion(id, ref.version)
     return { ...base, status: 'ok', data: v.data, hash: `v${ref.version}` }
   } catch (e) {
     const notFound = e instanceof ModelApiError && e.isNotFound
