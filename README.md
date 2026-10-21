@@ -164,6 +164,7 @@ independent adjustments, each of which can be left alone:
 
   It exits 0 when every Assert passed, 1 when one failed (or a named model has none), and 2 when a model could not be found, built or run. It needs a C compiler (`$CC`, else `cc`). Add `--json` for machine-readable results.
 - Exported C keeps Assert checks behind `OBLIQ_ASSERTS`, off by default.
+- **Model references** keep tests apart from the model they test. A **Model Reference** block (Hierarchy) embeds another saved model: its ports are that model's top-level Input and Output Ports. Several test models can embed the same model, each with its own inputs, run settings and Asserts. A reference follows the model's latest save or is pinned to a saved version; edit the referenced model in its own tab (**Open Model**) and the test models pick up the change. The FPV reference models show the pattern.
 
 ### Code Generation
 - **PlatformIO-compatible C code** generation
@@ -187,7 +188,11 @@ independent adjustments, each of which can be left alone:
 
 ### Reference Models
 - [`reference-models/`](reference-models/) holds example models that are imported once into a new installation's store; existing installations can add them with **My Models → Import Model**
-- **FPV Quadcopter**: a 5-inch quad at Tri-County Aerodrome (48TX), Texas, with motors, battery, ground contact, IMU/magnetometer/barometer models and a Betaflight-style flight controller (acro and angle modes, Mahony estimator). It is built by `scripts/build-fpv-reference-model.ts`; design and sources are in [docs/fpv-reference-model-plan.md](docs/fpv-reference-model-plan.md)
+- **FPV quadcopter**, as a model and the test models that embed it:
+  - **FPV Vehicle**: a 5-inch quad at Tri-County Aerodrome (48TX), Texas, with motors, battery, ground contact, IMU/magnetometer/barometer models and a Betaflight-style flight controller (acro and angle modes, Mahony estimator). The pilot's sticks are its input; telemetry is its outputs.
+  - **FPV Demo Flight** and **FPV Acro Rate Step**: test models that embed the vehicle with a Model Reference, fly it with a Pilot stick profile, plot it, and check it with Assert blocks.
+
+  They are built by `scripts/build-fpv-reference-model.ts`; design and sources are in [docs/fpv-reference-model-plan.md](docs/fpv-reference-model-plan.md).
 
 ## Tech Stack
 

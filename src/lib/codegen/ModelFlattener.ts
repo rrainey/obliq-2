@@ -1720,12 +1720,18 @@ export class ModelFlattener {
       return { blockId: d.blockId, port: d.port }
     }
 
+    // Label sinks are removed; a From that feeds one (a chain) is resolved
+    // through ultimateResolve by the From downstream, so that wire is dropped
+    const sinkIds = new Set(
+      flattenedBlocks.filter(b => b.block.type === 'sheet_label_sink').map(b => b.originalId)
+    )
+
     for (const sourceBlock of sheetLabelSources) {
       const ultimate = ultimateResolve(sourceBlock.originalId)
       if (!ultimate) continue
 
       const sourceConnections = connections.filter(
-        c => c.sourceBlockId === sourceBlock.originalId
+        c => c.sourceBlockId === sourceBlock.originalId && !sinkIds.has(c.targetBlockId)
       )
       const direct = directResolve.get(sourceBlock.originalId)!
 

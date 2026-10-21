@@ -9,12 +9,27 @@
   - After a run, the toolbar shows how many Asserts passed. Clicking it opens a Test Results panel listing each Assert's status and first failure; clicking a row shows the block. Assert blocks show a pass/fail mark. Marks and summary fade once you change the model.
   - A run stopped by an Assert says which one and when, and plots end there.
   - The automations API's `simulate` action, and so the MCP `run_simulation` tool, returns Assert results.
+- **Model references: test a model from separate test models.** A **Model Reference** block (Hierarchy) embeds another saved model.
+  - **Ports:** the block's ports are the referenced model's top-level Input and Output Ports, so a test model drives the model's real interface. Many test models can embed the same model, each with its own inputs, duration, time step, integrator and Asserts.
+  - **Versions:** a reference follows the model's latest save, or is pinned to a saved version. Its badge shows which, and flags a newer version or a missing model.
+  - **Editing:** edit the referenced model in its own tab (**Open Model**). When you come back, test models reload it, and wires follow port names.
+  - **Building:** simulation, Generate Code, the automations API and `obliq:test` all read the referenced model when they build. Its parameters join the test model's (a clash is an error naming both). Sheet labels never connect across the boundary, and references nest.
+  - **Finding models:** a reference also records the model's name, so test models find their model after being imported or seeded with new ids.
+  - **Warnings:** deleting a model that others use says which ones. Exporting a model with references reminds you to export those too.
+  - **APIs:** the Model Builder actions `addModelReference` and `setModelReference`, and the MCP tools `add_model_reference` and `set_model_reference`.
+- **The FPV reference model is now a vehicle and its test models.** New installations get:
+  - **FPV Vehicle** (sticks in, telemetry out);
+  - **FPV Demo Flight**: the original demo flight, scopes and 11 Asserts, embedding the vehicle;
+  - **FPV Acro Rate Step**: a roll-rate step response with 6 Asserts.
+
+  Existing installations can import `reference-models/fpv-vehicle.json`, then the test models, which find the vehicle by name. `npm run obliq:test -- reference-models/fpv-demo-flight.json` runs from the files without importing.
 - **`npm run obliq:test`**: runs models' Assert blocks from the command line.
   - Name the models by name, id or JSON file path, or use `--all` for every stored model that has Asserts.
   - Each model is built natively with the host C compiler and runs with its saved duration, time step and integrator. A stop-on-failure Assert ends the run, as in the editor.
   - It prints a summary with each failure's time and value. `--json` gives machine-readable results, and `--junit <file>` writes JUnit XML for CI.
   - Exit code 0 means every Assert passed. 1 means one failed, was not checked, or a named model has none. 2 means a model could not be found, built or run.
-- **The FPV reference model has tests.** A new **Tests** sheet has 11 Assert blocks that check the demo flight: arming, the climb, the bank, pitch and yaw manoeuvres, the attitude and altitude estimators against the true state, battery voltage, and staying upright. Run them in the editor, or with `npm run obliq:test -- reference-models/fpv-quadcopter.json`. Existing installations get the new version by importing that file again.
+- **Fixed: untyped outputs of multi-sheet subsystems.** An output fed by a sheet label from another of the subsystem's sheets was reported as "Unable to determine signal type".
+- **Fixed: a spurious validation error for chained sheet labels.** This happened when a sheet label was fed by a subsystem output that was itself driven by a sheet label. The generated code was correct, but a leftover wire was reported as an invalid connection.
 - **Fixed: runs could be one step short.** The step count was `floor(duration / step)`, which loses a step when the division comes out just under a whole number (0.3 / 0.1 = 2.9999…). Runs now use the rounded count. Server-side runs used `ceil` and could take an extra step; they now match.
 
 ## What's New in 3.2.2

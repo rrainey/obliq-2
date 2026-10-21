@@ -1,10 +1,10 @@
 {
-  "name": "FPV Quadcopter",
+  "name": "FPV Vehicle",
   "data": {
     "version": "2.2",
     "metadata": {
       "created": "2026-10-19T00:00:00.000Z",
-      "description": "5-inch FPV quadcopter reference model. NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems, and a Betaflight-style acro flight controller at 1 kHz (rates, gyro PT1 filters, rate PID with feed-forward, quad-X mixer with airmode) re-implemented from documented behaviour and defaults. Site: Tri-County Aerodrome (48TX), Texas, 33.45192 N 96.37729 W, elevation 240.8 m; WMM2025 field (2026.8) N/E/D 22.891 / 0.91 / 42.325 uT. Sensors: IMU (gyro, accelerometer) at 1 kHz, magnetometer at 100 Hz and barometer at 50 Hz with datasheet noise, bias, quantization and range; the controller flies on the sensor gyro and runs a Mahony attitude filter and a baro/accelerometer altitude filter. Motors draw from a 4S LiPo battery model (state of charge, internal resistance; speed scales with voltage) and their rotor-acceleration reaction torque is included. Ground contact (spring-damper legs) and Betaflight-style arming: the Pilot subsystem arms at 0.25 s, takes off from rest on the field, hovers, then in angle (self-level) mode flies a 24 deg bank, an 18 deg forward pitch and a yaw turn. Model outputs and scopes are on the Telemetry sheet (run results show there). Assert blocks on the Tests sheet check the flight: arming, the climb, each manoeuvre, the estimators and the battery (npm run obliq:test -- \"FPV Quadcopter\"). Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; equation structure after uzh-rpg/flightmare (MIT). See docs/fpv-reference-model-plan.md."
+      "description": "5-inch FPV quadcopter vehicle, for embedding in test models with a Model Reference block. Frame and 6-DOF body, four motor/propeller subsystems, 4S battery, IMU/magnetometer/barometer models, ground contact and a Betaflight-style flight controller (acro and angle modes, arming, Mahony and altitude estimators) at Tri-County Aerodrome (48TX), Texas. Input: sticks = [roll, pitch, yaw, throttle, AUX1 angle mode, AUX2 arm] (double[6], sticks -1..1, throttle 0..1, switches above 0.5 on). Outputs (Telemetry sheet): the true state, sensor readings, motor commands and speeds, rate setpoints, estimates and battery. Test models such as \"FPV Demo Flight\" drive it and check it with Assert blocks. Built by scripts/build-fpv-reference-model.ts; see docs/fpv-reference-model-plan.md."
     },
     "globalSettings": {
       "simulationTimeStep": 0.0005,
@@ -24,8 +24,8 @@
             "type": "demux",
             "name": "MotorCmdSplit",
             "position": {
-              "x": 100,
-              "y": 255
+              "x": 600,
+              "y": 135
             },
             "parameters": {
               "showName": true,
@@ -36,356 +36,17 @@
             }
           },
           {
-            "id": "main__Pilot",
-            "type": "subsystem",
-            "name": "Pilot",
+            "id": "main__sticks",
+            "type": "input_port",
+            "name": "sticks",
             "position": {
               "x": 100,
-              "y": 103
+              "y": 466
             },
             "parameters": {
               "showName": true,
-              "inputPorts": [],
-              "outputPorts": [
-                "sticks"
-              ],
-              "showPortNames": true,
-              "codeGenStrategy": "flatten",
-              "sheets": [
-                {
-                  "id": "pilot",
-                  "name": "Pilot",
-                  "blocks": [
-                    {
-                      "id": "pilot__Time",
-                      "type": "clock",
-                      "name": "Time",
-                      "position": {
-                        "x": 100,
-                        "y": 368
-                      },
-                      "parameters": {
-                        "showName": true
-                      }
-                    },
-                    {
-                      "id": "pilot__Sticks",
-                      "type": "mux",
-                      "name": "Sticks",
-                      "position": {
-                        "x": 420,
-                        "y": 330
-                      },
-                      "parameters": {
-                        "showName": true,
-                        "rows": 6,
-                        "cols": 1,
-                        "baseType": "double",
-                        "outputType": "double[6]"
-                      }
-                    },
-                    {
-                      "id": "pilot__RollStick",
-                      "type": "lookup_1d",
-                      "name": "RollStick",
-                      "position": {
-                        "x": 260,
-                        "y": 8
-                      },
-                      "parameters": {
-                        "showName": true,
-                        "inputValues": [
-                          0,
-                          2,
-                          2.1,
-                          2.8,
-                          2.9
-                        ],
-                        "outputValues": [
-                          0,
-                          0,
-                          0.4,
-                          0.4,
-                          0
-                        ],
-                        "extrapolation": "clamp"
-                      }
-                    },
-                    {
-                      "id": "pilot__PitchStick",
-                      "type": "lookup_1d",
-                      "name": "PitchStick",
-                      "position": {
-                        "x": 260,
-                        "y": 152
-                      },
-                      "parameters": {
-                        "showName": true,
-                        "inputValues": [
-                          0,
-                          3.1,
-                          3.2,
-                          3.8,
-                          3.9
-                        ],
-                        "outputValues": [
-                          0,
-                          0,
-                          -0.3,
-                          -0.3,
-                          0
-                        ],
-                        "extrapolation": "clamp"
-                      }
-                    },
-                    {
-                      "id": "pilot__YawStick",
-                      "type": "lookup_1d",
-                      "name": "YawStick",
-                      "position": {
-                        "x": 260,
-                        "y": 296
-                      },
-                      "parameters": {
-                        "showName": true,
-                        "inputValues": [
-                          0,
-                          4.1,
-                          4.15,
-                          4.6,
-                          4.65
-                        ],
-                        "outputValues": [
-                          0,
-                          0,
-                          0.5,
-                          0.5,
-                          0
-                        ],
-                        "extrapolation": "clamp"
-                      }
-                    },
-                    {
-                      "id": "pilot__ThrottleStick",
-                      "type": "lookup_1d",
-                      "name": "ThrottleStick",
-                      "position": {
-                        "x": 260,
-                        "y": 440
-                      },
-                      "parameters": {
-                        "showName": true,
-                        "inputValues": [
-                          0,
-                          0.5,
-                          0.6,
-                          1.1,
-                          1.3
-                        ],
-                        "outputValues": [
-                          0,
-                          0,
-                          0.55,
-                          0.55,
-                          0.4383
-                        ],
-                        "extrapolation": "clamp"
-                      }
-                    },
-                    {
-                      "id": "pilot__AngleModeSwitch",
-                      "type": "lookup_1d",
-                      "name": "AngleModeSwitch",
-                      "position": {
-                        "x": 260,
-                        "y": 584
-                      },
-                      "parameters": {
-                        "showName": true,
-                        "inputValues": [
-                          0,
-                          1
-                        ],
-                        "outputValues": [
-                          1,
-                          1
-                        ],
-                        "extrapolation": "clamp"
-                      }
-                    },
-                    {
-                      "id": "pilot__ArmSwitch",
-                      "type": "lookup_1d",
-                      "name": "ArmSwitch",
-                      "position": {
-                        "x": 260,
-                        "y": 728
-                      },
-                      "parameters": {
-                        "showName": true,
-                        "inputValues": [
-                          0,
-                          0.25,
-                          0.251
-                        ],
-                        "outputValues": [
-                          0,
-                          0,
-                          1
-                        ],
-                        "extrapolation": "clamp"
-                      }
-                    },
-                    {
-                      "id": "pilot__sticks",
-                      "type": "output_port",
-                      "name": "sticks",
-                      "position": {
-                        "x": 590,
-                        "y": 378
-                      },
-                      "parameters": {
-                        "showName": true,
-                        "portName": "sticks",
-                        "dataType": "double[6]"
-                      }
-                    }
-                  ],
-                  "connections": [
-                    {
-                      "id": "w_1_pilot__Time_pilot__RollStick",
-                      "sourceBlockId": "pilot__Time",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__RollStick",
-                      "targetPortIndex": 0,
-                      "routing": {
-                        "midpointOffset": 0
-                      }
-                    },
-                    {
-                      "id": "w_2_pilot__RollStick_pilot__Sticks",
-                      "sourceBlockId": "pilot__RollStick",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__Sticks",
-                      "targetPortIndex": 0,
-                      "routing": {
-                        "midpointOffset": 12
-                      }
-                    },
-                    {
-                      "id": "w_3_pilot__Time_pilot__PitchStick",
-                      "sourceBlockId": "pilot__Time",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__PitchStick",
-                      "targetPortIndex": 0,
-                      "routing": {
-                        "midpointOffset": 0
-                      }
-                    },
-                    {
-                      "id": "w_4_pilot__PitchStick_pilot__Sticks",
-                      "sourceBlockId": "pilot__PitchStick",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__Sticks",
-                      "targetPortIndex": 1,
-                      "routing": {
-                        "midpointOffset": -4
-                      }
-                    },
-                    {
-                      "id": "w_5_pilot__Time_pilot__YawStick",
-                      "sourceBlockId": "pilot__Time",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__YawStick",
-                      "targetPortIndex": 0,
-                      "routing": {
-                        "midpointOffset": 0
-                      }
-                    },
-                    {
-                      "id": "w_6_pilot__YawStick_pilot__Sticks",
-                      "sourceBlockId": "pilot__YawStick",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__Sticks",
-                      "targetPortIndex": 2,
-                      "routing": {
-                        "midpointOffset": -20
-                      }
-                    },
-                    {
-                      "id": "w_7_pilot__Time_pilot__ThrottleStick",
-                      "sourceBlockId": "pilot__Time",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__ThrottleStick",
-                      "targetPortIndex": 0,
-                      "routing": {
-                        "midpointOffset": 0
-                      }
-                    },
-                    {
-                      "id": "w_8_pilot__ThrottleStick_pilot__Sticks",
-                      "sourceBlockId": "pilot__ThrottleStick",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__Sticks",
-                      "targetPortIndex": 3,
-                      "routing": {
-                        "midpointOffset": -12
-                      }
-                    },
-                    {
-                      "id": "w_9_pilot__Time_pilot__AngleModeSwitch",
-                      "sourceBlockId": "pilot__Time",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__AngleModeSwitch",
-                      "targetPortIndex": 0,
-                      "routing": {
-                        "midpointOffset": 0
-                      }
-                    },
-                    {
-                      "id": "w_10_pilot__AngleModeSwitch_pilot__Sticks",
-                      "sourceBlockId": "pilot__AngleModeSwitch",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__Sticks",
-                      "targetPortIndex": 4,
-                      "routing": {
-                        "midpointOffset": 4
-                      }
-                    },
-                    {
-                      "id": "w_11_pilot__Time_pilot__ArmSwitch",
-                      "sourceBlockId": "pilot__Time",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__ArmSwitch",
-                      "targetPortIndex": 0,
-                      "routing": {
-                        "midpointOffset": 0
-                      }
-                    },
-                    {
-                      "id": "w_12_pilot__ArmSwitch_pilot__Sticks",
-                      "sourceBlockId": "pilot__ArmSwitch",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__Sticks",
-                      "targetPortIndex": 5,
-                      "routing": {
-                        "midpointOffset": 20
-                      }
-                    },
-                    {
-                      "id": "w_13_pilot__Sticks_pilot__sticks",
-                      "sourceBlockId": "pilot__Sticks",
-                      "sourcePortIndex": 0,
-                      "targetBlockId": "pilot__sticks",
-                      "targetPortIndex": 0
-                    }
-                  ],
-                  "extents": {
-                    "width": 890,
-                    "height": 928
-                  }
-                }
-              ]
+              "portName": "sticks",
+              "dataType": "double[6]"
             }
           },
           {
@@ -393,8 +54,8 @@
             "type": "subsystem",
             "name": "FlightController",
             "position": {
-              "x": 1715,
-              "y": 178
+              "x": 280,
+              "y": 459
             },
             "parameters": {
               "showName": true,
@@ -4274,8 +3935,8 @@
             "type": "subsystem",
             "name": "Motor_RR",
             "position": {
-              "x": 260,
-              "y": 280
+              "x": 780,
+              "y": 172
             },
             "parameters": {
               "showName": true,
@@ -4690,8 +4351,8 @@
             "type": "subsystem",
             "name": "Motor_FR",
             "position": {
-              "x": 823,
-              "y": 95
+              "x": 1343,
+              "y": -13
             },
             "parameters": {
               "showName": true,
@@ -4719,8 +4380,8 @@
             "type": "subsystem",
             "name": "Motor_RL",
             "position": {
-              "x": 823,
-              "y": 255
+              "x": 1343,
+              "y": 147
             },
             "parameters": {
               "showName": true,
@@ -4748,8 +4409,8 @@
             "type": "subsystem",
             "name": "Motor_FL",
             "position": {
-              "x": 823,
-              "y": 415
+              "x": 1343,
+              "y": 307
             },
             "parameters": {
               "showName": true,
@@ -4777,8 +4438,8 @@
             "type": "mux",
             "name": "Thrusts",
             "position": {
-              "x": 1055,
-              "y": 237
+              "x": 1575,
+              "y": 129
             },
             "parameters": {
               "showName": true,
@@ -4793,8 +4454,8 @@
             "type": "mux",
             "name": "RotorSpeeds",
             "position": {
-              "x": 1055,
-              "y": 57
+              "x": 1575,
+              "y": -51
             },
             "parameters": {
               "showName": true,
@@ -4809,8 +4470,8 @@
             "type": "mux",
             "name": "RotorAccelerations",
             "position": {
-              "x": 1055,
-              "y": 417
+              "x": 1575,
+              "y": 309
             },
             "parameters": {
               "showName": true,
@@ -4825,8 +4486,8 @@
             "type": "mux",
             "name": "MotorPower",
             "position": {
-              "x": 480,
-              "y": 489
+              "x": 1000,
+              "y": 382
             },
             "parameters": {
               "showName": true,
@@ -4841,8 +4502,8 @@
             "type": "subsystem",
             "name": "Battery",
             "position": {
-              "x": 650,
-              "y": 499
+              "x": 1170,
+              "y": 392
             },
             "parameters": {
               "showName": true,
@@ -5156,8 +4817,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_voltage",
             "position": {
-              "x": 833,
-              "y": 575
+              "x": 1353,
+              "y": 467
             },
             "parameters": {
               "showName": true,
@@ -5169,8 +4830,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_current",
             "position": {
-              "x": 833,
-              "y": 719
+              "x": 1353,
+              "y": 611
             },
             "parameters": {
               "showName": true,
@@ -5182,8 +4843,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_soc",
             "position": {
-              "x": 833,
-              "y": 863
+              "x": 1353,
+              "y": 755
             },
             "parameters": {
               "showName": true,
@@ -5195,8 +4856,8 @@
             "type": "subsystem",
             "name": "Frame",
             "position": {
-              "x": 1225,
-              "y": 247
+              "x": 1745,
+              "y": 139
             },
             "parameters": {
               "showName": true,
@@ -6904,8 +6565,8 @@
             "type": "subsystem",
             "name": "Sensors",
             "position": {
-              "x": 1465,
-              "y": 305
+              "x": 1985,
+              "y": 198
             },
             "parameters": {
               "showName": true,
@@ -7953,8 +7614,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_imu_gyro",
             "position": {
-              "x": 1769,
-              "y": 34
+              "x": 2237,
+              "y": 25
             },
             "parameters": {
               "showName": true,
@@ -7966,8 +7627,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_imu_accel",
             "position": {
-              "x": 1767,
-              "y": 438
+              "x": 2235,
+              "y": 169
             },
             "parameters": {
               "showName": true,
@@ -7979,8 +7640,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_mag",
             "position": {
-              "x": 1785,
-              "y": 582
+              "x": 2253,
+              "y": 313
             },
             "parameters": {
               "showName": true,
@@ -7992,8 +7653,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_pressure",
             "position": {
-              "x": 1769,
-              "y": 726
+              "x": 2237,
+              "y": 457
             },
             "parameters": {
               "showName": true,
@@ -8005,8 +7666,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_pos_ned",
             "position": {
-              "x": 1496,
-              "y": -127
+              "x": 2016,
+              "y": -234
             },
             "parameters": {
               "showName": true,
@@ -8018,8 +7679,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_vel_ned",
             "position": {
-              "x": 1496,
-              "y": 17
+              "x": 2016,
+              "y": -90
             },
             "parameters": {
               "showName": true,
@@ -8031,8 +7692,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_quat",
             "position": {
-              "x": 1510,
-              "y": 161
+              "x": 2030,
+              "y": 54
             },
             "parameters": {
               "showName": true,
@@ -8044,8 +7705,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler",
             "position": {
-              "x": 1510,
-              "y": 536
+              "x": 2030,
+              "y": 428
             },
             "parameters": {
               "showName": true,
@@ -8057,8 +7718,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_omega",
             "position": {
-              "x": 1510,
-              "y": 680
+              "x": 2030,
+              "y": 572
             },
             "parameters": {
               "showName": true,
@@ -8070,8 +7731,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_accel",
             "position": {
-              "x": 1510,
-              "y": 824
+              "x": 2030,
+              "y": 716
             },
             "parameters": {
               "showName": true,
@@ -8083,8 +7744,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_motor_omega",
             "position": {
-              "x": 1245,
-              "y": 75
+              "x": 1765,
+              "y": -33
             },
             "parameters": {
               "showName": true,
@@ -8096,8 +7757,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_motor_cmd",
             "position": {
-              "x": 2017,
-              "y": -124
+              "x": 582,
+              "y": -9
             },
             "parameters": {
               "showName": true,
@@ -8109,8 +7770,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_rate_setpoint",
             "position": {
-              "x": 2015,
-              "y": 20
+              "x": 580,
+              "y": 394
             },
             "parameters": {
               "showName": true,
@@ -8122,8 +7783,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gyro_dps",
             "position": {
-              "x": 2019,
-              "y": 164
+              "x": 584,
+              "y": 538
             },
             "parameters": {
               "showName": true,
@@ -8135,8 +7796,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler_est",
             "position": {
-              "x": 2017,
-              "y": 308
+              "x": 582,
+              "y": 682
             },
             "parameters": {
               "showName": true,
@@ -8148,8 +7809,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_altitude_est",
             "position": {
-              "x": 2015,
-              "y": 452
+              "x": 580,
+              "y": 826
             },
             "parameters": {
               "showName": true,
@@ -8161,8 +7822,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_quat_est",
             "position": {
-              "x": 2019,
-              "y": 596
+              "x": 584,
+              "y": 970
             },
             "parameters": {
               "showName": true,
@@ -8172,21 +7833,21 @@
         ],
         "connections": [
           {
-            "id": "w_1_main__Pilot_main__FlightController",
-            "sourceBlockId": "main__Pilot",
+            "id": "w_1_main__sticks_main__FlightController",
+            "sourceBlockId": "main__sticks",
             "sourcePortIndex": 0,
             "targetBlockId": "main__FlightController",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -345.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_2_main__FlightController_main__MotorCmdSplit",
             "sourceBlockId": "main__FlightController",
             "sourcePortIndex": 0,
             "targetBlockId": "main__MotorCmdSplit",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -22
+            }
           },
           {
             "id": "w_3_main__MotorCmdSplit_main__Motor_RR",
@@ -8195,7 +7856,7 @@
             "targetBlockId": "main__Motor_RR",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 0
+              "midpointOffset": 10
             }
           },
           {
@@ -8205,7 +7866,7 @@
             "targetBlockId": "main__Motor_FR",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -289.5
+              "midpointOffset": -279.5
             }
           },
           {
@@ -8215,7 +7876,7 @@
             "targetBlockId": "main__Motor_RL",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 108.5
+              "midpointOffset": 118.5
             }
           },
           {
@@ -8225,7 +7886,7 @@
             "targetBlockId": "main__Motor_FL",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -273.5
+              "midpointOffset": -263.5
             }
           },
           {
@@ -8235,7 +7896,7 @@
             "targetBlockId": "main__Thrusts",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -279.5
+              "midpointOffset": -125.5
             }
           },
           {
@@ -8245,7 +7906,7 @@
             "targetBlockId": "main__RotorSpeeds",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -295.5
+              "midpointOffset": -291.5
             }
           },
           {
@@ -8265,7 +7926,7 @@
             "targetBlockId": "main__MotorPower",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 0
+              "midpointOffset": 4
             }
           },
           {
@@ -8490,7 +8151,7 @@
             "targetBlockId": "main__Sensors",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 20
+              "midpointOffset": 12
             }
           },
           {
@@ -8500,7 +8161,7 @@
             "targetBlockId": "main__Sensors",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -4
+              "midpointOffset": -12
             }
           },
           {
@@ -8518,40 +8179,28 @@
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 0,
             "targetBlockId": "main__FlightController",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": -12
-            }
+            "targetPortIndex": 1
           },
           {
             "id": "w_38_main__Sensors_main__FlightController",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 1,
             "targetBlockId": "main__FlightController",
-            "targetPortIndex": 2,
-            "routing": {
-              "midpointOffset": -4
-            }
+            "targetPortIndex": 2
           },
           {
             "id": "w_39_main__Sensors_main__FlightController",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 2,
             "targetBlockId": "main__FlightController",
-            "targetPortIndex": 3,
-            "routing": {
-              "midpointOffset": 4
-            }
+            "targetPortIndex": 3
           },
           {
             "id": "w_40_main__Sensors_main__FlightController",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 3,
             "targetBlockId": "main__FlightController",
-            "targetPortIndex": 4,
-            "routing": {
-              "midpointOffset": 12
-            }
+            "targetPortIndex": 4
           },
           {
             "id": "w_41_main__Sensors_main__Tag_imu_gyro",
@@ -8560,7 +8209,7 @@
             "targetBlockId": "main__Tag_imu_gyro",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -39
+              "midpointOffset": -13
             }
           },
           {
@@ -8570,7 +8219,7 @@
             "targetBlockId": "main__Tag_imu_accel",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -30
+              "midpointOffset": 4
             }
           },
           {
@@ -8580,7 +8229,7 @@
             "targetBlockId": "main__Tag_mag",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -31
+              "midpointOffset": 3
             }
           },
           {
@@ -8590,7 +8239,7 @@
             "targetBlockId": "main__Tag_pressure",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -15
+              "midpointOffset": -5
             }
           },
           {
@@ -8610,7 +8259,7 @@
             "targetBlockId": "main__Tag_vel_ned",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -27.5
+              "midpointOffset": -19.5
             }
           },
           {
@@ -8620,7 +8269,7 @@
             "targetBlockId": "main__Tag_quat",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -2.5
+              "midpointOffset": -10.5
             }
           },
           {
@@ -8630,7 +8279,7 @@
             "targetBlockId": "main__Tag_euler",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -10.5
+              "midpointOffset": -2.5
             }
           },
           {
@@ -8640,7 +8289,7 @@
             "targetBlockId": "main__Tag_omega",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -26.5
+              "midpointOffset": -34.5
             }
           },
           {
@@ -8667,7 +8316,7 @@
             "targetBlockId": "main__Tag_motor_cmd",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -21
+              "midpointOffset": -13
             }
           },
           {
@@ -8677,7 +8326,7 @@
             "targetBlockId": "main__Tag_rate_setpoint",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4
+              "midpointOffset": 4
             }
           },
           {
@@ -8687,7 +8336,7 @@
             "targetBlockId": "main__Tag_gyro_dps",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 10
+              "midpointOffset": 18
             }
           },
           {
@@ -8697,7 +8346,7 @@
             "targetBlockId": "main__Tag_euler_est",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 19
+              "midpointOffset": 11
             }
           },
           {
@@ -8707,7 +8356,7 @@
             "targetBlockId": "main__Tag_altitude_est",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 4
+              "midpointOffset": -4
             }
           },
           {
@@ -8717,13 +8366,13 @@
             "targetBlockId": "main__Tag_quat_est",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -14
+              "midpointOffset": -22
             }
           }
         ],
         "extents": {
-          "width": 2319,
-          "height": 1063
+          "width": 2553,
+          "height": 1170
         }
       },
       {
@@ -8736,7 +8385,7 @@
             "name": "From_battery_voltage",
             "position": {
               "x": 100,
-              "y": -752
+              "y": -424
             },
             "parameters": {
               "showName": true,
@@ -8748,8 +8397,8 @@
             "type": "output_port",
             "name": "battery_voltage",
             "position": {
-              "x": 368,
-              "y": -676
+              "x": 300,
+              "y": -414
             },
             "parameters": {
               "showName": true,
@@ -8763,7 +8412,7 @@
             "name": "From_battery_current",
             "position": {
               "x": 100,
-              "y": -1091
+              "y": -712
             },
             "parameters": {
               "showName": true,
@@ -8775,8 +8424,8 @@
             "type": "output_port",
             "name": "battery_current",
             "position": {
-              "x": 368,
-              "y": -1073
+              "x": 300,
+              "y": -702
             },
             "parameters": {
               "showName": true,
@@ -8790,7 +8439,7 @@
             "name": "From_battery_soc",
             "position": {
               "x": 100,
-              "y": -947
+              "y": -568
             },
             "parameters": {
               "showName": true,
@@ -8802,8 +8451,8 @@
             "type": "output_port",
             "name": "battery_soc",
             "position": {
-              "x": 384,
-              "y": -945
+              "x": 316,
+              "y": -558
             },
             "parameters": {
               "showName": true,
@@ -8817,7 +8466,7 @@
             "name": "From_imu_gyro",
             "position": {
               "x": 104,
-              "y": 374
+              "y": 296
             },
             "parameters": {
               "showName": true,
@@ -8829,8 +8478,8 @@
             "type": "output_port",
             "name": "imu_gyro",
             "position": {
-              "x": 396,
-              "y": 384
+              "x": 328,
+              "y": 306
             },
             "parameters": {
               "showName": true,
@@ -8844,7 +8493,7 @@
             "name": "From_imu_accel",
             "position": {
               "x": 102,
-              "y": 230
+              "y": 152
             },
             "parameters": {
               "showName": true,
@@ -8856,8 +8505,8 @@
             "type": "output_port",
             "name": "imu_accel",
             "position": {
-              "x": 392,
-              "y": 256
+              "x": 324,
+              "y": 162
             },
             "parameters": {
               "showName": true,
@@ -8871,7 +8520,7 @@
             "name": "From_mag",
             "position": {
               "x": 120,
-              "y": 518
+              "y": 440
             },
             "parameters": {
               "showName": true,
@@ -8883,8 +8532,8 @@
             "type": "output_port",
             "name": "mag",
             "position": {
-              "x": 398,
-              "y": 510
+              "x": 330,
+              "y": 450
             },
             "parameters": {
               "showName": true,
@@ -8898,7 +8547,7 @@
             "name": "From_pressure",
             "position": {
               "x": 104,
-              "y": 1543
+              "y": 1160
             },
             "parameters": {
               "showName": true,
@@ -8910,8 +8559,8 @@
             "type": "output_port",
             "name": "pressure",
             "position": {
-              "x": 396,
-              "y": 1567
+              "x": 328,
+              "y": 1170
             },
             "parameters": {
               "showName": true,
@@ -8925,7 +8574,7 @@
             "name": "From_pos_ned",
             "position": {
               "x": 106,
-              "y": 1355
+              "y": 1016
             },
             "parameters": {
               "showName": true,
@@ -8937,8 +8586,8 @@
             "type": "output_port",
             "name": "pos_ned",
             "position": {
-              "x": 398,
-              "y": 1298
+              "x": 330,
+              "y": 1026
             },
             "parameters": {
               "showName": true,
@@ -8952,7 +8601,7 @@
             "name": "From_vel_ned",
             "position": {
               "x": 106,
-              "y": 2213
+              "y": 1736
             },
             "parameters": {
               "showName": true,
@@ -8964,8 +8613,8 @@
             "type": "output_port",
             "name": "vel_ned",
             "position": {
-              "x": 398,
-              "y": 2222
+              "x": 330,
+              "y": 1746
             },
             "parameters": {
               "showName": true,
@@ -8979,7 +8628,7 @@
             "name": "From_quat",
             "position": {
               "x": 120,
-              "y": 1687
+              "y": 1304
             },
             "parameters": {
               "showName": true,
@@ -8991,8 +8640,8 @@
             "type": "output_port",
             "name": "quat",
             "position": {
-              "x": 398,
-              "y": 1695
+              "x": 330,
+              "y": 1314
             },
             "parameters": {
               "showName": true,
@@ -9006,7 +8655,7 @@
             "name": "From_euler",
             "position": {
               "x": 120,
-              "y": -483
+              "y": -280
             },
             "parameters": {
               "showName": true,
@@ -9018,8 +8667,8 @@
             "type": "output_port",
             "name": "euler",
             "position": {
-              "x": 398,
-              "y": -407
+              "x": 330,
+              "y": -270
             },
             "parameters": {
               "showName": true,
@@ -9033,7 +8682,7 @@
             "name": "From_omega",
             "position": {
               "x": 120,
-              "y": 1163
+              "y": 872
             },
             "parameters": {
               "showName": true,
@@ -9045,8 +8694,8 @@
             "type": "output_port",
             "name": "omega",
             "position": {
-              "x": 398,
-              "y": 1173
+              "x": 330,
+              "y": 882
             },
             "parameters": {
               "showName": true,
@@ -9060,7 +8709,7 @@
             "name": "From_accel",
             "position": {
               "x": 120,
-              "y": -1477
+              "y": -1000
             },
             "parameters": {
               "showName": true,
@@ -9072,8 +8721,8 @@
             "type": "output_port",
             "name": "accel",
             "position": {
-              "x": 398,
-              "y": -1467
+              "x": 330,
+              "y": -990
             },
             "parameters": {
               "showName": true,
@@ -9087,7 +8736,7 @@
             "name": "From_motor_omega",
             "position": {
               "x": 100,
-              "y": 961
+              "y": 728
             },
             "parameters": {
               "showName": true,
@@ -9099,8 +8748,8 @@
             "type": "output_port",
             "name": "motor_omega",
             "position": {
-              "x": 384,
-              "y": 904
+              "x": 316,
+              "y": 738
             },
             "parameters": {
               "showName": true,
@@ -9114,7 +8763,7 @@
             "name": "From_motor_cmd",
             "position": {
               "x": 102,
-              "y": 692
+              "y": 584
             },
             "parameters": {
               "showName": true,
@@ -9126,8 +8775,8 @@
             "type": "output_port",
             "name": "motor_cmd",
             "position": {
-              "x": 392,
-              "y": 635
+              "x": 324,
+              "y": 594
             },
             "parameters": {
               "showName": true,
@@ -9141,7 +8790,7 @@
             "name": "From_rate_setpoint",
             "position": {
               "x": 100,
-              "y": 2011
+              "y": 1592
             },
             "parameters": {
               "showName": true,
@@ -9153,8 +8802,8 @@
             "type": "output_port",
             "name": "rate_setpoint",
             "position": {
-              "x": 376,
-              "y": 1953
+              "x": 308,
+              "y": 1602
             },
             "parameters": {
               "showName": true,
@@ -9168,7 +8817,7 @@
             "name": "From_gyro_dps",
             "position": {
               "x": 104,
-              "y": 45
+              "y": 8
             },
             "parameters": {
               "showName": true,
@@ -9180,8 +8829,8 @@
             "type": "output_port",
             "name": "gyro_dps",
             "position": {
-              "x": 396,
-              "y": -13
+              "x": 328,
+              "y": 18
             },
             "parameters": {
               "showName": true,
@@ -9195,7 +8844,7 @@
             "name": "From_euler_est",
             "position": {
               "x": 102,
-              "y": -214
+              "y": -136
             },
             "parameters": {
               "showName": true,
@@ -9207,8 +8856,8 @@
             "type": "output_port",
             "name": "euler_est",
             "position": {
-              "x": 392,
-              "y": -138
+              "x": 324,
+              "y": -126
             },
             "parameters": {
               "showName": true,
@@ -9222,7 +8871,7 @@
             "name": "From_altitude_est",
             "position": {
               "x": 100,
-              "y": -1285
+              "y": -856
             },
             "parameters": {
               "showName": true,
@@ -9234,8 +8883,8 @@
             "type": "output_port",
             "name": "altitude_est",
             "position": {
-              "x": 380,
-              "y": -1342
+              "x": 312,
+              "y": -846
             },
             "parameters": {
               "showName": true,
@@ -9249,7 +8898,7 @@
             "name": "From_quat_est",
             "position": {
               "x": 104,
-              "y": 1831
+              "y": 1448
             },
             "parameters": {
               "showName": true,
@@ -9261,130 +8910,13 @@
             "type": "output_port",
             "name": "quat_est",
             "position": {
-              "x": 396,
-              "y": 1828
+              "x": 328,
+              "y": 1458
             },
             "parameters": {
               "showName": true,
               "portName": "quat_est",
               "dataType": "double[4][1]"
-            }
-          },
-          {
-            "id": "telemetry__Position",
-            "type": "signal_display",
-            "name": "Position",
-            "position": {
-              "x": 408,
-              "y": 1423
-            },
-            "parameters": {
-              "showName": true,
-              "maxSamples": 10000
-            }
-          },
-          {
-            "id": "telemetry__Attitude",
-            "type": "signal_display",
-            "name": "Attitude",
-            "position": {
-              "x": 408,
-              "y": -551
-            },
-            "parameters": {
-              "showName": true,
-              "maxSamples": 10000
-            }
-          },
-          {
-            "id": "telemetry__RotorSpeed",
-            "type": "signal_display",
-            "name": "RotorSpeed",
-            "position": {
-              "x": 408,
-              "y": 1029
-            },
-            "parameters": {
-              "showName": true,
-              "maxSamples": 10000
-            }
-          },
-          {
-            "id": "telemetry__RateSetpoint",
-            "type": "signal_display",
-            "name": "RateSetpoint",
-            "position": {
-              "x": 408,
-              "y": 2078
-            },
-            "parameters": {
-              "showName": true,
-              "maxSamples": 10000
-            }
-          },
-          {
-            "id": "telemetry__GyroRate",
-            "type": "signal_display",
-            "name": "GyroRate",
-            "position": {
-              "x": 408,
-              "y": 112
-            },
-            "parameters": {
-              "showName": true,
-              "maxSamples": 10000
-            }
-          },
-          {
-            "id": "telemetry__MotorCommand",
-            "type": "signal_display",
-            "name": "MotorCommand",
-            "position": {
-              "x": 408,
-              "y": 760
-            },
-            "parameters": {
-              "showName": true,
-              "maxSamples": 10000
-            }
-          },
-          {
-            "id": "telemetry__AttitudeEstimate",
-            "type": "signal_display",
-            "name": "AttitudeEstimate",
-            "position": {
-              "x": 408,
-              "y": -282
-            },
-            "parameters": {
-              "showName": true,
-              "maxSamples": 10000
-            }
-          },
-          {
-            "id": "telemetry__AltitudeEstimate",
-            "type": "signal_display",
-            "name": "AltitudeEstimate",
-            "position": {
-              "x": 408,
-              "y": -1217
-            },
-            "parameters": {
-              "showName": true,
-              "maxSamples": 10000
-            }
-          },
-          {
-            "id": "telemetry__Battery",
-            "type": "signal_display",
-            "name": "Battery",
-            "position": {
-              "x": 408,
-              "y": -820
-            },
-            "parameters": {
-              "showName": true,
-              "maxSamples": 10000
             }
           }
         ],
@@ -9394,30 +8926,21 @@
             "sourceBlockId": "telemetry__From_battery_voltage",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__battery_voltage",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -36
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_2_telemetry__From_battery_current_telemetry__battery_current",
             "sourceBlockId": "telemetry__From_battery_current",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__battery_current",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -52
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_3_telemetry__From_battery_soc_telemetry__battery_soc",
             "sourceBlockId": "telemetry__From_battery_soc",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__battery_soc",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -52
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_4_telemetry__From_imu_gyro_telemetry__imu_gyro",
@@ -9431,40 +8954,28 @@
             "sourceBlockId": "telemetry__From_imu_accel",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__imu_accel",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -15
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_6_telemetry__From_mag_telemetry__mag",
             "sourceBlockId": "telemetry__From_mag",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__mag",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -1
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_7_telemetry__From_pressure_telemetry__pressure",
             "sourceBlockId": "telemetry__From_pressure",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__pressure",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 24
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_8_telemetry__From_pos_ned_telemetry__pos_ned",
             "sourceBlockId": "telemetry__From_pos_ned",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__pos_ned",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 16
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_9_telemetry__From_vel_ned_telemetry__vel_ned",
@@ -9478,20 +8989,14 @@
             "sourceBlockId": "telemetry__From_quat",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__quat",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 39
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_11_telemetry__From_euler_telemetry__euler",
             "sourceBlockId": "telemetry__From_euler",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__euler",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -33
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_12_telemetry__From_omega_telemetry__omega",
@@ -9512,782 +9017,54 @@
             "sourceBlockId": "telemetry__From_motor_omega",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__motor_omega",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 12
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_15_telemetry__From_motor_cmd_telemetry__motor_cmd",
             "sourceBlockId": "telemetry__From_motor_cmd",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__motor_cmd",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 1
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_16_telemetry__From_rate_setpoint_telemetry__rate_setpoint",
             "sourceBlockId": "telemetry__From_rate_setpoint",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__rate_setpoint",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 56
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_17_telemetry__From_gyro_dps_telemetry__gyro_dps",
             "sourceBlockId": "telemetry__From_gyro_dps",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__gyro_dps",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -24
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_18_telemetry__From_euler_est_telemetry__euler_est",
             "sourceBlockId": "telemetry__From_euler_est",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__euler_est",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -31
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_19_telemetry__From_altitude_est_telemetry__altitude_est",
             "sourceBlockId": "telemetry__From_altitude_est",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__altitude_est",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -66
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_20_telemetry__From_quat_est_telemetry__quat_est",
             "sourceBlockId": "telemetry__From_quat_est",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__quat_est",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 40
-            }
-          },
-          {
-            "id": "w_21_telemetry__From_pos_ned_telemetry__Position",
-            "sourceBlockId": "telemetry__From_pos_ned",
-            "sourcePortIndex": 0,
-            "targetBlockId": "telemetry__Position",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 11
-            }
-          },
-          {
-            "id": "w_22_telemetry__From_euler_telemetry__Attitude",
-            "sourceBlockId": "telemetry__From_euler",
-            "sourcePortIndex": 0,
-            "targetBlockId": "telemetry__Attitude",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -38
-            }
-          },
-          {
-            "id": "w_23_telemetry__From_motor_omega_telemetry__RotorSpeed",
-            "sourceBlockId": "telemetry__From_motor_omega",
-            "sourcePortIndex": 0,
-            "targetBlockId": "telemetry__RotorSpeed",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 0
-            }
-          },
-          {
-            "id": "w_24_telemetry__From_rate_setpoint_telemetry__RateSetpoint",
-            "sourceBlockId": "telemetry__From_rate_setpoint",
-            "sourcePortIndex": 0,
-            "targetBlockId": "telemetry__RateSetpoint",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 40
-            }
-          },
-          {
-            "id": "w_25_telemetry__From_gyro_dps_telemetry__GyroRate",
-            "sourceBlockId": "telemetry__From_gyro_dps",
-            "sourcePortIndex": 0,
-            "targetBlockId": "telemetry__GyroRate",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -30
-            }
-          },
-          {
-            "id": "w_26_telemetry__From_motor_cmd_telemetry__MotorCommand",
-            "sourceBlockId": "telemetry__From_motor_cmd",
-            "sourcePortIndex": 0,
-            "targetBlockId": "telemetry__MotorCommand",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -7
-            }
-          },
-          {
-            "id": "w_27_telemetry__From_euler_est_telemetry__AttitudeEstimate",
-            "sourceBlockId": "telemetry__From_euler_est",
-            "sourcePortIndex": 0,
-            "targetBlockId": "telemetry__AttitudeEstimate",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -39
-            }
-          },
-          {
-            "id": "w_28_telemetry__From_altitude_est_telemetry__AltitudeEstimate",
-            "sourceBlockId": "telemetry__From_altitude_est",
-            "sourcePortIndex": 0,
-            "targetBlockId": "telemetry__AltitudeEstimate",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -80
-            }
-          },
-          {
-            "id": "w_29_telemetry__From_battery_voltage_telemetry__Battery",
-            "sourceBlockId": "telemetry__From_battery_voltage",
-            "sourcePortIndex": 0,
-            "targetBlockId": "telemetry__Battery",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -56
-            }
+            "targetPortIndex": 0
           }
         ],
         "extents": {
-          "width": 708,
-          "height": 2422
-        }
-      },
-      {
-        "id": "tests",
-        "name": "Tests",
-        "blocks": [
-          {
-            "id": "tests__From_motor_cmd",
-            "type": "sheet_label_source",
-            "name": "From_motor_cmd",
-            "position": {
-              "x": 102,
-              "y": -136
-            },
-            "parameters": {
-              "showName": true,
-              "signalName": "motor_cmd"
-            }
-          },
-          {
-            "id": "tests__From_pos_ned",
-            "type": "sheet_label_source",
-            "name": "From_pos_ned",
-            "position": {
-              "x": 106,
-              "y": 776
-            },
-            "parameters": {
-              "showName": true,
-              "signalName": "pos_ned"
-            }
-          },
-          {
-            "id": "tests__From_euler",
-            "type": "sheet_label_source",
-            "name": "From_euler",
-            "position": {
-              "x": 120,
-              "y": 514
-            },
-            "parameters": {
-              "showName": true,
-              "signalName": "euler"
-            }
-          },
-          {
-            "id": "tests__EulerDeg",
-            "type": "scale",
-            "name": "EulerDeg",
-            "position": {
-              "x": 300,
-              "y": 514
-            },
-            "parameters": {
-              "showName": true,
-              "gain": 57.2958
-            }
-          },
-          {
-            "id": "tests__EulerEstimateDeg",
-            "type": "scale",
-            "name": "EulerEstimateDeg",
-            "position": {
-              "x": 300,
-              "y": 933
-            },
-            "parameters": {
-              "showName": true,
-              "gain": 57.2958
-            }
-          },
-          {
-            "id": "tests__From_euler_est",
-            "type": "sheet_label_source",
-            "name": "From_euler_est",
-            "position": {
-              "x": 102,
-              "y": 933
-            },
-            "parameters": {
-              "showName": true,
-              "signalName": "euler_est"
-            }
-          },
-          {
-            "id": "tests__RollPitch",
-            "type": "selector",
-            "name": "RollPitch",
-            "position": {
-              "x": 493,
-              "y": 608
-            },
-            "parameters": {
-              "showName": true,
-              "indices": [
-                0,
-                1
-              ]
-            }
-          },
-          {
-            "id": "tests__Down",
-            "type": "selector",
-            "name": "Down",
-            "position": {
-              "x": 300,
-              "y": 776
-            },
-            "parameters": {
-              "showName": true,
-              "indices": [
-                2
-              ]
-            }
-          },
-          {
-            "id": "tests__HeightAboveField",
-            "type": "evaluate",
-            "name": "HeightAboveField",
-            "position": {
-              "x": 483,
-              "y": 1088
-            },
-            "parameters": {
-              "showName": true,
-              "numInputs": 1,
-              "expression": "-in(0)"
-            }
-          },
-          {
-            "id": "tests__TrueAltitude",
-            "type": "evaluate",
-            "name": "TrueAltitude",
-            "position": {
-              "x": 460,
-              "y": 464
-            },
-            "parameters": {
-              "showName": true,
-              "numInputs": 1,
-              "expression": "240.792 - in(0)"
-            }
-          },
-          {
-            "id": "tests__DisarmedMotorsOff",
-            "type": "assert",
-            "name": "DisarmedMotorsOff",
-            "position": {
-              "x": 685,
-              "y": -64
-            },
-            "parameters": {
-              "showName": true,
-              "mode": "bounds",
-              "checkFrom": 0,
-              "checkUntil": 0.24,
-              "onFailure": "record",
-              "lower": 0,
-              "upper": 0
-            }
-          },
-          {
-            "id": "tests__ArmedMotorsAtIdle",
-            "type": "assert",
-            "name": "ArmedMotorsAtIdle",
-            "position": {
-              "x": 685,
-              "y": -208
-            },
-            "parameters": {
-              "showName": true,
-              "mode": "bounds",
-              "checkFrom": 0.3,
-              "checkUntil": null,
-              "onFailure": "record",
-              "lower": 0.054999999,
-              "upper": 1
-            }
-          },
-          {
-            "id": "tests__ClimbsAfterTakeoff",
-            "type": "assert",
-            "name": "ClimbsAfterTakeoff",
-            "position": {
-              "x": 685,
-              "y": 1088
-            },
-            "parameters": {
-              "showName": true,
-              "mode": "bounds",
-              "checkFrom": 1.5,
-              "checkUntil": null,
-              "onFailure": "record",
-              "lower": 1,
-              "upper": null
-            }
-          },
-          {
-            "id": "tests__LevelClimb",
-            "type": "assert",
-            "name": "LevelClimb",
-            "position": {
-              "x": 685,
-              "y": 512
-            },
-            "parameters": {
-              "showName": true,
-              "mode": "bounds",
-              "checkFrom": 0.6,
-              "checkUntil": 2,
-              "onFailure": "record",
-              "lower": -2,
-              "upper": 2
-            }
-          },
-          {
-            "id": "tests__Roll",
-            "type": "selector",
-            "name": "Roll",
-            "position": {
-              "x": 493,
-              "y": 176
-            },
-            "parameters": {
-              "showName": true,
-              "indices": [
-                0
-              ]
-            }
-          },
-          {
-            "id": "tests__BankFollowsStick",
-            "type": "assert",
-            "name": "BankFollowsStick",
-            "position": {
-              "x": 685,
-              "y": 224
-            },
-            "parameters": {
-              "showName": true,
-              "mode": "bounds",
-              "checkFrom": 2.6,
-              "checkUntil": 2.8,
-              "onFailure": "record",
-              "lower": 22,
-              "upper": 26.5
-            }
-          },
-          {
-            "id": "tests__Pitch",
-            "type": "selector",
-            "name": "Pitch",
-            "position": {
-              "x": 493,
-              "y": 32
-            },
-            "parameters": {
-              "showName": true,
-              "indices": [
-                1
-              ]
-            }
-          },
-          {
-            "id": "tests__PitchFollowsStick",
-            "type": "assert",
-            "name": "PitchFollowsStick",
-            "position": {
-              "x": 685,
-              "y": 80
-            },
-            "parameters": {
-              "showName": true,
-              "mode": "bounds",
-              "checkFrom": 3.6,
-              "checkUntil": 3.8,
-              "onFailure": "record",
-              "lower": -19.5,
-              "upper": -15.5
-            }
-          },
-          {
-            "id": "tests__Yaw",
-            "type": "selector",
-            "name": "Yaw",
-            "position": {
-              "x": 493,
-              "y": 800
-            },
-            "parameters": {
-              "showName": true,
-              "indices": [
-                2
-              ]
-            }
-          },
-          {
-            "id": "tests__YawTurnCompletes",
-            "type": "assert",
-            "name": "YawTurnCompletes",
-            "position": {
-              "x": 685,
-              "y": 800
-            },
-            "parameters": {
-              "showName": true,
-              "mode": "bounds",
-              "checkFrom": 4.7,
-              "checkUntil": null,
-              "onFailure": "record",
-              "lower": 80,
-              "upper": 100
-            }
-          },
-          {
-            "id": "tests__AttitudeEstimateTracks",
-            "type": "assert",
-            "name": "AttitudeEstimateTracks",
-            "position": {
-              "x": 685,
-              "y": 944
-            },
-            "parameters": {
-              "showName": true,
-              "mode": "near",
-              "checkFrom": 0,
-              "checkUntil": null,
-              "onFailure": "record",
-              "absTol": 5,
-              "relTol": 0
-            }
-          },
-          {
-            "id": "tests__From_altitude_est",
-            "type": "sheet_label_source",
-            "name": "From_altitude_est",
-            "position": {
-              "x": 473,
-              "y": 320
-            },
-            "parameters": {
-              "showName": true,
-              "signalName": "altitude_est"
-            }
-          },
-          {
-            "id": "tests__AltitudeEstimateTracks",
-            "type": "assert",
-            "name": "AltitudeEstimateTracks",
-            "position": {
-              "x": 685,
-              "y": 368
-            },
-            "parameters": {
-              "showName": true,
-              "mode": "near",
-              "checkFrom": 0,
-              "checkUntil": null,
-              "onFailure": "record",
-              "absTol": 0.5,
-              "relTol": 0
-            }
-          },
-          {
-            "id": "tests__From_battery_voltage",
-            "type": "sheet_label_source",
-            "name": "From_battery_voltage",
-            "position": {
-              "x": 100,
-              "y": -352
-            },
-            "parameters": {
-              "showName": true,
-              "signalName": "battery_voltage"
-            }
-          },
-          {
-            "id": "tests__BatteryAboveCutoff",
-            "type": "assert",
-            "name": "BatteryAboveCutoff",
-            "position": {
-              "x": 685,
-              "y": -352
-            },
-            "parameters": {
-              "showName": true,
-              "mode": "bounds",
-              "checkFrom": 0,
-              "checkUntil": null,
-              "onFailure": "record",
-              "lower": 14,
-              "upper": null
-            }
-          },
-          {
-            "id": "tests__StaysUpright",
-            "type": "assert",
-            "name": "StaysUpright",
-            "position": {
-              "x": 685,
-              "y": 656
-            },
-            "parameters": {
-              "showName": true,
-              "mode": "bounds",
-              "checkFrom": 0,
-              "checkUntil": null,
-              "onFailure": "stop",
-              "lower": -60,
-              "upper": 60
-            }
-          }
-        ],
-        "connections": [
-          {
-            "id": "w_1_tests__From_euler_tests__EulerDeg",
-            "sourceBlockId": "tests__From_euler",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__EulerDeg",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_2_tests__From_euler_est_tests__EulerEstimateDeg",
-            "sourceBlockId": "tests__From_euler_est",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__EulerEstimateDeg",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_3_tests__EulerDeg_tests__RollPitch",
-            "sourceBlockId": "tests__EulerDeg",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__RollPitch",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -8.5
-            }
-          },
-          {
-            "id": "w_4_tests__From_pos_ned_tests__Down",
-            "sourceBlockId": "tests__From_pos_ned",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__Down",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_5_tests__Down_tests__HeightAboveField",
-            "sourceBlockId": "tests__Down",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__HeightAboveField",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -19.5
-            }
-          },
-          {
-            "id": "w_6_tests__Down_tests__TrueAltitude",
-            "sourceBlockId": "tests__Down",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__TrueAltitude",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -8
-            }
-          },
-          {
-            "id": "w_7_tests__From_motor_cmd_tests__DisarmedMotorsOff",
-            "sourceBlockId": "tests__From_motor_cmd",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__DisarmedMotorsOff",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -31.5
-            }
-          },
-          {
-            "id": "w_8_tests__From_motor_cmd_tests__ArmedMotorsAtIdle",
-            "sourceBlockId": "tests__From_motor_cmd",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__ArmedMotorsAtIdle",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -31.5
-            }
-          },
-          {
-            "id": "w_9_tests__HeightAboveField_tests__ClimbsAfterTakeoff",
-            "sourceBlockId": "tests__HeightAboveField",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__ClimbsAfterTakeoff",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_10_tests__RollPitch_tests__LevelClimb",
-            "sourceBlockId": "tests__RollPitch",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__LevelClimb",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 32
-            }
-          },
-          {
-            "id": "w_11_tests__EulerDeg_tests__Roll",
-            "sourceBlockId": "tests__EulerDeg",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__Roll",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -8.5
-            }
-          },
-          {
-            "id": "w_12_tests__Roll_tests__BankFollowsStick",
-            "sourceBlockId": "tests__Roll",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__BankFollowsStick",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 8
-            }
-          },
-          {
-            "id": "w_13_tests__EulerDeg_tests__Pitch",
-            "sourceBlockId": "tests__EulerDeg",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__Pitch",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -8.5
-            }
-          },
-          {
-            "id": "w_14_tests__Pitch_tests__PitchFollowsStick",
-            "sourceBlockId": "tests__Pitch",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__PitchFollowsStick",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 0
-            }
-          },
-          {
-            "id": "w_15_tests__EulerDeg_tests__Yaw",
-            "sourceBlockId": "tests__EulerDeg",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__Yaw",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -8.5
-            }
-          },
-          {
-            "id": "w_16_tests__Yaw_tests__YawTurnCompletes",
-            "sourceBlockId": "tests__Yaw",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__YawTurnCompletes",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_17_tests__EulerEstimateDeg_tests__AttitudeEstimateTracks",
-            "sourceBlockId": "tests__EulerEstimateDeg",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__AttitudeEstimateTracks",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_18_tests__EulerDeg_tests__AttitudeEstimateTracks",
-            "sourceBlockId": "tests__EulerDeg",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__AttitudeEstimateTracks",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": -104.5
-            }
-          },
-          {
-            "id": "w_19_tests__From_altitude_est_tests__AltitudeEstimateTracks",
-            "sourceBlockId": "tests__From_altitude_est",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__AltitudeEstimateTracks",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 6
-            }
-          },
-          {
-            "id": "w_20_tests__TrueAltitude_tests__AltitudeEstimateTracks",
-            "sourceBlockId": "tests__TrueAltitude",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__AltitudeEstimateTracks",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": 8
-            }
-          },
-          {
-            "id": "w_21_tests__From_battery_voltage_tests__BatteryAboveCutoff",
-            "sourceBlockId": "tests__From_battery_voltage",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__BatteryAboveCutoff",
-            "targetPortIndex": 0
-          },
-          {
-            "id": "w_22_tests__RollPitch_tests__StaysUpright",
-            "sourceBlockId": "tests__RollPitch",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__StaysUpright",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 32
-            }
-          }
-        ],
-        "extents": {
-          "width": 985,
-          "height": 1288
+          "width": 630,
+          "height": 1946
         }
       }
     ]

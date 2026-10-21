@@ -6,13 +6,13 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { buildFpvModel, FPV, HOVER_COMMAND, OMEGA_MAX } from '../../scripts/build-fpv-reference-model'
+import { buildFpvModel, FPV, HOVER_COMMAND, OMEGA_MAX, SHIPPED_FPV_MODELS } from '../../scripts/build-fpv-reference-model'
 import { cleanupNativeDir, compileAndRunNative } from '../support/nativeCgen'
 import { validateMultiSheetTypeCompatibility } from '@/lib/multiSheetTypeValidator'
 
 jest.setTimeout(180000)
 
-const MODEL_FILE = path.join(__dirname, '../../reference-models/fpv-quadcopter.json')
+const MODEL_DIR = path.join(__dirname, '../../reference-models')
 const h = HOVER_COMMAND
 const d = 0.03
 
@@ -96,9 +96,11 @@ describe('FPV reference model: plant', () => {
 
   const at = (name: string, t: number) => runs[name]!.reduce((best, r) => (Math.abs(r.t - t) < Math.abs(best.t - t) ? r : best))
 
-  it('the committed reference model matches the builder', () => {
-    const committed = JSON.parse(fs.readFileSync(MODEL_FILE, 'utf8'))
-    expect(committed).toEqual(JSON.parse(JSON.stringify(buildFpvModel())))
+  it('the committed reference models match the builder', () => {
+    for (const [file, model] of SHIPPED_FPV_MODELS()) {
+      const committed = JSON.parse(fs.readFileSync(path.join(MODEL_DIR, file), 'utf8'))
+      expect(committed).toEqual(JSON.parse(JSON.stringify(model)))
+    }
   })
 
   it('validates in the editor with no errors or warnings (references and loop integrators are typed)', () => {

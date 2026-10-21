@@ -213,7 +213,12 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
      - the battery stays above 3.5 V per cell;
      - the quad stays upright, which stops the run on failure.
 
-     They pass in the editor and with `npm run obliq:test -- "FPV Quadcopter"`. `__tests__/reference-models/fpv-tests-sheet.test.ts` also checks that each Assert reads the intended signal in the intended units. Other builds (custom sticks, open loop, airborne) have no Tests sheet. Separating the vehicle from these tests into its own model waits on model references (Part B of [model-testing-plan.md](model-testing-plan.md)).
+     They pass in the editor and with `npm run obliq:test -- "FPV Quadcopter"`. `__tests__/reference-models/fpv-tests-sheet.test.ts` also checks that each Assert reads the intended signal in the intended units. Other builds (custom sticks, open loop, airborne) have no Tests sheet.    - **Split into a vehicle and test models** (with model references, Part B of [model-testing-plan.md](model-testing-plan.md)). The shipped files are now:
+     - `fpv-vehicle.json` (**FPV Vehicle**): the model above without its Pilot. The sticks come in on a top-level Input Port, and the Telemetry sheet holds only Output Ports.
+     - `fpv-demo-flight.json` (**FPV Demo Flight**): the Pilot's demo profile, the Telemetry scopes and the Tests sheet, around a Model Reference to FPV Vehicle.
+     - `fpv-acro-rate-step.json` (**FPV Acro Rate Step**): an acro roll-rate step with 6 Asserts (`ACRO_STEP_TESTS`).
+
+     `buildFpvModel()` still builds the single-file model, which the native tests use.
 
 Each phase adds native-codegen tests to `__tests__/reference-models/` that fly the model for a few seconds and assert physical invariants.
 

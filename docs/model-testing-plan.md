@@ -1,6 +1,6 @@
 # Testing Generated Code: Assertions, a Test Runner, and Model References
 
-Status: decisions confirmed. Part A (milestones 1–4) is implemented; Part B is not yet (October 2026).
+Status: implemented (October 2026). Part A (milestones 1–4) and Part B (milestones 1–5); differences from the plan are noted in B3, B4 and B8.
 
 ## Goal
 
@@ -217,26 +217,23 @@ This should be closed later. One way is to make the deployable's exported C a mo
 
 This allows scripted test-model generation, as the FPV builder does today.
 
-### B8. Milestones
+### B8. Milestones (done)
 
-1. `loadModelForBuild` with reference resolution, cycle detection and cache keys. Codegen changes 1–4. Native tests: a deployable with parameters, embedded twice in a test model with Assert blocks, built and run.
-2. Editor:
-   - the Model Reference block and its config dialog;
-   - the `referencedModels` cache and validation;
-   - Open Model in a new tab;
-   - live refresh;
-   - missing-model display.
-3. Version pinning UI, the dependency table and delete/export warnings.
-4. Model Builder and MCP support.
-5. **Reference example:** split the FPV quadcopter into:
-   - **an FPV vehicle model:** the frame and body dynamics, motors, battery, sensors and flight controller. The pilot's sticks come in as top-level Input Ports, and the telemetry goes out as Output Ports.
-   - **test models that embed it:**
-     - the current demo flight: its Pilot stick profile, Telemetry scopes, and the Tests sheet's Asserts;
-     - one or two focused tests, such as an acro rate step or a hover hold, each with its own stick inputs, duration and Asserts.
+1. ✅ Expansion with resolution, cycle detection and cache keys (B3, B4), with native tests: a referenced model with parameters, sheet labels and an inner subsystem reference, embedded twice and run.
+2. ✅ Editor:
+   - the Model Reference block and its dialog;
+   - the loaded referenced models, used by validation and typing;
+   - Open Model in a new tab, a missing-model badge, and refresh.
+   - **Change:** referenced models reload when the window regains focus, not through one event stream each. Streams could exhaust the browser's per-host connection limit, and the common case is editing in another tab and coming back.
+3. ✅ Pinning, delete and export warnings.
+   - **Change:** dependents are found by scanning the stored models' files (`GET /api/models/:id/dependents`), not through a `model_dependencies` table.
+   - **Added:** a reference records its model's name. When the id is unknown (the model was imported or seeded), the one model with that name is used. This lets shipped test models find their vehicle, and lets an imported test model find a separately imported model.
+4. ✅ Model Builder `addModelReference` / `setModelReference`, and the MCP tools `add_model_reference` / `set_model_reference`.
+5. ✅ The FPV split: **FPV Vehicle**, plus the test models **FPV Demo Flight** and **FPV Acro Rate Step**. `obliq:test` resolves references among model files in the same folder, so the shipped files test without a store.
 
-   Later, the flight controller could become its own model inside the vehicle, as a nested reference.
-
-   This depends on reference-model seeding learning to remap model ids between the seeded files.
+**Fixes found on the way:**
+- A multi-sheet subsystem is now typed across its sheets, so an output fed by a sheet label from another of its sheets resolves.
+- A sheet label fed through a subsystem output that is itself driven by a sheet label no longer leaves a dangling wire, which validation reported as an error.
 
 ## Order of work
 

@@ -1,9 +1,10 @@
 /**
- * Builds reference-models/fpv-quadcopter.json, the FPV quadcopter reference
- * model. See docs/fpv-reference-model-plan.md for the design, parameters and
- * sources.
+ * Builds the FPV quadcopter reference models in reference-models/: the
+ * vehicle (fpv-vehicle.json) and test models that embed it with a model
+ * reference (fpv-demo-flight.json, fpv-acro-rate-step.json). See
+ * docs/fpv-reference-model-plan.md for the design, parameters and sources.
  *
- *   npx tsx --tsconfig tsconfig.json scripts/build-fpv-reference-model.ts [out.json]
+ *   npx tsx --tsconfig tsconfig.json scripts/build-fpv-reference-model.ts [out-dir]
  *
  * The model is generated rather than drawn so it stays reviewable and
  * reproducible: parameters live in one place below, and the diagram is laid
@@ -23,6 +24,7 @@ import type { Sheet } from '@/lib/simulationTypes'
 import { tuneModelLayout, DEFAULT_TUNE_OPTIONS } from '@/lib/layout/tuneModelLayout'
 import { ussa1976, USSA1976 } from '@/lib/atmosphere/ussa1976'
 import { loadWmm2025, wmmField } from './lib/wmm'
+import { modelInterface } from '@/lib/modelReferences'
 
 // ---------------------------------------------------------------------------
 // Parameters (kingfisher 5-inch, agile_flight MIT; see the plan for sources)
@@ -1218,7 +1220,16 @@ const MOTOR_OUTPUTS = ['omega', 'thrust', 'omega_dot', 'power']
 const FRAME_OUTPUTS = ['pos_ned', 'vel_ned', 'quat', 'euler', 'omega', 'accel']
 const FRAME_OUTPUT_TYPES = ['double[3]', 'double[3]', 'double[4][1]', 'double[3]', 'double[3]', 'double[3]']
 
+/** The vehicle model's name; test models reference it by this name. */
+export const FPV_VEHICLE_NAME = 'FPV Vehicle'
+
 export interface FpvModelOptions {
+  /**
+   * The vehicle alone, for embedding with a model reference: the pilot's
+   * sticks come in on a top-level Input Port "sticks" (double[6]) and the
+   * Telemetry sheet holds only the Output Ports (no scopes, no Tests sheet).
+   */
+  vehicleOnly?: boolean
   /** Plant only: a constant motor command (default hover) instead of pilot and flight controller. */
   openLoop?: boolean
   motorCommand?: number[]
@@ -1258,7 +1269,9 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     const cmd = main.constant('MotorCmd', opts.motorCommand ?? [hover, hover, hover, hover], 'double[4]')
     main.wire(cmd, split)
   } else {
-    const pilot = main.add('subsystem', 'Pilot', subsystem([], ['sticks'], buildPilotSheet(opts.sticks ?? DEMO_STICKS)))
+    const pilot = opts.vehicleOnly
+      ? main.input('sticks', 'double[6]')
+      : main.add('subsystem', 'Pilot', subsystem([], ['sticks'], buildPilotSheet(opts.sticks ?? DEMO_STICKS)))
     fc = main.add('subsystem', 'FlightController', {
       ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure'], FC_OUTPUTS, buildFlightControllerSheet(initialQuat, altitude0), FC_SIZE),
       sampleTimeSec: FC.ts,
@@ -1353,14 +1366,16 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   } else {
     displays.push(['BodyRates', 'omega'])
   }
-  for (const [label, signal] of displays) {
-    const d = telemetry.add('signal_display', label, { maxSamples: 10000 })
-    telemetry.wire(published.get(signal)!, d)
+  if (!opts.vehicleOnly) {
+    for (const [label, signal] of displays) {
+      const d = telemetry.add('signal_display', label, { maxSamples: 10000 })
+      telemetry.wire(published.get(signal)!, d)
+    }
   }
 
   // The default demo flight carries its pass/fail checks on a Tests sheet
   const isDefaultDemo =
-    !!fc && opts.sticks === undefined && !opts.initialAltitude && !opts.initialEuler && !opts.initialOmega
+    !!fc && !opts.vehicleOnly && opts.sticks === undefined && !opts.initialAltitude && !opts.initialEuler && !opts.initialOmega
   let sheets: Sheet[] = [main.sheet(), telemetry.sheet()]
   if (isDefaultDemo) sheets.push(buildTestsSheet().sheet())
   sheets = tuneModelLayout(sheets as any, null, {
@@ -1371,7 +1386,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   }).sheets as unknown as Sheet[]
   fitExtents(sheets)
 
-  return {
+  const model = {
     name: 'FPV Quadcopter',
     data: {
       version: '2.2',
@@ -1408,6 +1423,215 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
       sheets,
     },
   }
+  if (opts.vehicleOnly) {
+    model.name = FPV_VEHICLE_NAME
+    model.data.metadata.description =
+      '5-inch FPV quadcopter vehicle, for embedding in test models with a Model Reference block. ' +
+      'Frame and 6-DOF body, four motor/propeller subsystems, 4S battery, IMU/magnetometer/barometer models, ground contact ' +
+      `and a Betaflight-style flight controller (acro and angle modes, arming, Mahony and altitude estimators) at ${LOCATION.name}. ` +
+      'Input: sticks = [roll, pitch, yaw, throttle, AUX1 angle mode, AUX2 arm] (double[6], sticks -1..1, throttle 0..1, switches above 0.5 on). ' +
+      'Outputs (Telemetry sheet): the true state, sensor readings, motor commands and speeds, rate setpoints, estimates and battery. ' +
+      'Test models such as "FPV Demo Flight" drive it and check it with Assert blocks. Built by scripts/build-fpv-reference-model.ts; ' +
+      'see docs/fpv-reference-model-plan.md.'
+  }
+  return model
+}
+
+// ---------------------------------------------------------------------------
+// Test models: a Pilot and the FPV Vehicle (by model reference), with scopes
+// on a Telemetry sheet and Assert blocks on a Tests sheet
+
+export interface FpvTestSpec {
+  name: string
+  description: string
+  sticks: StickProfile
+  /** Simulated seconds */
+  duration: number
+  /** Telemetry scopes: [label, vehicle output] */
+  displays: Array<[string, string]>
+  /** The Tests sheet (Assert blocks reading vehicle outputs through sheet labels) */
+  tests: () => SheetBuilder
+}
+
+/**
+ * A test model that embeds the vehicle. The reference records the vehicle's
+ * name, so it resolves after the models are imported or seeded (new ids).
+ */
+export function buildFpvTestModel(spec: FpvTestSpec): { name: string; data: Record<string, unknown> } {
+  const vehicle = buildFpvModel({ vehicleOnly: true })
+  const iface = modelInterface(vehicle.data as any)
+
+  const telemetry = new SheetBuilder('telemetry', 'Telemetry')
+  for (const [label, signal] of spec.displays) {
+    const src = telemetry.add('sheet_label_source', `From_${signal}`, { signalName: signal })
+    const d = telemetry.add('signal_display', label, { maxSamples: 10000 })
+    telemetry.wire(src, d)
+  }
+  const tests = spec.tests()
+
+  // Publish from the vehicle every output the other sheets read
+  const used = new Set<string>()
+  for (const sheet of [telemetry, tests]) {
+    for (const b of sheet.blocks) {
+      if (b.type === 'sheet_label_source') used.add(String(b.parameters?.signalName))
+    }
+  }
+  const main = new SheetBuilder('main', 'Main')
+  const pilot = main.add('subsystem', 'Pilot', subsystem([], ['sticks'], buildPilotSheet(spec.sticks)))
+  const vehicleBlock = main.add('subsystem', 'Vehicle', {
+    showPortNames: true,
+    sheets: [],
+    inputPorts: iface.inputs,
+    outputPorts: iface.outputs,
+    modelRef: { modelId: FPV_VEHICLE_REF_ID, version: null, name: FPV_VEHICLE_NAME },
+    modelRefName: FPV_VEHICLE_NAME,
+  })
+  main.wire(pilot, vehicleBlock, iface.inputs.indexOf('sticks'))
+  for (const signal of iface.outputs) {
+    if (!used.has(signal)) continue
+    const tag = main.add('sheet_label_sink', `Tag_${signal}`, { signalName: signal })
+    main.wire(vehicleBlock, tag, 0, iface.outputs.indexOf(signal))
+  }
+  const missing = [...used].filter(sig => !iface.outputs.includes(sig))
+  if (missing.length) throw new Error(`${spec.name}: the vehicle has no output ${missing.join(', ')}`)
+
+  let sheets: Sheet[] = [main.sheet(), telemetry.sheet(), tests.sheet()]
+  sheets = tuneModelLayout(sheets as any, null, {
+    ...DEFAULT_TUNE_OPTIONS,
+    cleanUpLayout: true,
+    resizeSubsystems: false,
+    scope: 'model',
+  }).sheets as unknown as Sheet[]
+  fitExtents(sheets)
+  return {
+    name: spec.name,
+    data: {
+      version: '2.2',
+      metadata: { created: '2026-10-21T00:00:00.000Z', description: spec.description },
+      globalSettings: { simulationTimeStep: FPV.dt, simulationDuration: spec.duration, integrationAlgorithm: 'rk4', debugMath: false },
+      parameters: [],
+      dataStores: [],
+      sheets,
+    },
+  }
+}
+
+/**
+ * Placeholder id for the vehicle in shipped test models. No store has it, so
+ * the reference falls back to the model named FPV_VEHICLE_NAME (and the
+ * editor then records that model's real id).
+ */
+export const FPV_VEHICLE_REF_ID = 'reference-model:fpv-vehicle'
+
+const DEMO_DISPLAYS: Array<[string, string]> = [
+  ['Position', 'pos_ned'], ['Attitude', 'euler'], ['RotorSpeed', 'motor_omega'], ['RateSetpoint', 'rate_setpoint'],
+  ['GyroRate', 'gyro_dps'], ['MotorCommand', 'motor_cmd'], ['AttitudeEstimate', 'euler_est'],
+  ['AltitudeEstimate', 'altitude_est'], ['Battery', 'battery_voltage'],
+]
+
+/** The default demo flight as a test model: the original FPV model's Pilot, scopes and Tests sheet. */
+export function buildFpvDemoFlightModel() {
+  return buildFpvTestModel({
+    name: 'FPV Demo Flight',
+    description:
+      'Test model for the FPV Vehicle: the Pilot arms at 0.25 s, takes off from the field, hovers, then in angle mode flies a ' +
+      '24 deg bank, an 18 deg forward pitch and a yaw turn. The Vehicle block is a Model Reference to "FPV Vehicle". ' +
+      'Scopes are on the Telemetry sheet; Assert blocks on the Tests sheet check arming, the climb, each manoeuvre, ' +
+      'the estimators and the battery (npm run obliq:test -- "FPV Demo Flight").',
+    sticks: DEMO_STICKS,
+    duration: 5,
+    displays: DEMO_DISPLAYS,
+    tests: buildTestsSheet,
+  })
+}
+
+/**
+ * Acro rate step: take off as in the demo, then in acro mode a 0.3 roll stick
+ * step (75 deg/s) held 0.23 s, reversed for 0.23 s to roll back, and released.
+ */
+export const ACRO_STEP_STICKS: StickProfile = {
+  roll: [[0, 0], [2.0, 0], [2.02, 0.3], [2.25, 0.3], [2.27, -0.3], [2.5, -0.3], [2.52, 0]],
+  pitch: [[0, 0]],
+  yaw: [[0, 0]],
+  throttle: DEMO_STICKS.throttle,
+  aux: [[0, 0]],
+  arm: DEMO_STICKS.arm,
+}
+
+/** Limits for the acro rate step (deg/s and deg), around the flown response. */
+export const ACRO_STEP_TESTS = {
+  /** After the overshoot, roll rate within this of the 75 deg/s setpoint */
+  rateTrackDps: 10,
+  rollRightWindow: [2.14, 2.25] as [number, number],
+  rollLeftWindow: [2.42, 2.5] as [number, number],
+  /** Peak roll rate while stepping (the reversal swings 150 deg/s) */
+  peakDps: 140,
+  stepWindow: [2.0, 2.6] as [number, number],
+  /** Pitch and yaw rates stay quiet during a pure roll step */
+  crossAxisDps: 5,
+  /** Back within this of level once the stick is released */
+  levelFrom: 2.7,
+  levelDeg: 3,
+  uprightDeg: 60,
+}
+
+function buildAcroStepTestsSheet(): SheetBuilder {
+  const t = ACRO_STEP_TESTS
+  const s = new SheetBuilder('tests', 'Tests')
+  const R2D = Number((180 / Math.PI).toFixed(4))
+  const from = (signal: string) => s.add('sheet_label_source', `From_${signal}`, { signalName: signal })
+  const pick = (name: string, src: string, indices: number[]) => {
+    const id = s.add('selector', name, { indices })
+    s.wire(src, id)
+    return id
+  }
+  const check = (name: string, input: string, params: Record<string, unknown>, expected?: string) => {
+    const id = s.add('assert', name, { mode: 'bounds', checkFrom: 0, checkUntil: null, onFailure: 'record', ...params })
+    s.wire(input, id, 0)
+    if (expected) s.wire(expected, id, 1)
+  }
+  const gyro = from('gyro_dps')
+  const setpoint = from('rate_setpoint')
+  const eulerDeg = s.add('scale', 'EulerDeg', { gain: R2D })
+  s.wire(from('euler'), eulerDeg)
+  const rollRate = pick('RollRate', gyro, [0])
+  const rollSetpoint = pick('RollRateSetpoint', setpoint, [0])
+  const pitchYawRate = pick('PitchYawRate', gyro, [1, 2])
+  const rollPitch = pick('RollPitch', eulerDeg, [0, 1])
+
+  const track = { mode: 'near', absTol: t.rateTrackDps, relTol: 0 }
+  check('RollRateTracksRight', rollRate, { ...track, checkFrom: t.rollRightWindow[0], checkUntil: t.rollRightWindow[1] }, rollSetpoint)
+  check('RollRateTracksLeft', rollRate, { ...track, checkFrom: t.rollLeftWindow[0], checkUntil: t.rollLeftWindow[1] }, rollSetpoint)
+  check('RollRatePeakBounded', rollRate, { lower: -t.peakDps, upper: t.peakDps, checkFrom: t.stepWindow[0], checkUntil: t.stepWindow[1] })
+  check('PitchYawQuiet', pitchYawRate, { lower: -t.crossAxisDps, upper: t.crossAxisDps, checkFrom: t.stepWindow[0], checkUntil: t.stepWindow[1] })
+  check('ReturnsLevel', pick('Roll', eulerDeg, [0]), { lower: -t.levelDeg, upper: t.levelDeg, checkFrom: t.levelFrom })
+  check('StaysUpright', rollPitch, { lower: -t.uprightDeg, upper: t.uprightDeg, onFailure: 'stop' })
+  return s
+}
+
+/** A focused test model: the acro roll-rate step response. */
+export function buildFpvAcroRateStepModel() {
+  return buildFpvTestModel({
+    name: 'FPV Acro Rate Step',
+    description:
+      'Test model for the FPV Vehicle: after take-off, in acro mode, a 75 deg/s roll-rate step and its reversal. ' +
+      'Assert blocks on the Tests sheet check that the roll rate settles on its setpoint, the overshoot is bounded, ' +
+      'pitch and yaw stay quiet, and the quad returns level. The Vehicle block is a Model Reference to "FPV Vehicle" ' +
+      '(npm run obliq:test -- "FPV Acro Rate Step").',
+    sticks: ACRO_STEP_STICKS,
+    duration: 3,
+    displays: [['GyroRate', 'gyro_dps'], ['RateSetpoint', 'rate_setpoint'], ['Attitude', 'euler'], ['MotorCommand', 'motor_cmd']],
+    tests: buildAcroStepTestsSheet,
+  })
+}
+
+/** The FPV files shipped in reference-models/: [file name, model]. */
+export function SHIPPED_FPV_MODELS(): Array<[string, { name: string; data: Record<string, unknown> }]> {
+  return [
+    ['fpv-vehicle.json', buildFpvModel({ vehicleOnly: true })],
+    ['fpv-demo-flight.json', buildFpvDemoFlightModel()],
+    ['fpv-acro-rate-step.json', buildFpvAcroRateStepModel()],
+  ]
 }
 
 /** Grow each sheet's extents to cover its laid-out blocks. */
@@ -1475,7 +1699,11 @@ function fitExtents(sheets: Sheet[]): void {
 }
 
 if (require.main === module) {
-  const out = process.argv[2] || path.join(__dirname, '..', 'reference-models', 'fpv-quadcopter.json')
-  fs.writeFileSync(out, JSON.stringify(buildFpvModel(), null, 2) + '\n')
-  console.log(`Wrote ${out} (hover command ${HOVER_COMMAND.toFixed(4)}, omega_max ${OMEGA_MAX.toFixed(1)} rad/s)`)
+  // Shipped reference models: the vehicle and the test models that embed it
+  const dir = process.argv[2] || path.join(__dirname, '..', 'reference-models')
+  for (const [file, model] of SHIPPED_FPV_MODELS()) {
+    fs.writeFileSync(path.join(dir, file), JSON.stringify(model, null, 2) + '\n')
+    console.log(`Wrote ${path.join(dir, file)}`)
+  }
+  console.log(`(hover command ${HOVER_COMMAND.toFixed(4)}, omega_max ${OMEGA_MAX.toFixed(1)} rad/s)`)
 }

@@ -710,6 +710,31 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 
 ---
 
+### Model Reference Block
+**Purpose**: Embeds another saved model, the way a test model embeds the model it tests. Several models can embed the same model, each driving it with its own inputs and run settings.
+
+**Parameters** (a `subsystem` block with no sheets of its own):
+- `modelRef`: `{ modelId, version, name }`. `version` is a saved version to pin, or `null` for the model's latest save. `name` is the model's name; if no model has `modelId` (the model was imported or seeded and got a new id), the one model with exactly this name is used, and the editor then records its id.
+- `inputPorts`, `outputPorts`: the referenced model's top-level Input Port and Output Port names, in sheet then block order. The editor keeps these current.
+
+**In the editor**:
+- Add one from the **Hierarchy** group, choose the model and version in its properties, and see its ports there.
+- **Open Model** (properties dialog or context menu) opens the referenced model in a new tab, read-only when pinned. Edit it there; when you return, references that follow the latest save reload it, and the block's ports follow. Wires are matched by port name.
+- The badge shows `latest`, `vN`, `vN · newer` (a newer version exists), `missing` or `no model`.
+- Deleting a model that others reference warns which models use it. Exporting a model with references reminds you to export the referenced models too.
+
+**Building and simulating**: the referenced model is read when this model is built (simulation, Generate Code, `obliq:test`) and is compiled in as a flattened subsystem.
+- Its own simulation settings are ignored; this model's apply.
+- Its parameters join this model's. The same name with a different value or type is an error naming both models.
+- Sheet labels never connect across the model boundary.
+- References nest, up to 8 deep. A cycle is an error.
+- A referenced model with data stores is not supported yet.
+- Assert blocks inside the referenced model are checked and reported.
+
+**APIs**: the Model Builder actions `addModelReference` and `setModelReference`, and the MCP tools `add_model_reference` and `set_model_reference`.
+
+---
+
 ## Type System Notes
 
 ### Supported Base Types

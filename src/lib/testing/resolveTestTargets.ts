@@ -10,8 +10,8 @@ import * as path from 'path'
 import { openStorage, type Storage } from '@/lib/server/storage'
 import { createStoragePaths, resolveObliqHome } from '@/lib/server/storage/paths'
 import { parseModelDocument } from '@/lib/server/storage/ModelRepository'
-import { expandForBuild } from '@/lib/server/modelReferenceLoader'
-import { hasModelReferences } from '@/lib/modelReferences'
+import { storageModelLoader } from '@/lib/server/modelReferenceLoader'
+import { ModelLoader, ModelReferenceError, expandModelReferences, hasModelReferences } from '@/lib/modelReferences'
 import { ModelTestTarget, modelHasAsserts } from './modelTestRunner'
 
 export interface ResolveResult {
@@ -42,9 +42,27 @@ export function resolveTestTargets(args: string[], opts: ResolveOptions = {}): R
     return storage
   }
 
-  // Model references are expanded from the store before the model is built
-  const expand = (t: ModelTestTarget): ModelTestTarget =>
-    hasModelReferences(t.data.sheets) ? { ...t, data: expandForBuild(store(), t.data as any, t.name).data } : t
+  // Model references are expanded before the model is built: from the model
+  // files beside a model file (by name), then from the store
+  const storeExists = fs.existsSync(createStoragePaths(home).db)
+  const expand = (t: ModelTestTarget): ModelTestTarget => {
+    if (!hasModelReferences(t.data.sheets)) return t
+    const loaders: ModelLoader[] = []
+    if (t.file) loaders.push(siblingFileLoader(path.dirname(t.file)))
+    if (storeExists || !t.file) loaders.push(storageModelLoader(store()))
+    const load: ModelLoader = ref => {
+      let last: Error | null = null
+      for (const l of loaders) {
+        try {
+          return l(ref)
+        } catch (e) {
+          last = e as Error
+        }
+      }
+      throw last ?? new ModelReferenceError(`the referenced model (${ref.modelId}) does not exist`)
+    }
+    return { ...t, data: expandModelReferences(t.data as any, load, { rootName: t.name }).data }
+  }
 
   try {
     for (const arg of args) {
@@ -104,4 +122,33 @@ export function resolveTestTargets(args: string[], opts: ResolveOptions = {}): R
     ;(storage as Storage | null)?.db.close()
   }
   return result
+}
+
+/**
+ * Resolves references against the model files in a folder, by the
+ * reference's recorded model name (files carry no store id). Pinned versions
+ * are not available from files.
+ */
+function siblingFileLoader(dir: string): ModelLoader {
+  let byName: Map<string, { name: string; data: any; file: string }> | null = null
+  return ref => {
+    if (!byName) {
+      byName = new Map()
+      for (const f of fs.readdirSync(dir).filter(n => n.toLowerCase().endsWith('.json'))) {
+        try {
+          const file = path.join(dir, f)
+          const doc = parseModelDocument(fs.readFileSync(file, 'utf8'), file)
+          if (doc.name && !byName.has(doc.name)) byName.set(doc.name, { name: doc.name, data: doc.data, file })
+        } catch {
+          // not a model file
+        }
+      }
+    }
+    const m = ref.name ? byName.get(ref.name) : undefined
+    if (!m) throw new ModelReferenceError(`no model file named "${ref.name ?? ref.modelId}" in ${dir}`)
+    if (ref.version !== null) {
+      throw new ModelReferenceError(`model file "${m.name}" has no saved versions (the reference pins v${ref.version})`)
+    }
+    return { id: ref.modelId, name: m.name, version: null, hash: m.file, data: m.data }
+  }
 }
