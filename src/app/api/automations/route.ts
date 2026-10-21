@@ -4,6 +4,7 @@ import { CodeGenerator } from '@/lib/codeGenerationNew'
 import { executeServerSimulation, type SimulationConfig } from '@/lib/wasm/ServerWasmExecutor'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
 import { authenticateRequest } from '@/lib/apiAuthMiddleware'
+import { expandForBuild, ModelReferenceError } from '@/lib/server/modelReferenceLoader'
 import {
   getStorage,
   ModelNotFoundError,
@@ -152,6 +153,17 @@ async function automationHandler(
       throw new AppError(error.message, 422, ErrorTypes.VALIDATION_ERROR, { modelId: body.modelId })
     }
     throw error
+  }
+  // Model references are expanded from the store before code generation
+  if (versionData.data?.sheets) {
+    try {
+      versionData = { ...versionData, data: expandForBuild(storage, versionData.data, model.name).data }
+    } catch (error) {
+      if (error instanceof ModelReferenceError) {
+        throw new AppError(error.message, 422, ErrorTypes.VALIDATION_ERROR, { modelId: body.modelId })
+      }
+      throw error
+    }
   }
   const versionToUse = versionData.version
 

@@ -173,29 +173,27 @@ The block reuses `type: 'subsystem'`, so existing port handling, type checking a
 
 ### B3. Resolving references (server side)
 
-- Add a single **`loadModelForBuild(modelId, version)`**. It replaces the three duplicated `loadModelSource` copies (generate-code, compile-wasm, compile-wasm-stream) and the automations loader, and is also used by `obliq:test`.
-- It loads the model, then recursively resolves each model reference into an in-memory expanded model:
-  - the referenced model's sheets go into the block's `sheets`;
-  - its parameters and module name are attached.
+Implemented as `expandModelReferences` (`src/lib/modelReferences.ts`), with a store-backed loader (`src/lib/server/modelReferenceLoader.ts`). The generate-code and both compile routes, the automations API and `obliq:test` all expand a model right after loading it.
+
+- Each reference is expanded recursively into an in-memory copy. The block gets the referenced model's sheets, and its ports become the model's top-level Input and Output Ports, in sheet then block order.
+- Wires to the block are re-indexed by port name, so a reordered interface stays wired. A wire to a port the model no longer has is an error.
 - It enforces:
   - **Cycles** (A embeds B embeds A) are an error naming the chain.
   - **Depth** is limited to 8.
-  - A pinned version that no longer exists is an error.
-- The WASM cache key includes the content hash of every resolved reference, so editing the deployable rebuilds its test models.
+  - A missing model, or a pinned version that no longer exists, is an error.
+  - A referenced model with data stores is not supported yet.
+- The WASM cache key is computed from the expanded model, so editing the referenced model rebuilds the models that embed it.
+- Code generation refuses a model whose references were not expanded.
 
-### B4. Code generation changes
+### B4. Code generation (as built)
 
-The flattener already compiles intra-model references as `segregated_atomic` shared modules (`ModelFlattener.analyzeSegregatedSubsystem`). A resolved model reference goes through the same path, with four changes:
-
-1. **Parameters belong to the referenced model.** Today a module uses the *host* model's parameters as global `#define PARAM_*`. For a model reference:
-   - the module uses its own model's parameters;
-   - they are emitted inside its `.c`/`.h` under a module prefix (`<Module>_PARAM_*`), so two models with a parameter of the same name do not collide.
-   This is the largest codegen change.
-2. **Module names** come from the referenced model's name, made unique if two different models share a name. Two references to the same model and version share one module. References to two different versions of the same model get separate modules.
-3. **Sample time:** the referenced model's blocks run at the host's rate unless they set their own. The referenced model's own `globalSettings` (time step, integrator) are ignored when embedded; the test model's settings govern. The config dialog says so.
-4. **`WasmCodeGenerator.resolveSubsystemOutput`** must resolve references. It reads `parameters.sheets` directly today, which is already a gap for intra-model references.
-
-Data stores and Goto/From labels never cross a model boundary. Intra-model references inside the referenced model keep working, because each module is flattened against its own sheets.
+**Change from the original plan:** a model reference is expanded as an ordinary **flattened** subsystem, not a segregated C module.
+- The module generator cannot hold segregated subsystems inside a module. The FPV vehicle, for example, has segregated Motor modules. Flattening keeps them working exactly as they do at the top level of a model today.
+- Inside the copy, block, sheet and connection ids, and sheet-label names, are prefixed per instance (`<block id>~`). Nothing binds across the model boundary, and subsystem references inside the referenced model stay consistent.
+- **Parameters:** a referenced model's parameters join the host's, because model parameters are global in generated C. The same name with a different value or type is an error naming both models; identical definitions merge. Module-private parameters would need the segregated path above.
+- **Sample time:** the referenced model's blocks run at the host's rate, unless the reference block or blocks inside it set their own. The referenced model's own `globalSettings` are ignored when it is embedded; the test model's settings govern.
+- **Asserts:** Assert blocks inside a referenced model are checked and reported, since they are flattened into the host. Their block ids carry the instance prefix.
+- **Two instances** of the same model are two flattened copies. Segregated subsystems inside them share one C module, because they have the same definition.
 
 ### B5. Editor changes
 

@@ -17,6 +17,7 @@ import { DataStoreDeclaration, refineDataStoreTypes } from '@/lib/dataStoreUtils
 import { SubsystemCodeGenerator, SubsystemCodeResult } from './SubsystemCodeGenerator'
 import { generateDebugMathPreamble } from './DebugMathRuntime'
 import { generateAssertFunctions, reportedAssertBlocks, unsupportedAssertBlocks } from './AssertResults'
+import { hasModelReferences, ModelReferenceError } from '@/lib/modelReferences'
 
 /**
  * Options for code generation
@@ -106,6 +107,13 @@ export class CodeGenerator {
     parameters: ModelParameter[] = [],
     dataStores: DataStoreDeclaration[] = []
   ): CodeGenerationResult {
+    // Model references must be expanded first (server: loadModelForBuild)
+    if (hasModelReferences(sheets)) {
+      throw new ModelReferenceError(
+        'This model contains model references, which must be expanded before code generation'
+      )
+    }
+
     // Step 1: Flatten the model
     const flattener = new ModelFlattener({
       preserveOriginalNames: this.options.includeDebugComments,

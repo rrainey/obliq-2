@@ -12,6 +12,7 @@ import {
   type ModelData
 } from '@/lib/server/storage'
 import JSZip from 'jszip'
+import { expandForBuild, ModelReferenceError } from '@/lib/server/modelReferenceLoader'
 
 export const runtime = 'nodejs'
 
@@ -278,6 +279,22 @@ void loop() {
  * (authoritative, possibly newer than the latest snapshot) is used.
  */
 function loadModelSource(
+  modelId: string,
+  version?: number | null
+): { modelName: string; versionToUse: number; data: ModelData } {
+  const source = loadRawModelSource(modelId, version)
+  // Model references are expanded from the store before code generation
+  try {
+    return { ...source, data: expandForBuild(getStorage(), source.data, source.modelName).data }
+  } catch (error) {
+    if (error instanceof ModelReferenceError) {
+      throw new AppError(error.message, 422, ErrorTypes.VALIDATION_ERROR, { modelId })
+    }
+    throw error
+  }
+}
+
+function loadRawModelSource(
   modelId: string,
   version?: number | null
 ): { modelName: string; versionToUse: number; data: ModelData } {

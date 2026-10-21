@@ -40,6 +40,7 @@ import * as fs from 'fs/promises'
 import * as path from 'path'
 import * as os from 'os'
 import { emccExportedFunctionsArg } from '@/lib/wasm/wasmExports'
+import { expandForBuild, ModelReferenceError } from '@/lib/server/modelReferenceLoader'
 
 const execAsync = promisify(exec)
 
@@ -179,6 +180,20 @@ export async function POST(request: NextRequest) {
           return
         }
         console.log(`[compile-wasm-stream] Requested version: ${version}, using version: ${versionToUse}`)
+
+        // Model references are expanded from the store before code generation
+        if (modelData?.sheets) {
+          try {
+            modelData = expandForBuild(storage, modelData, model.name).data
+          } catch (error) {
+            if (error instanceof ModelReferenceError) {
+              sendEvent(controller, 'error', { error: error.message, modelId })
+              controller.close()
+              return
+            }
+            throw error
+          }
+        }
 
         // Validate model structure
         if (!modelData || !modelData.sheets || !Array.isArray(modelData.sheets)) {

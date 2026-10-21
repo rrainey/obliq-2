@@ -10,6 +10,8 @@ import * as path from 'path'
 import { openStorage, type Storage } from '@/lib/server/storage'
 import { createStoragePaths, resolveObliqHome } from '@/lib/server/storage/paths'
 import { parseModelDocument } from '@/lib/server/storage/ModelRepository'
+import { expandForBuild } from '@/lib/server/modelReferenceLoader'
+import { hasModelReferences } from '@/lib/modelReferences'
 import { ModelTestTarget, modelHasAsserts } from './modelTestRunner'
 
 export interface ResolveResult {
@@ -40,16 +42,20 @@ export function resolveTestTargets(args: string[], opts: ResolveOptions = {}): R
     return storage
   }
 
+  // Model references are expanded from the store before the model is built
+  const expand = (t: ModelTestTarget): ModelTestTarget =>
+    hasModelReferences(t.data.sheets) ? { ...t, data: expandForBuild(store(), t.data as any, t.name).data } : t
+
   try {
     for (const arg of args) {
       try {
         if (fs.existsSync(arg) && fs.statSync(arg).isFile()) {
           const doc = parseModelDocument(fs.readFileSync(arg, 'utf8'), arg)
-          result.targets.push({
+          result.targets.push(expand({
             name: doc.name || path.basename(arg).replace(/\.json$/i, '').replace(/\.obliq$/i, ''),
             file: arg,
             data: doc.data as any,
-          })
+          }))
           continue
         }
         const s = store()
@@ -69,7 +75,7 @@ export function resolveTestTargets(args: string[], opts: ResolveOptions = {}): R
           continue
         }
         const current = s.models.readCurrent(matches[0]!.id)
-        result.targets.push({ name: current.record.name, id: current.record.id, data: current.data as any })
+        result.targets.push(expand({ name: current.record.name, id: current.record.id, data: current.data as any }))
       } catch (e) {
         result.errors.push({ arg, message: (e as Error).message })
       }
@@ -84,7 +90,7 @@ export function resolveTestTargets(args: string[], opts: ResolveOptions = {}): R
           try {
             const current = s.models.readCurrent(m.id)
             if (modelHasAsserts((current.data as any).sheets)) {
-              result.targets.push({ name: current.record.name, id: current.record.id, data: current.data as any })
+              result.targets.push(expand({ name: current.record.name, id: current.record.id, data: current.data as any }))
             }
           } catch (e) {
             result.errors.push({ arg: `${m.name} (${m.id})`, message: (e as Error).message })
