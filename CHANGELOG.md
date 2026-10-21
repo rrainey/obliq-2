@@ -1,6 +1,6 @@
 # obliq-2 Change Log
 
-## Unreleased
+## What's New in 3.2.2
 
 - **Fixed: subsystem references losing their ports.** Opening a subsystem definition's sheet and returning cleared the port lists of every reference to it. The references still built and ran, because code generation takes ports from the definition. The editor, though, drew them without ports, and Validate reported "Unable to determine signal type" for each of their wires. Saving kept the damage.
   - References now always take their ports from their definition, including when ports are added inside it.
