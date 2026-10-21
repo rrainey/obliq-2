@@ -824,6 +824,37 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     outputs: []
   },
   {
+    type: 'assert',
+    displayName: 'Assert',
+    category: 'Sinks',
+    description:
+      'Test check: records whether its input ever left bounds, differed from an expected value, or was false. ' +
+      'Checked once per major step inside the check window; vectors and matrices element by element. ' +
+      'Compiled into generated C only when OBLIQ_ASSERTS is defined.',
+    parameters: {
+      mode: {
+        type: 'string',
+        description: 'bounds: lower ≤ u ≤ upper; near: |u − expected| ≤ absTol + relTol·|expected| (adds an "expected" input); true: u non-zero',
+        default: 'bounds',
+        enum: ['bounds', 'near', 'true']
+      },
+      lower: { type: 'number', description: 'Lower bound (bounds mode); null for none', default: -1 },
+      upper: { type: 'number', description: 'Upper bound (bounds mode); null for none', default: 1 },
+      absTol: { type: 'number', description: 'Absolute tolerance (near mode)', default: 1e-6, minimum: 0 },
+      relTol: { type: 'number', description: 'Relative tolerance, fraction of |expected| (near mode)', default: 0, minimum: 0 },
+      checkFrom: { type: 'number', description: 'Start of the check window (s)', default: 0, minimum: 0 },
+      checkUntil: { type: 'number', description: 'End of the check window (s); null for the end of the run', default: null },
+      onFailure: {
+        type: 'string',
+        description: 'record: note the failure and continue; stop: end the simulation after the failing step',
+        default: 'record',
+        enum: ['record', 'stop']
+      }
+    },
+    inputs: ['u'],
+    outputs: []
+  },
+  {
     type: 'no_connection',
     displayName: 'No Connection',
     category: 'Sinks',

@@ -10,6 +10,7 @@ import { OutputPortBlockModule } from './OutputPortBlockModule'
 import { SourceBlockModule } from './SourceBlockModule'
 import { ClockBlockModule } from './ClockBlockModule'
 import { RandomNoiseBlockModule } from './RandomNoiseBlockModule'
+import { AssertBlockModule } from './AssertBlockModule'
 import { ScaleBlockModule } from './ScaleBlockModule'
 import { EvaluateBlockModule } from './EvaluateBlockModule'
 import { SaturationDynamicBlockModule } from './SaturationDynamicBlockModule'
@@ -116,6 +117,9 @@ export class BlockModuleFactory {
 
       case 'random_noise':
         return new RandomNoiseBlockModule()
+
+      case 'assert':
+        return new AssertBlockModule()
 
       case 'scale':
         return new ScaleBlockModule()
@@ -276,6 +280,7 @@ export class BlockModuleFactory {
       'source',
       'clock',
       'random_noise',
+      'assert',
       'scale',
       'evaluate',
       'transfer_function',

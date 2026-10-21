@@ -141,6 +141,8 @@ function getRequiredInputCount(block: { type: string; parameters?: Record<string
       return configuredArithmeticArity(block)
     case 'lookup_2d':
       return 2
+    case 'assert':
+      return block.parameters?.mode === 'near' ? 2 : 1
     case 'scale':
     case 'transfer_function':
     case 'signal_display':

@@ -151,6 +151,7 @@ function canEnqueueForTypePropagation(
     [
       'signal_display',
       'signal_logger',
+      'assert',
       'no_connection',
       'output_port',
       'sheet_label_sink',
@@ -262,6 +263,7 @@ function getBlockOutputType(block: BlockData): string | null {
     case 'data_store_write':
     case 'signal_display':
     case 'signal_logger':
+    case 'assert':
     case 'no_connection':
       return null
 
@@ -2242,6 +2244,7 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'output_port':
     case 'signal_display':
     case 'signal_logger':
+    case 'assert':
     case 'no_connection':
     case 'data_store_write':
       return 0
@@ -2271,6 +2274,8 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'sum':
     case 'multiply':
       return configuredArithmeticInputCount(block)
+    case 'assert':
+      return block.parameters?.mode === 'near' ? 2 : 1
     case 'scale':
     case 'limit':
     case 'units_conversion':

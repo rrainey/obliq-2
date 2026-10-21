@@ -663,6 +663,7 @@ function validateBlockInputType(
     case 'transfer_function':
     case 'signal_display':
     case 'signal_logger':
+    case 'assert':
     case 'output_port':
     case 'sheet_label_sink':
     case 'sheet_label_source':
@@ -670,6 +671,7 @@ function validateBlockInputType(
       if (parsedInputType.baseType === 'bool' && 
           block.type !== 'signal_display' && 
           block.type !== 'signal_logger' &&
+          block.type !== 'assert' &&
           block.type !== 'output_port' &&
           block.type !== 'sheet_label_sink') {
         return {
@@ -835,7 +837,7 @@ export function validateWireConnection(
     }
   }
   
-  if (sourceBlock.type === 'output_port' || sourceBlock.type === 'signal_display' || sourceBlock.type === 'signal_logger') {
+  if (sourceBlock.type === 'output_port' || sourceBlock.type === 'signal_display' || sourceBlock.type === 'signal_logger' || sourceBlock.type === 'assert') {
     return {
       sourceBlockId: sourceBlock.id,
       targetBlockId: targetBlock.id,

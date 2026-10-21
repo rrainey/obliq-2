@@ -115,12 +115,14 @@ const BOUNDARY_SINK_TYPES = new Set<string>([
   'output_port',
   'signal_display',
   'signal_logger',
+  'assert',
 ])
 
 const SINK_TYPES = new Set<string>([
   'output_port',
   'signal_display',
   'signal_logger',
+  'assert',
   'sheet_label_sink',
   'data_store_write',
 ])

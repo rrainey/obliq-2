@@ -5,6 +5,11 @@ import { CCodeBuilder } from './CCodeBuilder'
 import { BlockModuleFactory } from '../blocks/BlockModuleFactory'
 import { parseType, isValidType } from '@/lib/typeValidator'
 import { dataStoreMemberDecl } from '@/lib/dataStoreUtils'
+import {
+  generateAssertHeaderPreamble,
+  generateAssertPrototypes,
+  generateAssertStructMember
+} from './AssertResults'
 
 /**
  * Generates the C header file for a flattened model
@@ -13,8 +18,11 @@ export class HeaderGenerator {
   private model: FlattenedModel
   private modelName: string
   private typeMap: Map<string, string>
-  
-  constructor(model: FlattenedModel, typeMap: Map<string, string>) {
+  /** Define OBLIQ_ASSERTS in the header (obliq's simulation and test builds) */
+  private asserts: boolean
+
+  constructor(model: FlattenedModel, typeMap: Map<string, string>, options: { asserts?: boolean } = {}) {
+    this.asserts = options.asserts ?? false
     this.model = model
     this.modelName = CCodeBuilder.sanitizeIdentifier(model.metadata.modelName)
     this.typeMap = typeMap
@@ -29,6 +37,9 @@ export class HeaderGenerator {
     
     // Add standard includes
     header += this.generateIncludes()
+    header += '\n'
+
+    header += generateAssertHeaderPreamble(this.asserts)
     header += '\n'
 
     // Add model parameters (Feature 3)
@@ -172,6 +183,7 @@ export class HeaderGenerator {
       `    unsigned long long sample_tick; /* Fundamental steps since t=0 (multi-rate hits) */`
     )
     members.push(`    int use_rk4; /* Integration method: 1=RK4, 0=Euler */`)
+    members.push(generateAssertStructMember())
 
     return CCodeBuilder.generateStruct(
       this.modelName,
@@ -539,6 +551,8 @@ export class HeaderGenerator {
         'Update enable states based on enable inputs'
       ) + '\n'
     }
+
+    prototypes += generateAssertPrototypes(this.modelName) + '\n'
 
     // Cleanup function - only if we have data collection blocks
     if (this.hasDataCollectionBlocks()) {

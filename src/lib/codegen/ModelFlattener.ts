@@ -1930,7 +1930,8 @@ export class ModelFlattener {
       // Skip output ports and signal displays/loggers as they may not have outgoing connections
       if (block.block.type === 'output_port' ||
           block.block.type === 'signal_display' ||
-          block.block.type === 'signal_logger') {
+          block.block.type === 'signal_logger' ||
+          block.block.type === 'assert') {
         continue
       }
 

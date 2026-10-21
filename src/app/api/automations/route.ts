@@ -541,6 +541,7 @@ function getRequiredInputCount(blockType: string): number {
     case 'lookup_1d':
     case 'signal_display':
     case 'signal_logger':
+    case 'assert':
     case 'output_port':
       return 1
     case 'lookup_2d':

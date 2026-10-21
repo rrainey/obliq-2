@@ -433,6 +433,39 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 
 ---
 
+### Assert Block
+**Purpose**: A test check. Records whether its input ever broke a condition during a run.
+
+**Parameters**:
+- `mode`:
+  - `bounds` (default): fails when `u < lower` or `u > upper`. A blank (`null`) bound is unbounded.
+  - `near`: has a second input, `expected`. It fails when `|u − expected| > absTol + relTol·|expected|`. A scalar `expected` applies to every element.
+  - `true`: fails when `u` is false or 0.
+- `lower`, `upper`: bounds for `bounds` mode (defaults −1 and 1).
+- `absTol`, `relTol`: tolerances for `near` mode (defaults 1e-6 and 0).
+- `checkFrom`, `checkUntil`: the check window in seconds. The defaults are 0 and `null`, the end of the run.
+- `onFailure`: `record` (default) records the failure and continues; `stop` ends the simulation after the failing step.
+
+**Signal Compatibility**:
+- Input: scalar, vector or matrix, checked element by element. Any failing element fails the step.
+- NaN always fails.
+- No output.
+
+**Behaviour**:
+- The check runs once per major time step at the step's start time. Blocks inside a subsystem with a sample time check only on its sample hits.
+- RK4 intermediate stages are never checked.
+- An Assert whose window contains no step reports **not checked**, not passed.
+
+**Generated C**:
+- All check code is inside `#ifdef OBLIQ_ASSERTS`. Exported code leaves it undefined, so deployed code carries no test logic unless you define it.
+- With it defined, the model provides:
+  - `<model>_assert_count()`;
+  - `<model>_assert_result(model, i, &result)`, which fills an `obliq_assert_result_t` with the status (not checked, passed or failed), checked and failed step counts, the first failure's time, value and element index, and the worst violation;
+  - `<model>_stop_requested(model)`.
+- Assert blocks inside segregated subsystems and subsystem references are not checked yet, and code generation warns about them.
+
+---
+
 ## Lookup Tables
 
 ### 1-D Lookup Block

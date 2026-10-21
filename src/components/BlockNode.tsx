@@ -6,7 +6,7 @@ import { memo, CSSProperties, useCallback, useEffect, useRef, useState } from 'r
 import { Handle, Position, NodeProps, useStore } from 'reactflow'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
-import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, IconCube, IconClockCog, IconActivity, IconX } from '@tabler/icons-react'
+import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, IconCube, IconClockCog, IconActivity, IconChecklist, IconX } from '@tabler/icons-react'
 import { useComputedColorScheme } from '@mantine/core'
 import CommentNode from './CommentNode'
 import { useModelStore } from '@/lib/modelStore'
@@ -216,6 +216,11 @@ const getBlockSymbol = (data: BlockNodeData) => {
   // Handle signal_display with Tabler icon
   if (data.type === 'signal_display') {
     return <IconChartCovariate size={24} stroke={1.5} />
+  }
+
+  // Assert: a checklist
+  if (data.type === 'assert') {
+    return <IconChecklist size={24} stroke={1.5} />
   }
 
   // Handle subsystem with Tabler icon

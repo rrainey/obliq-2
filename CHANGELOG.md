@@ -1,5 +1,13 @@
 # obliq-2 Change Log
 
+## Unreleased
+
+- **Assert block** (Display & Logging): a test check that records whether its input ever left bounds, differed from an expected value, or was false. See [docs/model-testing-plan.md](docs/model-testing-plan.md) for the testing features this starts.
+  - It checks once per time step, inside an optional time window. Vectors and matrices are checked element by element.
+  - On failure it either records and continues, or stops the simulation.
+  - Generated C keeps all check code behind `OBLIQ_ASSERTS`, so exported code has no test logic unless you define it. With it defined, the model reports each Assert's result: passed, failed or not checked, plus the first failure's time and value.
+  - Browser simulations don't check Asserts yet. Results in the editor and a command-line test runner come next.
+
 ## What's New in 3.2.2
 
 - **Fixed: subsystem references losing their ports.** Opening a subsystem definition's sheet and returning cleared the port lists of every reference to it. The references still built and ran, because code generation takes ports from the definition. The editor, though, drew them without ports, and Validate reported "Unable to determine signal type" for each of their wires. Saving kept the damage.

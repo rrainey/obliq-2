@@ -146,7 +146,7 @@ export async function handleValidateModel(ctx: HandlerContext): Promise<NextResp
     // Check for unconnected required ports
     blocks.forEach((block: any) => {
       // Check for blocks that typically need inputs
-      if (['sum', 'multiply', 'scale', 'transfer_function', 'output_port', 'signal_display', 'signal_logger'].includes(block.type)) {
+      if (['sum', 'multiply', 'scale', 'transfer_function', 'output_port', 'signal_display', 'signal_logger', 'assert'].includes(block.type)) {
         const hasInputConnection = connections.some((conn: any) => conn.targetBlockId === block.id);
         if (!hasInputConnection) {
           warnings.push(`Block '${block.name || block.id}' (${block.type}) in sheet '${sheet.name}' has no input connections`);

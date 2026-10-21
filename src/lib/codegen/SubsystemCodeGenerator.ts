@@ -846,8 +846,9 @@ export class SubsystemCodeGenerator {
         continue
       }
 
-      // Skip blocks that don't generate code
-      if (!BlockModuleFactory.isSupported(block.block.type)) {
+      // Skip blocks that don't generate code. Assert blocks are not checked
+      // inside segregated modules yet (CodeGenerator warns about them).
+      if (!BlockModuleFactory.isSupported(block.block.type) || block.block.type === 'assert') {
         continue
       }
 

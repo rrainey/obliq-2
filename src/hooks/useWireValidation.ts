@@ -124,7 +124,8 @@ export function useWireConnectionValidation() {
 
     if (sourceBlock.type === 'output_port' || 
         sourceBlock.type === 'signal_display' || 
-        sourceBlock.type === 'signal_logger') {
+        sourceBlock.type === 'signal_logger' ||
+        sourceBlock.type === 'assert') {
       setValidationError(`Cannot connect from ${sourceBlock.type} blocks (no outputs)`)
       return false
     }

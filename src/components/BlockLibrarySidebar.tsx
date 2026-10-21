@@ -264,6 +264,14 @@ const blockTypes: BlockType[] = [
     vectorSupport: 'full'
   },
   {
+    id: 'assert',
+    name: 'Assert',
+    category: 'Display',
+    description: 'Test check: bounds, near expected, or true',
+    icon: '✓',
+    vectorSupport: 'full'
+  },
+  {
     id: 'no_connection',
     name: 'No Connection',
     category: 'Sinks',

@@ -154,6 +154,9 @@ export class InitFunctionGenerator {
     model->dt = dt;
     model->sample_tick = 0ULL;
     model->use_rk4 = ${useRk4}; /* ${algorithmComment} */
+#ifdef OBLIQ_ASSERTS
+    model->stop_requested = 0;
+#endif
 
 `
   }

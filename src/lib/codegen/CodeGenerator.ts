@@ -16,6 +16,7 @@ import { ModelParameter } from '@/lib/modelSchema'
 import { DataStoreDeclaration, refineDataStoreTypes } from '@/lib/dataStoreUtils'
 import { SubsystemCodeGenerator, SubsystemCodeResult } from './SubsystemCodeGenerator'
 import { generateDebugMathPreamble } from './DebugMathRuntime'
+import { generateAssertFunctions, reportedAssertBlocks, unsupportedAssertBlocks } from './AssertResults'
 
 /**
  * Options for code generation
@@ -41,6 +42,12 @@ export interface CodeGenerationOptions {
    * block name, and isfinite checks on each RK4 derivative stage.
    */
   debugMath?: boolean
+
+  /**
+   * When true, the header defines OBLIQ_ASSERTS so Assert blocks are checked
+   * (obliq's simulation and test builds). Exported code leaves it undefined.
+   */
+  asserts?: boolean
 }
 
 /**
@@ -86,7 +93,8 @@ export class CodeGenerator {
       includeDebugComments: options.includeDebugComments ?? true,
       generateMain: options.generateMain ?? false,
       integrationAlgorithm: options.integrationAlgorithm ?? 'rk4',
-      debugMath: options.debugMath ?? false
+      debugMath: options.debugMath ?? false,
+      asserts: options.asserts ?? false
     }
   }
   
@@ -183,8 +191,15 @@ export class CodeGenerator {
       }
     }
 
+    for (const { subsystem, block } of unsupportedAssertBlocks(model)) {
+      allWarnings.push(
+        `Assert "${block.block.name}" is inside segregated subsystem "${subsystem}" and is not checked; ` +
+        'place Assert blocks outside segregated subsystems and references'
+      )
+    }
+
     // Step 5: Generate header file
-    const headerGenerator = new HeaderGenerator(model, effectiveTypeMap)
+    const headerGenerator = new HeaderGenerator(model, effectiveTypeMap, { asserts: this.options.asserts })
     const header = headerGenerator.generate()
 
     // Step 6: Generate source file
@@ -311,6 +326,10 @@ export class CodeGenerator {
       source += '\n'
       source += cleanupCode
     }
+
+    // Assert results table (inside #ifdef OBLIQ_ASSERTS)
+    source += '\n'
+    source += generateAssertFunctions(modelName, reportedAssertBlocks(model))
 
     // Optional main function
     if (this.options.generateMain) {

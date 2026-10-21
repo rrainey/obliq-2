@@ -48,6 +48,7 @@ export const BlockTypes = {
   OUTPUT_PORT: 'output_port',
   SIGNAL_DISPLAY: 'signal_display',
   SIGNAL_LOGGER: 'signal_logger',
+  ASSERT: 'assert',
   NO_CONNECTION: 'no_connection',
 
   // Sheet labels
@@ -343,6 +344,25 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [{ name: 'input' }],
     outputs: [],
     description: 'Logs signal values for export'
+  },
+
+  [BlockTypes.ASSERT]: {
+    type: BlockTypes.ASSERT,
+    displayName: 'Assert',
+    category: 'Sinks',
+    defaultParameters: {
+      mode: 'bounds',
+      lower: -1,
+      upper: 1,
+      absTol: 1e-6,
+      relTol: 0,
+      checkFrom: 0,
+      checkUntil: null,
+      onFailure: 'record'
+    },
+    inputs: [{ name: 'u' }],
+    outputs: [],
+    description: 'Test check: fails when its input leaves bounds, differs from an expected value, or is false'
   },
 
   [BlockTypes.NO_CONNECTION]: {

@@ -21,6 +21,8 @@ export interface NativeCgenOptions {
   dt?: number
   /** Default 'rk4'. */
   integrationAlgorithm?: 'rk4' | 'euler'
+  /** Define OBLIQ_ASSERTS in the header so Assert blocks are checked (default false, as exported code). */
+  asserts?: boolean
   /** Body of main() after includes; must print results and return 0 on success. */
   smokeMainBody: string
   /** Extra #includes for the smoke main (default: stdio + math). */
@@ -64,7 +66,8 @@ export function compileAndRunNative(opts: NativeCgenOptions): NativeCgenResult {
   const gen = new CodeGenerator({
     modelName,
     integrationAlgorithm: opts.integrationAlgorithm ?? 'rk4',
-    generateMain: false
+    generateMain: false,
+    asserts: opts.asserts ?? false
   })
   const result = gen.generate(opts.sheets, opts.parameters || [])
 
