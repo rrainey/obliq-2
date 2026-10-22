@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Tune Model Layout resizes subsystems modestly.** **Resize Subsystems** used to grow subsystems until each port lined up exactly with its neighbour, often up to the 1,200 px cap. The FPV Vehicle's subsystems all reached it, 8–15× their natural height. Now:
+  - A resize spreads ports at most **Maximum port spacing** apart: a new field in the dialog, 40 px by default, twice the natural spacing.
+  - The height is fitted once, so a grown block no longer pushes its neighbours apart and then grows again to meet them.
+  - Wires to neighbours shared with another subsystem are ignored, because no size could line them all up.
+
+  On the FPV Vehicle, the Flight Controller and Frame now reach 280 px and Sensors 200 px, and the Motors keep their size.
 - **Dragging stacked wire segments prefers the highlighted net.** When wire segments lie on top of each other, the one under the pointer used to be whichever wire happened to be drawn last. Highlighted wires (**Highlight Connections**) are now drawn above the others, so you can highlight the net you want, then drag its segment.
 
 ## What's New in 3.3.0

@@ -99,7 +99,7 @@ independent adjustments, each of which can be left alone:
 | Adjustment | Effect |
 |------------|--------|
 | **Clean up block layout** | Arranges blocks so data flows left to right and routes the turns of the wires between them |
-| **Resize Subsystems** | Sizes subsystem blocks so their ports fit what they connect to |
+| **Resize Subsystems** | Sizes subsystem blocks so their ports sit closer to what they connect to, spreading ports at most **Maximum port spacing** apart (default 40 px; natural spacing is 20 px) |
 | **Subsystem Ports Labeling** | Shows or hides port-name labels on subsystem blocks |
 | **Hide unnecessary block names** | Hides names on everything except subsystems |
 | **Scope** | Current sheet (default), current subsystem, or the entire model |
@@ -119,7 +119,7 @@ independent adjustments, each of which can be left alone:
 - To adjust a wire yourself, hover its vertical segment and drag it left or right from anywhere along its length.
 
 **Other notes**
-- Resizing grows a subsystem until its ports are far enough apart for neighboring blocks to line up with them, and writes the result into the model as `width` / `height`.
+- Resizing fits each subsystem's height to where the blocks it connects to sit, then caps it so adjacent ports are at most **Maximum port spacing** apart. Lining every port up exactly with a separate neighbour would need ports as far apart as those neighbours are, many times the natural size. Wires to neighbours that another subsystem also feeds (a mux fed by four motors, say) are ignored, because no size could align them all. The result is written into the model as `width` / `height`.
 - A scope may reach sheets nested inside subsystems that are not currently open, so the dialog reports how many sheets a scope covers and warns when that is more than one. Tuning cannot be undone, but every Save keeps a version snapshot.
 - Subsystem blocks can also be resized by hand: right-click the block, choose **Resize...**, and drag any corner handle.
 

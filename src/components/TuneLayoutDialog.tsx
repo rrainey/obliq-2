@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Modal, Radio, Button, Stack, Group, Text, Divider, Alert } from '@mantine/core'
+import { Modal, Radio, Button, Stack, Group, Text, Divider, Alert, NumberInput } from '@mantine/core'
 import { IconInfoCircle, IconWand, IconAlertTriangle } from '@tabler/icons-react'
 import {
   DEFAULT_TUNE_OPTIONS,
@@ -39,13 +39,14 @@ export default function TuneLayoutDialog({
 }: TuneLayoutDialogProps) {
   const [cleanUpLayout, setCleanUpLayout] = useState(DEFAULT_TUNE_OPTIONS.cleanUpLayout)
   const [resizeSubsystems, setResizeSubsystems] = useState(DEFAULT_TUNE_OPTIONS.resizeSubsystems)
+  const [maxPortSpacing, setMaxPortSpacing] = useState(DEFAULT_TUNE_OPTIONS.maxPortSpacing)
   const [subsystemPortLabels, setSubsystemPortLabels] =
     useState<PortLabelChoice>(DEFAULT_TUNE_OPTIONS.subsystemPortLabels)
   const [hideBlockNames, setHideBlockNames] = useState(DEFAULT_TUNE_OPTIONS.hideBlockNames)
   const [scope, setScope] = useState<TuneScope>(DEFAULT_TUNE_OPTIONS.scope)
 
   const options: TuneLayoutOptions = {
-    cleanUpLayout, resizeSubsystems, subsystemPortLabels, hideBlockNames, scope,
+    cleanUpLayout, resizeSubsystems, maxPortSpacing, subsystemPortLabels, hideBlockNames, scope,
   }
   const nothingSelected = isNoOp(options)
   const affected = sheetsInScope?.(scope) ?? 1
@@ -71,6 +72,21 @@ export default function TuneLayoutDialog({
         >
           <Stack gap="xs" mt="xs">
             <Radio value={YES} label="Yes, resize Subsystem blocks to better fit its ports" />
+            {resizeSubsystems && (
+              <NumberInput
+                ml={28}
+                maw={260}
+                size="xs"
+                label="Maximum port spacing (px)"
+                description="How far apart a resized Subsystem may spread its ports (natural spacing is 20)"
+                value={maxPortSpacing}
+                onChange={v => setMaxPortSpacing(typeof v === 'number' && v > 0 ? v : DEFAULT_TUNE_OPTIONS.maxPortSpacing)}
+                min={20}
+                max={400}
+                step={10}
+                allowDecimal={false}
+              />
+            )}
             <Radio value={NO} label="Do not resize Subsystem blocks" />
           </Stack>
         </Radio.Group>

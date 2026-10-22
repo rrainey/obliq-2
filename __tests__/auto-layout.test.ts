@@ -363,20 +363,46 @@ describe('computeAutoLayout', () => {
       expect(computeAutoLayout(blocks, wires).resizes).toEqual([])
     })
 
-    it('grows a subsystem until its ports can reach their consumers', () => {
+    it('grows a subsystem toward its consumers, with ports at most 40px apart by default', () => {
       const { blocks, wires } = threePortSubsystem()
       const { resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true })
 
       const sub = resizes.find(r => r.id === 'sub')
       expect(sub).toBeDefined()
-      // Three ports sit at height/4 intervals and consumers need 64 + 80 of
-      // clearance, so the block has to reach at least 4 * 144 = 576px.
-      expect(sub!.height).toBeGreaterThanOrEqual(576)
+      // Lining the consumers up exactly would need ports 144px apart (64 + 80
+      // of clearance); the default limit stops at (3 + 1) * 40 = 160px, twice
+      // the natural 3 * 20 + 20 = 80px.
+      expect(sub!.height).toBe(160)
     })
 
-    it('actually achieves alignment once resizing is allowed', () => {
+    it('honours a different maximum port spacing', () => {
       const { blocks, wires } = threePortSubsystem()
-      const { moves, resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true })
+      const { resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true, maxPortSpacing: 60 })
+      expect(resizes.find(r => r.id === 'sub')!.height).toBe(240)
+      // At the natural spacing (or less) nothing grows
+      expect(computeAutoLayout(blocks, wires, { resizeBlocks: true, maxPortSpacing: 20 }).resizes).toEqual([])
+    })
+
+    it('leaves out neighbours shared with another resizable block', () => {
+      // Two subsystems both feed the same three consumers: no heights can line
+      // either up with all of them, so neither is grown to try.
+      const sub = (id: string) => block(id, 'subsystem', { inputPorts: ['In1'], outputPorts: ['A', 'B', 'C'], sheets: [] })
+      const blocks = [block('feed', 'source'), sub('s1'), sub('s2'), block('cA', 'sum'), block('cB', 'sum'), block('cC', 'sum')]
+      const wires = [
+        wire('f1', 'feed', 0, 's1', 0),
+        wire('f2', 'feed', 0, 's2', 0),
+        ...['cA', 'cB', 'cC'].flatMap((c, i) => [wire(`a${i}`, 's1', i, c, 0), wire(`b${i}`, 's2', i, c, 1)]),
+      ]
+      expect(computeAutoLayout(blocks, wires, { resizeBlocks: true }).resizes).toEqual([])
+    })
+
+    it('achieves alignment when the spacing limit allows it', () => {
+      const { blocks, wires } = threePortSubsystem()
+      const { moves, resizes } = computeAutoLayout(blocks, wires, {
+        resizeBlocks: true,
+        maxPortSpacing: 1000,
+        resizePasses: 3,
+      })
       const subH = resizes.find(r => r.id === 'sub')!.height
       const posIn = (id: string) => moves.find(m => m.id === id)!.position
       const subY = posIn('sub').y
@@ -417,12 +443,15 @@ describe('computeAutoLayout', () => {
       for (const r of resizes) expect(r.height).toBeLessThanOrEqual(300)
     })
 
-    it('widens a grown block so it does not become a sliver', () => {
+    it('widens a block grown tall so it does not become a sliver', () => {
       const { blocks, wires } = threePortSubsystem()
-      const { resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true })
+      const { resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true, maxPortSpacing: 1000, resizePasses: 3 })
       const sub = resizes.find(r => r.id === 'sub')!
       expect(sub.width).toBeGreaterThan(80)
       expect(sub.width).toBeLessThanOrEqual(200)
+      // A modest resize keeps its width
+      const modest = computeAutoLayout(blocks, wires, { resizeBlocks: true }).resizes.find(r => r.id === 'sub')!
+      expect(modest.width).toBe(80)
     })
 
     it('snaps resized dimensions to the resize grid', () => {

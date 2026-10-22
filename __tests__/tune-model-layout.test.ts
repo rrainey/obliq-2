@@ -262,7 +262,7 @@ describe('mounting the sheet changes nothing', () => {
 describe('defaults', () => {
   test('the dialog opens on current sheet, layout only', () => {
     expect(DEFAULT_TUNE_OPTIONS).toEqual({
-      cleanUpLayout: true, resizeSubsystems: false, subsystemPortLabels: 'asis',
+      cleanUpLayout: true, resizeSubsystems: false, maxPortSpacing: 40, subsystemPortLabels: 'asis',
       hideBlockNames: false, scope: 'sheet',
     })
   })

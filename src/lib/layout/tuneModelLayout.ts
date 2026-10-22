@@ -21,6 +21,8 @@ export interface TuneLayoutOptions {
   cleanUpLayout: boolean
   /** Grow subsystems so their ports can line up with what they connect to. */
   resizeSubsystems: boolean
+  /** When resizing, the most a subsystem's adjacent ports may be spread apart (px). */
+  maxPortSpacing: number
   /** Show or hide the port-name labels on subsystem blocks. */
   subsystemPortLabels: PortLabelChoice
   /** Hide block names everywhere except on subsystems. */
@@ -31,6 +33,7 @@ export interface TuneLayoutOptions {
 export const DEFAULT_TUNE_OPTIONS: TuneLayoutOptions = {
   cleanUpLayout: true,
   resizeSubsystems: false,
+  maxPortSpacing: 40,
   subsystemPortLabels: 'asis',
   hideBlockNames: false,
   scope: 'sheet',
@@ -98,6 +101,7 @@ export function tuneModelLayout(
     const layout = needsLayout
       ? computeAutoLayout(blocks, sheet.connections || [], {
           resizeBlocks: options.resizeSubsystems,
+          maxPortSpacing: options.maxPortSpacing,
           routeWires: options.cleanUpLayout,
         })
       : { moves: [], resizes: [], routes: [] }

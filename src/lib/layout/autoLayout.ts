@@ -57,7 +57,20 @@ export interface AutoLayoutOptions {
    */
   resizeBlocks?: boolean
   maxBlockHeight?: number  // ceiling when resizing (px)
-  resizePasses?: number    // resize/replace refinement iterations
+  /**
+   * Largest spacing between adjacent ports a resize may produce (px). A
+   * block's height is capped at (ports on its busier side + 1) × this, and
+   * never goes below its natural height. Default 40, twice the natural
+   * PORT_SPACING: enough to ease alignment without blocks many times their
+   * natural size.
+   */
+  maxPortSpacing?: number
+  /**
+   * Resize/replace iterations. Default 1: fit against where the neighbours sit
+   * at natural size. Further passes let a grown block push its neighbours
+   * apart and then grow again to meet them.
+   */
+  resizePasses?: number
   /**
    * Choose where each wire turns (see wireRouting.ts) and widen crowded gaps.
    * On by default; the result's `routes` carry each wire's turn offset.
@@ -626,8 +639,19 @@ function computePlacement(
 }
 
 /**
- * Fit a new height to each resizable block so its ports land on the
+ * Fit a new height to each resizable block so its ports land closer to the
  * neighbours they connect to.
+ *
+ * Exact alignment is not the goal. Where a block's ports feed separate
+ * neighbours, lining each one up needs the ports as far apart as the
+ * neighbours are (their height plus the row gap), many times the natural
+ * port spacing. So the fitted height is capped by `maxPortSpacing`, and the
+ * placement step aligns what it can within that.
+ *
+ * Wires to a neighbour that another resizable block also connects to are
+ * left out of the fit: those neighbours (a mux fed by four motors, say)
+ * cannot line up with all of them whatever the heights, and counting them
+ * only pulls the blocks apart.
  *
  * A block's port p sits at `top + height * fraction(p)`, so across all of a
  * block's connections the desired port positions are linear in the height:
@@ -651,6 +675,12 @@ function refitResizableBlocks(
   opts: Required<AutoLayoutOptions>,
 ): boolean {
   const isForward = (e: LEdge) => rank.get(e.u)! < rank.get(e.v)!
+  const resizable = (id: string) => !!metrics.get(id)?.resizable
+  // A neighbour shared with another resizable block cannot align with both
+  const sharedConsumer = (v: string, self: string) =>
+    (graph.inEdges.get(v) ?? []).some(e => e.u !== self && resizable(e.u))
+  const sharedProducer = (u: string, self: string) =>
+    (graph.outEdges.get(u) ?? []).some(e => e.v !== self && resizable(e.v))
   let changed = false
 
   for (const [id, m] of metrics) {
@@ -661,13 +691,13 @@ function refitResizableBlocks(
     const targets: number[] = []
 
     for (const e of graph.outEdges.get(id) ?? []) {
-      if (!isForward(e)) continue
+      if (!isForward(e) || sharedConsumer(e.v, id)) continue
       const om = metrics.get(e.v)!
       fractions.push(portFraction(e.uPort, m.outputs))
       targets.push(y.get(e.v)! + portOffsetY(e.vPort, om.inputs, om.height))
     }
     for (const e of graph.inEdges.get(id) ?? []) {
-      if (!isForward(e)) continue
+      if (!isForward(e) || sharedProducer(e.u, id)) continue
       const om = metrics.get(e.u)!
       fractions.push(portFraction(e.vPort, m.inputs))
       targets.push(y.get(e.u)! + portOffsetY(e.uPort, om.outputs, om.height))
@@ -690,6 +720,9 @@ function refitResizableBlocks(
     let height = num / den
     if (!Number.isFinite(height)) continue
     height = Math.round(height / RESIZE_SNAP) * RESIZE_SNAP
+    // Ports at most maxPortSpacing apart on the busier side
+    const spacingCap = (Math.max(m.inputs, m.outputs) + 1) * opts.maxPortSpacing
+    height = Math.min(height, Math.floor(spacingCap / RESIZE_SNAP) * RESIZE_SNAP)
     height = Math.max(m.minHeight, Math.min(opts.maxBlockHeight, height))
 
     // Keep a grown block from becoming a tall thin sliver. Width only ever
@@ -723,7 +756,8 @@ export function computeAutoLayout(
     alignmentPasses: options.alignmentPasses ?? 4,
     resizeBlocks: options.resizeBlocks ?? false,
     maxBlockHeight: options.maxBlockHeight ?? 1200,
-    resizePasses: options.resizePasses ?? 3,
+    maxPortSpacing: options.maxPortSpacing ?? 40,
+    resizePasses: options.resizePasses ?? 1,
     routeWires: options.routeWires ?? true,
     trackSpacing: options.trackSpacing ?? 8,
   }
