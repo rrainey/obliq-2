@@ -406,6 +406,11 @@ function CanvasReactFlowInner({
         data: edgeData,
       }
     })
+    // Draw highlighted wires last. Where segments are stacked on top of each
+    // other, the wire drawn last receives the pointer, so a highlighted net's
+    // segment is the one picked for dragging. The sort is stable, so all
+    // other wires keep their order.
+    newEdges.sort((a, b) => Number(!!a.data?.isHighlighted) - Number(!!b.data?.isHighlighted))
     setEdges(newEdges)
   }, [wires, blocks, propagationResult, setEdges, handleWireRoutingChange, highlightedNet])
 

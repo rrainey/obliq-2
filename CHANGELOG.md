@@ -1,5 +1,9 @@
 # obliq-2 Change Log
 
+## Unreleased
+
+- **Dragging stacked wire segments prefers the highlighted net.** When wire segments lie on top of each other, the one under the pointer used to be whichever wire happened to be drawn last. Highlighted wires (**Highlight Connections**) are now drawn above the others, so you can highlight the net you want, then drag its segment.
+
 ## What's New in 3.3.0
 
 - **Assert block** (Display & Logging): a test check that records whether its input ever left bounds, differed from an expected value, or was false. See [docs/model-testing-plan.md](docs/model-testing-plan.md) for the testing features this starts.
