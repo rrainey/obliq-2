@@ -6,9 +6,9 @@
   - A resize spreads ports at most **Maximum port spacing** apart: a new field in the dialog, 40 px by default, twice the natural spacing.
   - The height is fitted once, so a grown block no longer pushes its neighbours apart and then grows again to meet them.
   - Wires to neighbours shared with another subsystem are ignored, because no size could line them all up.
-  - A subsystem smaller than its natural size (ports packed tighter than 20 px) is brought up to it, even when it has nothing to fit.
+  - Each resize starts from the subsystem's natural size, so the result no longer depends on earlier sizes. A block made oversized by an earlier resize (or by hand) comes back down when nothing calls for the size, and resizing twice gives the same result.
 
-  On the FPV Vehicle, the Flight Controller and Frame now reach 280 px and Sensors 200 px. The Motors, whose neighbours are all shared, go from 80 px to their natural 100 px.
+  On the FPV Vehicle, the Flight Controller and Frame now reach 280 px and Sensors 200 px. The Motors, whose neighbours are all shared, settle at their natural 100 px, including copies left at 1,200 px by the old resize.
 - **Dragging stacked wire segments prefers the highlighted net.** When wire segments lie on top of each other, the one under the pointer used to be whichever wire happened to be drawn last. Highlighted wires (**Highlight Connections**) are now drawn above the others, so you can highlight the net you want, then drag its segment.
 
 ## What's New in 3.3.0

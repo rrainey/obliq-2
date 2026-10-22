@@ -155,6 +155,7 @@ interface Metrics {
   inputs: number       // effective input port count
   outputs: number      // effective output port count
   minHeight: number    // natural height; a resize may not go below this
+  naturalWidth: number // width without a stored resize; a resize starts here
   resizable: boolean
 }
 
@@ -169,6 +170,7 @@ function measure(block: BlockData): Metrics {
     inputs,
     outputs,
     minHeight: getIntrinsicBlockHeight(block, inputs, outputs),
+    naturalWidth: getBlockWidth({ ...block, parameters: { ...block.parameters, width: undefined, height: undefined } }),
     resizable: isResizable(block.type),
   }
 }
@@ -781,6 +783,14 @@ export function computeAutoLayout(
   const columns = orderWithinColumns(graph, rank, laidOut, metrics, opts.barycenterPasses)
 
   if (opts.resizeBlocks) {
+    // Fit from natural size, so the result does not depend on earlier sizes:
+    // a block left large by an earlier resize (or by hand) comes back down
+    // when nothing calls for it, and resizing twice gives the same answer
+    for (const m of metrics.values()) {
+      if (!m.resizable) continue
+      m.height = m.minHeight
+      m.width = m.naturalWidth
+    }
     for (let pass = 0; pass < opts.resizePasses; pass++) {
       const trial = computePlacement(graph, columns, rank, metrics, opts)
       if (!refitResizableBlocks(graph, trial, metrics, rank, opts)) break

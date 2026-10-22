@@ -410,6 +410,28 @@ describe('computeAutoLayout', () => {
       expect(resizes.map(r => [r.id, r.height]).sort()).toEqual([['s1', 80], ['s2', 80]])
     })
 
+    it('fits from natural size: an oversized block comes back down, and resizing twice is stable', () => {
+      // Shared neighbours only, left 1200px tall by an earlier resize
+      const sub = (id: string) =>
+        block(id, 'subsystem', { inputPorts: ['In1'], outputPorts: ['A', 'B', 'C'], sheets: [], height: 1200, width: 200 })
+      const blocks = [block('feed', 'source'), sub('s1'), sub('s2'), block('cA', 'sum'), block('cB', 'sum'), block('cC', 'sum')]
+      const wires = [
+        wire('f1', 'feed', 0, 's1', 0),
+        wire('f2', 'feed', 0, 's2', 0),
+        ...['cA', 'cB', 'cC'].flatMap((c, i) => [wire(`a${i}`, 's1', i, c, 0), wire(`b${i}`, 's2', i, c, 1)]),
+      ]
+      const first = computeAutoLayout(blocks, wires, { resizeBlocks: true }).resizes
+      expect(first.map(r => [r.id, r.height]).sort()).toEqual([['s1', 80], ['s2', 80]])
+      expect(first.every(r => r.width < 200)).toBe(true)
+
+      // Apply and resize again: nothing changes
+      const applied = blocks.map(b => {
+        const r = first.find(x => x.id === b.id)
+        return r ? { ...b, parameters: { ...b.parameters, height: r.height, width: r.width } } : b
+      })
+      expect(computeAutoLayout(applied, wires, { resizeBlocks: true }).resizes).toEqual([])
+    })
+
     it('achieves alignment when the spacing limit allows it', () => {
       const { blocks, wires } = threePortSubsystem()
       const { moves, resizes } = computeAutoLayout(blocks, wires, {
