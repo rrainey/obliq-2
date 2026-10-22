@@ -15,6 +15,11 @@
 //   3. Tracks are ordered left to right to minimise crossings among them, and
 //      spaced `trackSpacing` apart. The caller widens crowded gaps.
 //
+// Feedback wires (target column at or left of the source's) turn in the gap
+// just left of the target's column, so they come into the port from the
+// front on a short horizontal run instead of crossing the target block from
+// behind. They get their own staggered tracks there, ordered with the rest.
+//
 // The result is a turn x per wire, which the caller stores as the wire's
 // `routing.midpointOffset` (relative to the editor's default midpoint).
 
@@ -43,6 +48,8 @@ export interface RoutableWire {
   y1: number
   x2: number
   y2: number
+  /** A feedback wire: routed into the gap just left of its target's column. */
+  feedback?: boolean
 }
 
 export interface WireRoutingOptions {
@@ -123,9 +130,14 @@ export function routeWires(
   const gapCentre = (gap: number) => (columns[gap].right + columns[gap + 1].left) / 2
   const routable = (w: RoutableWire) =>
     w.tgtCol > w.srcCol && w.x2 > w.x1 && Math.abs(w.y1 - w.y2) >= 1
+  // A feedback wire needs a gap left of its target's column to turn in
+  const routableFeedback = (w: RoutableWire) =>
+    !!w.feedback && w.tgtCol >= 1 && w.x2 < w.x1 && Math.abs(w.y1 - w.y2) >= 1
 
   const live = wires.filter(routable)
+  const feedback = wires.filter(routableFeedback)
   const gapOf = new Map<string, number>()
+  for (const w of feedback) gapOf.set(w.id, w.tgtCol - 1)
   for (const w of live) {
     // Seed: the gap holding the editor's default midpoint, else the last spanned gap.
     const mid = (w.x1 + w.x2) / 2
@@ -173,7 +185,7 @@ export function routeWires(
 
   // 2/3. Per gap: one track per net, ordered to minimise crossings, then spaced.
   const byGap = new Map<number, RoutableWire[]>()
-  for (const w of live) {
+  for (const w of [...live, ...feedback]) {
     const gap = gapOf.get(w.id)!
     if (!byGap.has(gap)) byGap.set(gap, [])
     byGap.get(gap)!.push(w)
@@ -182,25 +194,30 @@ export function routeWires(
   const turnX = new Map<string, number>()
   const tracksPerGap = new Map<number, number>()
   for (const [gap, members] of byGap) {
-    interface Track { entries: number[]; exits: number[]; min: number; max: number; ids: string[] }
+    // A track's horizontal runs, by the side of the track they extend to: a
+    // forward wire comes in from the left and leaves to the right; both runs
+    // of a feedback wire extend to the right (its source is to the right).
+    interface Track { toLeft: number[]; toRight: number[]; min: number; max: number; ids: string[] }
     const nets = new Map<string, Track>()
     for (const w of members) {
-      let t = nets.get(w.net)
+      const isFeedback = routableFeedback(w)
+      const key = `${isFeedback ? 'fb' : 'fwd'}|${w.net}`
+      let t = nets.get(key)
       if (!t) {
-        t = { entries: [w.y1], exits: [], min: w.y1, max: w.y1, ids: [] }
-        nets.set(w.net, t)
+        t = { toLeft: isFeedback ? [] : [w.y1], toRight: isFeedback ? [w.y1] : [], min: w.y1, max: w.y1, ids: [] }
+        nets.set(key, t)
       }
-      t.exits.push(w.y2)
+      t.toRight.push(w.y2)
       t.ids.push(w.id)
       t.min = Math.min(t.min, w.y2)
       t.max = Math.max(t.max, w.y2)
     }
     const tracks = [...nets.values()]
     const within = (y: number, t: Track) => y > t.min + 0.5 && y < t.max - 0.5
-    // Crossings if track a sits left of track b: b's incoming run passes a's
-    // vertical, and a's outgoing runs pass b's vertical.
+    // Crossings if track a sits left of track b: a's rightward runs pass b's
+    // vertical, and b's leftward runs pass a's vertical.
     const leftOfCost = (a: Track, b: Track) =>
-      b.entries.filter(y => within(y, a)).length + a.exits.filter(y => within(y, b)).length
+      b.toLeft.filter(y => within(y, a)).length + a.toRight.filter(y => within(y, b)).length
     // Pairwise preferences need not be transitive, so rank globally first:
     // each track scores how much better it does on the left of every other
     // track (a Borda count), then adjacent swaps refine. Swapping neighbours

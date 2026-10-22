@@ -620,7 +620,10 @@
                                 "sourceBlockId": "att__C_bn",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "att__UpEstimated",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -823
+                                }
                               },
                               {
                                 "id": "w_3_att__UpNED_att__UpEstimated",
@@ -669,7 +672,7 @@
                                 "targetBlockId": "att__AccelError",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 47
+                                  "midpointOffset": 43
                                 }
                               },
                               {
@@ -714,7 +717,10 @@
                                 "sourceBlockId": "att__C_bn",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "att__FieldEstimated",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -823
+                                }
                               },
                               {
                                 "id": "w_13_att__FieldDirectionNED_att__FieldEstimated",
@@ -723,7 +729,7 @@
                                 "targetBlockId": "att__FieldEstimated",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 4
+                                  "midpointOffset": -20
                                 }
                               },
                               {
@@ -733,7 +739,7 @@
                                 "targetBlockId": "att__FieldMeasuredNorm",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 34.5
+                                  "midpointOffset": 26.5
                                 }
                               },
                               {
@@ -763,7 +769,7 @@
                                 "targetBlockId": "att__MagError",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 63
+                                  "midpointOffset": 59
                                 }
                               },
                               {
@@ -800,7 +806,7 @@
                                 "targetBlockId": "att__MagYawError",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 30
+                                  "midpointOffset": 26
                                 }
                               },
                               {
@@ -810,7 +816,7 @@
                                 "targetBlockId": "att__MagYawError",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 0
+                                  "midpointOffset": -4
                                 }
                               },
                               {
@@ -849,7 +855,10 @@
                                 "sourceBlockId": "att__Kp",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "att__CorrectedRate",
-                                "targetPortIndex": 1
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -657.5
+                                }
                               },
                               {
                                 "id": "w_28_att__CorrectedRate_att__pqr",
@@ -863,7 +872,10 @@
                                 "sourceBlockId": "att__qPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "att__q_dot",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -468
+                                }
                               },
                               {
                                 "id": "w_30_att__pqr_att__q_dot",
@@ -898,7 +910,10 @@
                                 "sourceBlockId": "att__qPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "att__qIntegrate",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -316
+                                }
                               },
                               {
                                 "id": "w_35_att__Ts_att__qIntegrate",
@@ -1283,7 +1298,10 @@
                                 "sourceBlockId": "alt__vPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "alt__ClimbRate",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -278
+                                }
                               },
                               {
                                 "id": "w_9_alt__AccelUp_alt__ClimbRate",
@@ -1299,7 +1317,7 @@
                                 "targetBlockId": "alt__ClimbRate",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -474
+                                  "midpointOffset": -490
                                 }
                               },
                               {
@@ -1309,7 +1327,7 @@
                                 "targetBlockId": "alt__ClimbRate",
                                 "targetPortIndex": 3,
                                 "routing": {
-                                  "midpointOffset": 201.5
+                                  "midpointOffset": 205.5
                                 }
                               },
                               {
@@ -1317,14 +1335,20 @@
                                 "sourceBlockId": "alt__hPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "alt__Altitude",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -260.5
+                                }
                               },
                               {
                                 "id": "w_13_alt__vPrev_alt__Altitude",
                                 "sourceBlockId": "alt__vPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "alt__Altitude",
-                                "targetPortIndex": 1
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -744
+                                }
                               },
                               {
                                 "id": "w_14_alt__BaroAltitude_alt__Altitude",
@@ -1333,7 +1357,7 @@
                                 "targetBlockId": "alt__Altitude",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 4
+                                  "midpointOffset": -12
                                 }
                               },
                               {
@@ -1363,7 +1387,7 @@
                                 "targetBlockId": "alt__altitude",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 18
+                                  "midpointOffset": 22
                                 }
                               },
                               {
@@ -2260,7 +2284,7 @@
                                 "targetBlockId": "arming__AirmodeActive",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 4
+                                  "midpointOffset": -8
                                 }
                               },
                               {
@@ -2270,7 +2294,7 @@
                                 "targetBlockId": "arming__AirmodeActive",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 143.5
+                                  "midpointOffset": 147.5
                                 }
                               },
                               {
@@ -2278,7 +2302,10 @@
                                 "sourceBlockId": "arming__AirmodePrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "arming__AirmodeActive",
-                                "targetPortIndex": 2
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -262
+                                }
                               },
                               {
                                 "id": "w_6_arming__AirmodeActive_arming__AirmodePrev",
@@ -2297,7 +2324,7 @@
                                 "targetBlockId": "arming__armed",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -266
+                                  "midpointOffset": -278
                                 }
                               },
                               {
@@ -2750,7 +2777,7 @@
                                 "targetBlockId": "pid__RateError",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -18
+                                  "midpointOffset": -22
                                 }
                               },
                               {
@@ -2760,7 +2787,7 @@
                                 "targetBlockId": "pid__RateError",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -26
+                                  "midpointOffset": -30
                                 }
                               },
                               {
@@ -2808,7 +2835,10 @@
                                 "sourceBlockId": "pid__IPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "pid__IAccumulate",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -72
+                                }
                               },
                               {
                                 "id": "w_8_pid__IIncrement_pid__IAccumulate",
@@ -2817,7 +2847,7 @@
                                 "targetBlockId": "pid__IAccumulate",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 21
+                                  "midpointOffset": 25
                                 }
                               },
                               {
@@ -2825,7 +2855,10 @@
                                 "sourceBlockId": "pid__IAccumulate",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "pid__IReset",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -372
+                                }
                               },
                               {
                                 "id": "w_10_pid__iterm_enable_pid__IReset",
@@ -2851,7 +2884,7 @@
                                 "targetBlockId": "pid__IPrev",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 29
+                                  "midpointOffset": 17
                                 }
                               },
                               {
@@ -2861,7 +2894,7 @@
                                 "targetBlockId": "pid__DtermLPF",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -21
+                                  "midpointOffset": -25
                                 }
                               },
                               {
@@ -2881,7 +2914,7 @@
                                 "targetBlockId": "pid__D",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 12
+                                  "midpointOffset": 16
                                 }
                               },
                               {
@@ -2891,7 +2924,7 @@
                                 "targetBlockId": "pid__D",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 8
+                                  "midpointOffset": 4
                                 }
                               },
                               {
@@ -2901,7 +2934,7 @@
                                 "targetBlockId": "pid__SetpointRateOfChange",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -13
+                                  "midpointOffset": -17
                                 }
                               },
                               {
@@ -4711,7 +4744,10 @@
                       "sourceBlockId": "battery__VoltagePrev",
                       "sourcePortIndex": 0,
                       "targetBlockId": "battery__Current",
-                      "targetPortIndex": 1
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -304
+                      }
                     },
                     {
                       "id": "w_4_battery__Current_battery__ChargeRate",
@@ -4720,7 +4756,7 @@
                       "targetBlockId": "battery__ChargeRate",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -32
+                        "midpointOffset": -36
                       }
                     },
                     {
@@ -4745,7 +4781,10 @@
                       "sourceBlockId": "battery__CellOCV",
                       "sourcePortIndex": 0,
                       "targetBlockId": "battery__TerminalVoltage",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -300
+                      }
                     },
                     {
                       "id": "w_8_battery__Current_battery__TerminalVoltage",
@@ -4754,7 +4793,7 @@
                       "targetBlockId": "battery__TerminalVoltage",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 0
+                        "midpointOffset": -4
                       }
                     },
                     {
@@ -4969,7 +5008,7 @@
                       "type": "matrix_multiply",
                       "name": "RotorForce",
                       "position": {
-                        "x": 384,
+                        "x": 424,
                         "y": 1038
                       },
                       "parameters": {
@@ -4981,7 +5020,7 @@
                       "type": "matrix_multiply",
                       "name": "RotorMoment",
                       "position": {
-                        "x": 384,
+                        "x": 424,
                         "y": -69
                       },
                       "parameters": {
@@ -5027,7 +5066,7 @@
                       "type": "matrix_multiply",
                       "name": "RotorReactionMoment",
                       "position": {
-                        "x": 384,
+                        "x": 424,
                         "y": 219
                       },
                       "parameters": {
@@ -5039,7 +5078,7 @@
                       "type": "integrator",
                       "name": "q",
                       "position": {
-                        "x": 1445,
+                        "x": 1497,
                         "y": -263
                       },
                       "parameters": {
@@ -5065,7 +5104,7 @@
                       "type": "mag",
                       "name": "qNorm",
                       "position": {
-                        "x": 1615,
+                        "x": 1667,
                         "y": -305
                       },
                       "parameters": {
@@ -5077,7 +5116,7 @@
                       "type": "divide",
                       "name": "q_n",
                       "position": {
-                        "x": 1780,
+                        "x": 1832,
                         "y": -315
                       },
                       "parameters": {
@@ -5089,7 +5128,7 @@
                       "type": "orientation_conversion",
                       "name": "C_bn",
                       "position": {
-                        "x": 1940,
+                        "x": 1992,
                         "y": -313
                       },
                       "parameters": {
@@ -5102,7 +5141,7 @@
                       "type": "transpose",
                       "name": "C_nb",
                       "position": {
-                        "x": 2100,
+                        "x": 2152,
                         "y": -313
                       },
                       "parameters": {
@@ -5114,7 +5153,7 @@
                       "type": "integrator",
                       "name": "v_ned",
                       "position": {
-                        "x": 560,
+                        "x": 604,
                         "y": 356
                       },
                       "parameters": {
@@ -5131,7 +5170,7 @@
                       "type": "matrix_multiply",
                       "name": "v_body",
                       "position": {
-                        "x": 726,
+                        "x": 770,
                         "y": 196
                       },
                       "parameters": {
@@ -5162,7 +5201,7 @@
                       "type": "multiply",
                       "name": "DragForce",
                       "position": {
-                        "x": 389,
+                        "x": 429,
                         "y": 1182
                       },
                       "parameters": {
@@ -5175,7 +5214,7 @@
                       "type": "sum",
                       "name": "F_body",
                       "position": {
-                        "x": 560,
+                        "x": 604,
                         "y": 990
                       },
                       "parameters": {
@@ -5189,7 +5228,7 @@
                       "type": "matrix_multiply",
                       "name": "F_ned",
                       "position": {
-                        "x": 726,
+                        "x": 770,
                         "y": 920
                       },
                       "parameters": {
@@ -5201,7 +5240,7 @@
                       "type": "scale",
                       "name": "InvMass",
                       "position": {
-                        "x": 900,
+                        "x": 952,
                         "y": 934
                       },
                       "parameters": {
@@ -5233,7 +5272,7 @@
                       "type": "sum",
                       "name": "a_ned",
                       "position": {
-                        "x": 389,
+                        "x": 429,
                         "y": 363
                       },
                       "parameters": {
@@ -5247,7 +5286,7 @@
                       "type": "integrator",
                       "name": "p_ned",
                       "position": {
-                        "x": 731,
+                        "x": 775,
                         "y": 508
                       },
                       "parameters": {
@@ -5264,7 +5303,7 @@
                       "type": "demux",
                       "name": "PosSplit",
                       "position": {
-                        "x": 900,
+                        "x": 952,
                         "y": 413
                       },
                       "parameters": {
@@ -5280,7 +5319,7 @@
                       "type": "demux",
                       "name": "VelSplit",
                       "position": {
-                        "x": 731,
+                        "x": 775,
                         "y": 348
                       },
                       "parameters": {
@@ -5296,7 +5335,7 @@
                       "type": "mux",
                       "name": "GroundForceNED",
                       "position": {
-                        "x": 1440,
+                        "x": 1492,
                         "y": 369
                       },
                       "parameters": {
@@ -5312,7 +5351,7 @@
                       "type": "evaluate",
                       "name": "GroundFrictionN",
                       "position": {
-                        "x": 1075,
+                        "x": 1127,
                         "y": 233
                       },
                       "parameters": {
@@ -5326,7 +5365,7 @@
                       "type": "evaluate",
                       "name": "GroundFrictionE",
                       "position": {
-                        "x": 1075,
+                        "x": 1127,
                         "y": 377
                       },
                       "parameters": {
@@ -5340,7 +5379,7 @@
                       "type": "evaluate",
                       "name": "GroundNormal",
                       "position": {
-                        "x": 1060,
+                        "x": 1112,
                         "y": 521
                       },
                       "parameters": {
@@ -5354,7 +5393,7 @@
                       "type": "matrix_multiply",
                       "name": "GroundForceBody",
                       "position": {
-                        "x": 1610,
+                        "x": 1662,
                         "y": 366
                       },
                       "parameters": {
@@ -5366,7 +5405,7 @@
                       "type": "evaluate",
                       "name": "OnGround",
                       "position": {
-                        "x": 1103,
+                        "x": 1155,
                         "y": 665
                       },
                       "parameters": {
@@ -5380,7 +5419,7 @@
                       "type": "scale",
                       "name": "SpecificForce",
                       "position": {
-                        "x": 731,
+                        "x": 775,
                         "y": 1064
                       },
                       "parameters": {
@@ -5393,7 +5432,7 @@
                       "type": "integrator",
                       "name": "omega_body",
                       "position": {
-                        "x": 560,
+                        "x": 604,
                         "y": -138
                       },
                       "parameters": {
@@ -5429,7 +5468,7 @@
                       "type": "multiply",
                       "name": "Jw",
                       "position": {
-                        "x": 389,
+                        "x": 429,
                         "y": 75
                       },
                       "parameters": {
@@ -5442,7 +5481,7 @@
                       "type": "cross",
                       "name": "GyroTorque",
                       "position": {
-                        "x": 731,
+                        "x": 775,
                         "y": 49
                       },
                       "parameters": {
@@ -5473,7 +5512,7 @@
                       "type": "matrix_multiply",
                       "name": "DownInBody",
                       "position": {
-                        "x": 384,
+                        "x": 424,
                         "y": 750
                       },
                       "parameters": {
@@ -5485,7 +5524,7 @@
                       "type": "source",
                       "name": "BodyZ",
                       "position": {
-                        "x": 389,
+                        "x": 429,
                         "y": 894
                       },
                       "parameters": {
@@ -5504,7 +5543,7 @@
                       "type": "cross",
                       "name": "Tilt",
                       "position": {
-                        "x": 560,
+                        "x": 604,
                         "y": 846
                       },
                       "parameters": {
@@ -5516,7 +5555,7 @@
                       "type": "source",
                       "name": "LegStiffness",
                       "position": {
-                        "x": 554,
+                        "x": 598,
                         "y": 702
                       },
                       "parameters": {
@@ -5535,7 +5574,7 @@
                       "type": "multiply",
                       "name": "LegSpringMoment",
                       "position": {
-                        "x": 731,
+                        "x": 775,
                         "y": 776
                       },
                       "parameters": {
@@ -5567,7 +5606,7 @@
                       "type": "multiply",
                       "name": "LegDampingMoment",
                       "position": {
-                        "x": 389,
+                        "x": 429,
                         "y": 606
                       },
                       "parameters": {
@@ -5580,7 +5619,7 @@
                       "type": "sum",
                       "name": "LegMoment",
                       "position": {
-                        "x": 900,
+                        "x": 952,
                         "y": 790
                       },
                       "parameters": {
@@ -5594,7 +5633,7 @@
                       "type": "multiply",
                       "name": "GroundMoment",
                       "position": {
-                        "x": 1170,
+                        "x": 1222,
                         "y": 809
                       },
                       "parameters": {
@@ -5607,7 +5646,7 @@
                       "type": "sum",
                       "name": "M_net",
                       "position": {
-                        "x": 900,
+                        "x": 952,
                         "y": 41
                       },
                       "parameters": {
@@ -5621,7 +5660,7 @@
                       "type": "divide",
                       "name": "omega_dot",
                       "position": {
-                        "x": 389,
+                        "x": 429,
                         "y": -213
                       },
                       "parameters": {
@@ -5633,7 +5672,7 @@
                       "type": "demux",
                       "name": "pqr",
                       "position": {
-                        "x": 731,
+                        "x": 775,
                         "y": -272
                       },
                       "parameters": {
@@ -5649,7 +5688,7 @@
                       "type": "body2quaternion_rates",
                       "name": "q_dot",
                       "position": {
-                        "x": 900,
+                        "x": 952,
                         "y": -292
                       },
                       "parameters": {
@@ -5661,7 +5700,7 @@
                       "type": "sum",
                       "name": "qNormError",
                       "position": {
-                        "x": 1940,
+                        "x": 1992,
                         "y": -169
                       },
                       "parameters": {
@@ -5675,7 +5714,7 @@
                       "type": "scale",
                       "name": "qNormGain",
                       "position": {
-                        "x": 2100,
+                        "x": 2152,
                         "y": -169
                       },
                       "parameters": {
@@ -5688,7 +5727,7 @@
                       "type": "sum",
                       "name": "q_dot_total",
                       "position": {
-                        "x": 1170,
+                        "x": 1222,
                         "y": -263
                       },
                       "parameters": {
@@ -5702,7 +5741,7 @@
                       "type": "orientation_conversion",
                       "name": "Euler",
                       "position": {
-                        "x": 1940,
+                        "x": 1992,
                         "y": -457
                       },
                       "parameters": {
@@ -5715,7 +5754,7 @@
                       "type": "output_port",
                       "name": "pos_ned",
                       "position": {
-                        "x": 2260,
+                        "x": 2312,
                         "y": 510
                       },
                       "parameters": {
@@ -5729,7 +5768,7 @@
                       "type": "output_port",
                       "name": "vel_ned",
                       "position": {
-                        "x": 2260,
+                        "x": 2312,
                         "y": 361
                       },
                       "parameters": {
@@ -5743,7 +5782,7 @@
                       "type": "output_port",
                       "name": "quat",
                       "position": {
-                        "x": 2260,
+                        "x": 2312,
                         "y": -303
                       },
                       "parameters": {
@@ -5757,7 +5796,7 @@
                       "type": "output_port",
                       "name": "euler",
                       "position": {
-                        "x": 2260,
+                        "x": 2312,
                         "y": -447
                       },
                       "parameters": {
@@ -5771,7 +5810,7 @@
                       "type": "output_port",
                       "name": "omega",
                       "position": {
-                        "x": 2260,
+                        "x": 2312,
                         "y": -178
                       },
                       "parameters": {
@@ -5785,7 +5824,7 @@
                       "type": "output_port",
                       "name": "accel",
                       "position": {
-                        "x": 2260,
+                        "x": 2312,
                         "y": 1055
                       },
                       "parameters": {
@@ -5810,7 +5849,7 @@
                       "targetBlockId": "frame__RotorForce",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 53
+                        "midpointOffset": -23
                       }
                     },
                     {
@@ -5820,7 +5859,7 @@
                       "targetBlockId": "frame__RotorMoment",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -20
+                        "midpointOffset": -16
                       }
                     },
                     {
@@ -5830,7 +5869,7 @@
                       "targetBlockId": "frame__RotorMoment",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 53
+                        "midpointOffset": -23
                       }
                     },
                     {
@@ -5840,7 +5879,7 @@
                       "targetBlockId": "frame__RotorReactionMoment",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -12
+                        "midpointOffset": -8
                       }
                     },
                     {
@@ -5850,7 +5889,7 @@
                       "targetBlockId": "frame__RotorReactionMoment",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 14
+                        "midpointOffset": 18
                       }
                     },
                     {
@@ -5860,7 +5899,7 @@
                       "targetBlockId": "frame__qNorm",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -8
+                        "midpointOffset": -12
                       }
                     },
                     {
@@ -5902,7 +5941,10 @@
                       "sourceBlockId": "frame__C_bn",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__v_body",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -707
+                      }
                     },
                     {
                       "id": "w_13_frame__v_ned_frame__v_body",
@@ -5911,7 +5953,7 @@
                       "targetBlockId": "frame__v_body",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -1
+                        "midpointOffset": 27
                       }
                     },
                     {
@@ -5919,7 +5961,10 @@
                       "sourceBlockId": "frame__v_body",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__DragForce",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -306.5
+                      }
                     },
                     {
                       "id": "w_15_frame__DragCoeff_frame__DragForce",
@@ -5935,7 +5980,7 @@
                       "targetBlockId": "frame__F_body",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -23
+                        "midpointOffset": -31
                       }
                     },
                     {
@@ -5945,7 +5990,7 @@
                       "targetBlockId": "frame__F_body",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 19.5
+                        "midpointOffset": 27.5
                       }
                     },
                     {
@@ -5953,7 +5998,10 @@
                       "sourceBlockId": "frame__C_nb",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__F_ned",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -795
+                      }
                     },
                     {
                       "id": "w_19_frame__F_body_frame__F_ned",
@@ -5962,7 +6010,7 @@
                       "targetBlockId": "frame__F_ned",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 23
+                        "midpointOffset": 11
                       }
                     },
                     {
@@ -5972,7 +6020,7 @@
                       "targetBlockId": "frame__InvMass",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 28
+                        "midpointOffset": 24
                       }
                     },
                     {
@@ -5980,7 +6028,10 @@
                       "sourceBlockId": "frame__InvMass",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__a_ned",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -328.5
+                      }
                     },
                     {
                       "id": "w_22_frame__Gravity_frame__a_ned",
@@ -5989,7 +6040,7 @@
                       "targetBlockId": "frame__a_ned",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 24.5
+                        "midpointOffset": 28.5
                       }
                     },
                     {
@@ -6009,7 +6060,7 @@
                       "targetBlockId": "frame__p_ned",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -3.5
+                        "midpointOffset": 24.5
                       }
                     },
                     {
@@ -6019,7 +6070,7 @@
                       "targetBlockId": "frame__PosSplit",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 6.5
+                        "midpointOffset": 2.5
                       }
                     },
                     {
@@ -6036,7 +6087,7 @@
                       "targetBlockId": "frame__GroundFrictionN",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 0.5
+                        "midpointOffset": 12.5
                       }
                     },
                     {
@@ -6046,7 +6097,7 @@
                       "targetBlockId": "frame__GroundFrictionN",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -97
+                        "midpointOffset": 77
                       }
                     },
                     {
@@ -6066,7 +6117,7 @@
                       "targetBlockId": "frame__GroundFrictionE",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 0.5
+                        "midpointOffset": 12.5
                       }
                     },
                     {
@@ -6076,7 +6127,7 @@
                       "targetBlockId": "frame__GroundFrictionE",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 69
+                        "midpointOffset": 61
                       }
                     },
                     {
@@ -6093,7 +6144,7 @@
                       "targetBlockId": "frame__GroundNormal",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 8
+                        "midpointOffset": 20
                       }
                     },
                     {
@@ -6103,7 +6154,7 @@
                       "targetBlockId": "frame__GroundNormal",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -81.5
+                        "midpointOffset": -85.5
                       }
                     },
                     {
@@ -6121,7 +6172,10 @@
                       "sourceBlockId": "frame__C_bn",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__GroundForceBody",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -249
+                      }
                     },
                     {
                       "id": "w_37_frame__GroundForceNED_frame__GroundForceBody",
@@ -6135,7 +6189,10 @@
                       "sourceBlockId": "frame__GroundForceBody",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__F_body",
-                      "targetPortIndex": 2
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -618
+                      }
                     },
                     {
                       "id": "w_39_frame__PosSplit_frame__OnGround",
@@ -6144,7 +6201,7 @@
                       "targetBlockId": "frame__OnGround",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -13.5
+                        "midpointOffset": -1.5
                       }
                     },
                     {
@@ -6154,7 +6211,7 @@
                       "targetBlockId": "frame__SpecificForce",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 20.5
+                        "midpointOffset": 8.5
                       }
                     },
                     {
@@ -6164,7 +6221,7 @@
                       "targetBlockId": "frame__Jw",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -25.5
+                        "midpointOffset": -29.5
                       }
                     },
                     {
@@ -6172,7 +6229,10 @@
                       "sourceBlockId": "frame__omega_body",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__Jw",
-                      "targetPortIndex": 1
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -146.5
+                      }
                     },
                     {
                       "id": "w_43_frame__omega_body_frame__GyroTorque",
@@ -6181,7 +6241,7 @@
                       "targetBlockId": "frame__GyroTorque",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -19.5
+                        "midpointOffset": 16.5
                       }
                     },
                     {
@@ -6191,7 +6251,7 @@
                       "targetBlockId": "frame__GyroTorque",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 74
+                        "midpointOffset": -98
                       }
                     },
                     {
@@ -6199,7 +6259,10 @@
                       "sourceBlockId": "frame__C_bn",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__DownInBody",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -926
+                      }
                     },
                     {
                       "id": "w_46_frame__DownNED_frame__DownInBody",
@@ -6208,7 +6271,7 @@
                       "targetBlockId": "frame__DownInBody",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 50
+                        "midpointOffset": 54
                       }
                     },
                     {
@@ -6218,7 +6281,7 @@
                       "targetBlockId": "frame__Tilt",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 1
+                        "midpointOffset": 9
                       }
                     },
                     {
@@ -6228,7 +6291,7 @@
                       "targetBlockId": "frame__Tilt",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 11.5
+                        "midpointOffset": 19.5
                       }
                     },
                     {
@@ -6238,7 +6301,7 @@
                       "targetBlockId": "frame__LegSpringMoment",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 1.5
+                        "midpointOffset": -10.5
                       }
                     },
                     {
@@ -6248,7 +6311,7 @@
                       "targetBlockId": "frame__LegSpringMoment",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 12.5
+                        "midpointOffset": 0.5
                       }
                     },
                     {
@@ -6258,7 +6321,7 @@
                       "targetBlockId": "frame__LegDampingMoment",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 34.5
+                        "midpointOffset": 38.5
                       }
                     },
                     {
@@ -6266,7 +6329,10 @@
                       "sourceBlockId": "frame__omega_body",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__LegDampingMoment",
-                      "targetPortIndex": 1
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -146.5
+                      }
                     },
                     {
                       "id": "w_53_frame__LegSpringMoment_frame__LegMoment",
@@ -6275,7 +6341,7 @@
                       "targetBlockId": "frame__LegMoment",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 22.5
+                        "midpointOffset": 18.5
                       }
                     },
                     {
@@ -6285,7 +6351,7 @@
                       "targetBlockId": "frame__LegMoment",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 185.5
+                        "midpointOffset": 183.5
                       }
                     },
                     {
@@ -6295,7 +6361,7 @@
                       "targetBlockId": "frame__GroundMoment",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -55
+                        "midpointOffset": -43
                       }
                     },
                     {
@@ -6303,7 +6369,10 @@
                       "sourceBlockId": "frame__OnGround",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__GroundMoment",
-                      "targetPortIndex": 1
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -220
+                      }
                     },
                     {
                       "id": "w_57_frame__RotorMoment_frame__M_net",
@@ -6312,7 +6381,7 @@
                       "targetBlockId": "frame__M_net",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 143
+                        "midpointOffset": 157
                       }
                     },
                     {
@@ -6329,7 +6398,7 @@
                       "targetBlockId": "frame__M_net",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": 151
+                        "midpointOffset": 141
                       }
                     },
                     {
@@ -6337,14 +6406,20 @@
                       "sourceBlockId": "frame__GroundMoment",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__M_net",
-                      "targetPortIndex": 3
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": -189
+                      }
                     },
                     {
                       "id": "w_61_frame__M_net_frame__omega_dot",
                       "sourceBlockId": "frame__M_net",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__omega_dot",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -336.5
+                      }
                     },
                     {
                       "id": "w_62_frame__Inertia_frame__omega_dot",
@@ -6353,7 +6428,7 @@
                       "targetBlockId": "frame__omega_dot",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -25.5
+                        "midpointOffset": -29.5
                       }
                     },
                     {
@@ -6363,7 +6438,7 @@
                       "targetBlockId": "frame__omega_body",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -12.5
+                        "midpointOffset": -20.5
                       }
                     },
                     {
@@ -6373,7 +6448,7 @@
                       "targetBlockId": "frame__pqr",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -19.5
+                        "midpointOffset": 16.5
                       }
                     },
                     {
@@ -6381,7 +6456,10 @@
                       "sourceBlockId": "frame__q_n",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__q_dot",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -550
+                      }
                     },
                     {
                       "id": "w_66_frame__pqr_frame__q_dot",
@@ -6443,7 +6521,10 @@
                       "sourceBlockId": "frame__qNormGain",
                       "sourcePortIndex": 0,
                       "targetBlockId": "frame__q_dot_total",
-                      "targetPortIndex": 1
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -667
+                      }
                     },
                     {
                       "id": "w_74_frame__q_dot_total_frame__q",
@@ -6469,7 +6550,7 @@
                       "targetBlockId": "frame__pos_ned",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 34.5
+                        "midpointOffset": 42.5
                       }
                     },
                     {
@@ -6479,7 +6560,7 @@
                       "targetBlockId": "frame__vel_ned",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -768
+                        "midpointOffset": -744
                       }
                     },
                     {
@@ -6506,7 +6587,7 @@
                       "targetBlockId": "frame__omega",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 774
+                        "midpointOffset": 778
                       }
                     },
                     {
@@ -6516,12 +6597,12 @@
                       "targetBlockId": "frame__accel",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 42.5
+                        "midpointOffset": 50.5
                       }
                     }
                   ],
                   "extents": {
-                    "width": 2560,
+                    "width": 2612,
                     "height": 1393
                   }
                 }
@@ -7416,7 +7497,10 @@
                                 "sourceBlockId": "baro__BaroPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "baro__BaroLag",
-                                "targetPortIndex": 1
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -270
+                                }
                               },
                               {
                                 "id": "w_8_baro__BaroLag_baro__BaroPrev",
@@ -7826,7 +7910,7 @@
             "targetBlockId": "main__Motor_RR",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -2
+              "midpointOffset": -6
             }
           },
           {
@@ -7836,7 +7920,7 @@
             "targetBlockId": "main__Motor_FR",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 14
+              "midpointOffset": 10
             }
           },
           {
@@ -7846,7 +7930,7 @@
             "targetBlockId": "main__Motor_RL",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 22
+              "midpointOffset": 18
             }
           },
           {
@@ -7856,7 +7940,7 @@
             "targetBlockId": "main__Motor_FL",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 6
+              "midpointOffset": 2
             }
           },
           {
@@ -8058,28 +8142,40 @@
             "sourceBlockId": "main__Battery",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Motor_RR",
-            "targetPortIndex": 1
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -316.5
+            }
           },
           {
             "id": "w_28_main__Battery_main__Motor_FR",
             "sourceBlockId": "main__Battery",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Motor_FR",
-            "targetPortIndex": 1
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -316.5
+            }
           },
           {
             "id": "w_29_main__Battery_main__Motor_RL",
             "sourceBlockId": "main__Battery",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Motor_RL",
-            "targetPortIndex": 1
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -316.5
+            }
           },
           {
             "id": "w_30_main__Battery_main__Motor_FL",
             "sourceBlockId": "main__Battery",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Motor_FL",
-            "targetPortIndex": 1
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -316.5
+            }
           },
           {
             "id": "w_31_main__Thrusts_main__Frame",
@@ -8146,28 +8242,40 @@
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 0,
             "targetBlockId": "main__FlightController",
-            "targetPortIndex": 1
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -738
+            }
           },
           {
             "id": "w_38_main__Sensors_main__FlightController",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 1,
             "targetBlockId": "main__FlightController",
-            "targetPortIndex": 2
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -730
+            }
           },
           {
             "id": "w_39_main__Sensors_main__FlightController",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 2,
             "targetBlockId": "main__FlightController",
-            "targetPortIndex": 3
+            "targetPortIndex": 3,
+            "routing": {
+              "midpointOffset": -722
+            }
           },
           {
             "id": "w_40_main__Sensors_main__FlightController",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 3,
             "targetBlockId": "main__FlightController",
-            "targetPortIndex": 4
+            "targetPortIndex": 4,
+            "routing": {
+              "midpointOffset": -714
+            }
           },
           {
             "id": "w_41_main__Sensors_main__Tag_imu_gyro",

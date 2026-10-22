@@ -159,3 +159,40 @@ describe('tuneModelLayout writes wire routes', () => {
     expect(sheets[0].connections[0].routing).toEqual({ midpointOffset: 120 })
   })
 })
+
+describe('feedback wires', () => {
+  // A controller (column 1) fed back from a plant's sensor block (column 3)
+  // through four wires into its ports 1..4; an input feeds port 0.
+  const blocks = [
+    block('in', 'input_port'),
+    block('ctrl', 'subsystem', { inputPorts: ['ref', 'a', 'b', 'c', 'd'], outputPorts: ['u'], sheets: [] }),
+    block('plant', 'scale'),
+    block('sens', 'subsystem', { inputPorts: ['x'], outputPorts: ['a', 'b', 'c', 'd'], sheets: [] }),
+  ]
+  const wires = [
+    wire('w0', 'in', 0, 'ctrl', 0),
+    wire('wu', 'ctrl', 0, 'plant', 0),
+    wire('wx', 'plant', 0, 'sens', 0),
+    ...[0, 1, 2, 3].map(i => wire(`f${i}`, 'sens', i, 'ctrl', i + 1)),
+  ]
+
+  it('turn in front of their target, on staggered tracks, instead of crossing it from behind', () => {
+    const { moves, routes } = computeAutoLayout(blocks, wires)
+    const at = (id: string) => moves.find(m => m.id === id)!.position
+    const ctrlLeft = at('ctrl').x
+    const sensRight = at('sens').x + 80 // natural subsystem width
+    const turns = [0, 1, 2, 3].map(i => {
+      const off = routes.find(r => r.id === `f${i}`)!.midpointOffset
+      expect(off).toBeDefined()
+      const mid = (sensRight + HANDLE_OUTSET + ctrlLeft - HANDLE_OUTSET) / 2
+      return mid + off!
+    })
+    // Every turn is left of the controller (a short run into the port), and
+    // each wire has its own track
+    for (const t of turns) {
+      expect(t).toBeLessThan(ctrlLeft)
+      expect(t).toBeGreaterThan(at('in').x)
+    }
+    expect(new Set(turns).size).toBe(4)
+  })
+})

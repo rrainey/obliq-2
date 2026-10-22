@@ -976,6 +976,8 @@ function routeLaidOutWires(
       y1: a.y + portOffsetY(e.uPort, mu.outputs, a.h),
       x2: b.x - HANDLE_OUTSET,
       y2: b.y + portOffsetY(e.vPort, mv.inputs, b.h),
+      // Runs right to left: turn in front of the target, not behind it
+      feedback: !e.control && colIndex.get(e.v)! <= colIndex.get(e.u)!,
     }
     wires.push(w)
     defaultMid.set(w.id, (w.x1 + w.x2) / 2)

@@ -115,7 +115,8 @@ independent adjustments, each of which can be left alone:
 - Each turn is placed in the gap between block columns where it causes the fewest crossings, overlaps with other wires, and runs through blocks.
 - Within a gap, every net (all wires from one output port) gets its own vertical track, ordered to avoid crossings. Wires from one output share a track, which reads as a junction.
 - Gaps that need many tracks are widened so tracks stay 8 px apart.
-- Turn positions are saved with each wire. Straight wires, feedback wires and enable/reset connections keep the default midpoint, which also clears turns dragged by hand before the blocks moved.
+- **Feedback wires** (running right to left, back to an earlier block) turn in the gap just in front of the block they feed, each on its own track. They come into their port on a short, staggered horizontal run instead of crossing the block from behind, which makes them easy to follow.
+- Turn positions are saved with each wire. Straight wires and enable/reset connections keep the default midpoint, which also clears turns dragged by hand before the blocks moved.
 - To adjust a wire yourself, hover its vertical segment and drag it left or right from anywhere along its length.
 
 **Other notes**
