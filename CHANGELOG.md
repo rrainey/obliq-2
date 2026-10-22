@@ -1,6 +1,6 @@
 # obliq-2 Change Log
 
-## Unreleased
+## What's New in 3.3.1
 
 - **Feedback wires come into their port from the front.** A wire running back to an earlier block, such as the FPV Vehicle's sensor readings into the Flight Controller, used to turn halfway along, so its last segment crossed the target block from behind. **Tune Model Layout** now turns each feedback wire in the gap just in front of the block it feeds, on its own staggered track, so it enters its port on a short horizontal run. The shipped FPV Vehicle is re-laid out accordingly.
 - **Blocks wired alike now line up in feedback loops.** To arrange a sheet with feedback loops, the layout treats one wire in each loop as feedback. It used to pick that wire by the order it happened to visit blocks, so identically wired blocks could land on opposite sides of a loop. In the FPV Vehicle, Motor_RR sat several columns left of the other three Motors. The feedback wire is now chosen by each block's distance from the sheet's inputs, and only wires that actually close a loop are considered. Identically wired blocks share a column, and the flow reads outward from the inputs: controller, motors, power mux, then the battery voltage looping back. The shipped FPV Vehicle is re-laid out accordingly.
