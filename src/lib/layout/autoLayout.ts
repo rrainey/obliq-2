@@ -3,7 +3,8 @@
 // Sugiyama-style layered layout tailored to signal diagrams:
 //   1. Classify blocks (sources / sinks / annotations).
 //   2. Build a port-aware directed graph from wires; break back-edges
-//      (feedback loops) via DFS so ranking sees only forward flow.
+//      (feedback loops) by breadth-first distance from the sources, so
+//      ranking sees only forward flow.
 //   3. Rank via longest-path from sources -> left-to-right flow. Only the
 //      sheet's *boundary* blocks are pinned to the edges: Output Ports and
 //      displays/loggers to the rightmost column, Input Ports to the leftmost.
@@ -200,6 +201,55 @@ interface Graph {
   fwdIn: Map<string, Set<string>>
 }
 
+/** Strongly connected component of each node (Tarjan, iterative). */
+function stronglyConnectedComponents(nodes: string[], adjOut: Map<string, Set<string>>): Map<string, number> {
+  const index = new Map<string, number>()
+  const low = new Map<string, number>()
+  const onStack = new Set<string>()
+  const stack: string[] = []
+  const component = new Map<string, number>()
+  let next = 0
+  let count = 0
+  for (const root of nodes) {
+    if (index.has(root)) continue
+    const work: Array<{ id: string; iter: Iterator<string> }> = []
+    const open = (id: string) => {
+      index.set(id, next)
+      low.set(id, next)
+      next++
+      stack.push(id)
+      onStack.add(id)
+      work.push({ id, iter: adjOut.get(id)![Symbol.iterator]() })
+    }
+    open(root)
+    while (work.length) {
+      const frame = work[work.length - 1]!
+      const step = frame.iter.next()
+      if (!step.done) {
+        const v = step.value
+        if (!index.has(v)) open(v)
+        else if (onStack.has(v)) low.set(frame.id, Math.min(low.get(frame.id)!, index.get(v)!))
+        continue
+      }
+      work.pop()
+      if (work.length) {
+        const parent = work[work.length - 1]!.id
+        low.set(parent, Math.min(low.get(parent)!, low.get(frame.id)!))
+      }
+      if (low.get(frame.id) === index.get(frame.id)) {
+        let w: string
+        do {
+          w = stack.pop()!
+          onStack.delete(w)
+          component.set(w, count)
+        } while (w !== frame.id)
+        count++
+      }
+    }
+  }
+  return component
+}
+
 function buildGraph(
   blocks: BlockData[],
   wires: WireData[],
@@ -238,41 +288,60 @@ function buildGraph(
     adjOut.get(e.u)!.add(e.v)
   }
 
-  // Detect back-edges via three-colour DFS. Visit sources first so forward
-  // orientation is preferred.
-  const color = new Map<string, 'white' | 'gray' | 'black'>()
-  for (const id of nodes) color.set(id, 'white')
+  // Choose which edge of each feedback loop to treat as backward: order the
+  // blocks by breadth-first distance from the sheet's sources, and call an
+  // edge backward when it leads to a block no farther from the sources than
+  // the one it leaves. Signal flow reads outward from the inputs, a
+  // controller ahead of its plant with the sensor path looping back.
+  // Breadth-first distance depends only on how blocks are wired, so blocks
+  // wired alike (four motors fed by one battery and feeding one power mux)
+  // land on the same side of the loop, which a depth-first walk does not
+  // guarantee. Ties, and blocks no source reaches, follow sources-first
+  // model order, so the result is deterministic.
   const backEdges = new Set<string>() // key: "src->tgt"
-
-  const dfs = (start: string) => {
-    // Iterative to avoid blowing the stack on large sheets.
-    const stack: Array<{ id: string; iter: Iterator<string> }> = []
-    color.set(start, 'gray')
-    stack.push({ id: start, iter: adjOut.get(start)![Symbol.iterator]() })
-    while (stack.length) {
-      const frame = stack[stack.length - 1]
-      const next = frame.iter.next()
-      if (next.done) {
-        color.set(frame.id, 'black')
-        stack.pop()
-        continue
+  {
+    const preference = [
+      ...nodes.filter(id => isSource(typeOf.get(id)!)),
+      ...nodes.filter(id => !isSource(typeOf.get(id)!)),
+    ]
+    const tie = new Map(preference.map((id, i) => [id, i]))
+    const indeg = new Map<string, number>(nodes.map(id => [id, 0]))
+    for (const outs of adjOut.values()) for (const v of outs) indeg.set(v, indeg.get(v)! + 1)
+    const dist = new Map<string, number>()
+    const bfs = (starts: string[], base: number) => {
+      const queue = starts.filter(id => !dist.has(id))
+      for (const id of queue) dist.set(id, base)
+      for (let i = 0; i < queue.length; i++) {
+        const u = queue[i]!
+        for (const v of [...adjOut.get(u)!].sort((x, y) => tie.get(x)! - tie.get(y)!)) {
+          if (!dist.has(v)) {
+            dist.set(v, dist.get(u)! + 1)
+            queue.push(v)
+          }
+        }
       }
-      const v = next.value
-      const c = color.get(v)
-      if (c === 'gray') {
-        backEdges.add(`${frame.id}->${v}`)
-      } else if (c === 'white') {
-        color.set(v, 'gray')
-        stack.push({ id: v, iter: adjOut.get(v)![Symbol.iterator]() })
+    }
+    // From the sources (blocks with no inputs, or source-type blocks) first
+    bfs(preference.filter(id => isSource(typeOf.get(id)!) || indeg.get(id) === 0), 0)
+    // Then anything only reachable around a loop, from its earliest block
+    for (const id of preference) if (!dist.has(id)) bfs([id], 0)
+    const position = new Map(
+      [...nodes]
+        .sort((x, y) => dist.get(x)! - dist.get(y)! || tie.get(x)! - tie.get(y)!)
+        .map((id, i) => [id, i])
+    )
+    // Only an edge inside a loop can be backward: one between strongly
+    // connected components never closes a cycle, however the distances fall
+    // (a From feeding a block directly makes that block "near" the sources)
+    const component = stronglyConnectedComponents(nodes, adjOut)
+    for (const [u, outs] of adjOut) {
+      for (const v of outs) {
+        if (component.get(u) === component.get(v) && position.get(u)! > position.get(v)!) {
+          backEdges.add(`${u}->${v}`)
+        }
       }
     }
   }
-
-  const dfsOrder = [
-    ...nodes.filter(id => isSource(typeOf.get(id)!)),
-    ...nodes.filter(id => !isSource(typeOf.get(id)!)),
-  ]
-  for (const id of dfsOrder) if (color.get(id) === 'white') dfs(id)
 
   const fwdOut = new Map<string, Set<string>>()
   const fwdIn = new Map<string, Set<string>>()

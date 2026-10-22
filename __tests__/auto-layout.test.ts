@@ -104,6 +104,38 @@ describe('computeAutoLayout', () => {
     })
   })
 
+  describe('feedback loops', () => {
+    it('puts blocks wired alike in the same column (four motors on one battery)', () => {
+      // split feeds four motors; each motor feeds a power mux; the mux feeds the
+      // battery, whose voltage goes back to every motor (a loop through each)
+      const blocks = [
+        block('in', 'input_port'),
+        block('split', 'demux', { outputCount: 4 }),
+        ...['m0', 'm1', 'm2', 'm3'].map(id => block(id, 'sum', { signs: '++' })),
+        block('mux', 'mux', { rows: 4, cols: 1 }),
+        block('battery', 'scale'),
+        block('out', 'output_port'),
+      ]
+      const wires = [
+        wire('w0', 'in', 0, 'split', 0),
+        ...[0, 1, 2, 3].flatMap(i => [
+          wire(`s${i}`, 'split', i, `m${i}`, 0),
+          wire(`p${i}`, `m${i}`, 0, 'mux', i),
+          wire(`v${i}`, 'battery', 0, `m${i}`, 1),
+        ]),
+        wire('wb', 'mux', 0, 'battery', 0),
+        wire('wo', 'battery', 0, 'out', 0),
+      ]
+      const moves = layout(blocks, wires)
+      const x = (id: string) => posOf(moves, id).x
+      expect(new Set(['m0', 'm1', 'm2', 'm3'].map(x)).size).toBe(1)
+      // Flow reads outward from the input; the battery's voltage is the feedback
+      expect(x('split')).toBeLessThan(x('m0'))
+      expect(x('m0')).toBeLessThan(x('mux'))
+      expect(x('mux')).toBeLessThan(x('battery'))
+    })
+  })
+
   describe('long wires', () => {
     it('orders Output Ports by the ports that feed them, however far back', () => {
       // Path A (seeded at the top) is a long chain; path B (seeded at the bottom)

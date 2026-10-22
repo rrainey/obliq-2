@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Blocks wired alike now line up in feedback loops.** To arrange a sheet with feedback loops, the layout treats one wire in each loop as feedback. It used to pick that wire by the order it happened to visit blocks, so identically wired blocks could land on opposite sides of a loop. In the FPV Vehicle, Motor_RR sat several columns left of the other three Motors. The feedback wire is now chosen by each block's distance from the sheet's inputs, and only wires that actually close a loop are considered. Identically wired blocks share a column, and the flow reads outward from the inputs: controller, motors, power mux, then the battery voltage looping back. The shipped FPV Vehicle is re-laid out accordingly.
 - **Tune Model Layout resizes subsystems modestly.** **Resize Subsystems** used to grow subsystems until each port lined up exactly with its neighbour, often up to the 1,200 px cap. The FPV Vehicle's subsystems all reached it, 8–15× their natural height. Now:
   - A resize spreads ports at most **Maximum port spacing** apart: a new field in the dialog, 40 px by default, twice the natural spacing.
   - The height is fitted once, so a grown block no longer pushes its neighbours apart and then grows again to meet them.
