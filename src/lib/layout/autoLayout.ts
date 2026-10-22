@@ -686,6 +686,13 @@ function refitResizableBlocks(
   for (const [id, m] of metrics) {
     if (!m.resizable) continue
 
+    // Never leave a block packed tighter than its natural port spacing, even
+    // when nothing below can be fitted (all its neighbours are shared)
+    if (m.height < m.minHeight) {
+      m.height = m.minHeight
+      changed = true
+    }
+
     // Sample (port fraction along this block, desired absolute y) pairs.
     const fractions: number[] = []
     const targets: number[] = []

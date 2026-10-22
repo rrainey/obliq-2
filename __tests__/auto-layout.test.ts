@@ -396,6 +396,20 @@ describe('computeAutoLayout', () => {
       expect(computeAutoLayout(blocks, wires, { resizeBlocks: true }).resizes).toEqual([])
     })
 
+    it('raises a block stored below its natural height, even with nothing to fit', () => {
+      // Shared neighbours only, and stored at 60px though 3 ports need 80
+      const sub = (id: string) =>
+        block(id, 'subsystem', { inputPorts: ['In1'], outputPorts: ['A', 'B', 'C'], sheets: [], height: 60, width: 120 })
+      const blocks = [block('feed', 'source'), sub('s1'), sub('s2'), block('cA', 'sum'), block('cB', 'sum'), block('cC', 'sum')]
+      const wires = [
+        wire('f1', 'feed', 0, 's1', 0),
+        wire('f2', 'feed', 0, 's2', 0),
+        ...['cA', 'cB', 'cC'].flatMap((c, i) => [wire(`a${i}`, 's1', i, c, 0), wire(`b${i}`, 's2', i, c, 1)]),
+      ]
+      const { resizes } = computeAutoLayout(blocks, wires, { resizeBlocks: true })
+      expect(resizes.map(r => [r.id, r.height]).sort()).toEqual([['s1', 80], ['s2', 80]])
+    })
+
     it('achieves alignment when the spacing limit allows it', () => {
       const { blocks, wires } = threePortSubsystem()
       const { moves, resizes } = computeAutoLayout(blocks, wires, {
