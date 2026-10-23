@@ -1,6 +1,6 @@
 # obliq-2 Change Log
 
-## Unreleased
+## What's New in 3.4.0
 
 - **Signal Display plots are drawn with uPlot (canvas), about 6× faster.** The FPV Demo Flight's Telemetry sheet (9 scopes, 10,000 samples each) now draws in about 0.2 s instead of 1.2 s.
   - **Hover:** the legend below each plot shows the time and every value under the cursor, with a cursor line. This replaces the floating tooltip.
