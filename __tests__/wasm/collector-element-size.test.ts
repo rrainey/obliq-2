@@ -41,3 +41,14 @@ test('... and through a subsystem output fed by a label inside it', () => {
   const r = new WasmCodeGenerator({ modelName: 'm' }).generateWasm(sheets, [])
   expect(elementSizes(r.wasmWrapper)).toEqual([3, 3])
 })
+
+test('a single-output conversion block (quaternion to Euler) through a label reports 3 elements', () => {
+  const q = b('q', 'source', 'Quat', { signalType: 'constant', value: [[1], [0], [0], [0]], dataType: 'double[4][1]' })
+  const conv = b('c', 'orientation_conversion', 'ToEuler', { conversionType: 'quat_to_euler' })
+  const sheets: any[] = [
+    sheet('main', [q, conv, b('tag', 'sheet_label_sink', 'Tag', { signalName: 'e' })], [w('w1', 'q', 'c'), w('w2', 'c', 'tag')]),
+    sheet('t', [b('from', 'sheet_label_source', 'From', { signalName: 'e' }), b('d', 'signal_display', 'Attitude', {})], [w('w3', 'from', 'd')]),
+  ]
+  const r = new WasmCodeGenerator({ modelName: 'm' }).generateWasm(sheets, [])
+  expect(elementSizes(r.wasmWrapper)).toEqual([3])
+})

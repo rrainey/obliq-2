@@ -57,8 +57,10 @@ import type { ModelParameter } from '@/lib/modelSchema'
  * - v36: Loggers and displays fed through sheet labels (or through a
  *        subsystem output fed by a label inside it) report their vector
  *        width, not 1, so vector results are no longer read interleaved.
+ * - v37: The same for vectors from single-output blocks that v36 skipped
+ *        (e.g. Orientation Conversion quaternion-to-Euler).
  */
-const CODEGEN_VERSION = 'v36'
+const CODEGEN_VERSION = 'v37'
 
 export interface ModelStructure {
   sheets: Sheet[]

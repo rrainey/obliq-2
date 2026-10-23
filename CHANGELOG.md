@@ -8,8 +8,13 @@
   - **Zoom:** drag across a plot to zoom in time; double-click to reset.
   - **Tick labels:** labels carry the decimals the range needs, so a small signal is no longer labelled "0.0".
   - **Lines:** vector lines are straight between samples, no longer smoothed splines that overshot between samples.
+- **Plots in Export as PDF.** A new option, **Include plot results on sheets**, draws each sheet's Signal Display plots from the last run in a column on the right of its page.
+  - Plots are vector graphics, with titles, ticks, grid and legends, and stay sharp at any page size.
+  - Plots are stacked in the order of their blocks on the sheet.
+  - When a sheet has more plots than fit, they continue on further pages for that sheet, each showing the diagram again.
+  - Long series are reduced for printing without losing peaks: the FPV Demo Flight exports in about 180 KB.
 - **The block palette is 15% narrower** (290 px), leaving more room for the canvas.
-- **Fixed: vector Signal Displays and Loggers fed through sheet labels were plotted wrong.** Their elements were read as one interleaved signal, which showed as a single zig-zag line. Examples are the FPV Telemetry sheet's Position and RotorSpeed scopes. They now plot one line per element, and CSV exports of them have one column per element.
+- **Fixed: vector Signal Displays and Loggers fed through sheet labels were plotted wrong.** Their elements were read as one interleaved signal, which showed as a single zig-zag line. Examples are the FPV Telemetry sheet's Position, RotorSpeed and Attitude scopes. They now plot one line per element, and CSV exports of them have one column per element.
 ## What's New in 3.3.1
 
 - **Feedback wires come into their port from the front.** A wire running back to an earlier block, such as the FPV Vehicle's sensor readings into the Flight Controller, used to turn halfway along, so its last segment crossed the target block from behind. **Tune Model Layout** now turns each feedback wire in the gap just in front of the block it feeds, on its own staggered track, so it enters its port on a short horizontal run. The shipped FPV Vehicle is re-laid out accordingly.

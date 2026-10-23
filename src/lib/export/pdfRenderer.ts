@@ -23,6 +23,7 @@ import { getGlyphSpec, needsRaster } from './blockGlyphs'
 import { parseType } from '@/lib/typeValidator'
 import { resolvePageSize, type PageOrientation } from './pageSizes'
 import type { ExportPlan, ExportSheet, ExportSubsystem, PrintScope } from './sheetTree'
+import { drawPdfPlotColumn, plotsPerColumn, type PdfPlot } from './pdfPlot'
 
 export type PdfScaling = '100' | '50' | 'fit'
 
@@ -35,6 +36,11 @@ export interface PdfExportOptions {
   fitLargeSheets: boolean
   scope: PrintScope
   includeSubsystemSummaries: boolean
+  /**
+   * Put each sheet's Signal Display plots (from the last run, see
+   * PdfRenderContext.plotResults) in a column on the right of its page.
+   */
+  includePlotResults?: boolean
   /**
    * Text the user permits to be shortened with an ellipsis. Both off by
    * default: truncated text cannot be found by a reader searching the PDF.
@@ -53,6 +59,7 @@ export const DEFAULT_PDF_OPTIONS: Omit<PdfExportOptions, 'fileName'> = {
   fitLargeSheets: false,
   scope: 'model',
   includeSubsystemSummaries: false,
+  includePlotResults: false,
   allowTruncation: { blockNames: false, inBlockText: false },
 }
 
@@ -66,6 +73,8 @@ export interface PdfRenderContext {
    * populate this with propagateSignalTypesMultiSheet's output.
    */
   signalTypes?: Map<string, { type: string }>
+  /** Signal Display plots from the last run, by sheet id (for includePlotResults). */
+  plotResults?: Map<string, PdfPlot[]>
   /**
    * Rasterises a string that Helvetica cannot draw, returning PNG bytes plus
    * pixel dimensions. Supplied by the browser (canvas-backed); omit in tests
@@ -732,11 +741,53 @@ export async function renderModelToPdf(
 
   // --- Sheet pages --------------------------------------------------------
 
-  const drawSheet = async (sheet: ExportSheet) => {
-    const p = doc.addPage([page.width, page.height])
-    pages.push({ page: p, path: sheet.path })
-    const printable = printableFor(sheet.path)
+  /** This sheet's plots, in the order of their blocks on the sheet (by y, then x). */
+  const plotsFor = (sheet: ExportSheet): PdfPlot[] => {
+    if (!options.includePlotResults) return []
+    const position = new Map(sheet.blocks.map(b => [b.id, b.position ?? { x: 0, y: 0 }]))
+    return (ctx.plotResults?.get(sheet.id) ?? [])
+      .filter(plot => position.has(plot.blockId) && plot.columns.times.length > 0)
+      .sort((a, b) => {
+        const pa = position.get(a.blockId)!, pb = position.get(b.blockId)!
+        return pa.y - pb.y || pa.x - pb.x
+      })
+  }
 
+  /**
+   * A sheet's page(s). With plot results, the plots go in a column on the
+   * right and the diagram fits the area to its left; plots that do not fit
+   * continue on further pages for the sheet, each showing the diagram again.
+   */
+  const drawSheet = async (sheet: ExportSheet) => {
+    const printable = printableFor(sheet.path)
+    const plots = plotsFor(sheet)
+    const newPage = () => {
+      const p = doc.addPage([page.width, page.height])
+      pages.push({ page: p, path: sheet.path })
+      return p
+    }
+    if (plots.length === 0) {
+      await drawDiagram(sheet, newPage(), printable)
+      return
+    }
+    const columnWidth = Math.min(printable.width * 0.5, Math.max(180, printable.width / 3))
+    const gap = 14
+    const diagramArea = { ...printable, width: printable.width - columnWidth - gap }
+    const column = { x: printable.x + printable.width - columnWidth, y: printable.y, width: columnWidth, height: printable.height }
+    const perPage = plotsPerColumn(column.height)
+    for (let i = 0; i < plots.length; i += perPage) {
+      const p = newPage()
+      await drawDiagram(sheet, p, diagramArea)
+      drawPdfPlotColumn(p, column, plots.slice(i, i + perPage), { regular: helv, bold: helvBold })
+    }
+  }
+
+  /** Draw a sheet's diagram, scaled and centred in `printable`. */
+  const drawDiagram = async (
+    sheet: ExportSheet,
+    p: PDFPage,
+    printable: { x: number; y: number; width: number; height: number }
+  ) => {
     const metrics = new Map(sheet.blocks.map(b => [b.id, measure(b)]))
     const bounds = sheetBounds(sheet.blocks, metrics)
     const contentW = Math.max(1, bounds.maxX - bounds.minX)

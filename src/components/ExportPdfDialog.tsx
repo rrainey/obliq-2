@@ -21,6 +21,8 @@ interface ExportPdfDialogProps {
   defaultFileName: string
   /** True when the active sheet sits inside a subsystem. */
   insideSubsystem: boolean
+  /** True when the model has Signal Display results from a run to print. */
+  hasPlotResults?: boolean
   exporting?: boolean
   onClose: () => void
   onExport: (options: PdfExportOptions) => void
@@ -37,6 +39,7 @@ export default function ExportPdfDialog({
   modelName,
   defaultFileName,
   insideSubsystem,
+  hasPlotResults = false,
   exporting = false,
   onClose,
   onExport,
@@ -48,6 +51,7 @@ export default function ExportPdfDialog({
   const [fitLargeSheets, setFitLargeSheets] = useState(false)
   const [scope, setScope] = useState<PrintScope>('model')
   const [includeSubsystemSummaries, setIncludeSubsystemSummaries] = useState(false)
+  const [includePlotResults, setIncludePlotResults] = useState(false)
   // Truncation is off by default: shortened text cannot be found by a reader
   // searching the produced PDF.
   const [truncateBlockNames, setTruncateBlockNames] = useState(false)
@@ -88,6 +92,7 @@ export default function ExportPdfDialog({
       fitLargeSheets,
       scope,
       includeSubsystemSummaries,
+      includePlotResults: includePlotResults && !!hasPlotResults,
       allowTruncation: {
         blockNames: truncateBlockNames,
         inBlockText: truncateInBlockText,
@@ -166,6 +171,16 @@ export default function ExportPdfDialog({
           description="Adds a page per subsystem listing its ports, parameters, and sheets"
           checked={includeSubsystemSummaries}
           onChange={e => setIncludeSubsystemSummaries(e.currentTarget.checked)}
+        />
+
+        <Checkbox
+          label="Include plot results on sheets"
+          description={hasPlotResults
+            ? 'Draws each sheet\'s Signal Display plots from the last run in a column on the right of its page'
+            : 'Run the simulation first to print its plots'}
+          checked={includePlotResults && !!hasPlotResults}
+          disabled={!hasPlotResults}
+          onChange={e => setIncludePlotResults(e.currentTarget.checked)}
         />
 
         <Divider label="Allow Text Truncation" labelPosition="left" />

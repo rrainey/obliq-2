@@ -75,7 +75,6 @@ Other Recharts use: the admin API metrics page ([ModelBuilderMetricsViewer.tsx](
 - **Where the plots go.** When the option is on, each printed sheet that has Signal Display results puts its plots in a column on the right side of that sheet's diagram page. The diagram is fitted into the area to the left. Pages for sheets without results are unchanged, as is every page when the option is off.
 - **The column.** It takes about a third of the page width. Plots are stacked top to bottom in the order of their blocks on the sheet (by y, then x), each with its title, axes, ticks, grid, legend and lines. They share the column's height equally, down to a minimum readable height of about 1.5 in.
 - **Too many plots.** If a sheet has more plots than fit, the rest continue in the right-hand column of a following page for the same sheet. That page has the same footer and shows the diagram again on the left.
-- **Large sheets.** When a large sheet is split across several pages, the plots go on its first page.
 - **Scaling.** The page's scaling choice (100%, 50%, scale to fit) applies to the diagram area. The plot column is always laid out to fit the page.
 - **Vector drawing.** Everything is drawn with pdf-lib vector paths, as the existing lookup-table plots already are ([pdfRenderer.ts](../src/lib/export/pdfRenderer.ts)), so plots stay sharp at any page size.
 - **Decimation.** Long series are first reduced, keeping the minimum and maximum of each horizontal step of the printed plot (about 2,000 per line). No peaks are lost, and the file stays small.

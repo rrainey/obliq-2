@@ -76,6 +76,8 @@ import CommentConfig from '@/components/CommentConfig'
 import ModelValidationButton from '@/components/ModelValidationButton'
 import TestResultsButton from '@/components/TestResultsButton'
 import ModelReferenceConfig from '@/components/ModelReferenceConfig'
+import type { PdfPlot } from '@/lib/export/pdfPlot'
+import { resultsToColumns } from '@/lib/plots/signalPlot'
 import { isModelReference } from '@/lib/modelReferences'
 import { collectModelRefs, modelRefKey } from '@/lib/referencedModels'
 import { useReferencedModelUpdates } from '@/hooks/useReferencedModelUpdates'
@@ -1898,11 +1900,33 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         currentSheets.map(s => ({ blocks: s.blocks, connections: s.connections }))
       )
 
+      // Signal Display plots from the last run, per sheet, for the plot column
+      const plotResults = new Map<string, PdfPlot[]>()
+      if (options.includePlotResults && globalSimulationResults) {
+        for (const sheet of plan.sheets) {
+          const results = globalSimulationResults.get(sheet.id)
+          if (!results) continue
+          const plots: PdfPlot[] = []
+          for (const block of sheet.blocks) {
+            if (block.type !== 'signal_display') continue
+            const values = results.signalData.get(block.id)
+            if (!values || values.length === 0) continue
+            plots.push({
+              blockId: block.id,
+              title: block.name,
+              columns: resultsToColumns(results.timePoints, values as any, block.parameters?.maxSamples || 1000),
+            })
+          }
+          if (plots.length > 0) plotResults.set(sheet.id, plots)
+        }
+      }
+
       const bytes = await renderModelToPdf(plan, options, {
         modelName: model?.name || 'Untitled Model',
         printedAt: new Date(),
         rasterizeGlyph: createGlyphRasterizer(),
         signalTypes: typeResult.signalTypes,
+        plotResults,
       })
 
       downloadPdf(bytes, options.fileName)
@@ -2516,6 +2540,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           modelName={model.name}
           defaultFileName={defaultPdfFileName(model.name)}
           insideSubsystem={isCurrentSheetInSubsystem()}
+          hasPlotResults={!!globalSimulationResults && [...globalSimulationResults.values()].some(r => r.signalData.size > 0)}
           exporting={exportingPdf}
           onClose={() => setShowExportPdfDialog(false)}
           onExport={handleExportPdf}

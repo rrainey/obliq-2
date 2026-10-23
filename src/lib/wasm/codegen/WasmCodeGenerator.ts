@@ -14,6 +14,7 @@ import { CCodeBuilder } from '@/lib/codegen/CCodeBuilder'
 import { ModelFlattener } from '@/lib/codegen/ModelFlattener'
 import { TypePropagator } from '@/lib/codegen/TypePropagator'
 import { getSignalMemberName } from '@/lib/codegen/signalMemberName'
+import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
 
 export interface WasmCodeGenerationOptions extends CodeGenerationOptions {
   /** Whether to include Emscripten-specific exports (default: true) */
@@ -362,8 +363,14 @@ export class WasmCodeGenerator extends CodeGenerator {
       )
       const feeder = conn && flattenedModel.blocks.find((b: any) => b.originalId === conn.sourceBlockId)
       // The type map has one type per block: only trust it for single-output feeders
-      const multiOutput = (b: any) =>
-        b.isSegregated || ['demux', 'atmosphere', 'orientation_conversion', 'subsystem'].includes(b.block.type)
+      const multiOutput = (b: any) => {
+        if (b.isSegregated || b.block.type === 'subsystem') return true
+        try {
+          return BlockModuleFactory.getBlockModule(b.block.type).getOutputPortCount(b.block) > 1
+        } catch {
+          return true
+        }
+      }
       const flattened = feeder && !multiOutput(feeder) ? typeMap.get(feeder.originalId) : undefined
       return flattened && flattened !== 'void' ? flattened : direct
     }
