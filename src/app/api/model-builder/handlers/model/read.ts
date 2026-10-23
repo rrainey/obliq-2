@@ -48,13 +48,6 @@ export async function handleGetModel(ctx: HandlerContext): Promise<NextResponse>
     }
   };
 
-  modelBuilderApiMetrics.record(
-    'GET',
-    'getModel',
-    Date.now() - startTime,
-    true,
-    200
-  );
 
   return successResponse(responseData);
 }

@@ -112,6 +112,37 @@ const DELETE_HANDLERS: Record<string, ActionHandler> = {
   [ModelBuilderActions.DELETE_BLOCK_PARAMETER]: handleDeleteBlockParameter
 };
 
+/** Record a handled request in the API metrics (errors are recorded by logRequest). */
+function recordCall(method: string, action: string | null, startTime: number, response: NextResponse): NextResponse {
+  modelBuilderApiMetrics.record(method, action || 'getModel', Date.now() - startTime, response.status < 400, response.status)
+  return response
+}
+
+/** Read the recorded API metrics: summary, hourly (?hours=24) or export (CSV). */
+function metricsResponse(metricsAction: string, searchParams: URLSearchParams): NextResponse {
+  const ok = (data: unknown) => NextResponse.json({ success: true, timestamp: new Date().toISOString(), data });
+  switch (metricsAction) {
+    case 'summary':
+      return ok(modelBuilderApiMetrics.getSummary());
+    case 'hourly': {
+      const hours = Math.min(168, Math.max(1, Number(searchParams.get('hours')) || 24));
+      return ok(modelBuilderApiMetrics.getHourlyStats(hours));
+    }
+    case 'export':
+      return new NextResponse(modelBuilderApiMetrics.exportToCsv(), {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="model-builder-metrics.csv"',
+        },
+      });
+    default:
+      return NextResponse.json(
+        { success: false, timestamp: new Date().toISOString(), error: `Unknown metricsAction: ${metricsAction}`, code: 'INVALID_ACTION' },
+        { status: 400 }
+      );
+  }
+}
+
 // Look up an action's handler (own keys only, so 'toString' etc. stay unknown)
 function findHandler(table: Record<string, ActionHandler>, action: string | null | undefined): ActionHandler | undefined {
   return action && Object.prototype.hasOwnProperty.call(table, action) ? table[action] : undefined;
@@ -224,13 +255,19 @@ export async function GET(request: NextRequest) {
     return auth.response;
   }
 
+  // API metrics (the admin API Metrics page): summary, hourly stats, CSV export
+  const metricsAction = searchParams.get('metricsAction');
+  if (metricsAction) {
+    return metricsResponse(metricsAction, searchParams);
+  }
+
   try {
     const ctx = buildContext(request, auth, startTime, searchParams);
 
     // Default action is to get the model
     const handler = findHandler(GET_HANDLERS, action || ModelBuilderActions.GET_MODEL);
     if (handler) {
-      return await handler(ctx);
+      return recordCall('GET', action, startTime, await handler(ctx));
     }
 
     const errorResp = errorResponse(`Unknown action: ${action}`, 'UNKNOWN_ACTION');
@@ -274,7 +311,7 @@ export async function POST(request: NextRequest) {
 
     const handler = findHandler(POST_HANDLERS, action);
     if (handler) {
-      return await handler(buildContext(request, auth, startTime, searchParams, body));
+      return recordCall('POST', action, startTime, await handler(buildContext(request, auth, startTime, searchParams, body)));
     }
 
     const errorResp = errorResponse(`Unknown action: ${action}`, 'UNKNOWN_ACTION');
@@ -526,7 +563,7 @@ export async function PUT(request: NextRequest) {
   try {
     const handler = findHandler(PUT_HANDLERS, action);
     if (handler) {
-      return await handler(buildContext(request, auth, startTime, searchParams, body));
+      return recordCall('PUT', action, startTime, await handler(buildContext(request, auth, startTime, searchParams, body)));
     }
 
     const errorResp = errorResponse(`Unknown action: ${action}`, 'UNKNOWN_ACTION');
@@ -562,6 +599,11 @@ export async function DELETE(request: NextRequest) {
     return auth.response;
   }
 
+  if (searchParams.get('metricsAction') === 'clear') {
+    modelBuilderApiMetrics.clear();
+    return NextResponse.json({ success: true, timestamp: new Date().toISOString(), data: { cleared: true } });
+  }
+
   try {
     // For backward compatibility, if no action is specified but modelId is present,
     // assume it's a model deletion
@@ -591,7 +633,7 @@ export async function DELETE(request: NextRequest) {
 
     const handler = findHandler(DELETE_HANDLERS, action);
     if (handler) {
-      return await handler(buildContext(request, auth, startTime, searchParams));
+      return recordCall('DELETE', action, startTime, await handler(buildContext(request, auth, startTime, searchParams)));
     }
 
     // If no valid action or modelId

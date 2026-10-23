@@ -1,6 +1,6 @@
 # Plan: Signal Display plots on uPlot
 
-Status: decisions confirmed (October 2026).
+Status: implemented (October 2026). Steps 1–6 are done; notes below record where the result differs from the plan.
 
 ## Goals
 

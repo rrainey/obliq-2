@@ -14,6 +14,10 @@
   - When a sheet has more plots than fit, they continue on further pages for that sheet, each showing the diagram again.
   - Long series are reduced for printing without losing peaks: the FPV Demo Flight exports in about 180 KB.
 - **The block palette is 15% narrower** (290 px), leaving more room for the canvas.
+- **The admin API Metrics page works.** It now gets its data: the endpoint it reads was never implemented, and only failed requests and `getModel` calls were recorded. Every Model Builder request is now recorded.
+  - Its charts are drawn with uPlot: hourly calls, errors and response time, and grouped bars per action.
+  - **Clear Metrics** now uses a `DELETE` request.
+- **Recharts is removed**; all charts use uPlot.
 - **Fixed: vector Signal Displays and Loggers fed through sheet labels were plotted wrong.** Their elements were read as one interleaved signal, which showed as a single zig-zag line. Examples are the FPV Telemetry sheet's Position, RotorSpeed and Attitude scopes. They now plot one line per element, and CSV exports of them have one column per element.
 ## What's New in 3.3.1
 

@@ -141,7 +141,8 @@ independent adjustments, each of which can be left alone:
 
 ### Simulation Engine
 - **Client-side simulation** - Models are compiled dynamically and executed as [Web Assemblies](https://webassembly.org/)
-- Real-time signal visualization with Recharts
+- Fast canvas plots of Signal Displays ([uPlot](https://github.com/leeoniya/uPlot)): the values under the cursor in the legend, click legend entries to hide or show lines, and drag to zoom in time
+- **Export as PDF** can print each sheet's plots beside its diagram (**Include plot results on sheets**)
 - Configurable time steps, duration, and integration methods, saved with the model
 - Signal logging with CSV export capability
 - Support for both continuous and discrete-time systems
@@ -194,7 +195,7 @@ independent adjustments, each of which can be left alone:
 - **Storage**: SQLite (`better-sqlite3`) index + flat JSON model files under `~/.config/obliq-2/`
 - **Authentication**: Local session cookie (browser) and hashed API tokens (MCP/automation)
 - **State Management**: Zustand
-- **Visualization**: Recharts for signal charting
+- **Visualization**: uPlot for signal plots (canvas); pdf-lib vector plots in PDF export
 - **Code Generation**: Server-side TypeScript to C transpilation
 - **Model Compilation**: Custom Docker image with gcc and WASM tooling
 

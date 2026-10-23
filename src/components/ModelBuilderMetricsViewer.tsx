@@ -1,6 +1,61 @@
 // components/ModelBuilderMetricsViewer.tsx
-import React, { useState, useEffect } from 'react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import React, { useState, useEffect, useMemo } from 'react';
+import uPlot from 'uplot';
+import UPlotChart from './UPlotChart';
+
+const GRID = { stroke: '#e5e7eb', dash: [3, 3], width: 1 };
+const AXIS = { stroke: '#6b7280', grid: GRID, ticks: { stroke: '#e5e7eb', width: 1 } };
+const CALLS_COLOR = '#8884d8';
+const ERRORS_COLOR = '#ff7300';
+const TIME_COLOR = '#82ca9d';
+
+/** Hourly activity: calls and errors (left axis), average response time in ms (right axis). */
+function hourlyOptions(hours: string[]): Omit<uPlot.Options, 'width'> {
+  return {
+    height: 300,
+    legend: { show: true, live: true },
+    cursor: { drag: { x: false, y: false } },
+    scales: { x: { time: false }, ms: { auto: true } },
+    axes: [
+      { ...AXIS, splits: () => hours.map((_, i) => i), values: (_u, splits) => splits.map(i => hours[i] ?? '') },
+      { ...AXIS, label: 'Calls' },
+      { ...AXIS, scale: 'ms', side: 1, label: 'ms', grid: { show: false } },
+    ],
+    series: [
+      { label: 'Hour', value: (_u, i) => (i === null ? '—' : hours[i] ?? '') },
+      { label: 'API Calls', stroke: CALLS_COLOR, width: 2, points: { show: false } },
+      { label: 'Avg Response (ms)', stroke: TIME_COLOR, width: 2, scale: 'ms', points: { show: false } },
+      { label: 'Errors', stroke: ERRORS_COLOR, width: 2, points: { show: false } },
+    ],
+  };
+}
+
+/** Calls by action: successful and failed calls as grouped bars. */
+function actionOptions(actions: string[]): Omit<uPlot.Options, 'width'> {
+  const bars = (align: -1 | 1) => uPlot.paths.bars!({ size: [0.35, 40], align, gap: 1 });
+  return {
+    height: 320,
+    legend: { show: true, live: true },
+    cursor: { drag: { x: false, y: false }, points: { show: false } },
+    scales: { x: { time: false, range: (_u, min, max) => [min - 0.6, max + 0.6] }, y: { range: (_u, _min, max) => [0, Math.max(1, max * 1.1)] } },
+    axes: [
+      {
+        ...AXIS,
+        splits: () => actions.map((_, i) => i),
+        values: (_u, splits) => splits.map(i => actions[i] ?? ''),
+        rotate: -45,
+        size: 110,
+        grid: { show: false },
+      },
+      { ...AXIS, label: 'Calls' },
+    ],
+    series: [
+      { label: 'Action', value: (_u, i) => (i === null ? '—' : actions[i] ?? '') },
+      { label: 'Successful Calls', fill: CALLS_COLOR, stroke: CALLS_COLOR, paths: bars(-1), points: { show: false } },
+      { label: 'Failed Calls', fill: ERRORS_COLOR, stroke: ERRORS_COLOR, paths: bars(1), points: { show: false } },
+    ],
+  };
+}
 
 interface MetricsSummary {
   totalCalls: number;
@@ -76,11 +131,35 @@ export function ModelBuilderMetricsViewer({ token }: { token: string }) {
   const clearMetrics = async () => {
     if (confirm('Are you sure you want to clear all metrics data?')) {
       await fetch(`/api/model-builder?metricsAction=clear`, {
+        method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
       fetchMetrics();
     }
   };
+
+  // Chart options change only with their labels; data updates in place
+  const hourlyChart = useMemo(() => {
+    const hours = hourlyStats.map(stat => new Date(stat.hour).toLocaleTimeString([], { hour: '2-digit' }));
+    const data: uPlot.AlignedData = [
+      hourlyStats.map((_, i) => i),
+      hourlyStats.map(stat => stat.calls),
+      hourlyStats.map(stat => Math.round(stat.avgResponseTime)),
+      hourlyStats.map(stat => stat.errors),
+    ];
+    return { options: hourlyOptions(hours), data };
+  }, [hourlyStats]);
+
+  const actionChart = useMemo(() => {
+    const entries = Object.entries(summary?.callsByAction ?? {});
+    const actions = entries.map(([action]) => action);
+    const data: uPlot.AlignedData = [
+      actions.map((_, i) => i),
+      entries.map(([, calls]) => calls),
+      actions.map(action => summary?.errorsByAction[action] || 0),
+    ];
+    return { options: actionOptions(actions), data };
+  }, [summary]);
 
   if (loading) {
     return <div className="p-4">Loading metrics...</div>;
@@ -91,20 +170,6 @@ export function ModelBuilderMetricsViewer({ token }: { token: string }) {
   }
 
   // Prepare data for charts
-  const actionData = Object.entries(summary.callsByAction).map(([action, calls]) => ({
-    action,
-    calls,
-    errors: summary.errorsByAction[action] || 0,
-    avgTime: summary.responseTimeByAction[action]?.avg || 0
-  }));
-
-  const hourlyChartData = hourlyStats.map(stat => ({
-    hour: new Date(stat.hour).toLocaleTimeString([], { hour: '2-digit' }),
-    calls: stat.calls,
-    avgTime: Math.round(stat.avgResponseTime),
-    errors: stat.errors
-  }));
-
   return (
     <div className="p-4 space-y-6">
       {/* Summary Cards */}
@@ -165,53 +230,13 @@ export function ModelBuilderMetricsViewer({ token }: { token: string }) {
       {/* Hourly Activity Chart */}
       <div className="bg-white rounded-lg shadow p-4">
         <h2 className="text-lg font-semibold mb-4">API Activity (Last 24 Hours)</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={hourlyChartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="hour" />
-            <YAxis yAxisId="left" />
-            <YAxis yAxisId="right" orientation="right" />
-            <Tooltip />
-            <Legend />
-            <Line 
-              yAxisId="left"
-              type="monotone" 
-              dataKey="calls" 
-              stroke="#8884d8" 
-              name="API Calls"
-            />
-            <Line 
-              yAxisId="right"
-              type="monotone" 
-              dataKey="avgTime" 
-              stroke="#82ca9d" 
-              name="Avg Response (ms)"
-            />
-            <Line 
-              yAxisId="left"
-              type="monotone" 
-              dataKey="errors" 
-              stroke="#ff7300" 
-              name="Errors"
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        <UPlotChart options={hourlyChart.options} data={hourlyChart.data} />
       </div>
 
       {/* Actions Breakdown */}
       <div className="bg-white rounded-lg shadow p-4">
         <h2 className="text-lg font-semibold mb-4">API Calls by Action</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={actionData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="action" angle={-45} textAnchor="end" height={100} />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="calls" fill="#8884d8" name="Successful Calls" />
-            <Bar dataKey="errors" fill="#ff7300" name="Failed Calls" />
-          </BarChart>
-        </ResponsiveContainer>
+        <UPlotChart options={actionChart.options} data={actionChart.data} />
       </div>
 
       {/* Response Time by Action */}

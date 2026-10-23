@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { HandlerContext, RateLimitResult } from './types';
+import { modelBuilderApiMetrics } from '@/lib/modelBuilderApiMetrics';
 import {
   InvalidModelFileError,
   ModelConflictError,
@@ -146,6 +147,10 @@ export function logRequest(
 ): void {
   const duration = Date.now() - startTime;
   const timestamp = new Date().toISOString();
+
+  // Errors handled here also count in the API metrics (successful requests
+  // are recorded where the route dispatches them)
+  modelBuilderApiMetrics.record(method, action || 'none', duration, response.success, response.status, response.error);
 
   console.log(JSON.stringify({
     timestamp,
