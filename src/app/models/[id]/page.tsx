@@ -1997,7 +1997,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   return (
     <AppShell
       header={{ height: 60 }}
-      navbar={{ width: 340, breakpoint: 'sm' }}
+      navbar={{ width: 290, breakpoint: 'sm' }}
       aside={{ width: 400, breakpoint: 'md' }}
     >
       <AppShell.Header>
