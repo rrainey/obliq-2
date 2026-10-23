@@ -69,4 +69,24 @@ describe('subsystem reference codegen', () => {
     expect(result.source).toMatch(/Blade_compute_outputs\(&model->Blade\)/)
     expect(result.source).toMatch(/Blade_compute_outputs\(&model->Blade_2\)/)
   })
+
+  test('references saved with empty port lists take their ports from the definition', () => {
+    // Model files saved before the editor kept reference ports in sync can
+    // hold empty lists; the reference's outputs must still resolve in the C
+    const damaged = JSON.parse(JSON.stringify(modelJson.sheets)) as Sheet[]
+    for (const b of damaged[0]!.blocks) {
+      if (b.parameters?.isReference) {
+        b.parameters.inputPorts = []
+        b.parameters.outputPorts = []
+      }
+    }
+    const flat = new ModelFlattener().flattenModel(damaged, 'p5_blade')
+    for (const m of flat.model.segregatedSubsystems!) {
+      expect(m.outputPorts.map(p => p.name)).toEqual(['y'])
+    }
+    const result = new CodeGenerator({ modelName: 'p5_blade' }).generate(damaged, [])
+    expect(result.source).toMatch(/model->\w*Blade_2\.outputs\.y/)
+    expect(result.source).toMatch(/model->\w*Blade_3\.outputs\.y/)
+    expect(result.source).not.toMatch(/model->signals\.\w*Blade_[23];/)
+  })
 })

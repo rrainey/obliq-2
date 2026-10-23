@@ -20,6 +20,7 @@
 - **Recharts is removed**; all charts use uPlot.
 - **Fixed: vector Signal Displays and Loggers fed through sheet labels were plotted wrong.** Their elements were read as one interleaved signal, which showed as a single zig-zag line. Examples are the FPV Telemetry sheet's Position, RotorSpeed and Attitude scopes. They now plot one line per element, and CSV exports of them have one column per element.
 - **Fixed: wire type labels that stayed on screen.** The label shown while hovering a wire now goes away when the pointer leaves the wire onto its block, slides off a drag handle, or finishes a segment drag elsewhere.
+- **Fixed: models with subsystem references saved before 3.3.0 could fail to compile** ("no member named 'Motor_FR'"). Their saved references can have empty port lists. The editor repaired those lists on loading, but code generation reads the saved model file, so the references' outputs were left unresolved. Code generation now takes a reference's ports from its definition. Opening and saving such a model also repairs the file.
 ## What's New in 3.3.1
 
 - **Feedback wires come into their port from the front.** A wire running back to an earlier block, such as the FPV Vehicle's sensor readings into the Flight Controller, used to turn halfway along, so its last segment crossed the target block from behind. **Tune Model Layout** now turns each feedback wire in the gap just in front of the block it feeds, on its own staggered track, so it enters its port on a short horizontal run. The shipped FPV Vehicle is re-laid out accordingly.

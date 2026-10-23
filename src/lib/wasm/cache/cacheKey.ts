@@ -59,8 +59,10 @@ import type { ModelParameter } from '@/lib/modelSchema'
  *        width, not 1, so vector results are no longer read interleaved.
  * - v37: The same for vectors from single-output blocks that v36 skipped
  *        (e.g. Orientation Conversion quaternion-to-Euler).
+ * - v38: Subsystem references whose saved port lists are empty take their
+ *        ports from the definition, so their outputs resolve.
  */
-const CODEGEN_VERSION = 'v37'
+const CODEGEN_VERSION = 'v38'
 
 export interface ModelStructure {
   sheets: Sheet[]

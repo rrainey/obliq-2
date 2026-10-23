@@ -19,7 +19,8 @@ import {
   collectAllBlocksFromSheets,
   isSubsystemReference,
   resolveSubsystemDefinition,
-  resolveSubsystemSheets
+  resolveSubsystemSheets,
+  syncReferencePortsModelWide
 } from '@/lib/subsystemReference'
 
 /** Ordinary subsystem or For Iterator Subsystem (both carry nested sheets). */
@@ -1778,7 +1779,12 @@ export class ModelFlattener {
     if (!sheets || !Array.isArray(sheets)) {
       throw new Error('Invalid sheets parameter: expected array of sheets')
     }
-    
+
+    // References take their port lists from the definition. Model files
+    // saved before the editor kept them in sync can hold empty lists, which
+    // left the reference's outputs unresolved in the generated C.
+    sheets = syncReferencePortsModelWide(sheets)
+
     // Reset state for new flattening operation
     this.warnings = []
     this.blockMap.clear()
