@@ -54,8 +54,11 @@ import type { ModelParameter } from '@/lib/modelSchema'
  *        and outputs fed by a From on another sheet); M_PI fallback.
  * - v35: Assert blocks are checked (OBLIQ_ASSERTS) and their results and the
  *        stop request are exported from the wrapper.
+ * - v36: Loggers and displays fed through sheet labels (or through a
+ *        subsystem output fed by a label inside it) report their vector
+ *        width, not 1, so vector results are no longer read interleaved.
  */
-const CODEGEN_VERSION = 'v35'
+const CODEGEN_VERSION = 'v36'
 
 export interface ModelStructure {
   sheets: Sheet[]

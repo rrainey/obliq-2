@@ -346,6 +346,28 @@ export class WasmCodeGenerator extends CodeGenerator {
       )
     }
 
+    /**
+     * The type a logger or display records. The editor-level lookup cannot see
+     * through sheet labels (a From is gone after flattening) or through labels
+     * inside a subsystem's sheets, and falls back to 'double', which reads a
+     * vector as one value per sample with its elements interleaved. The
+     * flattened model has every label resolved, so ask it what feeds the
+     * collector and use that block's type.
+     */
+    const collectorType = (collectorId: string, sourceBlock: any, sourcePortIndex: number): string => {
+      const direct = getSourceSignalType(sourceBlock, sourcePortIndex)
+      if (direct !== 'double') return direct
+      const conn = flattenedModel.connections.find(
+        (c: any) => c.targetBlockId === collectorId && c.targetPortIndex === 0
+      )
+      const feeder = conn && flattenedModel.blocks.find((b: any) => b.originalId === conn.sourceBlockId)
+      // The type map has one type per block: only trust it for single-output feeders
+      const multiOutput = (b: any) =>
+        b.isSegregated || ['demux', 'atmosphere', 'orientation_conversion', 'subsystem'].includes(b.block.type)
+      const flattened = feeder && !multiOutput(feeder) ? typeMap.get(feeder.originalId) : undefined
+      return flattened && flattened !== 'void' ? flattened : direct
+    }
+
     // Process all sheets to find input/output ports and signal loggers
     for (const sheet of sheets) {
       for (const block of sheet.blocks) {
@@ -457,11 +479,7 @@ export class WasmCodeGenerator extends CodeGenerator {
                     ),
                 sourceBlock,
               })
-              const sourceType = getSourceSignalType(
-                sourceBlock,
-                feedingConnection.sourcePortIndex
-              )
-              collectorTypeMap.set(loggerName, sourceType)
+              collectorTypeMap.set(loggerName, collectorType(block.id, sourceBlock, feedingConnection.sourcePortIndex))
             }
           }
         } else if (block.type === 'signal_display') {
@@ -508,11 +526,7 @@ export class WasmCodeGenerator extends CodeGenerator {
                     ),
                 sourceBlock,
               })
-              const sourceType = getSourceSignalType(
-                sourceBlock,
-                feedingConnection.sourcePortIndex
-              )
-              collectorTypeMap.set(displayName, sourceType)
+              collectorTypeMap.set(displayName, collectorType(block.id, sourceBlock, feedingConnection.sourcePortIndex))
             }
           }
         }
