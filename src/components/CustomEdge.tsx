@@ -518,6 +518,33 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
     }
   }, [])
 
+  // While hovered, end the hover as soon as the pointer is over anything that
+  // is not part of this wire. Enter/leave pairs alone miss cases: leaving off
+  // the end of a wire onto its block (the hit areas end at the port), leaving
+  // through the edge of the drag handle, or finishing a drag elsewhere (leaves
+  // are ignored while dragging), which left the type label showing.
+  useEffect(() => {
+    if (!isHovered || isDragging) return
+    const selector = `[data-edge-hover="${typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id}"]`
+    const end = () => {
+      clearHoverTimeout()
+      setIsHovered(false)
+      setHoveredSegmentIndex(null)
+    }
+    const onMove = (e: PointerEvent) => {
+      const target = e.target as Element | null
+      if (!target?.closest?.(selector)) end()
+    }
+    document.addEventListener('pointermove', onMove, true)
+    window.addEventListener('blur', end)
+    document.documentElement.addEventListener('pointerleave', end)
+    return () => {
+      document.removeEventListener('pointermove', onMove, true)
+      window.removeEventListener('blur', end)
+      document.documentElement.removeEventListener('pointerleave', end)
+    }
+  }, [isHovered, isDragging, id, clearHoverTimeout])
+
   // Memoize segments to avoid recalculating on every render
   const segments = useMemo(() => {
     const effectiveOffset = isDragging ? currentOffset : (data?.routing?.midpointOffset ?? 0)
@@ -673,6 +700,7 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
       {/* Invisible wider path for easier selection */}
       <path
         id={`${id}-interaction`}
+        data-edge-hover={id}
         style={{ fill: 'none', strokeWidth: 20, stroke: 'transparent', cursor: 'pointer' }}
         d={fullPath}
         onMouseEnter={() => setIsHovered(true)}
@@ -705,6 +733,7 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
           <path
             key={`${id}-segment-hit-${index}`}
             d={segment.path}
+            data-edge-hover={id}
             className={draggable ? 'nodrag nopan' : undefined}
             style={{
               fill: 'none',
@@ -751,6 +780,7 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
                   cy={midY}
                   r={12}
                   fill="transparent"
+                  data-edge-hover={id}
                   className="nodrag nopan"
                   style={{ cursor: 'ew-resize', pointerEvents: 'all' }}
                   onMouseEnter={clearHoverTimeout}
