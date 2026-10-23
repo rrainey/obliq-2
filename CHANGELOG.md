@@ -1,5 +1,15 @@
 # obliq-2 Change Log
 
+## Unreleased
+
+- **Signal Display plots are drawn with uPlot (canvas), about 6× faster.** The FPV Demo Flight's Telemetry sheet (9 scopes, 10,000 samples each) now draws in about 0.2 s instead of 1.2 s.
+  - **Hover:** the legend below each plot shows the time and every value under the cursor, with a cursor line. This replaces the floating tooltip.
+  - **Legend:** click an entry to hide or show that line; the y range follows.
+  - **Zoom:** drag across a plot to zoom in time; double-click to reset.
+  - **Tick labels:** labels carry the decimals the range needs, so a small signal is no longer labelled "0.0".
+  - **Lines:** vector lines are straight between samples, no longer smoothed splines that overshot between samples.
+- **The block palette is 15% narrower** (290 px), leaving more room for the canvas.
+- **Fixed: vector Signal Displays and Loggers fed through sheet labels were plotted wrong.** Their elements were read as one interleaved signal, which showed as a single zig-zag line. Examples are the FPV Telemetry sheet's Position and RotorSpeed scopes. They now plot one line per element, and CSV exports of them have one column per element.
 ## What's New in 3.3.1
 
 - **Feedback wires come into their port from the front.** A wire running back to an earlier block, such as the FPV Vehicle's sensor readings into the Flight Controller, used to turn halfway along, so its last segment crossed the target block from behind. **Tune Model Layout** now turns each feedback wire in the gap just in front of the block it feeds, on its own staggered track, so it enters its port on a short horizontal run. The shipped FPV Vehicle is re-laid out accordingly.

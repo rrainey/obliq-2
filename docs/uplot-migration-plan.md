@@ -52,7 +52,7 @@ Other Recharts use: the admin API metrics page ([ModelBuilderMetricsViewer.tsx](
 
 | Gap | Cover |
 |---|---|
-| Canvas is a bitmap. Printing the browser page could look soft, while Recharts' SVG printed sharply. | **Export as PDF** can include the plots as vector paths, drawn from the data rather than the canvas (step 4). The plots also re-render at print resolution in the browser's `beforeprint` event. |
+| Canvas is a bitmap. Printing the browser page could look soft, while Recharts' SVG printed sharply. | **Export as PDF** can include the plots as vector paths, drawn from the data rather than the canvas (step 4). That is the print path. uPlot reads the screen's pixel ratio globally, so redrawing at print resolution on `beforeprint` is not practical: a browser print of the page shows screen-resolution plots. |
 | uPlot needs `window`, so it cannot render on the server. | Loaded in the client component, in an effect, as other canvas code is. |
 | Theme switches | The axis and grid colours are updated in place, without rebuilding the plot. |
 | Accessibility: a canvas has no text. Recharts' SVG had little more. | The plot gets an `aria-label` summarising the signal, its time span and its range. |

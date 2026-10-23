@@ -2379,17 +2379,14 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                   const block = blocks.find(b => b.id === blockId && b.type === 'signal_display')
                   if (!block) return null
                   
-                  // Transform the data to match SignalDisplay's expected format
-                  const signalData = currentSheetSimulationResults.timePoints.map((time: number, index: number) => ({
-                    time,
-                    value: data[index]
-                  }))
-                  
+                  // The result arrays keep their identity between renders, so the
+                  // plot is only rebuilt when a run produces new results
                   return (
                     <Box key={blockId}>
                       <SignalDisplay
                         block={block}
-                        signalData={signalData}
+                        timePoints={currentSheetSimulationResults.timePoints}
+                        values={data}
                         isRunning={false}
                       />
                     </Box>

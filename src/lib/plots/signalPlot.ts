@@ -62,6 +62,22 @@ export function signalToColumns(samples: SignalSample[], maxSamples: number): Pl
 }
 
 /**
+ * Simulation results (shared time points, one value per point) to plot
+ * columns, without building per-sample objects.
+ */
+export function resultsToColumns(
+  timePoints: ArrayLike<number>,
+  values: ArrayLike<SignalSample['value']>,
+  maxSamples: number
+): PlotColumns {
+  const n = Math.min(timePoints.length, values.length)
+  const start = maxSamples > 0 && n > maxSamples ? n - maxSamples : 0
+  const samples: SignalSample[] = []
+  for (let i = start; i < n; i++) samples.push({ time: timePoints[i]!, value: values[i]! })
+  return signalToColumns(samples, 0)
+}
+
+/**
  * The y range to show: the data's range (visible lines only) plus 10%
  * padding, or ±0.1 around a constant. NaNs are ignored; no data gives -1..1.
  */
