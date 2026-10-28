@@ -415,6 +415,50 @@ int main(void) {
 `
 }
 
+export interface PortSpec {
+  name: string
+  /** C element type, e.g. double */
+  cType: string
+  /** Array dimensions; [] for a scalar */
+  dims: number[]
+}
+
+/**
+ * The model's input and output ports, read from the generated header's
+ * `<model>_inputs_t` and `<model>_outputs_t` structs, so the manifest lists
+ * exactly what a host compiles against.
+ */
+export function portsFromHeader(header: string, modelName: string): { inputs: PortSpec[]; outputs: PortSpec[] } {
+  const struct = (suffix: string): PortSpec[] => {
+    const m = header.match(new RegExp(`typedef struct \\{([^}]*)\\} ${modelName}_${suffix}_t;`))
+    if (!m) return []
+    const ports: PortSpec[] = []
+    for (const line of m[1]!.split('\n')) {
+      const f = line.match(/^\s*([A-Za-z_][\w ]*?)\s+([A-Za-z_]\w*)((?:\[\d+\])*);\s*\/\*\s*(?:Input|Output) port/)
+      if (!f) continue
+      ports.push({ name: f[2]!, cType: f[1]!.trim(), dims: [...f[3]!.matchAll(/\[(\d+)\]/g)].map(d => Number(d[1])) })
+    }
+    return ports
+  }
+  return { inputs: struct('inputs'), outputs: struct('outputs') }
+}
+
+/** obliq-2's version, and the git commit it was built from when available. */
+function generatorInfo(): { version: string; commit: string | null; dirty: boolean | null } {
+  const root = path.resolve(__dirname, '..')
+  let version = 'unknown'
+  try {
+    version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version
+  } catch {}
+  try {
+    const commit = execSync('git rev-parse HEAD', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+    const dirty = execSync('git status --porcelain --untracked-files=no', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() !== ''
+    return { version, commit, dirty }
+  } catch {
+    return { version, commit: null, dirty: null }
+  }
+}
+
 function writeManifest(
   outDir: string,
   meta: {
@@ -424,16 +468,22 @@ function writeManifest(
     sourceJson: string
     warnings: string[]
     stats: Record<string, number>
+    header: string
+    subsystemFiles: string[]
   }
 ) {
+  const ports = portsFromHeader(meta.header, meta.modelName)
   const manifest = {
     modelName: meta.modelName,
     displayName: meta.displayName,
     profile: meta.profile,
     sourceJson: meta.sourceJson,
     generatedAt: new Date().toISOString(),
+    generator: { name: 'obliq-2', ...generatorInfo() },
     warnings: meta.warnings,
     stats: meta.stats,
+    inputs: ports.inputs,
+    outputs: ports.outputs,
     files:
       meta.profile === 'saturn-ib-stack'
         ? [
@@ -441,10 +491,11 @@ function writeManifest(
             `${meta.modelName}.h`,
             `${meta.modelName}_rtw_adapter.c`,
             `${meta.modelName}_rtw_adapter.h`,
+            ...meta.subsystemFiles,
             'CMakeLists.txt',
             'smoke_main.c'
           ]
-        : [`${meta.modelName}.c`, `${meta.modelName}.h`, 'CMakeLists.txt', 'smoke_main.c']
+        : [`${meta.modelName}.c`, `${meta.modelName}.h`, ...meta.subsystemFiles, 'CMakeLists.txt', 'smoke_main.c']
   }
   fs.writeFileSync(
     path.join(outDir, 'cgen-manifest.json'),
@@ -519,6 +570,7 @@ function main() {
   }
 
   const subsystemSources: string[] = []
+  const subsystemFiles: string[] = []
   for (const sub of result.subsystemFiles || []) {
     const base = sub.subsystemName
     const headerName = `${base}.h`
@@ -526,6 +578,7 @@ function main() {
     fs.writeFileSync(path.join(absOut, headerName), sub.header)
     fs.writeFileSync(path.join(absOut, sourceName), sub.source)
     subsystemSources.push(sourceName)
+    subsystemFiles.push(sourceName, headerName)
     console.log(`  segregated module: ${headerName} + ${sourceName}`)
   }
 
@@ -540,7 +593,9 @@ function main() {
     profile,
     sourceJson: path.resolve(modelPath!),
     warnings: result.warnings || [],
-    stats: result.stats as any
+    stats: result.stats as any,
+    header: result.header,
+    subsystemFiles
   })
 
   console.log(`Wrote C project → ${absOut}`)
@@ -559,4 +614,4 @@ function main() {
   }
 }
 
-main()
+if (require.main === module) main()
