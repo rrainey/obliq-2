@@ -111,15 +111,30 @@ export const LOCATION = {
   elevationM: 178.133,
   /** Decimal year for the magnetic field (2026-10-20) */
   epoch: 2026.8,
+  /**
+   * Geoid height N (m) at the park center, NGS GEOID18 (±0.043 m): the
+   * ellipsoid is 26.1 m below NAVD88 here, so ellipsoid height = H + N.
+   */
+  geoidHeightM: -26.103,
+  /** UTM zone of the terrain database's grid (NAD83 / UTM 14N) */
+  utmZone: 14,
+  /**
+   * Grid convergence γ (deg) at the park center: the angle from true north to
+   * UTM 14N grid north, positive when grid north is east of true north. The
+   * model's x axis is grid north. This is the default for test models; the
+   * Unity host supplies PROJ's value at run time (the DEM sidecar records it).
+   */
+  gridConvergenceDeg: 1.2425,
 }
 
 /**
- * WMM2025 field at the site, NED, µT. The model takes height above the WGS84
- * ellipsoid; using the MSL elevation (the geoid is about 27 m below the
- * ellipsoid here) changes the field by well under 0.01 µT.
+ * WMM2025 field at the site, true NED, µT, evaluated at the field's height
+ * above the ellipsoid (elevation + geoid height). Across the 1 km terrain box
+ * and 150 m of climb the field changes by at most 4 nT, far below the
+ * magnetometer's 0.3 µT LSB, so it is a constant.
  */
 export const SITE_FIELD = (() => {
-  const f = wmmField(loadWmm2025(), LOCATION.latitudeDeg, LOCATION.longitudeDeg, LOCATION.elevationM, LOCATION.epoch)
+  const f = wmmField(loadWmm2025(), LOCATION.latitudeDeg, LOCATION.longitudeDeg, LOCATION.elevationM + LOCATION.geoidHeightM, LOCATION.epoch)
   return { ned: [f.x, f.y, f.z].map(v => Number((v / 1000).toFixed(3))), declinationDeg: f.declinationDeg, inclinationDeg: f.inclinationDeg }
 })()
 
@@ -255,6 +270,37 @@ export interface StickProfile {
   arm?: Array<[number, number]>
 }
 
+/** A piecewise-linear schedule ([time s, value] pairs), or a constant. */
+export type Schedule = number | Array<[number, number]>
+
+/** GNSS conditions over time: the receiver's satellites used, HDOP, VDOP and UERE scale. */
+export interface GnssEnvProfile {
+  satellites?: Schedule
+  hdop?: Schedule
+  vdop?: Schedule
+  uereScale?: Schedule
+}
+
+/** Open sky: the receiver's default conditions (u-blox M10 class, multi-GNSS). */
+export const DEFAULT_GNSS_ENV = { satellites: 14, hdop: 0.8, vdop: 1.3, uereScale: 1.0 }
+
+/**
+ * The vehicle's inputs other than the sticks, over time. Test models feed
+ * them from a Conditions subsystem; the Unity host sets them directly.
+ */
+export interface ConditionsProfile {
+  gnssEnv?: GnssEnvProfile
+  /** Grid convergence γ (deg); default LOCATION.gridConvergenceDeg */
+  gridConvergenceDeg?: Schedule
+}
+
+/** The vehicle's Input Ports, in port order, with their types. */
+export const VEHICLE_INPUTS: Array<[string, string]> = [
+  ['sticks', 'double[6]'],
+  ['gnss_env', 'double[4]'],
+  ['grid_convergence_deg', 'double'],
+]
+
 /**
  * Default demo: take off from rest on the field. Armed at 0.25 s, climb on
  * 0.55 throttle, hover, then in angle mode a 24 deg bank, an 18 deg
@@ -356,6 +402,110 @@ class SheetBuilder {
 
   sheet(): Sheet {
     return { id: this.id, name: this.name, blocks: this.blocks, connections: this.connections, extents: { width: 1200, height: 800 } }
+  }
+}
+
+/**
+ * Tests-sheet helpers: turn events and statistics into signals that Assert
+ * blocks can check (docs/fpv-hud-gnss-test-plan.md, section 2.2). Inputs are
+ * scalars; select vector elements first. `ts` is the accumulation interval
+ * (0 = every model step).
+ */
+export class TestHelpers {
+  private clockId: string | null = null
+  constructor(private readonly s: SheetBuilder) {}
+
+  /** The sheet's clock (one per sheet). */
+  clock(): string {
+    return (this.clockId ??= this.s.add('clock', 'Time'))
+  }
+
+  private feedback(name: string, initialValue: number, ts: number, expression: string, inputs: string[]): string {
+    const prev = this.s.add('unit_delay', `${name}Prev`, { initialValue, sampleInterval: ts })
+    const ev = this.s.add('evaluate', name, { numInputs: inputs.length + 1, expression })
+    inputs.forEach((id, i) => this.s.wire(id, ev, i))
+    this.s.wire(prev, ev, inputs.length)
+    this.s.wire(ev, prev)
+    return ev
+  }
+
+  /** 1 once x has ever exceeded 0.5, else 0. */
+  latch(name: string, x: string): string {
+    return this.feedback(name, 0, 0, '(in(0) > 0.5 || in(1) > 0.5) ? 1.0 : 0.0', [x])
+  }
+
+  /** The time x first exceeded 0.5, held; −1 until then. */
+  firstTime(name: string, x: string): string {
+    return this.feedback(name, -1, 0, '(in(2) < 0.0 && in(0) > 0.5) ? in(1) : in(2)', [x, this.clock()])
+  }
+
+  /** Running maximum of x. */
+  runMax(name: string, x: string): string {
+    return this.feedback(name, -1e30, 0, 'fmax(in(0), in(1))', [x])
+  }
+
+  /** Running minimum of x. */
+  runMin(name: string, x: string): string {
+    return this.feedback(name, 1e30, 0, 'fmin(in(0), in(1))', [x])
+  }
+
+  /** x until time t, then held at its value there. */
+  heldAt(name: string, x: string, t: number): string {
+    return this.feedback(name, 0, 0, `(in(1) <= ${t}) ? in(0) : in(2)`, [x, this.clock()])
+  }
+
+  /** 1 when the clock is in [t0, t1), else 0. */
+  private gate(name: string, t0: number, t1: number): string {
+    const g = this.s.add('evaluate', name, { numInputs: 1, expression: `(in(0) >= ${t0} && in(0) < ${t1}) ? 1.0 : 0.0` })
+    this.s.wire(this.clock(), g)
+    return g
+  }
+
+  /** Accumulate term (an expression in in(0)…) while the gate is open, every ts. */
+  private accumulate(name: string, gate: string, ts: number, term: string, inputs: string[]): string {
+    const n = inputs.length
+    return this.feedback(name, 0, ts, `(in(${n}) > 0.5) ? in(${n + 1}) + (${term}) : in(${n + 1})`, [...inputs, gate])
+  }
+
+  /** Mean of x² over [t0, t1), sampled every ts; held after t1 (0 before any sample). */
+  windowMeanSquare(name: string, x: string, t0: number, t1: number, ts = 0): string {
+    const g = this.gate(`${name}Window`, t0, t1)
+    const sum = this.accumulate(`${name}Sum`, g, ts, 'in(0) * in(0)', [x])
+    const one = this.s.constant(`${name}One`, 1, 'double')
+    const count = this.accumulate(`${name}Count`, g, ts, 'in(0)', [one])
+    const out = this.s.add('evaluate', name, { numInputs: 2, expression: '(in(1) > 0.0) ? in(0) / in(1) : 0.0' })
+    this.s.wire(sum, out, 0)
+    this.s.wire(count, out, 1)
+    return out
+  }
+
+  /**
+   * Normalised correlation of x with x delayed by `lag` samples of ts, over
+   * [t0, t1): Σ x·x₋ / √(Σ x² · Σ x₋²). Held after t1.
+   */
+  windowCorr(name: string, x: string, lag: number, ts: number, t0: number, t1: number): string {
+    let delayed = x
+    for (let i = 1; i <= lag; i++) {
+      const d = this.s.add('unit_delay', `${name}Lag${i}`, { initialValue: 0, sampleInterval: ts })
+      this.s.wire(delayed, d)
+      delayed = d
+    }
+    const g = this.gate(`${name}Window`, t0 + lag * ts, t1)
+    const sab = this.accumulate(`${name}Sab`, g, ts, 'in(0) * in(1)', [x, delayed])
+    const saa = this.accumulate(`${name}Saa`, g, ts, 'in(0) * in(0)', [x])
+    const sbb = this.accumulate(`${name}Sbb`, g, ts, 'in(0) * in(0)', [delayed])
+    const out = this.s.add('evaluate', name, { numInputs: 3, expression: '(in(1) > 0.0 && in(2) > 0.0) ? in(0) / sqrt(in(1) * in(2)) : 0.0' })
+    this.s.wire(sab, out, 0)
+    this.s.wire(saa, out, 1)
+    this.s.wire(sbb, out, 2)
+    return out
+  }
+
+  /** 1 once a phase signal has equalled k. */
+  phaseVisited(name: string, phase: string, k: number): string {
+    const eq = this.s.add('evaluate', `${name}Now`, { numInputs: 1, expression: `(fabs(in(0) - ${k}) < 0.5) ? 1.0 : 0.0` })
+    this.s.wire(phase, eq)
+    return this.latch(name, eq)
   }
 }
 
@@ -665,6 +815,35 @@ function buildPilotSheet(sticks: StickProfile): SheetBuilder {
     s.wire(lut, mux, i)
   })
   s.output('sticks', mux, 'double[6]')
+  return s
+}
+
+/** A scheduled value: a constant, or a clamped lookup on the clock. */
+function scheduled(s: SheetBuilder, clock: () => string, name: string, sched: Schedule): string {
+  if (typeof sched === 'number') return s.constant(name, sched, 'double')
+  const pts = sched.length > 1 ? sched : [sched[0]!, [sched[0]![0] + 1, sched[0]![1]] as [number, number]]
+  const lut = s.add('lookup_1d', name, {
+    inputValues: pts.map(p => p[0]),
+    outputValues: pts.map(p => p[1]),
+    extrapolation: 'clamp',
+  })
+  s.wire(clock(), lut)
+  return lut
+}
+
+/** Conditions: the vehicle's non-pilot inputs, scheduled over time (defaults when not given). */
+function buildConditionsSheet(c: ConditionsProfile = {}): SheetBuilder {
+  const s = new SheetBuilder('conditions', 'Conditions')
+  let clockId: string | null = null
+  const clock = () => (clockId ??= s.add('clock', 'Time'))
+  const env = { ...DEFAULT_GNSS_ENV, ...(c.gnssEnv ?? {}) }
+  const mux = s.add('mux', 'GnssEnv', { rows: 4, cols: 1, baseType: 'double', outputType: 'double[4]' })
+  ;([['satellites', 'Satellites'], ['hdop', 'HDOP'], ['vdop', 'VDOP'], ['uereScale', 'UereScale']] as const).forEach(([key, name], i) => {
+    s.wire(scheduled(s, clock, name, env[key]), mux, i)
+  })
+  s.output('gnss_env', mux, 'double[4]')
+  const gamma = scheduled(s, clock, 'GridConvergence', c.gridConvergenceDeg ?? LOCATION.gridConvergenceDeg)
+  s.output('grid_convergence_deg', gamma, 'double')
   return s
 }
 
@@ -1253,6 +1432,8 @@ export interface FpvModelOptions {
   initialEuler?: number[]
   /** Initial height (m) above the field; 0 (default) starts at rest on the ground. */
   initialAltitude?: number
+  /** Scheduled GNSS conditions and grid convergence (builds with a Pilot; vehicleOnly takes them as inputs) */
+  conditions?: ConditionsProfile
 }
 
 export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data: Record<string, unknown> } {
@@ -1280,6 +1461,13 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     const pilot = opts.vehicleOnly
       ? main.input('sticks', 'double[6]')
       : main.add('subsystem', 'Pilot', subsystem([], ['sticks'], buildPilotSheet(opts.sticks ?? DEMO_STICKS)))
+    // GNSS conditions and grid convergence: Input Ports on the vehicle, or a
+    // Conditions schedule. Wired to their consumers in later phases.
+    if (opts.vehicleOnly) {
+      for (const [name, type] of VEHICLE_INPUTS.slice(1)) main.input(name, type)
+    } else {
+      main.add('subsystem', 'Conditions', subsystem([], VEHICLE_INPUTS.slice(1).map(([n]) => n), buildConditionsSheet(opts.conditions)))
+    }
     fc = main.add('subsystem', 'FlightController', {
       ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure'], FC_OUTPUTS, buildFlightControllerSheet(initialQuat, altitude0), FC_SIZE),
       sampleTimeSec: FC.ts,
@@ -1460,6 +1648,10 @@ export interface FpvTestSpec {
   displays: Array<[string, string]>
   /** The Tests sheet (Assert blocks reading vehicle outputs through sheet labels) */
   tests: () => SheetBuilder
+  /** GNSS conditions and grid convergence over time (defaults: open sky, the site's γ) */
+  conditions?: ConditionsProfile
+  /** The vehicle model to reference by name (default FPV_VEHICLE_NAME) */
+  vehicleName?: string
 }
 
 /**
@@ -1492,10 +1684,19 @@ export function buildFpvTestModel(spec: FpvTestSpec): { name: string; data: Reco
     sheets: [],
     inputPorts: iface.inputs,
     outputPorts: iface.outputs,
-    modelRef: { modelId: FPV_VEHICLE_REF_ID, version: null, name: FPV_VEHICLE_NAME },
-    modelRefName: FPV_VEHICLE_NAME,
+    modelRef: { modelId: FPV_VEHICLE_REF_ID, version: null, name: spec.vehicleName ?? FPV_VEHICLE_NAME },
+    modelRefName: spec.vehicleName ?? FPV_VEHICLE_NAME,
   })
   main.wire(pilot, vehicleBlock, iface.inputs.indexOf('sticks'))
+  // Every other vehicle input comes from the Conditions schedule, by name
+  const condOutputs = VEHICLE_INPUTS.slice(1).map(([n]) => n)
+  const conditions = main.add('subsystem', 'Conditions', subsystem([], condOutputs, buildConditionsSheet(spec.conditions)))
+  for (const name of iface.inputs) {
+    if (name === 'sticks') continue
+    const k = condOutputs.indexOf(name)
+    if (k < 0) throw new Error(`${spec.name}: no Conditions output for vehicle input ${name}`)
+    main.wire(conditions, vehicleBlock, iface.inputs.indexOf(name), k)
+  }
   for (const signal of iface.outputs) {
     if (!used.has(signal)) continue
     const tag = main.add('sheet_label_sink', `Tag_${signal}`, { signalName: signal })
@@ -1643,6 +1844,86 @@ export function SHIPPED_FPV_MODELS(): Array<[string, { name: string; data: Recor
   ]
 }
 
+/**
+ * T00: the Tests-sheet helpers checked on signals with known answers (a
+ * ramp, a 0.5 Hz sine, unit Gaussian noise), so the test infrastructure is
+ * itself tested. No vehicle.
+ */
+export function buildFpvHelpersTestModel(): { name: string; data: Record<string, unknown> } {
+  const s = new SheetBuilder('tests', 'Tests')
+  const h = new TestHelpers(s)
+  const t = h.clock()
+  const check = (name: string, input: string, lower: number, upper: number, from = 0, until: number | null = null) => {
+    const id = s.add('assert', name, { mode: 'bounds', lower, upper, checkFrom: from, checkUntil: until, onFailure: 'record' })
+    s.wire(input, id)
+  }
+  const after2 = s.add('evaluate', 'After2s', { numInputs: 1, expression: '(in(0) > 2.0) ? 1.0 : 0.0' })
+  s.wire(t, after2)
+  const sine = s.add('evaluate', 'Sine', { numInputs: 1, expression: `sin(${Math.PI} * in(0))` })
+  s.wire(t, sine)
+  const noise = s.add('random_noise', 'UnitNoise', { distribution: 'gaussian', mean: 0, stdDev: 1, seed: 7, sampleTime: 0, dataType: 'double' })
+  const phase = s.add('evaluate', 'WholeSeconds', { numInputs: 1, expression: 'floor(in(0))' })
+  s.wire(t, phase)
+
+  const latched = h.latch('LatchAfter2s', after2)
+  check('LatchOffBefore', latched, 0, 0, 0, 1.99)
+  check('LatchOnAfter', latched, 1, 1, 2.01)
+  const first = h.firstTime('FirstAfter2s', after2)
+  check('FirstTimeUnsetBefore', first, -1, -1, 0, 1.99)
+  check('FirstTimeRecorded', first, 2.0, 2.0011, 2.01)
+  check('RunningMax', h.runMax('SineMax', sine), 0.999, 1.0, 1.6)
+  check('RunningMin', h.runMin('SineMin', sine), -1.0, -0.999, 1.6)
+  check('HeldAt3s', h.heldAt('ClockAt3s', t, 3), 2.999, 3.0, 3.01)
+  // Two whole periods: mean of sin² is 1/2
+  check('SineMeanSquare', h.windowMeanSquare('SineMS', sine, 1, 5), 0.499, 0.501, 5.01)
+  // 8000 unit-variance samples: the estimate's standard deviation is 0.016
+  check('NoiseMeanSquare', h.windowMeanSquare('NoiseMS', noise, 1, 5), 0.95, 1.05, 5.01)
+  // A half-period lag (1 s) inverts the sine; a quarter period (0.5 s) is uncorrelated
+  check('CorrHalfPeriod', h.windowCorr('SineCorr1s', sine, 10, 0.1, 1, 5.5), -1.0, -0.98, 5.51)
+  check('CorrQuarterPeriod', h.windowCorr('SineCorr05s', sine, 5, 0.1, 1, 5.5), -0.05, 0.05, 5.51)
+  const visited = h.phaseVisited('Visited3', phase, 3)
+  check('PhaseNotYetVisited', visited, 0, 0, 0, 2.99)
+  check('PhaseVisited', visited, 1, 1, 3.01)
+
+  let sheets: Sheet[] = [s.sheet()]
+  sheets = tuneModelLayout(sheets as any, null, { ...DEFAULT_TUNE_OPTIONS, cleanUpLayout: true, resizeSubsystems: false, scope: 'model' }).sheets as unknown as Sheet[]
+  fitExtents(sheets)
+  return {
+    name: 'FPV T00 Test Helpers',
+    data: {
+      version: '2.2',
+      metadata: {
+        created: '2026-10-28T00:00:00.000Z',
+        description:
+          'Checks the Tests-sheet helpers used by the FPV test models (latch, first-event time, running extremes, ' +
+          'value held at a time, windowed mean square and lag correlation, phase visited) on a ramp, a 0.5 Hz sine ' +
+          'and unit Gaussian noise. See docs/fpv-hud-gnss-test-plan.md.',
+      },
+      globalSettings: { simulationTimeStep: FPV.dt, simulationDuration: 6, integrationAlgorithm: 'rk4', debugMath: false },
+      parameters: [],
+      dataStores: [],
+      sheets,
+    },
+  }
+}
+
+/** A test model renamed for the validation suite ("FPV Tnn …"). */
+const renamed = (model: { name: string; data: Record<string, unknown> }, name: string) => ({ ...model, name })
+
+/**
+ * The validation suite written to test-models/fpv/ (docs/fpv-hud-gnss-test-plan.md):
+ * its own copy of the vehicle, so the folder runs on its own with
+ * `npm run obliq:test -- test-models/fpv/*.json`, and the Tnn test models.
+ */
+export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<string, unknown> }]> {
+  return [
+    ['fpv-vehicle.json', buildFpvModel({ vehicleOnly: true })],
+    ['t00-test-helpers.json', buildFpvHelpersTestModel()],
+    ['t01-demo-flight.json', renamed(buildFpvDemoFlightModel(), 'FPV T01 Demo Flight')],
+    ['t02-acro-rate-step.json', renamed(buildFpvAcroRateStepModel(), 'FPV T02 Acro Rate Step')],
+  ]
+}
+
 /** Grow each sheet's extents to cover its laid-out blocks. */
 /**
  * The Tests sheet: Assert blocks that check the default demo flight against
@@ -1708,11 +1989,16 @@ function fitExtents(sheets: Sheet[]): void {
 }
 
 if (require.main === module) {
-  // Shipped reference models: the vehicle and the test models that embed it
-  const dir = process.argv[2] || path.join(__dirname, '..', 'reference-models')
-  for (const [file, model] of SHIPPED_FPV_MODELS()) {
-    fs.writeFileSync(path.join(dir, file), JSON.stringify(model, null, 2) + '\n')
-    console.log(`Wrote ${path.join(dir, file)}`)
+  // Shipped reference models (the vehicle and the test models that embed
+  // it), then the validation suite: [reference dir] [test-models dir]
+  const write = (dir: string, models: Array<[string, { name: string; data: Record<string, unknown> }]>) => {
+    fs.mkdirSync(dir, { recursive: true })
+    for (const [file, model] of models) {
+      fs.writeFileSync(path.join(dir, file), JSON.stringify(model, null, 2) + '\n')
+      console.log(`Wrote ${path.join(dir, file)}`)
+    }
   }
+  write(process.argv[2] || path.join(__dirname, '..', 'reference-models'), SHIPPED_FPV_MODELS())
+  write(process.argv[3] || path.join(__dirname, '..', 'test-models', 'fpv'), TEST_FPV_MODELS())
   console.log(`(hover command ${HOVER_COMMAND.toFixed(4)}, omega_max ${OMEGA_MAX.toFixed(1)} rad/s)`)
 }

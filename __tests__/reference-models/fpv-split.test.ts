@@ -26,7 +26,7 @@ describe('FPV vehicle model', () => {
   test('takes the sticks as an Input Port and publishes telemetry as Output Ports', () => {
     expect(vehicle.name).toBe(FPV_VEHICLE_NAME)
     const iface = modelInterface(vehicle.data as any)
-    expect(iface.inputs).toEqual(['sticks'])
+    expect(iface.inputs).toEqual(['sticks', 'gnss_env', 'grid_convergence_deg'])
     expect(iface.outputs).toEqual(expect.arrayContaining(['pos_ned', 'euler', 'gyro_dps', 'rate_setpoint', 'motor_cmd', 'altitude_est', 'battery_voltage']))
     const sheets = (vehicle.data as any).sheets as any[]
     expect(sheets.map(s => s.name)).toEqual(['Main', 'Telemetry'])

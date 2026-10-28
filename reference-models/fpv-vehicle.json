@@ -24,7 +24,7 @@
             "type": "demux",
             "name": "MotorCmdSplit",
             "position": {
-              "x": 600,
+              "x": 700,
               "y": 245
             },
             "parameters": {
@@ -40,7 +40,7 @@
             "type": "input_port",
             "name": "sticks",
             "position": {
-              "x": 100,
+              "x": 150,
               "y": 518
             },
             "parameters": {
@@ -50,11 +50,39 @@
             }
           },
           {
+            "id": "main__gnss_env",
+            "type": "input_port",
+            "name": "gnss_env",
+            "position": {
+              "x": 148,
+              "y": 245
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "gnss_env",
+              "dataType": "double[4]"
+            }
+          },
+          {
+            "id": "main__grid_convergence_deg",
+            "type": "input_port",
+            "name": "grid_convergence_deg",
+            "position": {
+              "x": 100,
+              "y": 370
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "grid_convergence_deg",
+              "dataType": "double"
+            }
+          },
+          {
             "id": "main__FlightController",
             "type": "subsystem",
             "name": "FlightController",
             "position": {
-              "x": 280,
+              "x": 380,
               "y": 511
             },
             "parameters": {
@@ -365,9 +393,9 @@
                                   "showName": true,
                                   "signalType": "constant",
                                   "value": [
-                                    0.48214139744344253,
-                                    0.020923590515949275,
-                                    0.8758435226861045
+                                    0.4821325707847119,
+                                    0.02092320746360429,
+                                    0.8758483907491978
                                   ],
                                   "dataType": "double[3]"
                                 }
@@ -3956,7 +3984,7 @@
             "type": "subsystem",
             "name": "Motor_RR",
             "position": {
-              "x": 780,
+              "x": 880,
               "y": 33
             },
             "parameters": {
@@ -4372,7 +4400,7 @@
             "type": "subsystem",
             "name": "Motor_FR",
             "position": {
-              "x": 780,
+              "x": 880,
               "y": 193
             },
             "parameters": {
@@ -4401,7 +4429,7 @@
             "type": "subsystem",
             "name": "Motor_RL",
             "position": {
-              "x": 780,
+              "x": 880,
               "y": 353
             },
             "parameters": {
@@ -4430,7 +4458,7 @@
             "type": "subsystem",
             "name": "Motor_FL",
             "position": {
-              "x": 780,
+              "x": 880,
               "y": 513
             },
             "parameters": {
@@ -4459,7 +4487,7 @@
             "type": "mux",
             "name": "Thrusts",
             "position": {
-              "x": 1068,
+              "x": 1168,
               "y": 52
             },
             "parameters": {
@@ -4475,7 +4503,7 @@
             "type": "mux",
             "name": "RotorSpeeds",
             "position": {
-              "x": 1068,
+              "x": 1168,
               "y": -128
             },
             "parameters": {
@@ -4491,7 +4519,7 @@
             "type": "mux",
             "name": "RotorAccelerations",
             "position": {
-              "x": 1068,
+              "x": 1168,
               "y": 232
             },
             "parameters": {
@@ -4507,7 +4535,7 @@
             "type": "mux",
             "name": "MotorPower",
             "position": {
-              "x": 1068,
+              "x": 1168,
               "y": 897
             },
             "parameters": {
@@ -4523,7 +4551,7 @@
             "type": "subsystem",
             "name": "Battery",
             "position": {
-              "x": 1272,
+              "x": 1372,
               "y": 907
             },
             "parameters": {
@@ -4844,7 +4872,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_voltage",
             "position": {
-              "x": 1507,
+              "x": 1607,
               "y": 771
             },
             "parameters": {
@@ -4857,7 +4885,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_current",
             "position": {
-              "x": 1507,
+              "x": 1607,
               "y": 915
             },
             "parameters": {
@@ -4870,7 +4898,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_soc",
             "position": {
-              "x": 1507,
+              "x": 1607,
               "y": 1059
             },
             "parameters": {
@@ -4883,7 +4911,7 @@
             "type": "subsystem",
             "name": "Frame",
             "position": {
-              "x": 1238,
+              "x": 1338,
               "y": 52
             },
             "parameters": {
@@ -6616,7 +6644,7 @@
             "type": "subsystem",
             "name": "Sensors",
             "position": {
-              "x": 1482,
+              "x": 1582,
               "y": 109
             },
             "parameters": {
@@ -7113,7 +7141,7 @@
                                   "value": [
                                     23.066,
                                     1.001,
-                                    41.901
+                                    41.902
                                   ],
                                   "dataType": "double[3]"
                                 }
@@ -7668,7 +7696,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_imu_gyro",
             "position": {
-              "x": 1734,
+              "x": 1834,
               "y": -64
             },
             "parameters": {
@@ -7681,7 +7709,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_imu_accel",
             "position": {
-              "x": 1732,
+              "x": 1832,
               "y": 80
             },
             "parameters": {
@@ -7694,7 +7722,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_mag",
             "position": {
-              "x": 1750,
+              "x": 1850,
               "y": 224
             },
             "parameters": {
@@ -7707,7 +7735,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_pressure",
             "position": {
-              "x": 1734,
+              "x": 1834,
               "y": 368
             },
             "parameters": {
@@ -7720,7 +7748,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_pos_ned",
             "position": {
-              "x": 1513,
+              "x": 1613,
               "y": -323
             },
             "parameters": {
@@ -7733,7 +7761,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_vel_ned",
             "position": {
-              "x": 1513,
+              "x": 1613,
               "y": -179
             },
             "parameters": {
@@ -7746,7 +7774,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_quat",
             "position": {
-              "x": 1527,
+              "x": 1627,
               "y": -35
             },
             "parameters": {
@@ -7759,7 +7787,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler",
             "position": {
-              "x": 1527,
+              "x": 1627,
               "y": 339
             },
             "parameters": {
@@ -7772,7 +7800,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_omega",
             "position": {
-              "x": 1527,
+              "x": 1627,
               "y": 483
             },
             "parameters": {
@@ -7785,7 +7813,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_accel",
             "position": {
-              "x": 1527,
+              "x": 1627,
               "y": 627
             },
             "parameters": {
@@ -7798,7 +7826,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_motor_omega",
             "position": {
-              "x": 1258,
+              "x": 1358,
               "y": -92
             },
             "parameters": {
@@ -7811,7 +7839,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_motor_cmd",
             "position": {
-              "x": 582,
+              "x": 682,
               "y": 88
             },
             "parameters": {
@@ -7824,7 +7852,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_rate_setpoint",
             "position": {
-              "x": 580,
+              "x": 680,
               "y": 425
             },
             "parameters": {
@@ -7837,7 +7865,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_gyro_dps",
             "position": {
-              "x": 584,
+              "x": 684,
               "y": 569
             },
             "parameters": {
@@ -7850,7 +7878,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler_est",
             "position": {
-              "x": 582,
+              "x": 682,
               "y": 713
             },
             "parameters": {
@@ -7863,7 +7891,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_altitude_est",
             "position": {
-              "x": 580,
+              "x": 680,
               "y": 857
             },
             "parameters": {
@@ -7876,7 +7904,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_quat_est",
             "position": {
-              "x": 584,
+              "x": 684,
               "y": 1001
             },
             "parameters": {
@@ -8449,7 +8477,7 @@
           }
         ],
         "extents": {
-          "width": 2050,
+          "width": 2150,
           "height": 1259
         }
       },

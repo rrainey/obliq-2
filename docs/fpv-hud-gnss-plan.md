@@ -21,7 +21,7 @@
 
 **Done when** the frame change is committed and the baselines are recorded.
 
-## Phase 1: Site constants and the new vehicle inputs
+## Phase 1: Site constants and the new vehicle inputs (done 2026-10-28)
 
 1. **`LOCATION` additions:**
    - `geoidHeightM: -26.103` (NGS GEOID18).

@@ -1,0 +1,2205 @@
+{
+  "name": "FPV T00 Test Helpers",
+  "data": {
+    "version": "2.2",
+    "metadata": {
+      "created": "2026-10-28T00:00:00.000Z",
+      "description": "Checks the Tests-sheet helpers used by the FPV test models (latch, first-event time, running extremes, value held at a time, windowed mean square and lag correlation, phase visited) on a ramp, a 0.5 Hz sine and unit Gaussian noise. See docs/fpv-hud-gnss-test-plan.md."
+    },
+    "globalSettings": {
+      "simulationTimeStep": 0.0005,
+      "simulationDuration": 6,
+      "integrationAlgorithm": "rk4",
+      "debugMath": false
+    },
+    "parameters": [],
+    "dataStores": [],
+    "sheets": [
+      {
+        "id": "tests",
+        "name": "Tests",
+        "blocks": [
+          {
+            "id": "tests__Time",
+            "type": "clock",
+            "name": "Time",
+            "position": {
+              "x": 100,
+              "y": 553
+            },
+            "parameters": {
+              "showName": true
+            }
+          },
+          {
+            "id": "tests__After2s",
+            "type": "evaluate",
+            "name": "After2s",
+            "position": {
+              "x": 303,
+              "y": -67
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "(in(0) > 2.0) ? 1.0 : 0.0"
+            }
+          },
+          {
+            "id": "tests__Sine",
+            "type": "evaluate",
+            "name": "Sine",
+            "position": {
+              "x": 285,
+              "y": 627
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "sin(3.141592653589793 * in(0))"
+            }
+          },
+          {
+            "id": "tests__UnitNoise",
+            "type": "random_noise",
+            "name": "UnitNoise",
+            "position": {
+              "x": 100,
+              "y": -515
+            },
+            "parameters": {
+              "showName": true,
+              "distribution": "gaussian",
+              "mean": 0,
+              "stdDev": 1,
+              "seed": 7,
+              "sampleTime": 0,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "tests__WholeSeconds",
+            "type": "evaluate",
+            "name": "WholeSeconds",
+            "position": {
+              "x": 348,
+              "y": 1398
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "floor(in(0))"
+            }
+          },
+          {
+            "id": "tests__LatchAfter2sPrev",
+            "type": "unit_delay",
+            "name": "LatchAfter2sPrev",
+            "position": {
+              "x": 1290,
+              "y": -143
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__LatchAfter2s",
+            "type": "evaluate",
+            "name": "LatchAfter2s",
+            "position": {
+              "x": 740,
+              "y": -246
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "(in(0) > 0.5 || in(1) > 0.5) ? 1.0 : 0.0"
+            }
+          },
+          {
+            "id": "tests__LatchOffBefore",
+            "type": "assert",
+            "name": "LatchOffBefore",
+            "position": {
+              "x": 4040,
+              "y": -289
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 0,
+              "checkUntil": 1.99,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__LatchOnAfter",
+            "type": "assert",
+            "name": "LatchOnAfter",
+            "position": {
+              "x": 4040,
+              "y": -145
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 1,
+              "upper": 1,
+              "checkFrom": 2.01,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__FirstAfter2sPrev",
+            "type": "unit_delay",
+            "name": "FirstAfter2sPrev",
+            "position": {
+              "x": 1290,
+              "y": 145
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": -1,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__FirstAfter2s",
+            "type": "evaluate",
+            "name": "FirstAfter2s",
+            "position": {
+              "x": 740,
+              "y": 218
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(2) < 0.0 && in(0) > 0.5) ? in(1) : in(2)"
+            }
+          },
+          {
+            "id": "tests__FirstTimeUnsetBefore",
+            "type": "assert",
+            "name": "FirstTimeUnsetBefore",
+            "position": {
+              "x": 4040,
+              "y": 287
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -1,
+              "upper": -1,
+              "checkFrom": 0,
+              "checkUntil": 1.99,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__FirstTimeRecorded",
+            "type": "assert",
+            "name": "FirstTimeRecorded",
+            "position": {
+              "x": 4040,
+              "y": 143
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 2,
+              "upper": 2.0011,
+              "checkFrom": 2.01,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__SineMaxPrev",
+            "type": "unit_delay",
+            "name": "SineMaxPrev",
+            "position": {
+              "x": 1290,
+              "y": 888
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": -1e+30,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__SineMax",
+            "type": "evaluate",
+            "name": "SineMax",
+            "position": {
+              "x": 807,
+              "y": 826
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "fmax(in(0), in(1))"
+            }
+          },
+          {
+            "id": "tests__RunningMax",
+            "type": "assert",
+            "name": "RunningMax",
+            "position": {
+              "x": 4040,
+              "y": 692
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0.999,
+              "upper": 1,
+              "checkFrom": 1.6,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__SineMinPrev",
+            "type": "unit_delay",
+            "name": "SineMinPrev",
+            "position": {
+              "x": 1290,
+              "y": 1032
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 1e+30,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__SineMin",
+            "type": "evaluate",
+            "name": "SineMin",
+            "position": {
+              "x": 807,
+              "y": 970
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "fmin(in(0), in(1))"
+            }
+          },
+          {
+            "id": "tests__RunningMin",
+            "type": "assert",
+            "name": "RunningMin",
+            "position": {
+              "x": 4040,
+              "y": 980
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -1,
+              "upper": -0.999,
+              "checkFrom": 1.6,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__ClockAt3sPrev",
+            "type": "unit_delay",
+            "name": "ClockAt3sPrev",
+            "position": {
+              "x": 850,
+              "y": 1455
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__ClockAt3s",
+            "type": "evaluate",
+            "name": "ClockAt3s",
+            "position": {
+              "x": 292,
+              "y": 1238
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) <= 3) ? in(0) : in(2)"
+            }
+          },
+          {
+            "id": "tests__HeldAt3s",
+            "type": "assert",
+            "name": "HeldAt3s",
+            "position": {
+              "x": 4040,
+              "y": 1124
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 2.999,
+              "upper": 3,
+              "checkFrom": 3.01,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__SineMSWindow",
+            "type": "evaluate",
+            "name": "SineMSWindow",
+            "position": {
+              "x": 261,
+              "y": 77
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "(in(0) >= 1 && in(0) < 5) ? 1.0 : 0.0"
+            }
+          },
+          {
+            "id": "tests__SineMSSumPrev",
+            "type": "unit_delay",
+            "name": "SineMSSumPrev",
+            "position": {
+              "x": 1290,
+              "y": 289
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__SineMSSum",
+            "type": "evaluate",
+            "name": "SineMSSum",
+            "position": {
+              "x": 740,
+              "y": 58
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0) * in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__SineMSOne",
+            "type": "source",
+            "name": "SineMSOne",
+            "position": {
+              "x": 370,
+              "y": -211
+            },
+            "parameters": {
+              "showName": true,
+              "signalType": "constant",
+              "value": 1,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "tests__SineMSCountPrev",
+            "type": "unit_delay",
+            "name": "SineMSCountPrev",
+            "position": {
+              "x": 1290,
+              "y": -287
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__SineMSCount",
+            "type": "evaluate",
+            "name": "SineMSCount",
+            "position": {
+              "x": 740,
+              "y": -102
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__SineMS",
+            "type": "evaluate",
+            "name": "SineMS",
+            "position": {
+              "x": 1188,
+              "y": 1
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "(in(1) > 0.0) ? in(0) / in(1) : 0.0"
+            }
+          },
+          {
+            "id": "tests__SineMeanSquare",
+            "type": "assert",
+            "name": "SineMeanSquare",
+            "position": {
+              "x": 4040,
+              "y": -1
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0.499,
+              "upper": 0.501,
+              "checkFrom": 5.01,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__NoiseMSWindow",
+            "type": "evaluate",
+            "name": "NoiseMSWindow",
+            "position": {
+              "x": 261,
+              "y": -560
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "(in(0) >= 1 && in(0) < 5) ? 1.0 : 0.0"
+            }
+          },
+          {
+            "id": "tests__NoiseMSSumPrev",
+            "type": "unit_delay",
+            "name": "NoiseMSSumPrev",
+            "position": {
+              "x": 1290,
+              "y": -431
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__NoiseMSSum",
+            "type": "evaluate",
+            "name": "NoiseMSSum",
+            "position": {
+              "x": 740,
+              "y": -503
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0) * in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__NoiseMSOne",
+            "type": "source",
+            "name": "NoiseMSOne",
+            "position": {
+              "x": 370,
+              "y": -704
+            },
+            "parameters": {
+              "showName": true,
+              "signalType": "constant",
+              "value": 1,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "tests__NoiseMSCountPrev",
+            "type": "unit_delay",
+            "name": "NoiseMSCountPrev",
+            "position": {
+              "x": 1290,
+              "y": -719
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__NoiseMSCount",
+            "type": "evaluate",
+            "name": "NoiseMSCount",
+            "position": {
+              "x": 740,
+              "y": -663
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__NoiseMS",
+            "type": "evaluate",
+            "name": "NoiseMS",
+            "position": {
+              "x": 1188,
+              "y": -575
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "(in(1) > 0.0) ? in(0) / in(1) : 0.0"
+            }
+          },
+          {
+            "id": "tests__NoiseMeanSquare",
+            "type": "assert",
+            "name": "NoiseMeanSquare",
+            "position": {
+              "x": 4040,
+              "y": -564
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0.95,
+              "upper": 1.05,
+              "checkFrom": 5.01,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__SineCorr1sLag1",
+            "type": "unit_delay",
+            "name": "SineCorr1sLag1",
+            "position": {
+              "x": 850,
+              "y": 682
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sLag2",
+            "type": "unit_delay",
+            "name": "SineCorr1sLag2",
+            "position": {
+              "x": 1290,
+              "y": 744
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sLag3",
+            "type": "unit_delay",
+            "name": "SineCorr1sLag3",
+            "position": {
+              "x": 1560,
+              "y": 753
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sLag4",
+            "type": "unit_delay",
+            "name": "SineCorr1sLag4",
+            "position": {
+              "x": 1720,
+              "y": 753
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sLag5",
+            "type": "unit_delay",
+            "name": "SineCorr1sLag5",
+            "position": {
+              "x": 1880,
+              "y": 753
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sLag6",
+            "type": "unit_delay",
+            "name": "SineCorr1sLag6",
+            "position": {
+              "x": 2150,
+              "y": 753
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sLag7",
+            "type": "unit_delay",
+            "name": "SineCorr1sLag7",
+            "position": {
+              "x": 2530,
+              "y": 753
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sLag8",
+            "type": "unit_delay",
+            "name": "SineCorr1sLag8",
+            "position": {
+              "x": 2800,
+              "y": 728
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sLag9",
+            "type": "unit_delay",
+            "name": "SineCorr1sLag9",
+            "position": {
+              "x": 2960,
+              "y": 728
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sLag10",
+            "type": "unit_delay",
+            "name": "SineCorr1sLag10",
+            "position": {
+              "x": 3120,
+              "y": 728
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sWindow",
+            "type": "evaluate",
+            "name": "SineCorr1sWindow",
+            "position": {
+              "x": 260,
+              "y": 873
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "(in(0) >= 2 && in(0) < 5.5) ? 1.0 : 0.0"
+            }
+          },
+          {
+            "id": "tests__SineCorr1sSabPrev",
+            "type": "unit_delay",
+            "name": "SineCorr1sSabPrev",
+            "position": {
+              "x": 3770,
+              "y": 559
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sSab",
+            "type": "evaluate",
+            "name": "SineCorr1sSab",
+            "position": {
+              "x": 3280,
+              "y": 640
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 4,
+              "expression": "(in(2) > 0.5) ? in(3) + (in(0) * in(1)) : in(3)"
+            }
+          },
+          {
+            "id": "tests__SineCorr1sSaaPrev",
+            "type": "unit_delay",
+            "name": "SineCorr1sSaaPrev",
+            "position": {
+              "x": 1290,
+              "y": 1176
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sSaa",
+            "type": "evaluate",
+            "name": "SineCorr1sSaa",
+            "position": {
+              "x": 740,
+              "y": 1114
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0) * in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__SineCorr1sSbbPrev",
+            "type": "unit_delay",
+            "name": "SineCorr1sSbbPrev",
+            "position": {
+              "x": 3770,
+              "y": 703
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr1sSbb",
+            "type": "evaluate",
+            "name": "SineCorr1sSbb",
+            "position": {
+              "x": 3280,
+              "y": 820
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0) * in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__SineCorr1s",
+            "type": "evaluate",
+            "name": "SineCorr1s",
+            "position": {
+              "x": 3660,
+              "y": 847
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.0 && in(2) > 0.0) ? in(0) / sqrt(in(1) * in(2)) : 0.0"
+            }
+          },
+          {
+            "id": "tests__CorrHalfPeriod",
+            "type": "assert",
+            "name": "CorrHalfPeriod",
+            "position": {
+              "x": 4040,
+              "y": 836
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -1,
+              "upper": -0.98,
+              "checkFrom": 5.51,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__SineCorr05sLag1",
+            "type": "unit_delay",
+            "name": "SineCorr05sLag1",
+            "position": {
+              "x": 850,
+              "y": 378
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr05sLag2",
+            "type": "unit_delay",
+            "name": "SineCorr05sLag2",
+            "position": {
+              "x": 1290,
+              "y": 433
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr05sLag3",
+            "type": "unit_delay",
+            "name": "SineCorr05sLag3",
+            "position": {
+              "x": 1560,
+              "y": 442
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr05sLag4",
+            "type": "unit_delay",
+            "name": "SineCorr05sLag4",
+            "position": {
+              "x": 1720,
+              "y": 442
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr05sLag5",
+            "type": "unit_delay",
+            "name": "SineCorr05sLag5",
+            "position": {
+              "x": 1880,
+              "y": 442
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr05sWindow",
+            "type": "evaluate",
+            "name": "SineCorr05sWindow",
+            "position": {
+              "x": 260,
+              "y": 483
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "(in(0) >= 1.5 && in(0) < 5.5) ? 1.0 : 0.0"
+            }
+          },
+          {
+            "id": "tests__SineCorr05sSabPrev",
+            "type": "unit_delay",
+            "name": "SineCorr05sSabPrev",
+            "position": {
+              "x": 2530,
+              "y": 609
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr05sSab",
+            "type": "evaluate",
+            "name": "SineCorr05sSab",
+            "position": {
+              "x": 2040,
+              "y": 524
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 4,
+              "expression": "(in(2) > 0.5) ? in(3) + (in(0) * in(1)) : in(3)"
+            }
+          },
+          {
+            "id": "tests__SineCorr05sSaaPrev",
+            "type": "unit_delay",
+            "name": "SineCorr05sSaaPrev",
+            "position": {
+              "x": 1290,
+              "y": 577
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr05sSaa",
+            "type": "evaluate",
+            "name": "SineCorr05sSaa",
+            "position": {
+              "x": 740,
+              "y": 522
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0) * in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__SineCorr05sSbbPrev",
+            "type": "unit_delay",
+            "name": "SineCorr05sSbbPrev",
+            "position": {
+              "x": 2530,
+              "y": 305
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0.1
+            }
+          },
+          {
+            "id": "tests__SineCorr05sSbb",
+            "type": "evaluate",
+            "name": "SineCorr05sSbb",
+            "position": {
+              "x": 2040,
+              "y": 364
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0) * in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__SineCorr05s",
+            "type": "evaluate",
+            "name": "SineCorr05s",
+            "position": {
+              "x": 2420,
+              "y": 449
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.0 && in(2) > 0.0) ? in(0) / sqrt(in(1) * in(2)) : 0.0"
+            }
+          },
+          {
+            "id": "tests__CorrQuarterPeriod",
+            "type": "assert",
+            "name": "CorrQuarterPeriod",
+            "position": {
+              "x": 4040,
+              "y": 473
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -0.05,
+              "upper": 0.05,
+              "checkFrom": 5.51,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__Visited3Now",
+            "type": "evaluate",
+            "name": "Visited3Now",
+            "position": {
+              "x": 748,
+              "y": 1311
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "(fabs(in(0) - 3) < 0.5) ? 1.0 : 0.0"
+            }
+          },
+          {
+            "id": "tests__Visited3Prev",
+            "type": "unit_delay",
+            "name": "Visited3Prev",
+            "position": {
+              "x": 1560,
+              "y": 1308
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__Visited3",
+            "type": "evaluate",
+            "name": "Visited3",
+            "position": {
+              "x": 1180,
+              "y": 1329
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "(in(0) > 0.5 || in(1) > 0.5) ? 1.0 : 0.0"
+            }
+          },
+          {
+            "id": "tests__PhaseNotYetVisited",
+            "type": "assert",
+            "name": "PhaseNotYetVisited",
+            "position": {
+              "x": 4040,
+              "y": 1268
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 0,
+              "checkUntil": 2.99,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__PhaseVisited",
+            "type": "assert",
+            "name": "PhaseVisited",
+            "position": {
+              "x": 4040,
+              "y": 1412
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 1,
+              "upper": 1,
+              "checkFrom": 3.01,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_tests__Time_tests__After2s",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__After2s",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -25.5
+            }
+          },
+          {
+            "id": "w_2_tests__Time_tests__Sine",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__Sine",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -16.5
+            }
+          },
+          {
+            "id": "w_3_tests__Time_tests__WholeSeconds",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__WholeSeconds",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -48
+            }
+          },
+          {
+            "id": "w_4_tests__After2s_tests__LatchAfter2s",
+            "sourceBlockId": "tests__After2s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__LatchAfter2s",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -39
+            }
+          },
+          {
+            "id": "w_5_tests__LatchAfter2sPrev_tests__LatchAfter2s",
+            "sourceBlockId": "tests__LatchAfter2sPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__LatchAfter2s",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -329
+            }
+          },
+          {
+            "id": "w_6_tests__LatchAfter2s_tests__LatchAfter2sPrev",
+            "sourceBlockId": "tests__LatchAfter2s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__LatchAfter2sPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -87
+            }
+          },
+          {
+            "id": "w_7_tests__LatchAfter2s_tests__LatchOffBefore",
+            "sourceBlockId": "tests__LatchAfter2s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__LatchOffBefore",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 1440
+            }
+          },
+          {
+            "id": "w_8_tests__LatchAfter2s_tests__LatchOnAfter",
+            "sourceBlockId": "tests__LatchAfter2s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__LatchOnAfter",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 1440
+            }
+          },
+          {
+            "id": "w_9_tests__After2s_tests__FirstAfter2s",
+            "sourceBlockId": "tests__After2s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__FirstAfter2s",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -39
+            }
+          },
+          {
+            "id": "w_10_tests__Time_tests__FirstAfter2s",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__FirstAfter2s",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -244
+            }
+          },
+          {
+            "id": "w_11_tests__FirstAfter2sPrev_tests__FirstAfter2s",
+            "sourceBlockId": "tests__FirstAfter2sPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__FirstAfter2s",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -353
+            }
+          },
+          {
+            "id": "w_12_tests__FirstAfter2s_tests__FirstAfter2sPrev",
+            "sourceBlockId": "tests__FirstAfter2s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__FirstAfter2sPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -63
+            }
+          },
+          {
+            "id": "w_13_tests__FirstAfter2s_tests__FirstTimeUnsetBefore",
+            "sourceBlockId": "tests__FirstAfter2s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__FirstTimeUnsetBefore",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 1448
+            }
+          },
+          {
+            "id": "w_14_tests__FirstAfter2s_tests__FirstTimeRecorded",
+            "sourceBlockId": "tests__FirstAfter2s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__FirstTimeRecorded",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 1448
+            }
+          },
+          {
+            "id": "w_15_tests__Sine_tests__SineMax",
+            "sourceBlockId": "tests__Sine",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMax",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -89
+            }
+          },
+          {
+            "id": "w_16_tests__SineMaxPrev_tests__SineMax",
+            "sourceBlockId": "tests__SineMaxPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMax",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -378.5
+            }
+          },
+          {
+            "id": "w_17_tests__SineMax_tests__SineMaxPrev",
+            "sourceBlockId": "tests__SineMax",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMaxPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -77.5
+            }
+          },
+          {
+            "id": "w_18_tests__SineMax_tests__RunningMax",
+            "sourceBlockId": "tests__SineMax",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RunningMax",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -822.5
+            }
+          },
+          {
+            "id": "w_19_tests__Sine_tests__SineMin",
+            "sourceBlockId": "tests__Sine",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMin",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -89
+            }
+          },
+          {
+            "id": "w_20_tests__SineMinPrev_tests__SineMin",
+            "sourceBlockId": "tests__SineMinPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMin",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -370.5
+            }
+          },
+          {
+            "id": "w_21_tests__SineMin_tests__SineMinPrev",
+            "sourceBlockId": "tests__SineMin",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMinPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 2.5
+            }
+          },
+          {
+            "id": "w_22_tests__SineMin_tests__RunningMin",
+            "sourceBlockId": "tests__SineMin",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RunningMin",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 1505.5
+            }
+          },
+          {
+            "id": "w_23_tests__Time_tests__ClockAt3s",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ClockAt3s",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -20
+            }
+          },
+          {
+            "id": "w_24_tests__Time_tests__ClockAt3s",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ClockAt3s",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -20
+            }
+          },
+          {
+            "id": "w_25_tests__ClockAt3sPrev_tests__ClockAt3s",
+            "sourceBlockId": "tests__ClockAt3sPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ClockAt3s",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -387
+            }
+          },
+          {
+            "id": "w_26_tests__ClockAt3s_tests__ClockAt3sPrev",
+            "sourceBlockId": "tests__ClockAt3s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ClockAt3sPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -19
+            }
+          },
+          {
+            "id": "w_27_tests__ClockAt3s_tests__HeldAt3s",
+            "sourceBlockId": "tests__ClockAt3s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__HeldAt3s",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 1736
+            }
+          },
+          {
+            "id": "w_28_tests__Time_tests__SineMSWindow",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMSWindow",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4.5
+            }
+          },
+          {
+            "id": "w_29_tests__Sine_tests__SineMSSum",
+            "sourceBlockId": "tests__Sine",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMSSum",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -55.5
+            }
+          },
+          {
+            "id": "w_30_tests__SineMSWindow_tests__SineMSSum",
+            "sourceBlockId": "tests__SineMSWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMSSum",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 36
+            }
+          },
+          {
+            "id": "w_31_tests__SineMSSumPrev_tests__SineMSSum",
+            "sourceBlockId": "tests__SineMSSumPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMSSum",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -401
+            }
+          },
+          {
+            "id": "w_32_tests__SineMSSum_tests__SineMSSumPrev",
+            "sourceBlockId": "tests__SineMSSum",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMSSumPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -71
+            }
+          },
+          {
+            "id": "w_33_tests__SineMSOne_tests__SineMSCount",
+            "sourceBlockId": "tests__SineMSOne",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMSCount",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 11
+            }
+          },
+          {
+            "id": "w_34_tests__SineMSWindow_tests__SineMSCount",
+            "sourceBlockId": "tests__SineMSWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMSCount",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 36
+            }
+          },
+          {
+            "id": "w_35_tests__SineMSCountPrev_tests__SineMSCount",
+            "sourceBlockId": "tests__SineMSCountPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMSCount",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -457
+            }
+          },
+          {
+            "id": "w_36_tests__SineMSCount_tests__SineMSCountPrev",
+            "sourceBlockId": "tests__SineMSCount",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMSCountPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -79
+            }
+          },
+          {
+            "id": "w_37_tests__SineMSSum_tests__SineMS",
+            "sourceBlockId": "tests__SineMSSum",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMS",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -20
+            }
+          },
+          {
+            "id": "w_38_tests__SineMSCount_tests__SineMS",
+            "sourceBlockId": "tests__SineMSCount",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMS",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -28
+            }
+          },
+          {
+            "id": "w_39_tests__SineMS_tests__SineMeanSquare",
+            "sourceBlockId": "tests__SineMS",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineMeanSquare",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 3.5
+            }
+          },
+          {
+            "id": "w_40_tests__Time_tests__NoiseMSWindow",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMSWindow",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4.5
+            }
+          },
+          {
+            "id": "w_41_tests__UnitNoise_tests__NoiseMSSum",
+            "sourceBlockId": "tests__UnitNoise",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMSSum",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_42_tests__NoiseMSWindow_tests__NoiseMSSum",
+            "sourceBlockId": "tests__NoiseMSWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMSSum",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -12
+            }
+          },
+          {
+            "id": "w_43_tests__NoiseMSSumPrev_tests__NoiseMSSum",
+            "sourceBlockId": "tests__NoiseMSSumPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMSSum",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -409
+            }
+          },
+          {
+            "id": "w_44_tests__NoiseMSSum_tests__NoiseMSSumPrev",
+            "sourceBlockId": "tests__NoiseMSSum",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMSSumPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -95
+            }
+          },
+          {
+            "id": "w_45_tests__NoiseMSOne_tests__NoiseMSCount",
+            "sourceBlockId": "tests__NoiseMSOne",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMSCount",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 27
+            }
+          },
+          {
+            "id": "w_46_tests__NoiseMSWindow_tests__NoiseMSCount",
+            "sourceBlockId": "tests__NoiseMSWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMSCount",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -12
+            }
+          },
+          {
+            "id": "w_47_tests__NoiseMSCountPrev_tests__NoiseMSCount",
+            "sourceBlockId": "tests__NoiseMSCountPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMSCount",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -425
+            }
+          },
+          {
+            "id": "w_48_tests__NoiseMSCount_tests__NoiseMSCountPrev",
+            "sourceBlockId": "tests__NoiseMSCount",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMSCountPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -103
+            }
+          },
+          {
+            "id": "w_49_tests__NoiseMSSum_tests__NoiseMS",
+            "sourceBlockId": "tests__NoiseMSSum",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMS",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -44
+            }
+          },
+          {
+            "id": "w_50_tests__NoiseMSCount_tests__NoiseMS",
+            "sourceBlockId": "tests__NoiseMSCount",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMS",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -52
+            }
+          },
+          {
+            "id": "w_51_tests__NoiseMS_tests__NoiseMeanSquare",
+            "sourceBlockId": "tests__NoiseMS",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NoiseMeanSquare",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4.5
+            }
+          },
+          {
+            "id": "w_52_tests__Sine_tests__SineCorr1sLag1",
+            "sourceBlockId": "tests__Sine",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sLag1",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -110.5
+            }
+          },
+          {
+            "id": "w_53_tests__SineCorr1sLag1_tests__SineCorr1sLag2",
+            "sourceBlockId": "tests__SineCorr1sLag1",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sLag2",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 16
+            }
+          },
+          {
+            "id": "w_54_tests__SineCorr1sLag2_tests__SineCorr1sLag3",
+            "sourceBlockId": "tests__SineCorr1sLag2",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sLag3",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 59
+            }
+          },
+          {
+            "id": "w_55_tests__SineCorr1sLag3_tests__SineCorr1sLag4",
+            "sourceBlockId": "tests__SineCorr1sLag3",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sLag4",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_56_tests__SineCorr1sLag4_tests__SineCorr1sLag5",
+            "sourceBlockId": "tests__SineCorr1sLag4",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sLag5",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_57_tests__SineCorr1sLag5_tests__SineCorr1sLag6",
+            "sourceBlockId": "tests__SineCorr1sLag5",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sLag6",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_58_tests__SineCorr1sLag6_tests__SineCorr1sLag7",
+            "sourceBlockId": "tests__SineCorr1sLag6",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sLag7",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_59_tests__SineCorr1sLag7_tests__SineCorr1sLag8",
+            "sourceBlockId": "tests__SineCorr1sLag7",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sLag8",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 63
+            }
+          },
+          {
+            "id": "w_60_tests__SineCorr1sLag8_tests__SineCorr1sLag9",
+            "sourceBlockId": "tests__SineCorr1sLag8",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sLag9",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_61_tests__SineCorr1sLag9_tests__SineCorr1sLag10",
+            "sourceBlockId": "tests__SineCorr1sLag9",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sLag10",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_62_tests__Time_tests__SineCorr1sWindow",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sWindow",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_63_tests__Sine_tests__SineCorr1sSab",
+            "sourceBlockId": "tests__Sine",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSab",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 1336.5
+            }
+          },
+          {
+            "id": "w_64_tests__SineCorr1sLag10_tests__SineCorr1sSab",
+            "sourceBlockId": "tests__SineCorr1sLag10",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSab",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -12
+            }
+          },
+          {
+            "id": "w_65_tests__SineCorr1sWindow_tests__SineCorr1sSab",
+            "sourceBlockId": "tests__SineCorr1sWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSab",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -754
+            }
+          },
+          {
+            "id": "w_66_tests__SineCorr1sSabPrev_tests__SineCorr1sSab",
+            "sourceBlockId": "tests__SineCorr1sSabPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSab",
+            "targetPortIndex": 3,
+            "routing": {
+              "midpointOffset": -329
+            }
+          },
+          {
+            "id": "w_67_tests__SineCorr1sSab_tests__SineCorr1sSabPrev",
+            "sourceBlockId": "tests__SineCorr1sSab",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSabPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -47
+            }
+          },
+          {
+            "id": "w_68_tests__Sine_tests__SineCorr1sSaa",
+            "sourceBlockId": "tests__Sine",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSaa",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -55.5
+            }
+          },
+          {
+            "id": "w_69_tests__SineCorr1sWindow_tests__SineCorr1sSaa",
+            "sourceBlockId": "tests__SineCorr1sWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSaa",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -76
+            }
+          },
+          {
+            "id": "w_70_tests__SineCorr1sSaaPrev_tests__SineCorr1sSaa",
+            "sourceBlockId": "tests__SineCorr1sSaaPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSaa",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -393
+            }
+          },
+          {
+            "id": "w_71_tests__SineCorr1sSaa_tests__SineCorr1sSaaPrev",
+            "sourceBlockId": "tests__SineCorr1sSaa",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSaaPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -23
+            }
+          },
+          {
+            "id": "w_72_tests__SineCorr1sLag10_tests__SineCorr1sSbb",
+            "sourceBlockId": "tests__SineCorr1sLag10",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSbb",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -12
+            }
+          },
+          {
+            "id": "w_73_tests__SineCorr1sWindow_tests__SineCorr1sSbb",
+            "sourceBlockId": "tests__SineCorr1sWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSbb",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -754
+            }
+          },
+          {
+            "id": "w_74_tests__SineCorr1sSbbPrev_tests__SineCorr1sSbb",
+            "sourceBlockId": "tests__SineCorr1sSbbPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSbb",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -313
+            }
+          },
+          {
+            "id": "w_75_tests__SineCorr1sSbb_tests__SineCorr1sSbbPrev",
+            "sourceBlockId": "tests__SineCorr1sSbb",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1sSbbPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -63
+            }
+          },
+          {
+            "id": "w_76_tests__SineCorr1sSab_tests__SineCorr1s",
+            "sourceBlockId": "tests__SineCorr1sSab",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1s",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 8
+            }
+          },
+          {
+            "id": "w_77_tests__SineCorr1sSaa_tests__SineCorr1s",
+            "sourceBlockId": "tests__SineCorr1sSaa",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1s",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 1270
+            }
+          },
+          {
+            "id": "w_78_tests__SineCorr1sSbb_tests__SineCorr1s",
+            "sourceBlockId": "tests__SineCorr1sSbb",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr1s",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -8
+            }
+          },
+          {
+            "id": "w_79_tests__SineCorr1s_tests__CorrHalfPeriod",
+            "sourceBlockId": "tests__SineCorr1s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__CorrHalfPeriod",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 4
+            }
+          },
+          {
+            "id": "w_80_tests__Sine_tests__SineCorr05sLag1",
+            "sourceBlockId": "tests__Sine",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sLag1",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -110.5
+            }
+          },
+          {
+            "id": "w_81_tests__SineCorr05sLag1_tests__SineCorr05sLag2",
+            "sourceBlockId": "tests__SineCorr05sLag1",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sLag2",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 0
+            }
+          },
+          {
+            "id": "w_82_tests__SineCorr05sLag2_tests__SineCorr05sLag3",
+            "sourceBlockId": "tests__SineCorr05sLag2",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sLag3",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 43
+            }
+          },
+          {
+            "id": "w_83_tests__SineCorr05sLag3_tests__SineCorr05sLag4",
+            "sourceBlockId": "tests__SineCorr05sLag3",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sLag4",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_84_tests__SineCorr05sLag4_tests__SineCorr05sLag5",
+            "sourceBlockId": "tests__SineCorr05sLag4",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sLag5",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_85_tests__Time_tests__SineCorr05sWindow",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sWindow",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_86_tests__Sine_tests__SineCorr05sSab",
+            "sourceBlockId": "tests__Sine",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSab",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 228.5
+            }
+          },
+          {
+            "id": "w_87_tests__SineCorr05sLag5_tests__SineCorr05sSab",
+            "sourceBlockId": "tests__SineCorr05sLag5",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSab",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_88_tests__SineCorr05sWindow_tests__SineCorr05sSab",
+            "sourceBlockId": "tests__SineCorr05sWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSab",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": 376
+            }
+          },
+          {
+            "id": "w_89_tests__SineCorr05sSabPrev_tests__SineCorr05sSab",
+            "sourceBlockId": "tests__SineCorr05sSabPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSab",
+            "targetPortIndex": 3,
+            "routing": {
+              "midpointOffset": -313
+            }
+          },
+          {
+            "id": "w_90_tests__SineCorr05sSab_tests__SineCorr05sSabPrev",
+            "sourceBlockId": "tests__SineCorr05sSab",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSabPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -51
+            }
+          },
+          {
+            "id": "w_91_tests__Sine_tests__SineCorr05sSaa",
+            "sourceBlockId": "tests__Sine",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSaa",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -55.5
+            }
+          },
+          {
+            "id": "w_92_tests__SineCorr05sWindow_tests__SineCorr05sSaa",
+            "sourceBlockId": "tests__SineCorr05sWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSaa",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -36
+            }
+          },
+          {
+            "id": "w_93_tests__SineCorr05sSaaPrev_tests__SineCorr05sSaa",
+            "sourceBlockId": "tests__SineCorr05sSaaPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSaa",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -361
+            }
+          },
+          {
+            "id": "w_94_tests__SineCorr05sSaa_tests__SineCorr05sSaaPrev",
+            "sourceBlockId": "tests__SineCorr05sSaa",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSaaPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -47
+            }
+          },
+          {
+            "id": "w_95_tests__SineCorr05sLag5_tests__SineCorr05sSbb",
+            "sourceBlockId": "tests__SineCorr05sLag5",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSbb",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_96_tests__SineCorr05sWindow_tests__SineCorr05sSbb",
+            "sourceBlockId": "tests__SineCorr05sWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSbb",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 376
+            }
+          },
+          {
+            "id": "w_97_tests__SineCorr05sSbbPrev_tests__SineCorr05sSbb",
+            "sourceBlockId": "tests__SineCorr05sSbbPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSbb",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -337
+            }
+          },
+          {
+            "id": "w_98_tests__SineCorr05sSbb_tests__SineCorr05sSbbPrev",
+            "sourceBlockId": "tests__SineCorr05sSbb",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05sSbbPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -59
+            }
+          },
+          {
+            "id": "w_99_tests__SineCorr05sSab_tests__SineCorr05s",
+            "sourceBlockId": "tests__SineCorr05sSab",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05s",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 4
+            }
+          },
+          {
+            "id": "w_100_tests__SineCorr05sSaa_tests__SineCorr05s",
+            "sourceBlockId": "tests__SineCorr05sSaa",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05s",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 274
+            }
+          },
+          {
+            "id": "w_101_tests__SineCorr05sSbb_tests__SineCorr05s",
+            "sourceBlockId": "tests__SineCorr05sSbb",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SineCorr05s",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_102_tests__SineCorr05s_tests__CorrQuarterPeriod",
+            "sourceBlockId": "tests__SineCorr05s",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__CorrQuarterPeriod",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 616
+            }
+          },
+          {
+            "id": "w_103_tests__WholeSeconds_tests__Visited3Now",
+            "sourceBlockId": "tests__WholeSeconds",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__Visited3Now",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 68
+            }
+          },
+          {
+            "id": "w_104_tests__Visited3Now_tests__Visited3",
+            "sourceBlockId": "tests__Visited3Now",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__Visited3",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 43.5
+            }
+          },
+          {
+            "id": "w_105_tests__Visited3Prev_tests__Visited3",
+            "sourceBlockId": "tests__Visited3Prev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__Visited3",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -252
+            }
+          },
+          {
+            "id": "w_106_tests__Visited3_tests__Visited3Prev",
+            "sourceBlockId": "tests__Visited3",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__Visited3Prev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 12
+            }
+          },
+          {
+            "id": "w_107_tests__Visited3_tests__PhaseNotYetVisited",
+            "sourceBlockId": "tests__Visited3",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__PhaseNotYetVisited",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -1228
+            }
+          },
+          {
+            "id": "w_108_tests__Visited3_tests__PhaseVisited",
+            "sourceBlockId": "tests__Visited3",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__PhaseVisited",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -1228
+            }
+          }
+        ],
+        "extents": {
+          "width": 4340,
+          "height": 1655
+        }
+      }
+    ]
+  }
+}

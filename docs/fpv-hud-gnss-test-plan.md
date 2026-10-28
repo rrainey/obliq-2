@@ -11,7 +11,7 @@
 - **Location.** Test models are built by `scripts/build-fpv-reference-model.ts` into **`test-models/fpv/`**, a folder of their own that is committed but not seeded into My Models.
 - **Vehicles.** The folder also holds its own copies of the vehicle: `fpv-vehicle.json` (with magnetometer) and `fpv-vehicle-no-mag.json` (`magnetometer: false`, named "FPV Vehicle No Mag"). `obliq:test` resolves a Model Reference from sibling files first, so the folder runs on its own.
 - **Shipped test models.** The ones listed under Shipped in section 3 are also written to `reference-models/`, as examples for users.
-- **Running.** `npm run obliq:test -- test-models/fpv/*.json --junit test-results/fpv-models.xml`.
+- **Running.** `npm run obliq:test -- test-models/fpv/t*.json --junit test-results/fpv-models.xml`. Pass only the `t*.json` test models: the vehicle files have no Asserts, and `obliq:test` fails a model with none. The test models still resolve the vehicle from the folder.
 - **Jest gate.** The Jest suite `__tests__/reference-models/fpv-test-models.test.ts` runs the same command over every file in the folder. It fails on any failed or missing Assert, so CI covers Level 1.
 
 ### 1.2 Level 2: Jest native suites (supplementary)
@@ -68,6 +68,7 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 
 | Model | Duration | Scenario | Asserts (summary) |
 |---|---|---|---|
+| **T00 Test Helpers** | 6 s | No vehicle: a ramp, a 0.5 Hz sine and unit Gaussian noise | Each helper in section 2.2 against its known answer (latch, first time 2.0 s, max 1 and min −1, value held at 3 s, mean square 0.5 and 1 ± 0.05, correlation −1 at half a period and 0 at a quarter, phase visited). The Jest runner also sets impossible limits on every Assert, to show none passes vacuously. |
 | **T01 Demo Flight** (Shipped; existing, extended) | 5 s | The current demo flight | Existing 11. Added: `GnssTracksTruth` (horizontal < 6 m), `HomeSetOnArm`, `HomeDistanceTracks` (< 6 m), `AltEstTracks` (< 0.5 m of height above the arming point), `ModeIsAngleAfterSwitch`, `ArmedFlagMatches`, `MahDrawnMatchesSoc` |
 | **T02 Acro Rate Step** (Shipped; existing) | 3 s | Unchanged | Existing 6, with the 8-channel sticks |
 | **T03 GNSS Statistics** | 900 s | Armed angle-mode hover. Windows: 0–300 s default; 300–600 s UERE scale 2; 600–900 s HDOP 2.5, VDOP 4 | Per window: horizontal and vertical RMS error and velocity RMS within ±25% of the specified σ; 1 s correlation of horizontal error > 0.9 (first window); RMS ratio between windows matches the scale or DOP ratio ±25% |
@@ -164,7 +165,7 @@ Each implementation phase writes the tests for its features, and the phase is do
 
 | Phase | Writes | Must pass |
 |---|---|---|
-| 1 | `test-models/fpv/` folder, `fpv-test-models` Jest runner, the Conditions schedules, the helpers in section 2.2 | T01, T02, F01 |
+| 1 | `test-models/fpv/` folder, `fpv-test-models` Jest runner, the Conditions schedules, the helpers in section 2.2 and T00 | T00, T01, T02, F01 (done) |
 | 2 | T06 (γ parts), L2 for F02 and F04 | T06 (first part) |
 | 3 | T03, T04, T05, L2 for F05 and F15 | T03–T05 |
 | 4 | T01 additions, F16–F19 | T01 |

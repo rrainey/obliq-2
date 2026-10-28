@@ -139,7 +139,12 @@ describe('FPV reference model: sensors and estimators', () => {
     expect(LOCATION.longitudeDeg).toBe(-96.71872529973575)
     expect(LOCATION.elevationM).toBe(178.133)
     expect(SENSORS.baro.homeAltitude).toBe(0)
-    const field = wmmField(loadWmm2025(), LOCATION.latitudeDeg, LOCATION.longitudeDeg, LOCATION.elevationM, LOCATION.epoch)
+    // GEOID18 at the park; the WMM takes height above the ellipsoid
+    expect(LOCATION.geoidHeightM).toBe(-26.103)
+    const field = wmmField(loadWmm2025(), LOCATION.latitudeDeg, LOCATION.longitudeDeg, LOCATION.elevationM + LOCATION.geoidHeightM, LOCATION.epoch)
+    // At the MSL height instead, the field differs by under 1 nT
+    const atMsl = wmmField(loadWmm2025(), LOCATION.latitudeDeg, LOCATION.longitudeDeg, LOCATION.elevationM, LOCATION.epoch)
+    expect(Math.abs(atMsl.totalNt - field.totalNt)).toBeLessThan(1)
     expect(SITE_FIELD.declinationDeg).toBe(field.declinationDeg)
     expect(SITE_FIELD.inclinationDeg).toBe(field.inclinationDeg)
     expect(SITE_FIELD.ned).toEqual([field.x, field.y, field.z].map(v => Number((v / 1000).toFixed(3))))

@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- **The FPV vehicle is at Prairie Creek Park, Texas, and its NED origin is 0 m MSL.** It was at Tri-County Aerodrome (48TX). Altitude MSL is −z. The field plane is the terrain database's origin cell, z = −178.133 m, and the vehicle rests 1 mm into that plane. The barometer and the altitude estimate still start at the field elevation. The magnetic field is WMM2025 at the park.
+- **The FPV vehicle is at Prairie Creek Park, Texas, and its NED origin is 0 m MSL.** It was at Tri-County Aerodrome (48TX). Altitude MSL is −z. The field plane is the terrain database's origin cell, z = −178.133 m, and the vehicle rests 1 mm into that plane. The barometer and the altitude estimate still start at the field elevation. The magnetic field is WMM2025 at the park, evaluated at the field's height above the ellipsoid.
+- **The FPV Vehicle has two more inputs:** `gnss_env` (GNSS conditions: satellites, HDOP, VDOP and a UERE scale) and `grid_convergence_deg` (the angle between true north and the terrain's UTM grid north). They prepare for the GNSS receiver. Test models feed them from a new Conditions subsystem that schedules them over time like the Pilot's sticks.
+- **FPV validation suite.** `test-models/fpv/` holds test models run with `npm run obliq:test -- test-models/fpv/t*.json`, with its own copy of the vehicle. T00 checks the Tests-sheet helpers that later test models use: event latches, first-event times, running extremes, and windowed mean square and correlation.
 
 ## What's New in 3.4.0
 

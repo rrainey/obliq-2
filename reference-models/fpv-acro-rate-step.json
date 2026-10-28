@@ -24,8 +24,8 @@
             "type": "subsystem",
             "name": "Pilot",
             "position": {
-              "x": 100,
-              "y": 303
+              "x": 125,
+              "y": 198
             },
             "parameters": {
               "showName": true,
@@ -369,7 +369,7 @@
             "type": "subsystem",
             "name": "Vehicle",
             "position": {
-              "x": 260,
+              "x": 310,
               "y": 129
             },
             "parameters": {
@@ -377,7 +377,9 @@
               "showPortNames": true,
               "sheets": [],
               "inputPorts": [
-                "sticks"
+                "sticks",
+                "gnss_env",
+                "grid_convergence_deg"
               ],
               "outputPorts": [
                 "battery_voltage",
@@ -410,12 +412,218 @@
             }
           },
           {
+            "id": "main__Conditions",
+            "type": "subsystem",
+            "name": "Conditions",
+            "position": {
+              "x": 100,
+              "y": 355
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [],
+              "outputPorts": [
+                "gnss_env",
+                "grid_convergence_deg"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "flatten",
+              "sheets": [
+                {
+                  "id": "conditions",
+                  "name": "Conditions",
+                  "blocks": [
+                    {
+                      "id": "conditions__GnssEnv",
+                      "type": "mux",
+                      "name": "GnssEnv",
+                      "position": {
+                        "x": 260,
+                        "y": 422
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "rows": 4,
+                        "cols": 1,
+                        "baseType": "double",
+                        "outputType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "conditions__Satellites",
+                      "type": "source",
+                      "name": "Satellites",
+                      "position": {
+                        "x": 100,
+                        "y": 224
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 14,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__HDOP",
+                      "type": "source",
+                      "name": "HDOP",
+                      "position": {
+                        "x": 100,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 0.8,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__VDOP",
+                      "type": "source",
+                      "name": "VDOP",
+                      "position": {
+                        "x": 100,
+                        "y": 512
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1.3,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__UereScale",
+                      "type": "source",
+                      "name": "UereScale",
+                      "position": {
+                        "x": 100,
+                        "y": 656
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__gnss_env",
+                      "type": "output_port",
+                      "name": "gnss_env",
+                      "position": {
+                        "x": 478,
+                        "y": 450
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "gnss_env",
+                        "dataType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "conditions__GridConvergence",
+                      "type": "source",
+                      "name": "GridConvergence",
+                      "position": {
+                        "x": 100,
+                        "y": 80
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1.2425,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__grid_convergence_deg",
+                      "type": "output_port",
+                      "name": "grid_convergence_deg",
+                      "position": {
+                        "x": 430,
+                        "y": 90
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "grid_convergence_deg",
+                        "dataType": "double"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_conditions__Satellites_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__Satellites",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_2_conditions__HDOP_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__HDOP",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -12
+                      }
+                    },
+                    {
+                      "id": "w_3_conditions__VDOP_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__VDOP",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_4_conditions__UereScale_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__UereScale",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": 12
+                      }
+                    },
+                    {
+                      "id": "w_5_conditions__GnssEnv_conditions__gnss_env",
+                      "sourceBlockId": "conditions__GnssEnv",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__gnss_env",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_6_conditions__GridConvergence_conditions__grid_convergence_deg",
+                      "sourceBlockId": "conditions__GridConvergence",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__grid_convergence_deg",
+                      "targetPortIndex": 0
+                    }
+                  ],
+                  "extents": {
+                    "width": 778,
+                    "height": 856
+                  }
+                }
+              ]
+            }
+          },
+          {
             "id": "main__Tag_euler",
             "type": "sheet_label_sink",
             "name": "Tag_euler",
             "position": {
-              "x": 454,
-              "y": 176
+              "x": 504,
+              "y": 175
             },
             "parameters": {
               "showName": true,
@@ -427,7 +635,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_motor_cmd",
             "position": {
-              "x": 436,
+              "x": 486,
               "y": 320
             },
             "parameters": {
@@ -440,7 +648,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_rate_setpoint",
             "position": {
-              "x": 434,
+              "x": 484,
               "y": 464
             },
             "parameters": {
@@ -453,7 +661,7 @@
             "type": "sheet_label_sink",
             "name": "Tag_gyro_dps",
             "position": {
-              "x": 438,
+              "x": 488,
               "y": 608
             },
             "parameters": {
@@ -471,7 +679,27 @@
             "targetPortIndex": 0
           },
           {
-            "id": "w_2_main__Vehicle_main__Tag_euler",
+            "id": "w_2_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_3_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": 4
+            }
+          },
+          {
+            "id": "w_4_main__Vehicle_main__Tag_euler",
             "sourceBlockId": "main__Vehicle",
             "sourcePortIndex": 10,
             "targetBlockId": "main__Tag_euler",
@@ -481,7 +709,7 @@
             }
           },
           {
-            "id": "w_3_main__Vehicle_main__Tag_motor_cmd",
+            "id": "w_5_main__Vehicle_main__Tag_motor_cmd",
             "sourceBlockId": "main__Vehicle",
             "sourcePortIndex": 14,
             "targetBlockId": "main__Tag_motor_cmd",
@@ -491,7 +719,7 @@
             }
           },
           {
-            "id": "w_4_main__Vehicle_main__Tag_rate_setpoint",
+            "id": "w_6_main__Vehicle_main__Tag_rate_setpoint",
             "sourceBlockId": "main__Vehicle",
             "sourcePortIndex": 15,
             "targetBlockId": "main__Tag_rate_setpoint",
@@ -501,7 +729,7 @@
             }
           },
           {
-            "id": "w_5_main__Vehicle_main__Tag_gyro_dps",
+            "id": "w_7_main__Vehicle_main__Tag_gyro_dps",
             "sourceBlockId": "main__Vehicle",
             "sourcePortIndex": 16,
             "targetBlockId": "main__Tag_gyro_dps",
@@ -512,7 +740,7 @@
           }
         ],
         "extents": {
-          "width": 754,
+          "width": 804,
           "height": 808
         }
       },
