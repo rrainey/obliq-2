@@ -25,7 +25,7 @@
     - `wind_ned`, which acts through the frame's drag.
   - Failsafe follows Betaflight:
     - stage 1 holds the last sticks for 0.3 s, then centres them with the throttle low, and recovers the moment the link returns;
-    - stage 2 runs the procedure 1.5 s after the loss. For now every procedure drops; auto-land and GPS rescue come next.
+    - stage 2 runs the procedure 1.5 s after the loss.
   - Arming follows Betaflight. It arms on the switch's rising edge, and is refused with the throttle up, with a rescue or hold switch on, on the first arming without a 3D fix and 8 satellites, or without a link. After a forced disarm the switch must be cycled.
   - New outputs: `fc_mode` (the flight-mode text), `fc_warnings` (bits) and `failsafe_stage`.
 - **The FPV altitude estimate is Betaflight's.** It blends baro and GPS altitude at 100 Hz, trusting GPS by 1/pDOP and less when the two disagree, through a 3 Hz filter. Like Betaflight's, it is relative to the arming point: `alt_est` reads 0 until arming. `vario_est` is its rate of change. They replace `altitude_est`, the previous baro/accelerometer filter.
@@ -39,10 +39,16 @@
   - Roll or pitch beyond 5% flies it; releasing the stick holds the new point.
   - It needs a 3D fix and a magnetometer, or a GPS heading established in flight when `posHoldWithoutMag` is set. Otherwise, or if pushed past its sanity distance, it shows `POSHOLD FAIL` and keeps its last angle, as Betaflight does.
   - AUTO-LAND now holds position while it lands.
+- **FPV GPS Rescue,** after Betaflight 2025.12, from the AUX3 switch or as the GPS-RESCUE failsafe procedure.
+  - It climbs to the flight's maximum altitude + 10 m, turns to home, flies home at 7.5 m/s, descends from 20 m out, lands and disarms on impact.
+  - Started within 15 m of home it climbs to 10 m above where it is and pitches out first; on the ground at home it aborts at once.
+  - Its sanity checks are Betaflight's: too few satellites, a fly-away (first disabling the magnetometer and steering by course over ground), no home, and a stalled climb or descent. With the switch it then does nothing for 20 s before disarming; in a real link loss it disarms at once.
+  - A failsafe rescue ends only when the link is back and a stick moves past 30%.
+  - New outputs `rescue_active` and `rescue_phase`; `fc_mode` shows RESC, and `fc_warnings` adds RESCUE N/A and RESCUE OFF. A new build option, `apThrottleMaxUs`, sets Betaflight's `ap_throttle_max`.
 - **Fixed: `gps_heading_ok` now latches once established, until the next arming,** as Betaflight's `canUseGPSHeading` does. Before, it decayed in a hover.
 - **Fixed: a Demux fed by a subsystem named "Conditions" (or anything containing "condition") split its vector wrongly.** It copied only the first element and set the rest to 0, with no warning. A guard for mislabelled relational outputs matched the name; it now matches "condition" only as a whole name segment. Generated code for every stored model is unchanged.
 - **Fixed: with ideal sensors the FPV attitude estimate became NaN** when the accelerometer read zero (free fall at the start of an airborne run). A zero vector now gives no correction instead of 0/0.
-- **FPV validation suite.** `test-models/fpv/` holds test models run with `npm run obliq:test -- test-models/fpv/t*.json`, with its own copy of the vehicle. T03–T05 check the GNSS receiver's error statistics, fix rules and course, T06 grid convergence, T07 arming, T08 failsafe and T22 wind. T00 checks the Tests-sheet helpers that later test models use: event latches, first-event times, running extremes, and windowed mean square and correlation.
+- **FPV validation suite.** `test-models/fpv/` holds test models run with `npm run obliq:test -- test-models/fpv/t*.json`, with its own copy of the vehicle. T03–T05 check the GNSS receiver's error statistics, fix rules and course, T06 grid convergence, T07 arming, T08 failsafe and T22 wind, and later models the altitude estimator, the holds and AUTO-LAND. T10–T14 and T20 fly GPS rescues: by switch and by failsafe, switched off, too close, losing satellites, without a home, into a wind it cannot beat, and without a magnetometer. T00 checks the Tests-sheet helpers that later test models use: event latches, first-event times, running extremes, windowed mean square and correlation, values captured at an event, and gated means.
 
 ## What's New in 3.4.0
 

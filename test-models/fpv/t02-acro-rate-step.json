@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 78
+              "y": 64
             },
             "parameters": {
               "showName": true,
@@ -452,7 +452,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 0
+              "y": -20
             },
             "parameters": {
               "showName": true,
@@ -505,7 +505,9 @@
                 "vario_est",
                 "gps_heading_ok",
                 "alt_hold_active",
-                "pos_hold_active"
+                "pos_hold_active",
+                "rescue_active",
+                "rescue_phase"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -521,7 +523,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 397
+              "y": 400
             },
             "parameters": {
               "showName": true,
@@ -911,7 +913,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 147
+              "y": 127
             },
             "parameters": {
               "showName": true,
@@ -924,7 +926,7 @@
             "name": "Tag_motor_cmd",
             "position": {
               "x": 486,
-              "y": 291
+              "y": 271
             },
             "parameters": {
               "showName": true,
@@ -937,7 +939,7 @@
             "name": "Tag_rate_setpoint",
             "position": {
               "x": 484,
-              "y": 435
+              "y": 415
             },
             "parameters": {
               "showName": true,
@@ -950,7 +952,7 @@
             "name": "Tag_gyro_dps",
             "position": {
               "x": 488,
-              "y": 579
+              "y": 559
             },
             "parameters": {
               "showName": true,
@@ -1056,7 +1058,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 779
+          "height": 759
         }
       },
       {

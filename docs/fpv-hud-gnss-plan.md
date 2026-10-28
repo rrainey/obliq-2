@@ -369,7 +369,18 @@ This is listed for interface agreement. It is implemented in that repo. The host
    - without a mag, refuses until GPS heading is established;
    - a fix loss shows `POSHOLD FAIL`.
 
-### Phase 12: GPS Rescue
+### Phase 12: GPS Rescue (done 2026-10-28)
+
+**As built:**
+- **GpsRescue (100 Hz)** follows `gps_rescue_multirotor.c` tick by tick: start, sensor update, the phase switch, the sanity checks (1 Hz), then the controls. Its outputs are in this model's conventions: pitch positive nose-up, yaw rate positive nose-right (Betaflight's rescue pitch is nose-down, its yaw left).
+- **The shared altitude controller** takes the rescue's target, per-tick step (as feed-forward), run and reset. AngleMode takes the rescue's angles, the yaw setpoint its yaw rate, and the estimator its COG gain and magnetometer disable.
+- **A new fix** is a 10 Hz receiver solution with a 3D fix, as Betaflight's GPS stamp. Without one the velocity PID holds. Without this gate, a satellite loss in FLY_HOME let the stale PID fly the quad 200 m away in 9 s.
+- **Task boundaries.** The 100 Hz autopilot and rescue outputs reach the 1 kHz loop one controller sample later (`…Task` unit delays), as in Betaflight's scheduler, and the rescue's disarm request is delayed one sample. This keeps the generator from breaking algebraic loops in the wrong place: without it, the phase machine read its failure before the phase switch had run, and the rescue stuck in FLY_HOME. The 12 remaining loop warnings are the 4 motor false loops (×3) that were there before.
+- **Failsafe:** GPS-RESCUE no longer drops in stage 2; DROP and AUTO-LAND keep their rules. A stage-2 rescue on the ground at home aborts and disarms on its next tick (`fpv-failsafe`).
+- **Build option `apThrottleMaxUs`** (Betaflight `ap_throttle_max`) for the stalled-climb test.
+- **New outputs:** `rescue_active`, `rescue_phase`; `fc_mode` shows RESC; `fc_warnings` adds RESCUE N/A (1) and RESCUE OFF (2).
+- **Measured** (T11): ATTAIN_ALT overshoots the return altitude by about 5 m (the 7.5 m/s ramp and the altitude controller's lag) and settles about 4 s into FLY_HOME; FLY_HOME averages 6.8 m/s against 7.5, with a noisy pitch, because the velocity to home is the 10 Hz difference of GNSS distances (σ about 1.7 m/s); touchdown 1.4 m from home. The quad's top airspeed at the 45° rescue pitch limit is about 22 m/s, so T14's fly-away needs a 25 m/s wind.
+- **Faithful but surprising:** DO_NOTHING holds the last throttle and yaw rate, so after a fly-away the quad climbs and turns for 20 s before ABORT; and with no home and no earlier autopilot use, its throttle is 0.
 
 1. **Phase machine and control:**
    - the IDLE bookkeeping (maximum altitude, return altitude, descent distance);
@@ -529,6 +540,7 @@ New model states are named in the generated C as `<subsystem path>_<block>_state
     - `FlightController_AltitudeEstimator_GpsZeroValidPrev_state` = 0, so the GPS zero is taken against baro at the first fix.
   - Leave the filter states (`AltitudeLpfStage1/2Prev`, `AltitudeLast`, `VarioLpfStage1/2Prev`) at 0; the trim's armed start then reads `alt_est` ≈ 0 at the hover point.
 - **The OSD struct** gains `fc_mode`, `fc_warnings`, `rescue_phase` and `failsafe_stage`.
+- **GPS Rescue (Phase 12)** adds the outputs `rescue_active` and `rescue_phase`, and states under `FlightController_GpsRescue_*` plus the task-boundary delays `FlightController_*Task` (AltHoldActive, AutopilotThrottle, RescueActive, RescueAngle, RescueYawRate, RescueMagDisable, RescueCogGain, PosHold…). The hover trim needs no writes for them: their initial values (rescue idle, autopilot off) are right for a trimmed hover, and a reset restores them.
 
 ## Order and checkpoints
 

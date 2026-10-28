@@ -151,7 +151,9 @@ So only the first arming after power-up is GPS-gated.
 
 ## 2. GPS Rescue (2025.12)
 
-The rescue task runs at 100 Hz. Its control loops update on new GPS data.
+The rescue task runs at 100 Hz. Its control loops update on new GPS data: a receiver solution with a 3D fix. Without a fix the GPS stamp does not advance (`onGpsNewData` returns early), so the velocity PID, the distance and the velocity to home hold their last values.
+
+**On the start tick** the rescue enters INITIALIZE, runs its INITIALIZE work, and the phase switch then moves on in the same tick (to ATTAIN_ALT, or ABORT). INITIALIZE is seen after the tick only while it waits, without a home.
 
 ### 2.1 Triggers
 
@@ -182,7 +184,7 @@ There are two ways in:
 | **FLY_HOME** | Target velocity → `ground_speed` (7.5 m/s) with a 1 s time constant. Velocity I relax 0 → 1 with a 2 s time constant. Roll limit = 0.5·max_angle·relax. The mag is ignored and COG is used. | distance ≤ descentDistance → DESCENT |
 | **DESCENT** | `proximity = clamp((dist − 0.5·landingAlt)/descentDistance, 0, 1)`. Target velocity = ground_speed·proximity·(30° − \|headingErr\|)/30°, or 0 when the error exceeds 30°. The target altitude falls at `descend_rate·k`, with k = 0.6 at ≤ 10 m rising linearly to 3.0 at ≥ 50 m. | Below landing altitude (4 m) → LANDING |
 | **LANDING** | Continues the descent. | Impact: accelerometer magnitude > `disarm_threshold`/10 g (3.0 g) → disarm |
-| **DO_NOTHING** | Level (rescue angles 0). Throttle stays at its last autopilot output. Impact disarm is active. | After 20 s → ABORT |
+| **DO_NOTHING** | Level (rescue angles 0). The control function returns before the altitude and yaw controllers, so the throttle stays at its last autopilot output (`throttleOut`, 0 if the autopilot has not run since power-up) and the yaw rate at its last value. Impact disarm is active. | After 20 s → ABORT |
 | **ABORT** | Disarm. Arming is blocked until the arm switch is cycled. | — |
 
 ### 2.3 Parameters (defaults)

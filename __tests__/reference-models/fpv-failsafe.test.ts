@@ -60,8 +60,11 @@ describe('FPV failsafe rules', () => {
     expect(firstTime(drop, r => r.armed === 1)).toBeLessThan(0.3)
     expect(firstTime(drop, r => r.t > 1 && r.armed === 0)).toBeCloseTo(loss, 2)
     const rescue = run(IDLE, 14, { rcLinkValid: lossAt(loss), failsafeProcedure: FAILSAFE_PROCEDURE.gpsRescue })
-    // Armed through stage 1; disarmed only when stage 2 starts (Phase 8: every procedure drops)
-    expect(firstTime(rescue, r => r.t > 1 && r.armed === 0)).toBeCloseTo(loss + FC.failsafe.delayS, 2)
+    // Armed through stage 1. Stage 2 starts GPS Rescue, which on the ground at home (within 5 m and
+    // below the landing altitude) aborts on its next 100 Hz tick and disarms, as Betaflight does
+    const disarmedAt = firstTime(rescue, r => r.t > 1 && r.armed === 0)
+    expect(disarmedAt).toBeGreaterThan(loss + FC.failsafe.delayS)
+    expect(disarmedAt).toBeLessThan(loss + FC.failsafe.delayS + 0.025)
   })
 
   test('the throttle-low rule needs more than 10 s: after 5 s at low throttle a DROP loss waits for stage 2', () => {

@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 78
+              "y": 64
             },
             "parameters": {
               "showName": true,
@@ -448,7 +448,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 0
+              "y": -20
             },
             "parameters": {
               "showName": true,
@@ -501,7 +501,9 @@
                 "vario_est",
                 "gps_heading_ok",
                 "alt_hold_active",
-                "pos_hold_active"
+                "pos_hold_active",
+                "rescue_active",
+                "rescue_phase"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -517,7 +519,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 397
+              "y": 400
             },
             "parameters": {
               "showName": true,
@@ -934,7 +936,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 251
+              "y": 231
             },
             "parameters": {
               "showName": true,
@@ -947,7 +949,7 @@
             "name": "Tag_euler_est",
             "position": {
               "x": 486,
-              "y": 395
+              "y": 375
             },
             "parameters": {
               "showName": true,
@@ -960,7 +962,7 @@
             "name": "Tag_heading_deg",
             "position": {
               "x": 484,
-              "y": 539
+              "y": 519
             },
             "parameters": {
               "showName": true,
@@ -1056,7 +1058,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 739
+          "height": 719
         }
       },
       {

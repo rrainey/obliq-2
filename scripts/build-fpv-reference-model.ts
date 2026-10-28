@@ -165,7 +165,41 @@ export const FC = {
     /** cm: sanity distance minimum; max(min, 2 s × ground speed) */
     sanityMinCm: 1000,
   },
+  /** GPS Rescue, after Betaflight 2025.12 (docs/fpv-betaflight-gnss-spec.md §2). */
+  rescue: {
+    /** s: the rescue task, 100 Hz */
+    ts: 0.01,
+    minStartDistM: 15,
+    initialClimbM: 10,
+    /** cm/s */
+    ascendRateCmS: 750,
+    descendRateCmS: 150,
+    groundSpeedCmS: 750,
+    maxAngleDeg: 45,
+    rollMix: 150,
+    /** Hz: velocity D cutoff (pitch_cutoff 75); the pitch PT3 upsampling runs at 4× */
+    pitchCutoffHz: 0.75,
+    /** m/s: normalises the groundspeed error ratio */
+    imuYawGainMs: 10,
+    descentDistM: 20,
+    /** g: impact disarm (disarm_threshold 30 × 0.1) */
+    disarmThresholdG: 3.0,
+    velP: 8, velI: 40, velD: 12,
+    yawP: 20,
+    /** ap_landing_altitude_m */
+    landingAltitudeM: 4,
+    maxYawRateDps: 180,
+    allowedYawRangeDeg: 30,
+    useMag: true,
+    /** gps_rescue_sanity_checks: 0 OFF, 1 ON, 2 FS_ONLY (default) */
+    sanityChecks: 2,
+  },
 }
+
+/** GPS Rescue phase codes (the rescue_phase output). */
+export const RESCUE_PHASE = { idle: 0, initialize: 1, attainAlt: 2, rotate: 3, flyHome: 4, descent: 5, landing: 6, doNothing: 7, abort: 8 }
+/** GPS Rescue failure codes. */
+export const RESCUE_FAILURE = { healthy: 0, flyaway: 1, gpsLost: 2, lowSats: 3, noHomePoint: 4 }
 
 /** Betaflight's PT1 gain: ω / (ω + 1), ω = 2π f dT. */
 export const pt1Gain = (cutoffHz: number, ts: number) => {
@@ -657,6 +691,24 @@ export class TestHelpers {
     return this.feedback(name, 0, 0, `(in(1) <= ${t}) ? in(0) : in(2)`, [x, this.clock()])
   }
 
+  /** x at the first sample trigger exceeds 0.5, held; 0 until then. */
+  heldWhen(name: string, x: string, trigger: string): string {
+    const seenPrev = this.s.add('unit_delay', `${name}SeenBefore`, { initialValue: 0, sampleInterval: 0 })
+    this.s.wire(this.latch(`${name}Seen`, trigger), seenPrev)
+    return this.feedback(name, 0, 0, '(in(1) > 0.5 && in(2) < 0.5) ? in(0) : in(3)', [x, trigger, seenPrev])
+  }
+
+  /** Mean of x over the samples (every ts) where gate exceeds 0.5; 0 before any. */
+  meanWhile(name: string, x: string, gate: string, ts = 0): string {
+    const sum = this.accumulate(`${name}Sum`, gate, ts, 'in(0)', [x])
+    const one = this.s.constant(`${name}One`, 1, 'double')
+    const count = this.accumulate(`${name}Count`, gate, ts, 'in(0)', [one])
+    const out = this.s.add('evaluate', name, { numInputs: 2, expression: '(in(1) > 0.0) ? in(0) / in(1) : 0.0' })
+    this.s.wire(sum, out, 0)
+    this.s.wire(count, out, 1)
+    return out
+  }
+
   /** 1 when the clock is in [t0, t1), else 0. */
   private gate(name: string, t0: number, t1: number): string {
     const g = this.s.add('evaluate', name, { numInputs: 1, expression: `(in(0) >= ${t0} && in(0) < ${t1}) ? 1.0 : 0.0` })
@@ -724,7 +776,7 @@ const MOTOR_SIZE = { width: 140, height: 80 }
 const FRAME_SIZE = { width: 160, height: 260 }
 const FC_SIZE = { width: 220, height: 180 }
 const SENSORS_SIZE = { width: 170, height: 150 }
-const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok', 'alt_hold_active', 'pos_hold_active']
+const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok', 'alt_hold_active', 'pos_hold_active', 'rescue_active', 'rescue_phase']
 
 // ---------------------------------------------------------------------------
 // Motor / ESC / propeller (one definition, referenced by the other three)
@@ -1443,6 +1495,8 @@ function buildAttitudeEstimatorSheet(initialQuat: number[][], magnetometer: bool
   const yawStick = s.input('yaw_stick', 'double')
   const armed = s.input('armed', 'double')
   const magDisable = s.input('mag_disable', 'double')
+  const rescueActive = s.input('rescue_active', 'double')
+  const rescueCogGain = s.input('rescue_cog_gain', 'double')
   const qPrev = s.add('unit_delay', 'qPrev', { initialValue: initialQuat, sampleInterval: FC.ts })
   const cbn = s.add('orientation_conversion', 'C_bn', { conversionType: 'quat_to_dcm' })
   s.wire(qPrev, cbn)
@@ -1549,13 +1603,16 @@ function buildAttitudeEstimatorSheet(initialQuat: number[][], magnetometer: bool
   })
   s.wire(ePrev, attF, 0, 0)
   s.wire(ePrev, attF, 1, 1)
-  // in(0) allowed, in(1) snapped, in(2) speed, in(3) yaw, in(4) attitude
-  const gain = s.add('evaluate', 'CogGain', { numInputs: 5, expression: '(in(0) > 0.5 && in(1) > 0.5) ? in(2) * in(3) * in(4) : 0.0' })
+  // in(0) allowed, in(1) snapped, in(2) speed, in(3) yaw, in(4) attitude, in(5) rescue active, in(6) rescue gain
+  // (during GPS Rescue the rescue supplies the gain)
+  const gain = s.add('evaluate', 'CogGain', { numInputs: 7, expression: '(in(0) > 0.5 && in(1) > 0.5) ? ((in(5) > 0.5) ? in(6) : in(2) * in(3) * in(4)) : 0.0' })
   s.wire(cogAllowed, gain, 0)
   s.wire(snapDonePrev, gain, 1)
   s.wire(speedF, gain, 2)
   s.wire(yawF, gain, 3)
   s.wire(attF, gain, 4)
+  s.wire(rescueActive, gain, 5)
+  s.wire(rescueCogGain, gain, 6)
   // Correction about the earth's down axis (in the body: −up), turning the estimate toward the course
   const cogScale = s.add('evaluate', 'CogErrorScale', { numInputs: 2, expression: '-in(0) * in(1)' })
   s.wire(courseErr, cogScale, 0)
@@ -1773,6 +1830,9 @@ function buildAngleModeSheet(): SheetBuilder {
   const apAngle = s.input('autopilot_angle', 'double[2]')
   const apSplit = s.add('demux', 'AutopilotAngleSplit', { outputCount: 2, inputDimensions: [2] })
   s.wire(apAngle, apSplit)
+  const rescueAngle = s.input('rescue_angle', 'double[2]')
+  const rescueSplit = s.add('demux', 'RescueAngleSplit', { outputCount: 2, inputDimensions: [2] })
+  s.wire(rescueAngle, rescueSplit)
   const split = s.add('demux', 'StickSplit', { outputCount: 8, inputDimensions: [8] })
   s.wire(sticks, split)
   const est = s.add('demux', 'AttitudeSplit', { outputCount: 3, inputDimensions: [3] })
@@ -1785,10 +1845,11 @@ function buildAngleModeSheet(): SheetBuilder {
   // limited to half of ap_max_angle
   const half = 0.5 * FC.posHold.maxAngleDeg
   ;['Roll', 'Pitch'].forEach((axis, i) => {
-    // in(0) stick, in(1) estimated angle (rad), in(2) Pos Hold, in(3) autopilot in control, in(4) autopilot angle (deg)
-    const target = `((in(2) > 0.5) ? fmin(fmax((in(3) > 0.5) ? in(4) : ${limitDeg} * in(0), -${half}), ${half}) : ${limitDeg} * in(0))`
+    // in(0) stick, in(1) estimated angle (rad), in(2) Pos Hold, in(3) autopilot in control, in(4) autopilot angle (deg),
+    // in(5) GPS Rescue angle (deg), added to the stick's target as in pid.c
+    const target = `((in(2) > 0.5) ? fmin(fmax((in(3) > 0.5) ? in(4) : ${limitDeg} * in(0) + in(5), -${half}), ${half}) : fmin(fmax(${limitDeg} * in(0) + in(5), -${limitDeg}.0), ${limitDeg}.0))`
     const ev = s.add('evaluate', `${axis}Level`, {
-      numInputs: 5,
+      numInputs: 6,
       expression: `${gain} * (${target} - in(1) * ${180 / Math.PI})`,
     })
     s.wire(split, ev, 0, i)
@@ -1796,6 +1857,7 @@ function buildAngleModeSheet(): SheetBuilder {
     s.wire(posActive, ev, 2)
     s.wire(apInControl, ev, 3)
     s.wire(apSplit, ev, 4, i)
+    s.wire(rescueSplit, ev, 5, i)
     s.wire(ev, level, i)
   })
   s.wire(acroSplit, level, 2, 2)
@@ -1949,7 +2011,7 @@ function buildMixerSheet(): SheetBuilder {
  * runs the failsafe procedure. Stage 1 ends the moment the link returns;
  * stage 2 needs recoveryS of valid link and, except after DROP, a stick moved
  * beyond stickThreshold. DROP disarms at stage 2; AUTO-LAND descends under
- * Altitude Hold and disarms after landingTimeS; GPS-RESCUE drops until Phase 12.
+ * Altitude Hold and disarms after landingTimeS; GPS-RESCUE runs GPS Rescue.
  */
 function buildFailsafeSheet(): SheetBuilder {
   const f = FC.failsafe
@@ -2011,14 +2073,14 @@ function buildFailsafeSheet(): SheetBuilder {
   s.wire(stage2, s2Time, 0)
   s.wire(s2TimePrev, s2Time, 1)
   s.wire(s2Time, s2TimePrev)
-  // Disarm: stage 2 with DROP (and GPS-RESCUE until Phase 12); AUTO-LAND after its landing
+  // Disarm: stage 2 with DROP; AUTO-LAND after its landing
   // time; or a loss after long low throttle with DROP or AUTO-LAND
   const { drop, autoLand, gpsRescue } = FAILSAFE_PROCEDURE
   // in(0) stage 2, in(1) link, in(2) low-throttle time, in(3) live procedure, in(4) latched procedure, in(5) stage-2 time
   const disarm = s.add('evaluate', 'DisarmRequest', {
     numInputs: 6,
     expression:
-      `((in(0) > 0.5 && (fabs(in(4) - ${drop}) < 0.5 || fabs(in(4) - ${gpsRescue}) < 0.5))` +
+      `((in(0) > 0.5 && fabs(in(4) - ${drop}) < 0.5)` +
       ` || (in(0) > 0.5 && fabs(in(4) - ${autoLand}) < 0.5 && in(5) >= ${f.landingTimeS - 1e-9})` +
       ` || (in(1) < 0.5 && in(2) > ${f.throttleLowDelayS} && fabs(in(3) - ${gpsRescue}) > 0.5)) ? 1.0 : 0.0`,
   })
@@ -2235,7 +2297,7 @@ function buildHomeVectorSheet(): SheetBuilder {
  * hover (not at low throttle); AUTO-LAND descends faster when higher. The
  * controller's throttle (µs) is returned in stick units, (µs − 1000) / 1000.
  */
-function buildAltHoldSheet(startArmed: boolean): SheetBuilder {
+function buildAltHoldSheet(startArmed: boolean, throttleMaxUs = FC.autopilot.throttleMaxUs): SheetBuilder {
   const A = FC.autopilot
   const ts = A.ts
   const s = new SheetBuilder('althold', 'AltHold')
@@ -2247,6 +2309,11 @@ function buildAltHoldSheet(startArmed: boolean): SheetBuilder {
   const vario = s.input('vario_est', 'double')
   const euler = s.input('euler_est', 'double[3]')
   const rescue = s.input('rescue_active', 'double')
+  // GPS Rescue drives the same controller with its own target and per-tick step
+  const rescueTarget = s.input('rescue_target_cm', 'double')
+  const rescueStep = s.input('rescue_step_cm', 'double')
+  const rescueRun = s.input('rescue_run', 'double')
+  const rescueReset = s.input('rescue_reset', 'double')
   const split = s.add('demux', 'StickSplit', { outputCount: 8, inputDimensions: [8] })
   s.wire(sticks, split)
   const att = s.add('demux', 'AttitudeSplit', { outputCount: 3, inputDimensions: [3] })
@@ -2300,29 +2367,32 @@ function buildAltHoldSheet(startArmed: boolean): SheetBuilder {
   const target = state('TargetCm', 0,
     `(in(0) > 0.5 && in(1) < 0.5) ? in(2) : ((fabs(in(2) - in(4)) < ${A.climbRateCmS}) ? in(4) + in(3) * ${ts} : in(4))`,
     [active, activePrev, altCm, targetVel])
-  const err = s.add('evaluate', 'AltitudeErrorCm', { numInputs: 2, expression: 'in(0) - in(1)' })
-  s.wire(target, err, 0)
-  s.wire(altCm, err, 1)
-  // I: reset on entry; 0.1× above iRelaxCm; limited
+  const running = namedEval(s, 'ControllerRunning', { a: active, r: rescueRun }, '({a} > 0.5 || {r} > 0.5) ? 1.0 : 0.0')
+  const err = namedEval(s, 'AltitudeErrorCm', { r: rescueRun, rt: rescueTarget, t: target, a: altCm }, '(({r} > 0.5) ? {rt} : {t}) - {a}')
+  // F's input: Alt Hold's target velocity (cm/s), or the rescue's target step per tick (cm), as in Betaflight
+  const fInput = namedEval(s, 'FeedforwardInput', { r: rescueRun, st: rescueStep, v: targetVel }, '({r} > 0.5) ? {st} : {v}')
+  // I: reset on Alt Hold entry or at a rescue's start; 0.1× above iRelaxCm; limited; held when not running
   const iTerm = state('ITerm', 0,
-    `(in(0) > 0.5 && in(1) > 0.5) ? fmin(fmax(in(3) + in(2) * ${A.i * 0.003} * ((fabs(in(2)) < ${A.iRelaxCm}) ? 1.0 : 0.1) * ${ts}, -${A.iLimitUs}), ${A.iLimitUs}) : 0.0`,
-    [active, activePrev, err])
+    `(in(0) > 0.5 && in(1) < 0.5) || in(4) > 0.5 ? 0.0 : ((in(3) > 0.5) ? fmin(fmax(in(5) + in(2) * ${A.i * 0.003} * ((fabs(in(2)) < ${A.iRelaxCm}) ? 1.0 : 0.1) * ${ts}, -${A.iLimitUs}), ${A.iLimitUs}) : in(5))`,
+    [active, activePrev, err, running, rescueReset])
   // Throttle (µs): (P + I − D·boost + F + hover offset) / max(cos tilt, 0.5), limited; then stick units
   // in(0) error, in(1) I, in(2) vario m/s, in(3) target velocity, in(4) roll, in(5) pitch
   const vz = '(in(2) * 100.0)'
   const boost = `((fabs(${vz}) > ${A.dBoostStartCmS}) ? (3.0 * fabs(${vz}) / ${A.dBoostStartCmS} - 2.0) / (fabs(${vz}) / ${A.dBoostStartCmS}) : 1.0)`
-  const throttle = s.add('evaluate', 'Throttle', {
+  const throttleRaw = s.add('evaluate', 'ThrottleCommand', {
     numInputs: 6,
     expression:
       `(fmin(fmax(1000.0 + (in(0) * ${A.p * 0.01} + in(1) - ${vz} * ${boost} * ${A.d * 0.01} + in(3) * ${A.f * 0.01} + ${hover - 1000})` +
-      ` / fmax(cos(in(4)) * cos(in(5)), 0.5), ${A.throttleMinUs}), ${A.throttleMaxUs}) - 1000.0) / 1000.0`,
+      ` / fmax(cos(in(4)) * cos(in(5)), 0.5), ${A.throttleMinUs}), ${throttleMaxUs}) - 1000.0) / 1000.0`,
   })
-  s.wire(err, throttle, 0)
-  s.wire(iTerm, throttle, 1)
-  s.wire(vario, throttle, 2)
-  s.wire(targetVel, throttle, 3)
-  s.wire(att, throttle, 4, 0)
-  s.wire(att, throttle, 5, 1)
+  s.wire(err, throttleRaw, 0)
+  s.wire(iTerm, throttleRaw, 1)
+  s.wire(vario, throttleRaw, 2)
+  s.wire(fInput, throttleRaw, 3)
+  s.wire(att, throttleRaw, 4, 0)
+  s.wire(att, throttleRaw, 5, 1)
+  // Held when the controller is not running (Betaflight's throttleOut keeps its last value)
+  const throttle = state('Throttle', 0, '(in(0) > 0.5) ? in(1) : in(2)', [running, throttleRaw])
   s.output('active', active, 'double')
   s.output('throttle', throttle, 'double')
   s.output('throttle_raised', raised, 'double')
@@ -2542,9 +2612,314 @@ function buildPosHoldSheet(magnetometer: boolean, withoutMag: boolean): SheetBui
   return s
 }
 
-function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, magnetometer: boolean, posHoldWithoutMag = FC.posHold.withoutMag): SheetBuilder {
+/** A source for named-input Evaluates: a block id, or [block id, output port]. */
+type Src = string | [string, number]
+
+/**
+ * An Evaluate whose expression names its inputs: `{name}` in the body
+ * becomes in(k) for the k-th entry of `vars`. Keeps long state-machine
+ * expressions readable against the behaviour reference.
+ */
+function namedEval(s: SheetBuilder, name: string, vars: Record<string, Src>, body: string): string {
+  const keys = Object.keys(vars)
+  const expression = body.replace(/\{(\w+)\}/g, (_, k: string) => {
+    const i = keys.indexOf(k)
+    if (i < 0) throw new Error(`${name}: no input {${k}}`)
+    return `in(${i})`
+  })
+  const id = s.add('evaluate', name, { numInputs: keys.length, expression })
+  keys.forEach((k, i) => {
+    const src = vars[k]!
+    if (Array.isArray(src)) s.wire(src[0], id, i, src[1])
+    else s.wire(src, id, i)
+  })
+  return id
+}
+
+/**
+ * GPS Rescue, after Betaflight 2025.12 gps_rescue_multirotor.c
+ * (docs/fpv-betaflight-gnss-spec.md §2), at 100 Hz. Each tick, in the code's
+ * order: start (IDLE → INITIALIZE); the sensor update (on a new fix: distance
+ * and velocity to home, the IMU course gain and the velocity I attenuation);
+ * the phase machine; the sanity checks (failures, and once a second fly-away,
+ * low satellites and stalled climb or descent); then the controls — the
+ * shared altitude controller's target, yaw P with roll mixed in, and the
+ * velocity PID (on a new fix) upsampled through a 3 Hz PT3 for pitch.
+ * Outputs follow this model's conventions: pitch positive nose-up, yaw rate
+ * positive nose-right (Betaflight's rescue pitch is nose-down, its yaw left).
+ */
+function buildGpsRescueSheet(magnetometer: boolean): SheetBuilder {
+  const R = FC.rescue
+  const ts = R.ts
+  const P = RESCUE_PHASE
+  const F = RESCUE_FAILURE
+  const s = new SheetBuilder('rescue', 'GpsRescue')
+  const sticks = s.input('sticks', 'double[8]')
+  const armed = s.input('armed', 'double')
+  const stage = s.input('failsafe_stage', 'double')
+  const procedure = s.input('failsafe_procedure', 'double')
+  const link = s.input('rc_link_valid', 'double')
+  const heading = s.input('heading_deg', 'double')
+  const homeValid = s.input('home_valid', 'double')
+  const dist = s.input('home_distance_m', 'double')
+  const bearing = s.input('home_bearing_deg', 'double')
+  const alt = s.input('alt_est', 'double')
+  const course = s.input('gnss_course', 'double[4]')
+  const fix = s.input('gnss_fix', 'double[3]')
+  const accel = s.input('accel', 'double[3]')
+  const E = (name: string, vars: Record<string, Src>, body: string) => namedEval(s, name, vars, body)
+  const delay = (name: string, init: number) => s.add('unit_delay', `${name}Prev`, { initialValue: init, sampleInterval: ts })
+  const is = (v: string, phase: number) => `(fabs(${v} - ${phase}.0) < 0.5)`
+  const split = s.add('demux', 'StickSplit', { outputCount: 8, inputDimensions: [8] })
+  s.wire(sticks, split)
+  const crs = s.add('demux', 'CourseSplit', { outputCount: 4, inputDimensions: [4] })
+  s.wire(course, crs)
+  const fixS = s.add('demux', 'FixSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(fix, fixS)
+  const t = s.add('clock', 'Time')
+  // A receiver solution with a 3D fix (Betaflight's GPS stamp advances only with GPS_FIX)
+  const ng = E('NewFix', { t, fx: [fixS, 0] }, `(fmod({t} + 0.005, ${SENSORS.gnss.ts}) < 0.01 && {fx} > 2.5) ? 1.0 : 0.0`)
+  const altCm = E('AltitudeCm', { a: alt }, '{a} * 100.0')
+  const distCm = E('DistanceCm', { d: dist }, '{d} * 100.0')
+  const gsCm = E('GroundSpeedCm', { g: [crs, 2] }, '{g} * 100.0')
+
+  // ---- start
+  const req = E('Requested', { armed, aux3: [split, 6], stage, proc: procedure },
+    `({armed} > 0.5 && ({aux3} > 0.5 || ({stage} > 1.5 && fabs({proc} - ${FAILSAFE_PROCEDURE.gpsRescue}) < 0.5))) ? 1.0 : 0.0`)
+  const phasePrev = delay('Phase', P.idle)
+  const p0 = E('Phase0', { req, pp: phasePrev }, `({req} < 0.5) ? ${P.idle}.0 : (${is('{pp}', P.idle)} ? ${P.initialize}.0 : {pp})`)
+  const start = E('Start', { req, pp: phasePrev }, `({req} > 0.5 && ${is('{pp}', P.idle)}) ? 1.0 : 0.0`)
+
+  // ---- sensor update
+  const err = E('ErrorAngle', { h: heading, b: bearing }, 'fmod({h} - {b} + 540.0, 360.0) - 180.0')
+  const lastDist = delay('LastDistance', 0)
+  const velPrev = delay('VelocityToHome', 0)
+  const vel = E('VelocityToHome', { ng, d: distCm, pd: lastDist, v: velPrev }, `({ng} > 0.5) ? ({pd} - {d}) * ${1 / SENSORS.gnss.ts} : {v}`)
+  s.wire(vel, velPrev)
+  s.wire(E('LastDistanceNext', { ng, d: distCm, pd: lastDist }, '({ng} > 0.5) ? {d} : {pd}'), lastDist)
+  const gsRatio = E('GroundspeedErrorRatio', { g: gsCm, v: vel }, `fabs({g} - {v}) / ${R.imuYawGainMs * 100}.0`)
+  const pitchOutPrev = delay('PitchOut', 0) // Betaflight sign, centidegrees
+  const cogGainPrev = delay('ImuCogGain', 0)
+  const cogGain = E('ImuCogGain', { ng, start, p0, r: gsRatio, po: pitchOutPrev, g: cogGainPrev },
+    `({ng} > 0.5) ? ((({po} > 0.0) ? fmin({po} / 3000.0, 2.0) : 0.0) + (${is('{p0}', P.flyHome)} ? fmin({r}, 3.5) : 0.0)) : (({start} > 0.5) ? 1.0 : {g})`)
+  s.wire(cogGain, cogGainPrev)
+
+  // ---- phase machine (values after the switch on p0)
+  const st = (name: string, init: number) => ({ prev: delay(name, init), name })
+  const maxAlt = st('MaxAltitudeCm', 0), ret = st('ReturnAltitudeCm', 0), dd = st('DescentDistanceM', R.descentDistM)
+  const target = st('TargetAltitudeCm', 0), stepS = st('TargetStepCm', 0), retLow = st('ReturnAltitudeLow', 1)
+  const yawAtt = st('YawAttenuator', 0), tv = st('TargetVelocityCmS', 0), initVelLow = st('InitialVelocityLow', 1)
+  const relax = st('ItermRelax', 0), cutMod = st('CutoffModifier', 1), pitchLim = st('PitchLimitDeg', 0)
+  const rollLim = st('RollLimitDeg', 0), atten = st('ItermAttenuator', 1), secFail = st('SecondsFailing', 0)
+  const failure = st('Failure', F.healthy)
+  const v = { p0, ng, armed, home: homeValid, dist, distCm, altCm, vel, err } as Record<string, Src>
+  const L = R.landingAltitudeM * 100
+  const initGo = E('InitGo', { p0, home: homeValid, dist, altCm }, `(${is('{p0}', P.initialize)} && {home} > 0.5 && !({dist} < 5.0 && {altCm} < ${L}.0)) ? 1.0 : 0.0`)
+  const tooClose = E('TooClose', { dist }, `({dist} < ${R.minStartDistM}.0) ? 1.0 : 0.0`)
+  const inDescend = E('Descending', { p0 }, `(${is('{p0}', P.descent)} || ${is('{p0}', P.landing)}) ? 1.0 : 0.0`)
+  const prox = E('ProximityToLanding', { dist, ddp: dd.prev }, `fmin(fmax(({dist} - ${0.5 * R.landingAltitudeM}) / {ddp}, 0.0), 1.0)`)
+  const stillAway = E('StillAway', { rl: retLow.prev, altCm, rp: ret.prev }, '((({rl} > 0.5) ? 1.0 : 0.0) == (({altCm} < {rp}) ? 1.0 : 0.0)) ? 1.0 : 0.0')
+
+  const maxAltN = E('MaxAltitudeNext', { ...v, m: maxAlt.prev }, `${is('{p0}', P.idle)} ? (({armed} > 0.5) ? fmax({altCm}, {m}) : 0.0) : {m}`)
+  const idleUpd = E('IdleUpdate', { p0, ng, armed }, `(${is('{p0}', P.idle)} && {ng} > 0.5 && {armed} > 0.5) ? 1.0 : 0.0`)
+  const retN = E('ReturnAltitudeNext', { iu: idleUpd, ig: initGo, tc: tooClose, m: maxAltN, altCm, r: ret.prev },
+    `({iu} > 0.5) ? {m} + ${R.initialClimbM * 100}.0 : (({ig} > 0.5 && {tc} > 0.5) ? fmax(1000.0, {altCm} + ${R.initialClimbM * 100}.0) : {r})`)
+  const ddN = E('DescentDistanceNext', { iu: idleUpd, ig: initGo, tc: tooClose, dist, d: dd.prev },
+    `({iu} > 0.5) ? fmin(0.5 * {dist}, ${R.descentDistM}.0) : (({ig} > 0.5 && {tc} > 0.5) ? ${0.5 * R.minStartDistM} : {d})`)
+  // descend(): the step grows with altitude, 0.6× at ≤ 10 m to 3.0× at ≥ 50 m
+  const stepMag = E('DescendStepCm', { tp: target.prev }, `${ts} * ${R.descendRateCmS}.0 * (0.6 + (fmin(fmax({tp}, 1000.0), 5000.0) - 1000.0) / 4000.0 * 2.4)`)
+  const stepA = E('AttainStepCm', { rl: retLow.prev }, `(({rl} > 0.5) ? ${R.ascendRateCmS}.0 : -${R.descendRateCmS}.0) * ${ts}`)
+  const targetN = E('TargetAltitudeNext', { iu: idleUpd, p0, sa: stillAway, sA: stepA, de: inDescend, sm: stepMag, altCm, tp: target.prev, rp: ret.prev },
+    `({iu} > 0.5) ? {altCm} : (${is('{p0}', P.attainAlt)} ? (({sa} > 0.5) ? {tp} + {sA} : {rp}) : (({de} > 0.5) ? {tp} - {sm} : {tp}))`)
+  const stepN = E('TargetStepNext', { ig: initGo, p0, sa: stillAway, sA: stepA, de: inDescend, sm: stepMag, sp: stepS.prev },
+    `({ig} > 0.5) ? 0.0 : (${is('{p0}', P.attainAlt)} ? (({sa} > 0.5) ? {sA} : 0.0) : (({de} > 0.5) ? -{sm} : {sp}))`)
+  const retLowN = E('ReturnAltitudeLowNext', { ig: initGo, altCm, r: retN, rl: retLow.prev }, '({ig} > 0.5) ? (({altCm} < {r}) ? 1.0 : 0.0) : {rl}')
+  const absErr = E('AbsErrorAngle', { e: err }, 'fabs({e})')
+  const yawAttN = E('YawAttenuatorNext', { ig: initGo, p0, de: inDescend, y: yawAtt.prev },
+    `({ig} > 0.5) ? 0.0 : ((${is('{p0}', P.rotate)} || ${is('{p0}', P.flyHome)}) ? (({y} < 1.0) ? {y} + ${ts} : {y}) : (({de} > 0.5) ? 1.0 : {y}))`)
+  const gsT = R.groundSpeedCmS
+  const tvDescend = E('DescendVelocity', { pr: prox, ae: absErr }, `({ae} > ${R.allowedYawRangeDeg}.0) ? 0.0 : ${gsT}.0 * {pr} * (${R.allowedYawRangeDeg}.0 - {ae}) / ${R.allowedYawRangeDeg}.0`)
+  const tvN = E('TargetVelocityNext', { ig: initGo, p0, ng, de: inDescend, vel, ivl: initVelLow.prev, tvp: tv.prev, td: tvDescend },
+    `({ig} > 0.5 || ${is('{p0}', P.attainAlt)} || ${is('{p0}', P.rotate)}) ? {vel} : (${is('{p0}', P.flyHome)} ? ((((({ivl} > 0.5) ? 1.0 : 0.0) == (({tvp} < ${gsT}.0) ? 1.0 : 0.0))) ? {tvp} + ${ts} * (${gsT}.0 - {tvp}) : {tvp}) : (({de} > 0.5 && {ng} > 0.5) ? {td} : {tvp}))`)
+  const ivlN = E('InitialVelocityLowNext', { p0, vel, i: initVelLow.prev }, `${is('{p0}', P.rotate)} ? (({vel} < ${gsT}.0) ? 1.0 : 0.0) : {i}`)
+  const relaxN = E('ItermRelaxNext', { ig: initGo, p0, r: relax.prev }, `({ig} > 0.5) ? 0.0 : (${is('{p0}', P.flyHome)} ? {r} + ${0.5 * ts} * (1.0 - {r}) : {r})`)
+  const cutN = E('CutoffModifierNext', { ig: initGo, p0, ng, de: inDescend, rn: relaxN, pr: prox, c: cutMod.prev },
+    `({ig} > 0.5) ? 1.0 : (${is('{p0}', P.flyHome)} ? 2.0 - {rn} : (({de} > 0.5 && {ng} > 0.5) ? 2.5 - {pr} : {c}))`)
+  const pitchLimN = E('PitchLimitNext', { ig: initGo, p0, ng, de: inDescend, ae: absErr, pl: pitchLim.prev },
+    `({ig} > 0.5) ? 0.0 : ((${is('{p0}', P.rotate)} && {ae} < ${R.allowedYawRangeDeg}.0) || ((${is('{p0}', P.flyHome)} || {de} > 0.5) && {ng} > 0.5)) ? ${R.maxAngleDeg}.0 : {pl}`)
+  const rollLimN = E('RollLimitNext', { ig: initGo, p0, ng, de: inDescend, rn: relaxN, dist, ddp: dd.prev, rl: rollLim.prev },
+    `({ig} > 0.5) ? 0.0 : ((${is('{p0}', P.flyHome)} && {ng} > 0.5) ? ${0.5 * R.maxAngleDeg} * {rn} : (({de} > 0.5 && {ng} > 0.5) ? ${0.5 * R.maxAngleDeg} * fmin(fmax({dist} / {ddp}, 0.0), 1.0) : {rl}))`)
+  const attenBase = E('ItermAttenuatorSensor', { ng, r: gsRatio, a: atten.prev }, '({ng} > 0.5) ? 4.0 / ({r} + 4.0) : {a}')
+  const attenN = E('ItermAttenuatorNext', { ig: initGo, de: inDescend, ng, pr: prox, b: attenBase },
+    '({ig} > 0.5) ? 1.0 : (({de} > 0.5 && {ng} > 0.5) ? fmin({pr}, {b}) : {b})')
+  // Impact: the accelerometer's magnitude (Betaflight acc.accMagnitude, in g)
+  const accelNorm = s.add('mag', 'AccelNorm')
+  s.wire(accel, accelNorm)
+  const accelMagG = E('AccelMagnitudeG', { a: accelNorm }, `{a} / ${FPV.gravity}`)
+  const impactNow = E('ImpactNow', { m: accelMagG }, `({m} > ${R.disarmThresholdG}) ? 1.0 : 0.0`)
+  const p1 = E('Phase1', { p0, home: homeValid, ig: initGo, sa: stillAway, dist, ae: absErr, ng, ddp: dd.prev, altCm, imp: impactNow },
+    `${is('{p0}', P.idle)} ? ${P.idle}.0 : ` +
+    `${is('{p0}', P.initialize)} ? (({home} < 0.5) ? ${P.initialize}.0 : (({ig} > 0.5) ? ${P.attainAlt}.0 : ${P.abort}.0)) : ` +
+    `${is('{p0}', P.attainAlt)} ? (({sa} < 0.5 && {dist} > ${R.minStartDistM}.0) ? ${P.rotate}.0 : ${P.attainAlt}.0) : ` +
+    `${is('{p0}', P.rotate)} ? (({ae} < ${R.allowedYawRangeDeg}.0) ? ${P.flyHome}.0 : ${P.rotate}.0) : ` +
+    `${is('{p0}', P.flyHome)} ? (({ng} > 0.5 && {dist} <= {ddp}) ? ${P.descent}.0 : ${P.flyHome}.0) : ` +
+    `${is('{p0}', P.descent)} ? (({altCm} < ${L}.0) ? ${P.landing}.0 : ${P.descent}.0) : ` +
+    `${is('{p0}', P.landing)} ? (({imp} > 0.5) ? ${P.idle}.0 : ${P.landing}.0) : ` +
+    `${is('{p0}', P.doNothing)} ? (({imp} > 0.5) ? ${P.idle}.0 : ${P.doNothing}.0) : ${P.idle}.0`)
+  const secSwitch = E('SecondsFailingSwitch', { ig: initGo, p0, ae: absErr, ng, dist, ddp: dd.prev, altCm, sf: secFail.prev },
+    `({ig} > 0.5 || ${is('{p0}', P.abort)} || (${is('{p0}', P.rotate)} && {ae} < ${R.allowedYawRangeDeg}.0) || (${is('{p0}', P.flyHome)} && {ng} > 0.5 && {dist} <= {ddp}) || (${is('{p0}', P.descent)} && {altCm} < ${L}.0)) ? 0.0 : {sf}`)
+  const failSwitch = E('FailureSwitch', { p0, home: homeValid, f: failure.prev }, `(${is('{p0}', P.initialize)} && {home} < 0.5) ? ${F.noHomePoint}.0 : {f}`)
+  const disarm = E('DisarmRequest', { p0, imp: impactNow }, `((${is('{p0}', P.landing)} || ${is('{p0}', P.doNothing)}) && {imp} > 0.5) || ${is('{p0}', P.abort)} ? 1.0 : 0.0`)
+
+  // ---- sanity checks (on p1)
+  const lastCheck = delay('LastCheck', 0), prevAltS = delay('SanityAltitudeCm', 0), prevTgtS = delay('SanityTargetCm', 0)
+  const prevDistS = delay('SanityDistanceCm', 0), lowSats = delay('SecondsLowSats', 0), nothing = delay('SecondsDoingNothing', 0)
+  const magForce = delay('MagForceDisable', 0)
+  const sInit = E('SanityInit', { p0, p1 }, `(${is('{p0}', P.initialize)} || ${is('{p1}', P.initialize)}) ? 1.0 : 0.0`)
+  const lc0 = E('LastCheck0', { i: sInit, t, l: lastCheck }, '({i} > 0.5) ? {t} : {l}')
+  const pa0 = E('SanityAltitude0', { i: sInit, altCm, p: prevAltS }, '({i} > 0.5) ? {altCm} : {p}')
+  const pt0 = E('SanityTarget0', { i: sInit, tn: targetN, p: prevTgtS }, '({i} > 0.5) ? {tn} : {p}')
+  const pd0 = E('SanityDistance0', { i: sInit, d: distCm, p: prevDistS }, '({i} > 0.5) ? {d} : {p}')
+  const ls0 = E('LowSats0', { i: sInit, l: lowSats }, '({i} > 0.5) ? 0.0 : {l}')
+  const dn0 = E('DoingNothing0', { i: sInit, n: nothing }, '({i} > 0.5) ? 0.0 : {n}')
+  const policy = R.sanityChecks
+  const pA = E('PhaseAfterFailure', { p1, f: failSwitch, link },
+    `${is('{p1}', P.idle)} ? ${P.idle}.0 : (({f} > 0.5) ? (${policy === 1 ? `${P.abort}.0` : policy === 2 ? `(({link} < 0.5) ? ${P.abort}.0 : ${P.doNothing}.0)` : `${P.doNothing}.0`}) : {p1})`)
+  const due = E('SanityDue', { p1, t, l: lc0 }, `(!${is('{p1}', P.idle)} && {t} - {l} >= ${1 - 1e-6}) ? 1.0 : 0.0`)
+  const vHome = E('SanityVelocityToHome', { pd: pd0, d: distCm }, '{pd} - {d}')
+  const secFly = E('SecondsFailingFly', { due, pA, sf: secSwitch, vh: vHome, tv: tvN },
+    `({due} > 0.5 && ${is('{pA}', P.flyHome)}) ? fmin(fmax({sf} + (({vh} < 0.1 * {tv}) ? 1.0 : -1.0), 0.0), 30.0) : {sf}`)
+  const mfN = E('MagForceDisableNext', { due, pA, sfy: secFly, m: magForce },
+    `({due} > 0.5 && ${is('{pA}', P.flyHome)} && {sfy} >= 30.0 && ${magnetometer && R.useMag ? 1 : 0} > 0 && {m} < 0.5) ? 1.0 : {m}`)
+  s.wire(mfN, magForce)
+  const lsN = E('LowSatsNext', { due, l: ls0, fx: [fixS, 0], sats: [fixS, 1] },
+    `({due} > 0.5) ? fmin(fmax({l} + (({fx} < 2.5 || {sats} < 4.0) ? 1.0 : -1.0), 0.0), 10.0) : {l}`)
+  const ratio = E('AltitudeChangeRatio', { altCm, pa: pa0, tn: targetN, pt: pt0 }, '({altCm} - {pa}) / ({tn} - {pt})')
+  const secStall = E('SecondsFailingStall', { due, pA, sfy: secFly, r: ratio },
+    `({due} > 0.5 && (${is('{pA}', P.landing)} || ${is('{pA}', P.attainAlt)} || ${is('{pA}', P.descent)})) ? fmin(fmax({sfy} + (({r} > 0.5) ? -1.0 : 1.0), 0.0), 10.0) : {sfy}`)
+  const dnN = E('DoingNothingNext', { due, pA, n: dn0 }, `({due} > 0.5 && ${is('{pA}', P.doNothing)}) ? fmin({n} + 1.0, 20.0) : {n}`)
+  const p2 = E('Phase2', { due, pA, ss: secStall, dn: dnN },
+    `({due} > 0.5 && ${is('{pA}', P.landing)} && {ss} >= 10.0) ? ${P.abort}.0 : ` +
+    `(({due} > 0.5 && (${is('{pA}', P.attainAlt)} || ${is('{pA}', P.descent)}) && {ss} >= 10.0) ? ${P.landing}.0 : ` +
+    `(({due} > 0.5 && ${is('{pA}', P.doNothing)} && {dn} >= 20.0) ? ${P.abort}.0 : {pA}))`)
+  const secFinal = E('SecondsFailingNext', { due, pA, sfy: secFly, ss: secStall, mfn: mfN, m: magForce },
+    `({due} > 0.5 && ${is('{pA}', P.flyHome)} && {sfy} >= 30.0 && {mfn} > 0.5 && {m} < 0.5) ? 0.0 : ` +
+    `(({due} > 0.5 && (${is('{pA}', P.attainAlt)} || ${is('{pA}', P.descent)}) && {ss} >= 10.0) ? 0.0 : {ss})`)
+  const failN = E('FailureNext', { p1, pA, due, sfy: secFly, mfn: mfN, m: magForce, ln: lsN, f: failSwitch },
+    `${is('{p1}', P.idle)} ? ${F.healthy}.0 : ((({due} > 0.5 && ${is('{pA}', P.flyHome)} && {sfy} >= 30.0 && !({mfn} > 0.5 && {m} < 0.5)) ? ${F.flyaway}.0 : ` +
+    `(({due} > 0.5 && {ln} >= 10.0) ? ${F.lowSats}.0 : {f})))`)
+  s.wire(E('LastCheckNext', { due, t, l: lc0 }, '({due} > 0.5) ? {t} : {l}'), lastCheck)
+  s.wire(E('SanityAltitudeNext', { due, altCm, p: pa0 }, '({due} > 0.5) ? {altCm} : {p}'), prevAltS)
+  s.wire(E('SanityTargetNext', { due, tn: targetN, p: pt0 }, '({due} > 0.5) ? {tn} : {p}'), prevTgtS)
+  s.wire(E('SanityDistanceNext', { due, pA, d: distCm, p: pd0 }, `({due} > 0.5 && ${is('{pA}', P.flyHome)}) ? {d} : {p}`), prevDistS)
+  s.wire(lsN, lowSats)
+  s.wire(dnN, nothing)
+  s.wire(p2, phasePrev)
+  // Intent state writes
+  ;([[maxAlt, maxAltN], [ret, retN], [dd, ddN], [target, targetN], [stepS, stepN], [retLow, retLowN], [yawAtt, yawAttN], [tv, tvN],
+    [initVelLow, ivlN], [relax, relaxN], [cutMod, cutN], [pitchLim, pitchLimN], [rollLim, rollLimN], [atten, attenN],
+    [secFail, secFinal], [failure, failN]] as Array<[{ prev: string }, string]>).forEach(([st_, n]) => s.wire(n, st_.prev))
+
+  // ---- controls (on p2)
+  const run = E('Running', { p2 }, `(!${is('{p2}', P.idle)} && !${is('{p2}', P.initialize)} && !${is('{p2}', P.doNothing)}) ? 1.0 : 0.0`)
+  const yawPrev = delay('YawRate', 0)
+  const yaw = E('YawRate', { run, e: err, ya: yawAttN, y: yawPrev },
+    `({run} > 0.5) ? fmin(fmax({e} * ${R.yawP}.0 * {ya} / 10.0, -${R.maxYawRateDps}.0), ${R.maxYawRateDps}.0) : {y}`)
+  s.wire(yaw, yawPrev)
+  const rollPrev = delay('RollCdeg', 0)
+  const roll = E('RollCdeg', { run, p2, y: yaw, rl: rollLimN, r: rollPrev },
+    `({run} > 0.5) ? fmin(fmax(-{y} * ${R.rollMix}.0 * fmin(fmax(1.0 - fabs({y}) * 0.01, 0.0), 1.0), -100.0 * {rl}), 100.0 * {rl}) : (${is('{p2}', P.initialize)} ? {r} : 0.0)`)
+  s.wire(roll, rollPrev)
+  // Velocity PID on a new fix (the interval normalisation factor is 1 at 10 Hz)
+  const upd = E('VelocityUpdate', { run, ng }, '({run} > 0.5 && {ng} > 0.5) ? 1.0 : 0.0')
+  const velErr = E('VelocityError', { tv: tvN, v: vel }, '{tv} - {v}')
+  const prevErr = delay('LastVelocityError', 0), velI = delay('VelocityI', 0), dLpf = delay('VelocityDFiltered', 0), pitchAdj = delay('PitchAdjustment', 0)
+  const prevErr0 = E('LastVelocityError0', { start, p: prevErr }, '({start} > 0.5) ? 0.0 : {p}')
+  const velI0 = E('VelocityI0', { start, i: velI }, '({start} > 0.5) ? 0.0 : {i}')
+  const velIN = E('VelocityINext', { upd, i: velI0, e: velErr, rx: relaxN, at: attenN, pl: pitchLimN },
+    `({upd} > 0.5) ? fmin(fmax(({i} + ${0.01 * R.velI} * {e} * {rx}) * {at}, -50.0 * {pl}), 50.0 * {pl}) : {i}`)
+  s.wire(velIN, velI)
+  const dRaw = E('VelocityD', { e: velErr, pe: prevErr0 }, `({e} - {pe}) * ${R.velD}.0`)
+  const dN = E('VelocityDFilteredNext', { upd, d: dRaw, f: dLpf, cm: cutN },
+    `({upd} > 0.5) ? {f} + (2.0 * ${Math.PI} * ${R.pitchCutoffHz} * {cm} * ${SENSORS.gnss.ts}) / (2.0 * ${Math.PI} * ${R.pitchCutoffHz} * {cm} * ${SENSORS.gnss.ts} + 1.0) * ({d} - {f}) : {f}`)
+  s.wire(dN, dLpf)
+  s.wire(E('LastVelocityErrorNext', { upd, e: velErr, p: prevErr0 }, '({upd} > 0.5) ? {e} : {p}'), prevErr)
+  const adjCalc = E('PitchAdjustmentNext', { upd, e: velErr, i: velIN, d: dN, pl: pitchLimN, pa: pitchAdj, p2, dist },
+    `(${is('{p2}', P.attainAlt)} && {dist} < ${R.minStartDistM}.0) ? 1500.0 : (({upd} > 0.5) ? fmin(fmax({e} * ${R.velP}.0 + {i} + {d}, -100.0 * {pl}), 100.0 * {pl}) : {pa})`)
+  s.wire(adjCalc, pitchAdj)
+  // 3 Hz PT3 upsampling while running (its state persists across rescues, as in Betaflight)
+  const k3 = pt1Gain(4 * R.pitchCutoffHz * 1.961459177, ts)
+  let x: string = adjCalc
+  for (let k = 1; k <= 3; k++) {
+    const prev = delay(`PitchUpsample${k}`, 0)
+    const y = E(`PitchUpsample${k}`, { run, x, p: prev }, `({run} > 0.5) ? {p} + ${k3} * ({x} - {p}) : {p}`)
+    s.wire(y, prev)
+    x = y
+  }
+  const pitchOut = E('PitchOut', { run, p2, f: x, po: pitchOutPrev }, `({run} > 0.5) ? {f} : (${is('{p2}', P.initialize)} ? {po} : 0.0)`)
+  s.wire(pitchOut, pitchOutPrev)
+
+  // ---- warnings: RESCUE N/A (home set, but no fix or under 4 satellites for 2 s, at 1 Hz) and RESCUE OFF (no home, 3 s after arming)
+  const naCheck = delay('AvailableCheck', 0), naLow = delay('AvailableLowSats', 0), naNoFix = delay('AvailableNoFix', 0)
+  const naDue = E('AvailableDue', { t, l: naCheck }, `({t} - {l} >= ${1 - 1e-6}) ? 1.0 : 0.0`)
+  s.wire(E('AvailableCheckNext', { naDue, t, l: naCheck }, '({naDue} > 0.5) ? {t} : {l}'), naCheck)
+  const naLowN = E('AvailableLowSatsNext', { naDue, l: naLow, sats: [fixS, 1] }, '({naDue} > 0.5) ? fmin(fmax({l} + (({sats} < 4.0) ? 1.0 : -1.0), 0.0), 2.0) : {l}')
+  s.wire(naLowN, naLow)
+  const naNoFixN = E('AvailableNoFixNext', { naDue, nf: naNoFix, fx: [fixS, 0] }, '({naDue} > 0.5) ? (({fx} < 2.5) ? 1.0 : 0.0) : {nf}')
+  s.wire(naNoFixN, naNoFix)
+  const armedPrev = delay('Armed', 0), armTime = delay('ArmTime', 0)
+  s.wire(armed, armedPrev)
+  const armT = E('ArmTime', { armed, ap: armedPrev, t, at: armTime }, '({armed} > 0.5 && {ap} < 0.5) ? {t} : {at}')
+  s.wire(armT, armTime)
+  const warnings = E('Warnings', { armed, home: homeValid, lo: naLowN, nf: naNoFixN, t, at: armT },
+    `(({armed} > 0.5 && {home} > 0.5 && ({nf} > 0.5 || {lo} >= 2.0)) ? ${FC_WARNING.rescueNA}.0 : 0.0)` +
+    ` + (({armed} > 0.5 && {home} < 0.5 && {t} - {at} < 3.0) ? ${FC_WARNING.rescueOff}.0 : 0.0)`)
+
+  const magDisable = E('MagDisable', { p2, m: mfN }, `(${R.useMag ? 1 : 0} > 0 && !${is('{p2}', P.flyHome)} && {m} < 0.5) ? 0.0 : 1.0`)
+  s.output('active', req, 'double')
+  s.output('phase', p2, 'double')
+  const angle = s.add('mux', 'RescueAngle', { rows: 2, cols: 1, baseType: 'double', outputType: 'double[2]' })
+  s.wire(E('RollDeg', { r: roll }, '{r} / 100.0'), angle, 0)
+  s.wire(E('PitchDeg', { p: pitchOut }, '-{p} / 100.0'), angle, 1)
+  s.output('angle', angle, 'double[2]')
+  s.output('yaw_rate', E('YawRateOut', { y: yaw }, '-{y}'), 'double')
+  s.output('alt_target_cm', targetN, 'double')
+  s.output('alt_step_cm', stepN, 'double')
+  s.output('alt_run', run, 'double')
+  s.output('alt_reset', start, 'double')
+  s.output('disarm_request', disarm, 'double')
+  s.output('mag_disable', magDisable, 'double')
+  s.output('cog_gain', cogGain, 'double')
+  s.output('warnings', warnings, 'double')
+  s.output('failure', failN, 'double')
+  return s
+}
+
+/** GPS Rescue's output ports, in order; wired by name. */
+const RESCUE_OUTPUTS = ['active', 'phase', 'angle', 'yaw_rate', 'alt_target_cm', 'alt_step_cm', 'alt_run', 'alt_reset', 'disarm_request', 'mag_disable', 'cog_gain', 'warnings', 'failure']
+const rOut = (name: string) => {
+  const k = RESCUE_OUTPUTS.indexOf(name)
+  if (k < 0) throw new Error(`GpsRescue has no output ${name}`)
+  return k
+}
+
+function buildFlightControllerSheet(
+  initialQuat: number[][], altitude0: number, magnetometer: boolean,
+  posHoldWithoutMag = FC.posHold.withoutMag, apThrottleMaxUs = FC.autopilot.throttleMaxUs
+): SheetBuilder {
   const s = new SheetBuilder('fc', 'FlightController')
   const rawSticks = s.input('sticks', 'double[8]')
+  /**
+   * A task boundary: the 100 Hz autopilot and rescue tasks write values that
+   * later controller and IMU loops read, so their outputs reach the 1 kHz path
+   * one controller sample later, as in Betaflight's scheduler. This also keeps
+   * the 1 kHz loop from forming algebraic loops through the motors.
+   */
+  const fromTask = (name: string, src: string, port: number, init: number | number[] = 0): [string, number] => {
+    const id = s.add('unit_delay', `${name}Task`, { initialValue: init, sampleInterval: FC.ts })
+    s.wire(src, id, 0, port)
+    return [id, 0]
+  }
   const gyro = s.input('gyro', 'double[3]')
   const acc = s.input('accel', 'double[3]')
   const mag = s.input('mag', 'double[3]')
@@ -2569,15 +2944,20 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   const apSticks = s.add('mux', 'AutopilotSticks', { rows: 8, cols: 1, baseType: 'double', outputType: 'double[8]' })
   for (let k = 0; k < 8; k++) {
     if (k === 3) {
-      const thr = s.add('evaluate', 'ThrottleCommand', { numInputs: 3, expression: '(in(0) > 0.5) ? in(1) : in(2)' })
-      s.wire(altHoldId, thr, 0, 0)
-      s.wire(altHoldId, thr, 1, 1)
+      // Alt Hold or GPS Rescue: the autopilot's throttle
+      const thr = s.add('evaluate', 'ThrottleCommand', { numInputs: 4, expression: '(in(0) > 0.5 || in(3) > 0.5) ? in(1) : in(2)' })
+      const hActive = fromTask('AltHoldActive', altHoldId, 0)
+      const rActive = fromTask('RescueActive', `${s.id}__GpsRescue`, rOut('active'))
+      s.wire(hActive[0], thr, 0)
+      s.wire(fromTask('AutopilotThrottle', altHoldId, 1)[0], thr, 1)
       s.wire(fsSplit, thr, 2, 3)
+      s.wire(rActive[0], thr, 3)
       s.wire(thr, apSticks, 3)
     } else if (k === 4) {
-      const ang = s.add('evaluate', 'AngleModeCommand', { numInputs: 2, expression: '(in(0) > 0.5) ? 1.0 : in(1)' })
-      s.wire(altHoldId, ang, 0, 0)
+      const ang = s.add('evaluate', 'AngleModeCommand', { numInputs: 3, expression: '(in(0) > 0.5 || in(2) > 0.5) ? 1.0 : in(1)' })
+      s.wire(`${s.id}__AltHoldActiveTask`, ang, 0)
       s.wire(fsSplit, ang, 1, 4)
+      s.wire(`${s.id}__RescueActiveTask`, ang, 2)
       s.wire(ang, apSticks, 4)
     } else {
       s.wire(fsSplit, apSticks, k, k)
@@ -2586,7 +2966,7 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
 
   // Estimators
   const att = s.add('subsystem', 'AttitudeEstimator', subsystem(
-    ['gyro', 'accel', 'mag', 'grid_convergence_deg', 'gnss_course', 'gnss_fix', 'yaw_stick', 'armed', 'mag_disable'],
+    ['gyro', 'accel', 'mag', 'grid_convergence_deg', 'gnss_course', 'gnss_fix', 'yaw_stick', 'armed', 'mag_disable', 'rescue_active', 'rescue_cog_gain'],
     ['quat', 'euler', 'gps_heading_ok'],
     buildAttitudeEstimatorSheet(initialQuat, magnetometer)))
   s.wire(gyro, att, 0)
@@ -2596,21 +2976,36 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.wire(gnssCourse, att, 4)
   s.wire(gnssFix, att, 5)
   s.wire(s.add('selector', 'YawStick', { indices: [2] }), att, 6)
-  // GPS Rescue disables the magnetometer in its fly-home phase (Phase 12); until then never
-  s.wire(s.constant('RescueMagDisable', 0, 'double'), att, 8)
+  const rescueId = `${s.id}__GpsRescue`
+  // GPS Rescue disables the magnetometer in its fly-home phase, and supplies the course gain
+  s.wire(fromTask('RescueMagDisable', rescueId, rOut('mag_disable'))[0], att, 8)
+  s.wire(`${s.id}__RescueActiveTask`, att, 9)
+  s.wire(fromTask('RescueCogGain', rescueId, rOut('cog_gain'))[0], att, 10)
 
   // Setpoint: acro rates, or angle mode on the AUX switch
   const rates = s.add('subsystem', 'Rates', subsystem(['sticks'], ['setpoint', 'throttle'], buildRatesSheet()))
   s.wire(apSticks, rates)
   const angle = s.add('subsystem', 'AngleMode', subsystem(
-    ['sticks', 'euler_est', 'acro_setpoint', 'pos_hold_active', 'autopilot_in_control', 'autopilot_angle'], ['setpoint', 'angle_mode'], buildAngleModeSheet()))
+    ['sticks', 'euler_est', 'acro_setpoint', 'pos_hold_active', 'autopilot_in_control', 'autopilot_angle', 'rescue_angle'], ['setpoint', 'angle_mode'], buildAngleModeSheet()))
   s.wire(apSticks, angle, 0)
   s.wire(att, angle, 1, 1)
   s.wire(rates, angle, 2, 0)
   const posHoldId = `${s.id}__PosHold`
-  s.wire(posHoldId, angle, 3, 0)
-  s.wire(posHoldId, angle, 4, 1)
-  s.wire(posHoldId, angle, 5, 2)
+  s.wire(fromTask('PosHoldActive', posHoldId, 0)[0], angle, 3)
+  s.wire(fromTask('PosHoldInControl', posHoldId, 1, 1)[0], angle, 4)
+  s.wire(fromTask('PosHoldAngle', posHoldId, 2, [0, 0])[0], angle, 5)
+  s.wire(fromTask('RescueAngle', `${s.id}__GpsRescue`, rOut('angle'), [0, 0])[0], angle, 6)
+  // GPS Rescue's yaw rate replaces the yaw setpoint (rc.c)
+  const spSplit = s.add('demux', 'SetpointSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(angle, spSplit, 0, 0)
+  const setpoint = s.add('mux', 'SetpointCommand', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+  s.wire(spSplit, setpoint, 0, 0)
+  s.wire(spSplit, setpoint, 1, 1)
+  const yawCmd = s.add('evaluate', 'YawSetpointCommand', { numInputs: 3, expression: '(in(0) > 0.5) ? in(1) : in(2)' })
+  s.wire(`${s.id}__RescueActiveTask`, yawCmd, 0)
+  s.wire(fromTask('RescueYawRate', `${s.id}__GpsRescue`, rOut('yaw_rate'))[0], yawCmd, 1)
+  s.wire(spSplit, yawCmd, 2, 2)
+  s.wire(yawCmd, setpoint, 2)
 
   // Rate loop and mixer
   const filt = s.add('subsystem', 'GyroFilters', subsystem(['gyro'], ['gyro_dps'], buildGyroFilterSheet()))
@@ -2618,7 +3013,16 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   const arming = s.add('subsystem', 'Arming', subsystem(['sticks', 'gnss_fix', 'disarm_request', 'rc_link_valid'], ['armed', 'airmode', 'warnings'], buildArmingSheet(altitude0 > 0)))
   s.wire(sticks, arming, 0)
   s.wire(gnssFix, arming, 1)
-  s.wire(failsafe, arming, 2, 2)
+  // Disarm requests: failsafe (DROP, AUTO-LAND's landing time, the throttle-low rule) and GPS Rescue (impact, ABORT)
+  const disarmReq = s.add('evaluate', 'DisarmRequest', { numInputs: 2, expression: '(in(0) > 0.5 || in(1) > 0.5) ? 1.0 : 0.0' })
+  s.wire(failsafe, disarmReq, 0, 2)
+  // The rescue's disarm (impact, ABORT) reaches arming on the next controller sample, as a
+  // disarm() from the rescue task is seen by the next step; this also keeps the rescue (which
+  // reads armed) out of an algebraic loop with arming
+  const rescueDisarmPrev = s.add('unit_delay', 'RescueDisarmPrev', { initialValue: 0, sampleInterval: FC.ts })
+  s.wire(`${s.id}__GpsRescue`, rescueDisarmPrev, 0, rOut('disarm_request'))
+  s.wire(rescueDisarmPrev, disarmReq, 1)
+  s.wire(disarmReq, arming, 2)
   s.wire(link, arming, 3)
   s.wire(arming, att, 7, 0)
   s.wire(sticks, `${s.id}__YawStick`)
@@ -2633,8 +3037,9 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.wire(arming, alt, 3, 0)
   // Altitude Hold and the altitude controller (100 Hz); GPS Rescue (Phase 12) suppresses it
   const altHold = s.add('subsystem', 'AltHold', {
-    ...subsystem(['sticks', 'armed', 'failsafe_stage', 'failsafe_procedure', 'alt_est', 'vario_est', 'euler_est', 'rescue_active'],
-      ['active', 'throttle', 'throttle_raised'], buildAltHoldSheet(altitude0 > 0)),
+    ...subsystem(['sticks', 'armed', 'failsafe_stage', 'failsafe_procedure', 'alt_est', 'vario_est', 'euler_est', 'rescue_active',
+      'rescue_target_cm', 'rescue_step_cm', 'rescue_run', 'rescue_reset'],
+      ['active', 'throttle', 'throttle_raised'], buildAltHoldSheet(altitude0 > 0, apThrottleMaxUs)),
     sampleTimeSec: FC.autopilot.ts,
   })
   if (altHold !== altHoldId) throw new Error('AltHold id')
@@ -2645,8 +3050,34 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.wire(alt, altHold, 4, 0)
   s.wire(alt, altHold, 5, 1)
   s.wire(att, altHold, 6, 1)
-  const rescueActive = s.constant('RescueActive', 0, 'double')
-  s.wire(rescueActive, altHold, 7)
+  // GPS Rescue (100 Hz): drives the shared altitude controller, angles, yaw and the IMU
+  const rescue = s.add('subsystem', 'GpsRescue', {
+    ...subsystem(['sticks', 'armed', 'failsafe_stage', 'failsafe_procedure', 'rc_link_valid', 'heading_deg', 'home_valid', 'home_distance_m',
+      'home_bearing_deg', 'alt_est', 'gnss_course', 'gnss_fix', 'accel'],
+    RESCUE_OUTPUTS,
+    buildGpsRescueSheet(magnetometer)),
+    sampleTimeSec: FC.rescue.ts,
+  })
+  if (rescue !== `${s.id}__GpsRescue`) throw new Error('GpsRescue id')
+  s.wire(sticks, rescue, 0)
+  s.wire(arming, rescue, 1, 0)
+  s.wire(failsafe, rescue, 2, 1)
+  s.wire(failsafe, rescue, 3, 3)
+  s.wire(link, rescue, 4)
+  s.wire(`${s.id}__HeadingTrue`, rescue, 5)
+  s.wire(`${s.id}__Home`, rescue, 6, 0)
+  s.wire(`${s.id}__Home`, rescue, 7, 1)
+  s.wire(`${s.id}__Home`, rescue, 8, 2)
+  s.wire(alt, rescue, 9, 0)
+  s.wire(gnssCourse, rescue, 10)
+  s.wire(gnssFix, rescue, 11)
+  s.wire(acc, rescue, 12)
+  const rescueActive: [string, number] = [rescue, rOut('active')]
+  s.wire(rescue, altHold, 7, rOut('active'))
+  s.wire(rescue, altHold, 8, rOut('alt_target_cm'))
+  s.wire(rescue, altHold, 9, rOut('alt_step_cm'))
+  s.wire(rescue, altHold, 10, rOut('alt_run'))
+  s.wire(rescue, altHold, 11, rOut('alt_reset'))
   // Position Hold (100 Hz, its controller on each fix); also forces angle mode through Alt Hold's switch rules
   const posHold = s.add('subsystem', 'PosHold', {
     ...subsystem(['sticks', 'armed', 'failsafe_stage', 'failsafe_procedure', 'throttle_raised', 'gnss_pos', 'gnss_fix', 'gnss_course', 'euler_est', 'gps_heading_ok', 'rescue_active'],
@@ -2664,9 +3095,9 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.wire(gnssCourse, posHold, 7)
   s.wire(att, posHold, 8, 1)
   s.wire(att, posHold, 9, 2)
-  s.wire(rescueActive, posHold, 10)
+  s.wire(rescueActive[0], posHold, 10, rescueActive[1])
   const pid = s.add('subsystem', 'RatePID', subsystem(['setpoint', 'gyro_dps', 'iterm_enable'], ['pid'], buildRatePidSheet()))
-  s.wire(angle, pid, 0, 0)
+  s.wire(setpoint, pid, 0)
   s.wire(filt, pid, 1, 0)
   s.wire(arming, pid, 2, 1)
   const mixer = s.add('subsystem', 'Mixer', subsystem(['pid', 'throttle'], ['motors'], buildMixerSheet()))
@@ -2678,7 +3109,7 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.wire(arming, motors, 1, 0)
 
   s.output('motors', motors, 'double[4]')
-  s.output('setpoint', angle, 'double[3]')
+  s.output('setpoint', setpoint, 'double[3]')
   s.output('gyro_dps', filt, 'double[3]')
   s.output('euler_est', att, 'double[3]', 1)
   s.output('quat_est', att, 'double[4][1]', 0)
@@ -2704,9 +3135,10 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.output('home_bearing_deg', home, 'double', 2)
   // Flight-mode text code (FC_MODE), in Betaflight's priority order
   const mode = s.add('evaluate', 'FlightMode', {
-    numInputs: 5,
-    expression: `(in(0) > 0.5) ? ${FC_MODE.failsafe}.0 : ((in(4) > 0.5) ? ${FC_MODE.posHold}.0 : ((in(3) > 0.5) ? ${FC_MODE.altHold}.0 : ((in(1) > 0.5) ? ${FC_MODE.angle}.0 : ((in(2) > 0.5) ? ${FC_MODE.air}.0 : ${FC_MODE.acro}.0))))`,
+    numInputs: 6,
+    expression: `(in(0) > 0.5) ? ${FC_MODE.failsafe}.0 : ((in(5) > 0.5) ? ${FC_MODE.rescue}.0 : ((in(4) > 0.5) ? ${FC_MODE.posHold}.0 : ((in(3) > 0.5) ? ${FC_MODE.altHold}.0 : ((in(1) > 0.5) ? ${FC_MODE.angle}.0 : ((in(2) > 0.5) ? ${FC_MODE.air}.0 : ${FC_MODE.acro}.0)))))`,
   })
+  s.wire(`${s.id}__GpsRescue`, mode, 5, rOut('active'))
   s.wire(failsafe, mode, 0, 1)
   s.wire(angle, mode, 1, 1)
   s.wire(arming, mode, 2, 1)
@@ -2714,9 +3146,10 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.wire(posHold, mode, 4, 0)
   s.output('fc_mode', mode, 'double')
   // Warnings: arming reasons (while disarmed) and POSHOLD FAIL
-  const warnings = s.add('evaluate', 'Warnings', { numInputs: 2, expression: `in(0) + ((in(1) > 0.5) ? ${FC_WARNING.posHoldFail}.0 : 0.0)` })
+  const warnings = s.add('evaluate', 'Warnings', { numInputs: 3, expression: `in(0) + ((in(1) > 0.5) ? ${FC_WARNING.posHoldFail}.0 : 0.0) + in(2)` })
   s.wire(arming, warnings, 0, 2)
   s.wire(posHold, warnings, 1, 3)
+  s.wire(`${s.id}__GpsRescue`, warnings, 2, rOut('warnings'))
   s.output('fc_warnings', warnings, 'double')
   s.output('failsafe_stage', failsafe, 'double', 1)
   s.output('alt_est', alt, 'double', 0)
@@ -2724,6 +3157,8 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.output('gps_heading_ok', att, 'double', 2)
   s.output('alt_hold_active', altHold, 'double', 0)
   s.output('pos_hold_active', posHold, 'double', 0)
+  s.output('rescue_active', `${s.id}__GpsRescue`, 'double', rOut('active'))
+  s.output('rescue_phase', `${s.id}__GpsRescue`, 'double', rOut('phase'))
   return s
 }
 
@@ -2773,6 +3208,8 @@ export interface FpvModelOptions {
    * Position Hold without a magnetometer once GPS heading is established.
    */
   posHoldWithoutMag?: boolean
+  /** Betaflight ap_throttle_max (µs, default FC.autopilot.throttleMaxUs): the altitude controller's upper limit. */
+  apThrottleMaxUs?: number
 }
 
 /** The vehicle model without a magnetometer (validation suite). */
@@ -2824,7 +3261,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
 
     fc = main.add('subsystem', 'FlightController', {
       ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure', 'grid_convergence_deg', 'gnss_pos', 'gnss_fix', 'rc_link_valid', 'failsafe_procedure', 'gnss_course'], FC_OUTPUTS,
-        buildFlightControllerSheet(magnetometer ? initialQuat : eulerToQuat([...(opts.initialEuler ?? [0, 0, 0]).slice(0, 2), 0]), altitude0, magnetometer, opts.posHoldWithoutMag ?? FC.posHold.withoutMag), FC_SIZE),
+        buildFlightControllerSheet(magnetometer ? initialQuat : eulerToQuat([...(opts.initialEuler ?? [0, 0, 0]).slice(0, 2), 0]), altitude0, magnetometer, opts.posHoldWithoutMag ?? FC.posHold.withoutMag, opts.apThrottleMaxUs), FC_SIZE),
       sampleTimeSec: FC.ts,
     })
     main.wire(pilot, fc, 0)
@@ -2920,7 +3357,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     publish('gyro_dps', fc, 'double[3]', fcOut('gyro_dps'))
     publish('euler_est', fc, 'double[3]', fcOut('euler_est'))
     publish('quat_est', fc, 'double[4][1]', fcOut('quat_est'))
-    for (const name of ['heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok', 'alt_hold_active', 'pos_hold_active']) {
+    for (const name of ['heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok', 'alt_hold_active', 'pos_hold_active', 'rescue_active', 'rescue_phase']) {
       publish(name, fc, 'double', fcOut(name))
     }
   }
@@ -3259,6 +3696,17 @@ export function buildFpvHelpersTestModel(): { name: string; data: Record<string,
   const visited = h.phaseVisited('Visited3', phase, 3)
   check('PhaseNotYetVisited', visited, 0, 0, 0, 2.99)
   check('PhaseVisited', visited, 1, 1, 3.01)
+  // sin(π·t) captured when the clock first passes 2.5 s: 1
+  const after2_5 = s.add('evaluate', 'After2_5s', { numInputs: 1, expression: '(in(0) >= 2.5) ? 1.0 : 0.0' })
+  s.wire(t, after2_5)
+  const sineAt = h.heldWhen('SineWhenPast2_5', sine, after2_5)
+  check('HeldWhenUnsetBefore', sineAt, 0, 0, 0, 2.49)
+  check('HeldWhenCaptured', sineAt, 0.9999, 1.0, 2.51)
+  // Mean of sin over the samples where it is positive (whole half-periods in 0–4 s): 2/π
+  const positive = s.add('evaluate', 'SinePositive', { numInputs: 2, expression: '(in(0) > 0.0 && in(1) < 4.0) ? 1.0 : 0.0' })
+  s.wire(sine, positive, 0)
+  s.wire(t, positive, 1)
+  check('MeanWhileGated', h.meanWhile('SineMeanPositive', sine, positive), 2 / Math.PI - 0.001, 2 / Math.PI + 0.001, 4.01)
 
   let sheets: Sheet[] = [s.sheet()]
   sheets = tuneModelLayout(sheets as any, null, { ...DEFAULT_TUNE_OPTIONS, cleanUpLayout: true, resizeSubsystems: false, scope: 'model' }).sheets as unknown as Sheet[]
@@ -3616,6 +4064,7 @@ export function buildFpvArmingChecksTestModel() {
     check('HomeOnArming', home, 1, 1, t.armed[0] + e, t.armed[1] - e)
     check('ReArmsWithoutGps', armed, 1, 1, t.rearm + e, t.linkLost[0] + FC.failsafe.delayS - e)
     check('NoHomeOnReArmWithoutGps', home, 0, 0, t.rearm + e, t.linkLost[0] + FC.failsafe.delayS - e)
+    check('RescueOffWithoutHome', bit('WarnRescueOff', warnings, W.rescueOff), 1, 1, t.rearm + e, t.linkLost[0] + FC.failsafe.delayS - e)
     const stage2At = t.linkLost[0] + FC.failsafe.delayS
     check('DroppedInStage2', armed, 0, 0, stage2At + e, t.cycleOn - e)
     check('RxLossWarning', bit('WarnRxLoss', warnings, W.armRxLoss), 1, 1, stage2At + e, t.linkLost[1] - e)
@@ -3630,7 +4079,7 @@ export function buildFpvArmingChecksTestModel() {
     description:
       'Validation test for arming (docs/fpv-hud-gnss-test-plan.md, T07): on the ground, arming is refused with the throttle up, ' +
       'with the rescue or hold switch on, and on the first arming with 7 satellites; it succeeds with 14 (home taken), and a re-arm ' +
-      'with 7 succeeds without a home. A DROP failsafe disarms, and arming then needs the switch cycled. fc_warnings shows each reason.',
+      'with 7 succeeds without a home (RESCUE OFF). A DROP failsafe disarms, and arming then needs the switch cycled. fc_warnings shows each reason.',
     sticks,
     duration: t.duration,
     displays: [['Armed', 'fc_armed'], ['Warnings', 'fc_warnings'], ['FailsafeStage', 'failsafe_stage']],
@@ -4034,6 +4483,389 @@ export function buildFpvPosHoldSanityTestModel() {
   })
 }
 
+// ---------------------------------------------------------------------------
+// GPS Rescue test models (T10–T14, T20)
+
+/** The rescue fly-out: climb, Alt Hold from 6 s, then a 35% roll east for 8 s, about 80 m east at about 14 m. */
+export const RESCUE_FLYOUT = { holdOn: 6, roll: [7, 15] as [number, number], rollStick: 0.35 }
+
+/** Fly-out sticks with the rescue switch schedule; the hold switch goes off at holdOff (default: stays on). */
+export function rescueFlyoutSticks(rescue: Array<[number, number]>, holdOff?: number): StickProfile {
+  const f = RESCUE_FLYOUT
+  const hold: Array<[number, number]> = holdOff === undefined
+    ? [[0, 0], [f.holdOn - 0.001, 0], [f.holdOn, 0.5]]
+    : [[0, 0], [f.holdOn - 0.001, 0], [f.holdOn, 0.5], [holdOff - 0.001, 0.5], [holdOff, 0]]
+  return {
+    ...CLIMB_STICKS,
+    roll: [[0, 0], [f.roll[0], 0], [f.roll[0] + 0.2, f.rollStick], [f.roll[1], f.rollStick], [f.roll[1] + 0.2, 0]],
+    hold,
+    rescue,
+  }
+}
+
+/**
+ * Rescue checks on a Tests sheet: the phase signal, 1 while in phase k, and
+ * the time phase k was first entered (−1 until then).
+ */
+function rescuePhases(ctx: ReturnType<typeof testsSheet>) {
+  const { h, from, expr } = ctx
+  const phase = from('rescue_phase')
+  const names = Object.fromEntries(Object.entries(RESCUE_PHASE).map(([k, v]) => [v, k[0]!.toUpperCase() + k.slice(1)]))
+  const isCache = new Map<number, string>(), firstCache = new Map<number, string>()
+  const is = (k: number) => {
+    if (!isCache.has(k)) isCache.set(k, expr(`In${names[k]}`, `(fabs(in(0) - ${k}.0) < 0.5) ? 1.0 : 0.0`, [phase]))
+    return isCache.get(k)!
+  }
+  const first = (k: number) => {
+    if (!firstCache.has(k)) firstCache.set(k, h.firstTime(`First${names[k]}`, is(k)))
+    return firstCache.get(k)!
+  }
+  /** 1 when the phases were each entered, in this order. */
+  const inOrder = (name: string, ks: number[]) => {
+    const terms = ks.map((_, i) => (i === 0 ? 'in(0) > 0.0' : `in(${i}) > in(${i - 1})`))
+    return expr(name, `(${terms.join(' && ')}) ? 1.0 : 0.0`, ks.map(first))
+  }
+  return { phase, is, first, inOrder }
+}
+
+/**
+ * The return checks shared by T11, T20 and T12b: the phases in order to
+ * LANDING, never ABORT, RESC while active, the return altitude in FLY_HOME,
+ * the heading on entering FLY_HOME, the ground speed, the descent distance,
+ * touchdown near home and the impact disarm.
+ */
+function rescueReturnChecks(ctx: ReturnType<typeof testsSheet>, o: {
+  on: number; duration: number; returnAltM: string; descentDistM: number; flyHomeSettleS: number; speed?: [number, number]
+}) {
+  const { h, from, pick, expr, check } = ctx
+  const P = RESCUE_PHASE
+  const T = RESCUE_RETURN_TEST
+  const { is, first, inOrder } = rescuePhases(ctx)
+  const end = o.duration - 0.5
+  check('StartsAtSwitch', first(P.attainAlt), o.on - 0.001, o.on + 0.02, o.on + 0.05)
+  check('PhasesInOrder', inOrder('PhaseOrder', [P.attainAlt, P.rotate, P.flyHome, P.descent, P.landing]), 1, 1, end)
+  check('NeverAborts', h.phaseVisited('Aborted', from('rescue_phase'), P.abort), 0, 0)
+  check('ModeIsRescueWhileActive', expr('ModeWhileActive', `(in(0) > 0.5 && fabs(in(1) - ${FC_MODE.rescue}.0) > 0.5) ? 0.0 : 1.0`,
+    [from('rescue_active'), from('fc_mode')]), 1, 1)
+  const t = h.clock()
+  const settled = expr('FlyHomeSettled', `(in(0) > 0.5 && in(2) - in(1) > ${o.flyHomeSettleS}) ? 1.0 : 0.0`, [is(P.flyHome), first(P.flyHome), t])
+  // The mean shows the return altitude; the swing about it is the altitude controller's (underdamped with Betaflight's gains, as T16)
+  const altErr = expr('ReturnAltitudeError', '(in(0) > 0.5) ? in(1) - in(2) : 0.0', [settled, from('alt_est'), o.returnAltM])
+  check('ReturnAltitude', h.meanWhile('ReturnAltitudeMeanError', altErr, settled), -T.altitudeM, T.altitudeM, end)
+  check('ReturnAltitudeSwing', altErr, -T.swingM, T.swingM)
+  const headingErr = expr('HeadingToHomeError', 'fmod(in(0) - in(1) + 540.0, 360.0) - 180.0', [from('heading_deg'), from('home_bearing_deg')])
+  check('HeadingOnFlyHome', h.heldWhen('HeadingErrorOnFlyHome', headingErr, is(P.flyHome)), -T.headingDeg, T.headingDeg, end)
+  if (o.speed) {
+    const gs = pick('GroundSpeed', from('gnss_course'), [2])
+    check('FlyHomeSpeed', h.meanWhile('FlyHomeMeanSpeed', gs, settled), o.speed[0], o.speed[1], end)
+  }
+  check('DescentDistance', h.heldWhen('DistanceOnDescent', from('home_distance_m'), is(P.descent)),
+    o.descentDistM - T.descentDistM, o.descentDistM + 0.01, end)
+  // Home is where it armed (0.25 s); touchdown is the final resting place
+  const pos = from('pos_ned')
+  const north = pick('North', pos, [0]), east = pick('East', pos, [1])
+  const fromHome = expr('DistanceFromHome', 'sqrt((in(0) - in(2)) * (in(0) - in(2)) + (in(1) - in(3)) * (in(1) - in(3)))',
+    [north, east, h.heldAt('HomeNorth', north, 0.3), h.heldAt('HomeEast', east, 0.3)])
+  check('LandsNearHome', fromHome, 0, T.landM, end)
+  check('DisarmedOnImpact', from('fc_armed'), 0, 0, end)
+  return { is, first }
+}
+
+/** Return-check limits (m, deg). */
+/** (The heading is checked a sample after ROTATE hands over below 30°; the speed and mean altitude limits cover T11 and T20, measured 6.8 and 8.5 m/s, −0.2 and +1.0 m.) */
+export const RESCUE_RETURN_TEST = { altitudeM: 1.5, swingM: 3, headingDeg: 32, descentDistM: 1, landM: 5 }
+
+/** T11 / T20: rescue switch at 20 s, about 82 m east; FLY_HOME settles 4.5 s after entry (ATTAIN_ALT overshoots). */
+export const RESCUE_SWITCH_TEST = { on: 20, flyHomeSettleS: 4.5, speed: [6, 9] as [number, number], duration: 60, noMagDuration: 62 }
+
+function buildRescueSwitchTestModel(noMag: boolean) {
+  const t = RESCUE_SWITCH_TEST
+  const duration = noMag ? t.noMagDuration : t.duration
+  const tests = () => {
+    const ctx = testsSheet()
+    const { s, h, from, expr, upright } = ctx
+    const alt = from('alt_est')
+    // Betaflight's MAX_ALT return altitude: the highest alt_est before the rescue, plus initial_climb
+    const ret = expr('ReturnAltitudeM', `in(0) + ${FC.rescue.initialClimbM}.0`, [h.heldAt('MaxAltitudeAtSwitch', h.runMax('MaxAltitude', alt), t.on)])
+    rescueReturnChecks(ctx, { on: t.on, duration, returnAltM: ret, descentDistM: FC.rescue.descentDistM, flyHomeSettleS: t.flyHomeSettleS, speed: t.speed })
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: noMag ? 'FPV T20 No-Mag Rescue' : 'FPV T11 GPS Rescue Switch',
+    description:
+      `Validation test for GPS Rescue${noMag ? ' without a magnetometer' : ''} (docs/fpv-hud-gnss-test-plan.md, ${noMag ? 'T20' : 'T11'}): fly out about ` +
+      `80 m east at about 14 m, then the rescue switch at ${t.on} s. The rescue climbs to the maximum altitude + ${FC.rescue.initialClimbM} m, ` +
+      `rotates to home, flies home at about 7.5 m/s, starts its descent ${FC.rescue.descentDistM} m out, lands within ` +
+      `${RESCUE_RETURN_TEST.landM} m of home and disarms on impact.` +
+      (noMag ? ' Heading comes from GPS course over ground.' : ''),
+    sticks: rescueFlyoutSticks(windows([t.on, duration + 1]), t.on),
+    duration,
+    displays: [['Position', 'pos_ned'], ['RescuePhase', 'rescue_phase'], ['Altitude', 'alt_est'], ['HomeDistance', 'home_distance_m']],
+    tests,
+    vehicleName: noMag ? FPV_VEHICLE_NO_MAG_NAME : undefined,
+  })
+}
+
+/** T11: GPS Rescue by switch. */
+export function buildFpvRescueSwitchTestModel() {
+  return buildRescueSwitchTestModel(false)
+}
+
+/** T20: GPS Rescue by switch on the vehicle without a magnetometer. */
+export function buildFpvNoMagRescueTestModel() {
+  return buildRescueSwitchTestModel(true)
+}
+
+/** T10 timeline (s): link lost; link back with centred sticks; a 40% roll stick. */
+export const FAILSAFE_RESCUE_TEST = { loss: 25, linkBack: 40, stick: 45, duration: 50 }
+
+/** T10: failsafe GPS-RESCUE — stage 2 starts the rescue; the link alone does not end it; stick movement does. */
+export function buildFpvFailsafeRescueTestModel() {
+  const t = FAILSAFE_RESCUE_TEST
+  const stage2 = t.loss + FC.failsafe.delayS
+  const e = 0.05
+  const tests = () => {
+    const ctx = testsSheet()
+    const { s, from, check, upright } = ctx
+    const P = RESCUE_PHASE
+    const { first, inOrder } = rescuePhases(ctx)
+    const active = from('rescue_active'), stage = from('failsafe_stage')
+    check('NoRescueBeforeStage2', active, 0, 0, 0, stage2 - e)
+    check('Stage1', stage, 1, 1, t.loss + e, stage2 - e)
+    check('Stage2', stage, 2, 2, stage2 + e, t.stick - e)
+    check('RescueFromStage2', first(P.attainAlt), stage2 - 0.001, stage2 + 0.02, stage2 + e)
+    check('LinkBackDoesNotEndIt', active, 1, 1, stage2 + e, t.stick - e)
+    check('ModeIsFailsafe', from('fc_mode'), FC_MODE.failsafe, FC_MODE.failsafe, t.loss + e, t.stick - e)
+    check('PhasesInOrder', inOrder('PhaseOrder', [P.attainAlt, P.rotate, P.flyHome, P.descent]), 1, 1, t.stick - e)
+    check('StickMovementEndsIt', active, 0, 0, t.stick + e)
+    check('FailsafeEnded', stage, 0, 0, t.stick + e)
+    check('StaysArmed', from('fc_armed'), 1, 1, 0.3)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T10 Failsafe Rescue',
+    description:
+      'Validation test for the GPS-RESCUE failsafe procedure (docs/fpv-hud-gnss-test-plan.md, T10): about 70 m out, the link is lost at ' +
+      `${t.loss} s. Stage 2 at ${stage2} s starts GPS Rescue (mode !FS!); the link coming back at ${t.linkBack} s with centred sticks ` +
+      `does not end it; a 40% roll stick at ${t.stick} s does, and the pilot has control again.`,
+    sticks: { ...rescueFlyoutSticks([[0, 0]]), roll: [...rescueFlyoutSticks([[0, 0]]).roll, [t.stick - 0.001, 0], [t.stick, 0.4], [t.stick + 0.5, 0.4], [t.stick + 0.501, 0]] },
+    duration: t.duration,
+    displays: [['Position', 'pos_ned'], ['RescuePhase', 'rescue_phase'], ['FailsafeStage', 'failsafe_stage'], ['Mode', 'fc_mode']],
+    tests,
+    conditions: { rcLinkValid: step([[0, 1], [t.loss, 0], [t.linkBack, 1]]), failsafeProcedure: FAILSAFE_PROCEDURE.gpsRescue },
+  })
+}
+
+/** T12a timeline (s): rescue switch on about 40 m out, off 2 s later in ATTAIN_ALT. */
+export const RESCUE_SWITCH_OFF_TEST = { on: 13.5, off: 15.5, duration: 20 }
+
+/** T12a: switching the rescue off ends it at once; the pilot has angle mode back. */
+export function buildFpvRescueSwitchOffTestModel() {
+  const t = RESCUE_SWITCH_OFF_TEST
+  const e = 0.05
+  const tests = () => {
+    const ctx = testsSheet()
+    const { s, from, check, upright } = ctx
+    const { is } = rescuePhases(ctx)
+    const active = from('rescue_active')
+    check('ActiveWhileOn', active, 1, 1, t.on + e, t.off - e)
+    check('ClimbingWhenOff', is(RESCUE_PHASE.attainAlt), 1, 1, t.on + e, t.off - e)
+    check('EndsAtOnce', active, 0, 0, t.off + e)
+    check('PhaseIdleAfter', from('rescue_phase'), RESCUE_PHASE.idle, RESCUE_PHASE.idle, t.off + e)
+    check('PilotHasAngleMode', from('fc_mode'), FC_MODE.angle, FC_MODE.angle, t.off + e)
+    check('StaysArmed', from('fc_armed'), 1, 1, 0.3)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T12a Rescue Switch Off',
+    description:
+      'Validation test for ending GPS Rescue by switch (docs/fpv-hud-gnss-test-plan.md, T12a): the rescue switch goes on about 40 m out at ' +
+      `${t.on} s and off at ${t.off} s, while it is still climbing. The rescue ends at once and the pilot flies in angle mode.`,
+    sticks: rescueFlyoutSticks(windows([t.on, t.off]), t.on),
+    duration: t.duration,
+    displays: [['RescuePhase', 'rescue_phase'], ['Mode', 'fc_mode'], ['Altitude', 'alt_est']],
+    tests,
+  })
+}
+
+/** T12b: a 25% roll stick for 1 s drifts the quad about 5 m east; the rescue starts at 12 s, inside min_start_dist. */
+export const RESCUE_TOO_CLOSE_TEST = { roll: [7, 8] as [number, number], on: 12, flyHomeSettleS: 7.5, duration: 55 }
+
+/** T12b: a too-close start climbs to max(10 m, current + 10 m), pitches out beyond 15 m, then returns and lands. */
+export function buildFpvRescueTooCloseTestModel() {
+  const t = RESCUE_TOO_CLOSE_TEST
+  const R = FC.rescue
+  const tests = () => {
+    const ctx = testsSheet()
+    const { s, h, from, expr, check, upright } = ctx
+    check('StartsTooClose', h.heldAt('DistanceAtSwitch', from('home_distance_m'), t.on), 0, R.minStartDistM - 0.01, t.on + 0.01)
+    const ret = expr('ReturnAltitudeM', `fmax(10.0, in(0) + ${R.initialClimbM}.0)`, [h.heldAt('AltitudeAtSwitch', from('alt_est'), t.on)])
+    const { is } = rescueReturnChecks(ctx, { on: t.on, duration: t.duration, returnAltM: ret, descentDistM: 0.5 * R.minStartDistM, flyHomeSettleS: t.flyHomeSettleS })
+    check('PitchesOutBeyondMinStart', h.heldWhen('DistanceOnRotate', from('home_distance_m'), is(RESCUE_PHASE.rotate)), R.minStartDistM, null, t.duration - 0.5)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T12b Rescue Too Close',
+    description:
+      'Validation test for a GPS Rescue started inside min_start_dist (docs/fpv-hud-gnss-test-plan.md, T12b): about 5 m from home at ' +
+      `${t.on} s, the rescue climbs to max(10 m, current + 10 m) while pitching 15° forward, turns home once beyond ` +
+      `${R.minStartDistM} m, starts its descent ${0.5 * R.minStartDistM} m out, lands near home and disarms on impact.`,
+    sticks: { ...rescueFlyoutSticks(windows([t.on, t.duration + 1]), t.on), roll: [[0, 0], [t.roll[0], 0], [t.roll[0] + 0.2, 0.25], [t.roll[1] + 0.2, 0.25], [t.roll[1] + 0.4, 0]] },
+    duration: t.duration,
+    displays: [['Position', 'pos_ned'], ['RescuePhase', 'rescue_phase'], ['Altitude', 'alt_est'], ['HomeDistance', 'home_distance_m']],
+    tests,
+  })
+}
+
+/** T13 timelines (s): satellites to 2 two seconds into FLY_HOME; LOWSATS needs 10 s of 1 Hz checks. */
+export const RESCUE_SANITY_TEST = {
+  on: 20, lowSats: 27, failBy: [35.5, 37] as [number, number], durationA: 60,
+  linkLost: 19, durationB: 40,
+  rearm: 1.5, holdOn: 4, onC: 6, durationC: 12,
+}
+
+/** T13a / T13b: satellites lost in FLY_HOME, with the rescue from the switch (DO_NOTHING, then ABORT) or from failsafe (ABORT). */
+function buildRescueLowSatsTestModel(linkLost: boolean) {
+  const t = RESCUE_SANITY_TEST
+  const P = RESCUE_PHASE
+  const duration = linkLost ? t.durationB : t.durationA
+  const tests = () => {
+    const ctx = testsSheet()
+    const { s, h, from, pick, expr, check, bit, upright } = ctx
+    const { is, first } = rescuePhases(ctx)
+    check('InFlyHomeAtSatelliteLoss', h.heldAt('PhaseAtLoss', from('rescue_phase'), t.lowSats), P.flyHome, P.flyHome, t.lowSats + 0.01)
+    check('RescueNotAvailable', bit('WarnRescueNA', from('fc_warnings'), FC_WARNING.rescueNA), 1, 1, t.lowSats + 3, t.failBy[0])
+    if (linkLost) {
+      check('NoDoNothingWithLinkLost', h.phaseVisited('DidNothing', from('rescue_phase'), P.doNothing), 0, 0)
+      check('AbortsOnLowSats', first(P.abort), t.failBy[0], t.failBy[1], t.failBy[1])
+      check('Disarmed', from('fc_armed'), 0, 0, t.failBy[1] + 0.05)
+    } else {
+      check('DoNothingOnLowSats', first(P.doNothing), t.failBy[0], t.failBy[1], t.failBy[1])
+      check('AbortAfter20s', expr('DoNothingDuration', 'in(1) - in(0)', [first(P.doNothing), first(P.abort)]), 19.98, 20.02, duration - 0.5)
+      // Level: the rescue's angles are 0 (the true attitude, 2 s after entry)
+      const levelGate = expr('DoNothingSettled', '(in(0) > 0.5 && in(2) - in(1) > 2.0) ? 1.0 : 0.0', [is(P.doNothing), first(P.doNothing), h.clock()])
+      const tiltDeg = expr('TiltDeg', `(in(0) > 0.5) ? fmax(fabs(in(1)), fabs(in(2))) * ${180 / Math.PI} : 0.0`,
+        [levelGate, pick('Roll', from('euler'), [0]), pick('Pitch', from('euler'), [1])])
+      check('LevelInDoNothing', tiltDeg, 0, RESCUE_SANITY_TEST_TILT_DEG)
+      check('DisarmedByAbort', from('fc_armed'), 0, 0, t.failBy[1] + 20.05)
+    }
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: linkLost ? 'FPV T13b Rescue Low Sats Failsafe' : 'FPV T13a Rescue Low Sats',
+    description:
+      `Validation test for the GPS Rescue LOWSATS check (docs/fpv-hud-gnss-test-plan.md, ${linkLost ? 'T13b' : 'T13a'}): ` +
+      (linkLost ? `the link is lost at ${t.linkLost} s (GPS-RESCUE procedure)` : `the rescue switch goes on at ${t.on} s`) +
+      `; satellites drop to 2 at ${t.lowSats} s, in FLY_HOME. After 10 s of 1 Hz checks the rescue fails with LOWSATS: ` +
+      (linkLost ? 'with the link lost the FS_ONLY policy aborts and disarms at once.' : 'the switch-started rescue does nothing (level, last throttle) for 20 s, then aborts and disarms.'),
+    sticks: rescueFlyoutSticks(linkLost ? [[0, 0]] : windows([t.on, duration + 1]), linkLost ? t.linkLost : t.on),
+    duration,
+    displays: [['Position', 'pos_ned'], ['RescuePhase', 'rescue_phase'], ['Warnings', 'fc_warnings'], ['Altitude', 'alt_est']],
+    tests,
+    conditions: {
+      gnssEnv: { satellites: step([[0, 14], [t.lowSats, 2]]) },
+      ...(linkLost ? { rcLinkValid: step([[0, 1], [t.linkLost, 0]]), failsafeProcedure: FAILSAFE_PROCEDURE.gpsRescue } : {}),
+    },
+  })
+}
+
+/** T13a's limit on roll and pitch (deg) once DO_NOTHING has levelled the quad. */
+export const RESCUE_SANITY_TEST_TILT_DEG = 5
+
+export function buildFpvRescueLowSatsTestModel() {
+  return buildRescueLowSatsTestModel(false)
+}
+
+export function buildFpvRescueLowSatsFailsafeTestModel() {
+  return buildRescueLowSatsTestModel(true)
+}
+
+/**
+ * T13c: re-armed with 7 satellites (no home), RESCUE OFF shows; the rescue
+ * switch then fails with NO_HOME_POINT and does nothing: Betaflight holds
+ * the autopilot's last throttle, here Alt Hold's while it was still settling
+ * (below hover), so the quad sinks and disarms on impact.
+ */
+export function buildFpvRescueNoHomeTestModel() {
+  const t = RESCUE_SANITY_TEST
+  const P = RESCUE_PHASE
+  const e = 0.05
+  const tests = () => {
+    const ctx = testsSheet()
+    const { s, h, from, check, bit } = ctx
+    const { first } = rescuePhases(ctx)
+    const off = bit('WarnRescueOff', from('fc_warnings'), FC_WARNING.rescueOff)
+    check('NoHomeOnReArm', from('home_valid'), 0, 0, t.rearm + e)
+    check('RescueOffAfterArming', off, 1, 1, t.rearm + e, t.rearm + 3 - e)
+    check('RescueOffClears', off, 0, 0, t.rearm + 3 + e)
+    check('DoNothingAtOnce', first(P.doNothing), t.onC - 0.001, t.onC + 0.02, t.onC + e)
+    check('NeverClimbs', h.phaseVisited('Climbed', from('rescue_phase'), P.attainAlt), 0, 0)
+    check('NeverAborts', h.phaseVisited('Aborted', from('rescue_phase'), P.abort), 0, 0)
+    check('DisarmedOnImpact', from('fc_armed'), 0, 0, t.durationC - 0.5)
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T13c Rescue No Home',
+    description:
+      'Validation test for GPS Rescue without a home (docs/fpv-hud-gnss-test-plan.md, T13c): armed with 14 satellites, disarmed, then ' +
+      `re-armed at ${t.rearm} s with 7 (no home; RESCUE OFF for 3 s). Alt Hold from ${t.holdOn} s; the rescue switch at ${t.onC} s fails ` +
+      'with NO_HOME_POINT and does nothing, holding the last autopilot throttle, so the quad sinks and disarms on impact.',
+    sticks: {
+      roll: [[0, 0]], pitch: [[0, 0]], yaw: [[0, 0]], aux: [[0, 1]],
+      arm: windows([0.25, 1.0], [t.rearm, t.durationC + 1]),
+      throttle: [[0, 0], [2.0, 0], [2.1, 0.6], [2.7, 0.6], [2.8, 0.42]],
+      hold: [[0, 0], [t.holdOn - 0.001, 0], [t.holdOn, 0.5]],
+      rescue: windows([t.onC, t.durationC + 1]),
+    },
+    duration: t.durationC,
+    displays: [['RescuePhase', 'rescue_phase'], ['Warnings', 'fc_warnings'], ['Altitude', 'alt_est']],
+    tests,
+    conditions: { gnssEnv: { satellites: step([[0, 14], [0.8, 7]]) } },
+  })
+}
+
+/**
+ * T14 timeline (s): rescue switch about 30 m out; a 25 m/s wind from the west
+ * (faster than the quad flies at the 45° rescue pitch limit, about 22 m/s)
+ * from FLY_HOME. 30 s without progress force-disables the mag and resets the
+ * count; 30 s more gives FLYAWAY.
+ */
+export const RESCUE_FLYAWAY_TEST = { on: 12.5, wind: [16.5, 17.5] as [number, number], windMs: 25, flyawayS: [58, 61] as [number, number], duration: 100 }
+
+/** T14: GPS Rescue fly-away into a wind it cannot beat. */
+export function buildFpvRescueFlyawayTestModel() {
+  const t = RESCUE_FLYAWAY_TEST
+  const P = RESCUE_PHASE
+  const tests = () => {
+    const ctx = testsSheet()
+    const { s, from, expr, check } = ctx
+    const { first } = rescuePhases(ctx)
+    check('FlyingHomeIntoWind', first(P.flyHome), t.on, t.wind[1], t.wind[1])
+    check('FlyawayAfter60s', expr('FlyHomeDuration', 'in(1) - in(0)', [first(P.flyHome), first(P.doNothing)]), t.flyawayS[0], t.flyawayS[1], t.duration - 0.5)
+    check('AbortAfter20s', expr('DoNothingDuration', 'in(1) - in(0)', [first(P.doNothing), first(P.abort)]), 19.98, 20.02, t.duration - 0.5)
+    check('Disarmed', from('fc_armed'), 0, 0, t.duration - 0.5)
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T14 Rescue Fly-away',
+    description:
+      'Validation test for the GPS Rescue fly-away check (docs/fpv-hud-gnss-test-plan.md, T14): the rescue switch at ' +
+      `${t.on} s; from FLY_HOME a ${t.windMs} m/s wind from the west carries the quad away faster than it can fly. After 30 s without ` +
+      'progress the magnetometer is force-disabled and the count restarts; 30 s later the rescue fails with FLYAWAY, does nothing ' +
+      'for 20 s, then aborts and disarms.',
+    sticks: rescueFlyoutSticks(windows([t.on, t.duration + 1]), t.on),
+    duration: t.duration,
+    displays: [['Position', 'pos_ned'], ['RescuePhase', 'rescue_phase'], ['HomeDistance', 'home_distance_m']],
+    tests,
+    conditions: { wind: { east: [[0, 0], [t.wind[0], 0], [t.wind[1], t.windMs]] } },
+  })
+}
+
 /** A test model renamed for the validation suite ("FPV Tnn …"). */
 const renamed = (model: { name: string; data: Record<string, unknown> }, name: string) => ({ ...model, name })
 
@@ -4056,10 +4888,19 @@ export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<s
     ['t07-arming-checks.json', buildFpvArmingChecksTestModel()],
     ['t08-failsafe-drop.json', buildFpvFailsafeDropTestModel()],
     ['t09-failsafe-auto-land.json', buildFpvAutoLandTestModel()],
+    ['t10-failsafe-rescue.json', buildFpvFailsafeRescueTestModel()],
+    ['t11-gps-rescue-switch.json', buildFpvRescueSwitchTestModel()],
+    ['t12a-rescue-switch-off.json', buildFpvRescueSwitchOffTestModel()],
+    ['t12b-rescue-too-close.json', buildFpvRescueTooCloseTestModel()],
+    ['t13a-rescue-low-sats.json', buildFpvRescueLowSatsTestModel()],
+    ['t13b-rescue-low-sats-failsafe.json', buildFpvRescueLowSatsFailsafeTestModel()],
+    ['t13c-rescue-no-home.json', buildFpvRescueNoHomeTestModel()],
+    ['t14-rescue-flyaway.json', buildFpvRescueFlyawayTestModel()],
     ['t16-altitude-hold.json', buildFpvAltHoldTestModel()],
     ['t17-position-hold.json', buildFpvPosHoldTestModel()],
     ['t18-position-hold-sanity.json', buildFpvPosHoldSanityTestModel()],
     ['t19-no-mag-heading.json', buildFpvNoMagHeadingTestModel()],
+    ['t20-no-mag-rescue.json', buildFpvNoMagRescueTestModel()],
     ['t21-altitude-estimator.json', buildFpvAltitudeEstimatorTestModel()],
     ['t22-wind.json', buildFpvWindTestModel()],
   ]

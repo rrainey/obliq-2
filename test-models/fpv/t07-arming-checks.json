@@ -4,7 +4,7 @@
     "version": "2.2",
     "metadata": {
       "created": "2026-10-21T00:00:00.000Z",
-      "description": "Validation test for arming (docs/fpv-hud-gnss-test-plan.md, T07): on the ground, arming is refused with the throttle up, with the rescue or hold switch on, and on the first arming with 7 satellites; it succeeds with 14 (home taken), and a re-arm with 7 succeeds without a home. A DROP failsafe disarms, and arming then needs the switch cycled. fc_warnings shows each reason."
+      "description": "Validation test for arming (docs/fpv-hud-gnss-test-plan.md, T07): on the ground, arming is refused with the throttle up, with the rescue or hold switch on, and on the first arming with 7 satellites; it succeeds with 14 (home taken), and a re-arm with 7 succeeds without a home (RESCUE OFF). A DROP failsafe disarms, and arming then needs the switch cycled. fc_warnings shows each reason."
     },
     "globalSettings": {
       "simulationTimeStep": 0.0005,
@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 49
+              "y": 55
             },
             "parameters": {
               "showName": true,
@@ -559,7 +559,9 @@
                 "vario_est",
                 "gps_heading_ok",
                 "alt_hold_active",
-                "pos_hold_active"
+                "pos_hold_active",
+                "rescue_active",
+                "rescue_phase"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -575,7 +577,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 368
+              "y": 391
             },
             "parameters": {
               "showName": true,
@@ -1302,7 +1304,7 @@
             "name": "From_fc_armed",
             "position": {
               "x": 104,
-              "y": -136
+              "y": -208
             },
             "parameters": {
               "showName": true,
@@ -1315,7 +1317,7 @@
             "name": "From_fc_warnings",
             "position": {
               "x": 100,
-              "y": 1160
+              "y": 1172
             },
             "parameters": {
               "showName": true,
@@ -1328,7 +1330,7 @@
             "name": "From_home_valid",
             "position": {
               "x": 100,
-              "y": 584
+              "y": 512
             },
             "parameters": {
               "showName": true,
@@ -1341,7 +1343,7 @@
             "name": "From_failsafe_stage",
             "position": {
               "x": 100,
-              "y": -784
+              "y": -856
             },
             "parameters": {
               "showName": true,
@@ -1354,7 +1356,7 @@
             "name": "RefusedWithThrottleUp",
             "position": {
               "x": 680,
-              "y": 368
+              "y": 296
             },
             "parameters": {
               "showName": true,
@@ -1372,7 +1374,7 @@
             "name": "WarnThrottle",
             "position": {
               "x": 304,
-              "y": 1520
+              "y": 1592
             },
             "parameters": {
               "showName": true,
@@ -1386,7 +1388,7 @@
             "name": "ThrottleWarning",
             "position": {
               "x": 680,
-              "y": 1520
+              "y": 1592
             },
             "parameters": {
               "showName": true,
@@ -1404,7 +1406,7 @@
             "name": "RefusedWithRescueSwitch",
             "position": {
               "x": 680,
-              "y": 224
+              "y": 152
             },
             "parameters": {
               "showName": true,
@@ -1422,7 +1424,7 @@
             "name": "WarnModeSwitch",
             "position": {
               "x": 301,
-              "y": 1160
+              "y": 1088
             },
             "parameters": {
               "showName": true,
@@ -1436,7 +1438,7 @@
             "name": "RescueSwitchWarning",
             "position": {
               "x": 680,
-              "y": 1232
+              "y": 1160
             },
             "parameters": {
               "showName": true,
@@ -1454,7 +1456,7 @@
             "name": "RefusedWithHoldSwitch",
             "position": {
               "x": 680,
-              "y": 80
+              "y": 8
             },
             "parameters": {
               "showName": true,
@@ -1472,7 +1474,7 @@
             "name": "HoldSwitchWarning",
             "position": {
               "x": 680,
-              "y": 1088
+              "y": 1016
             },
             "parameters": {
               "showName": true,
@@ -1490,7 +1492,7 @@
             "name": "RefusedFirstArmingWithoutGps",
             "position": {
               "x": 680,
-              "y": -64
+              "y": -136
             },
             "parameters": {
               "showName": true,
@@ -1508,7 +1510,7 @@
             "name": "WarnGps",
             "position": {
               "x": 301,
-              "y": 944
+              "y": 872
             },
             "parameters": {
               "showName": true,
@@ -1522,7 +1524,7 @@
             "name": "GpsWarning",
             "position": {
               "x": 680,
-              "y": 944
+              "y": 872
             },
             "parameters": {
               "showName": true,
@@ -1540,7 +1542,7 @@
             "name": "ArmsWithGps",
             "position": {
               "x": 680,
-              "y": -640
+              "y": -712
             },
             "parameters": {
               "showName": true,
@@ -1558,7 +1560,7 @@
             "name": "HomeOnArming",
             "position": {
               "x": 680,
-              "y": 512
+              "y": 440
             },
             "parameters": {
               "showName": true,
@@ -1576,7 +1578,7 @@
             "name": "ReArmsWithoutGps",
             "position": {
               "x": 680,
-              "y": -208
+              "y": -280
             },
             "parameters": {
               "showName": true,
@@ -1594,7 +1596,7 @@
             "name": "NoHomeOnReArmWithoutGps",
             "position": {
               "x": 680,
-              "y": 656
+              "y": 584
             },
             "parameters": {
               "showName": true,
@@ -1607,12 +1609,44 @@
             }
           },
           {
+            "id": "tests__WarnRescueOff",
+            "type": "evaluate",
+            "name": "WarnRescueOff",
+            "position": {
+              "x": 304,
+              "y": 1304
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "fmod(floor(in(0) / 2.0 + 1e-9), 2.0)"
+            }
+          },
+          {
+            "id": "tests__RescueOffWithoutHome",
+            "type": "assert",
+            "name": "RescueOffWithoutHome",
+            "position": {
+              "x": 680,
+              "y": 1304
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 1,
+              "upper": 1,
+              "checkFrom": 4.45,
+              "checkUntil": 6.45,
+              "onFailure": "record"
+            }
+          },
+          {
             "id": "tests__DroppedInStage2",
             "type": "assert",
             "name": "DroppedInStage2",
             "position": {
               "x": 680,
-              "y": -496
+              "y": -568
             },
             "parameters": {
               "showName": true,
@@ -1630,7 +1664,7 @@
             "name": "WarnRxLoss",
             "position": {
               "x": 301,
-              "y": 1376
+              "y": 1448
             },
             "parameters": {
               "showName": true,
@@ -1644,7 +1678,7 @@
             "name": "RxLossWarning",
             "position": {
               "x": 680,
-              "y": 1376
+              "y": 1448
             },
             "parameters": {
               "showName": true,
@@ -1662,7 +1696,7 @@
             "name": "WarnCycle",
             "position": {
               "x": 300,
-              "y": 800
+              "y": 728
             },
             "parameters": {
               "showName": true,
@@ -1676,7 +1710,7 @@
             "name": "SwitchCycleWarning",
             "position": {
               "x": 680,
-              "y": 800
+              "y": 728
             },
             "parameters": {
               "showName": true,
@@ -1694,7 +1728,7 @@
             "name": "FailsafeEndsAfterRecovery",
             "position": {
               "x": 680,
-              "y": -784
+              "y": -856
             },
             "parameters": {
               "showName": true,
@@ -1712,7 +1746,7 @@
             "name": "ReArmsAfterSwitchCycle",
             "position": {
               "x": 680,
-              "y": -352
+              "y": -424
             },
             "parameters": {
               "showName": true,
@@ -1768,7 +1802,10 @@
             "sourceBlockId": "tests__From_fc_warnings",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__WarnModeSwitch",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -0.5
+            }
           },
           {
             "id": "w_6_tests__WarnModeSwitch_tests__RescueSwitchWarning",
@@ -1868,7 +1905,24 @@
             }
           },
           {
-            "id": "w_16_tests__From_fc_armed_tests__DroppedInStage2",
+            "id": "w_16_tests__From_fc_warnings_tests__WarnRescueOff",
+            "sourceBlockId": "tests__From_fc_warnings",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__WarnRescueOff",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -2
+            }
+          },
+          {
+            "id": "w_17_tests__WarnRescueOff_tests__RescueOffWithoutHome",
+            "sourceBlockId": "tests__WarnRescueOff",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RescueOffWithoutHome",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_18_tests__From_fc_armed_tests__DroppedInStage2",
             "sourceBlockId": "tests__From_fc_armed",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DroppedInStage2",
@@ -1878,7 +1932,7 @@
             }
           },
           {
-            "id": "w_17_tests__From_fc_warnings_tests__WarnRxLoss",
+            "id": "w_19_tests__From_fc_warnings_tests__WarnRxLoss",
             "sourceBlockId": "tests__From_fc_warnings",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__WarnRxLoss",
@@ -1888,14 +1942,14 @@
             }
           },
           {
-            "id": "w_18_tests__WarnRxLoss_tests__RxLossWarning",
+            "id": "w_20_tests__WarnRxLoss_tests__RxLossWarning",
             "sourceBlockId": "tests__WarnRxLoss",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__RxLossWarning",
             "targetPortIndex": 0
           },
           {
-            "id": "w_19_tests__From_fc_warnings_tests__WarnCycle",
+            "id": "w_21_tests__From_fc_warnings_tests__WarnCycle",
             "sourceBlockId": "tests__From_fc_warnings",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__WarnCycle",
@@ -1905,21 +1959,21 @@
             }
           },
           {
-            "id": "w_20_tests__WarnCycle_tests__SwitchCycleWarning",
+            "id": "w_22_tests__WarnCycle_tests__SwitchCycleWarning",
             "sourceBlockId": "tests__WarnCycle",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SwitchCycleWarning",
             "targetPortIndex": 0
           },
           {
-            "id": "w_21_tests__From_failsafe_stage_tests__FailsafeEndsAfterRecovery",
+            "id": "w_23_tests__From_failsafe_stage_tests__FailsafeEndsAfterRecovery",
             "sourceBlockId": "tests__From_failsafe_stage",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FailsafeEndsAfterRecovery",
             "targetPortIndex": 0
           },
           {
-            "id": "w_22_tests__From_fc_armed_tests__ReArmsAfterSwitchCycle",
+            "id": "w_24_tests__From_fc_armed_tests__ReArmsAfterSwitchCycle",
             "sourceBlockId": "tests__From_fc_armed",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReArmsAfterSwitchCycle",
@@ -1931,7 +1985,7 @@
         ],
         "extents": {
           "width": 980,
-          "height": 1720
+          "height": 1792
         }
       }
     ]
