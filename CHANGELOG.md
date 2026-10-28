@@ -17,9 +17,20 @@
   - `battery_mah_drawn`.
 
   The Demo Flight's Tests sheet checks them, with 19 Asserts.
+- **FPV Vehicle: 8-channel sticks, failsafe, latched arming and wind.**
+  - `sticks` has 8 channels; AUX3 is a GPS Rescue switch and AUX4 a 3-position hold switch.
+  - New inputs:
+    - `rc_link_valid`;
+    - `failsafe_procedure` (0 drop, 1 auto-land, 2 GPS rescue);
+    - `wind_ned`, which acts through the frame's drag.
+  - Failsafe follows Betaflight:
+    - stage 1 holds the last sticks for 0.3 s, then centres them with the throttle low, and recovers the moment the link returns;
+    - stage 2 runs the procedure 1.5 s after the loss. For now every procedure drops; auto-land and GPS rescue come next.
+  - Arming follows Betaflight. It arms on the switch's rising edge, and is refused with the throttle up, with a rescue or hold switch on, on the first arming without a 3D fix and 8 satellites, or without a link. After a forced disarm the switch must be cycled.
+  - New outputs: `fc_mode` (the flight-mode text), `fc_warnings` (bits) and `failsafe_stage`.
 - **Fixed: a Demux fed by a subsystem named "Conditions" (or anything containing "condition") split its vector wrongly.** It copied only the first element and set the rest to 0, with no warning. A guard for mislabelled relational outputs matched the name; it now matches "condition" only as a whole name segment. Generated code for every stored model is unchanged.
 - **Fixed: with ideal sensors the FPV attitude estimate became NaN** when the accelerometer read zero (free fall at the start of an airborne run). A zero vector now gives no correction instead of 0/0.
-- **FPV validation suite.** `test-models/fpv/` holds test models run with `npm run obliq:test -- test-models/fpv/t*.json`, with its own copy of the vehicle. T03–T05 check the GNSS receiver's error statistics, fix rules and course, and T06 checks grid convergence. T00 checks the Tests-sheet helpers that later test models use: event latches, first-event times, running extremes, and windowed mean square and correlation.
+- **FPV validation suite.** `test-models/fpv/` holds test models run with `npm run obliq:test -- test-models/fpv/t*.json`, with its own copy of the vehicle. T03–T05 check the GNSS receiver's error statistics, fix rules and course, T06 grid convergence, T07 arming, T08 failsafe and T22 wind. T00 checks the Tests-sheet helpers that later test models use: event latches, first-event times, running extremes, and windowed mean square and correlation.
 
 ## What's New in 3.4.0
 

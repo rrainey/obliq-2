@@ -75,8 +75,8 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | **T04 GNSS Conditions** (Shipped) | 30 s | Hover; satellites 14 → 3 (t = 8) → 2 (t = 14) → 14 (t = 20) | Fix 3 / 2 / 0 / 3 in their windows; altitude held and vd = 0 while 2D; all outputs held while 0; `firstTime(fix == 3 after t = 20)` ∈ [20.95, 21.05]; pDOP = √(HDOP² + VDOP²); `home_valid` stays 1 throughout |
 | **T05 GNSS Course** | 12 s | Take-off and hover, then forward flight in angle mode, reaching 4–10 m/s toward grid north | Track valid = 0 and track held in the hover; in flight, valid = 1 and the true track within 3° of the truth (grid track + γ); magnetic = true − 2.48°; ground speed within 0.5 m/s of truth (the 10 Hz hold lags an accelerating vehicle by up to 0.25 m/s) |
 | **T06 Grid Convergence** | 10 s | Angle-mode take-off, then a yaw turn of about 90°; γ 1.2425, then γ 0 from t = 6 | `heading_deg` = estimate yaw + γ within 0.01° (catches a missing or wrong-signed γ); after the change, heading = estimate yaw within 0.01°; `euler_est` yaw within 3° of truth yaw (the estimator's error during the turn); the turn exceeds 60° |
-| **T07 Arming Checks** | 20 s | Arm attempts in this order: with throttle up; with the rescue switch on; with the hold switch on; first arming with 7 satellites; with 14 satellites (succeeds); disarm; 7 satellites, re-arm (succeeds, no home); ABORT forced by an impact, then arming without cycling the switch | Each refused attempt: `fc_armed` stays 0 and its `fc_warnings` bit is set; the 14-satellite arming succeeds; the re-arm succeeds with `home_valid` = 0 and `RESCUE OFF` shown for 3 s; after ABORT, arming is refused until the switch is cycled |
-| **T08 Failsafe Drop** | 15 s | Hover at 10 m; procedure DROP. Link lost at t = 5 for 1 s (recovers in stage 1); lost again at t = 9 | First loss: sticks centred after 0.3 s, control back immediately, no stage 2; second loss: `failsafe_stage` = 2 at t = 10.5 ± 0.05; disarmed at stage 2 |
+| **T07 Arming Checks** | 9 s | On the ground, arm attempts in this order: with throttle up; with the rescue switch on; with the hold switch at mid; first arming with 7 satellites; with 14 (succeeds); disarm; 7 satellites, re-arm (succeeds, no home); a DROP failsafe disarms; arming without cycling the switch; switch cycled | Each refused attempt: `fc_armed` stays 0 and its `fc_warnings` bit is set (throttle, mode switch, GPS); the 14-satellite arming succeeds with a home; the re-arm succeeds with `home_valid` = 0; stage 2 disarms, with the RX-loss bit set while the link is lost; then the cycle-switch bit, until the switch is cycled and it re-arms. Phase 12 adds `RESCUE OFF` after the no-home re-arm, and ABORT. |
+| **T08 Failsafe Drop** | 11 s | Climb, procedure DROP; link lost at t = 5 for 1 s (recovers in stage 1); lost again at t = 9 | First loss: stage 1 and `fc_mode` !FS!; motors near hover for the 0.3 s hold, then throttle low; stage 0 the moment the link returns, still armed; second loss: the first stage-2 sample within 2 ms of 10.5 s; disarmed from then |
 | **T09 Failsafe Auto-Land** | 75 s | Hover at 15 m with 3 m/s wind; procedure AUTO-LAND; link lost at t = 5 | Stage 2 at 6.5 s; mode ALTH + POSH; descent rate within the reference profile ±20%; horizontal drift < 5 m; on the ground before 60 s; disarmed by `failsafe_landing_time` |
 | **T10 Failsafe Rescue** (Shipped) | 90 s | Fly out to about 80 m east at 20 m; procedure GPS-RESCUE; link lost at t = 25; link back at t = 40 with sticks centred; sticks pushed 40% at t = 45 | Stage 2 at 26.5 s, rescue starts; the link returning with centred sticks does **not** end it; stick movement > 30% does; between those times the phases follow the T11 sequence |
 | **T11 GPS Rescue Switch** (Shipped) | 80 s | Fly out to about 80 m east at 20 m (maximum 22 m); rescue switch on at t = 25; left on | Phases visited in order (INITIALIZE, ATTAIN_ALT, ROTATE, FLY_HOME, DESCENT, LANDING); return altitude = maximum altitude + 10 m ± 1 m; heading within 30° of the home bearing at the switch to FLY_HOME; ground speed 7.5 ± 1 m/s in steady FLY_HOME; DESCENT begins within 1 m of descentDistance; touchdown within 5 m of home; disarmed by impact; mode text RESC throughout |
@@ -90,7 +90,7 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | **T19 No-Mag Heading** (vehicle without mag) | 60 s | Arm; hover; pitch forward to 3 m/s for 20 s on a straight course; Pos Hold before and after | `heading_deg` snaps to the course when ground speed first passes 1 m/s (within 5°); yaw then converges within 5° of truth; Pos Hold shows `POSHOLD FAIL` before GPS heading is established and holds after |
 | **T20 No-Mag Rescue** (vehicle without mag) | 80 s | As T11 without a mag | Same sequence and landing tolerance as T11 |
 | **T21 Altitude Estimator** | 60 s | Climb and hover profile; pDOP schedule 1.5 → 6 → 1.5; fix lost from t = 40 to 50 | `alt_est` = 0 at the arming sample; tracks height above the arming point within 0.5 m at pDOP 1.5 and within 1.5 m at pDOP 6; follows the baro alone while the fix is lost (GPS weight 0); `vario_est` within 0.3 m/s of −vd in steady climb |
-| **T22 Wind** | 15 s | Acro-mode level hover (no position control); wind 3 m/s north from t = 3 | Northward drift begins after the wind starts; steady drift speed approaches the wind speed as drag balances |
+| **T22 Wind** | 15 s | Angle-mode hover after a climb (no position control); wind 3 m/s north from t = 3 | North velocity within ±0.5 m/s before the wind; from t = 13, within ±15% of the wind speed. Drag balances at the wind's speed; the margin covers the hover's drift of about 0.25 m/s from the estimator's tilt error. |
 | **T23 OSD Outputs** | 20 s | Arm, angle, acro with airmode, hold, rescue, failsafe, in sequence | `fc_mode` follows the priority order (!FS! > RESC > POSH > ALTH > ANGL > AIR > ACRO); `fc_airmode` latches at 25% throttle; `battery_mah_drawn` = (1 − SOC) × 1300; `RESCUE N/A` after 2 s with fewer than 4 satellites while armed with a home |
 
 ## 4. Traceability matrix
@@ -123,8 +123,9 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | F22 | 8-channel sticks and mode switches | T07, T11, T16, T17 | — | — |
 | F23 | Arming latch and blocks | T07 | — | — |
 | F24 | Failsafe stage 1 and instant recovery | T08 | — | — |
+| F24a | Throttle-low disarm on loss (DROP, AUTO-LAND only) | — | `fpv-failsafe` | — |
 | F25 | `failsafe_procedure` input: DROP, AUTO-LAND, GPS-RESCUE | T08, T09, T10 | — | — |
-| F26 | Stage-2 recovery needs link and stick movement | T10 | — | — |
+| F26 | Stage-2 recovery needs link and stick movement | T10 | `fpv-failsafe`: DROP needs only 0.5 s of link; AUTO-LAND also a stick past 30% | — |
 | F27 | `rc_link_valid` input | T08–T10, T13 | — | — |
 | F28 | Wind input | T22, T09, T14, T17 | — | — |
 | F29 | Altitude blend, trust and zero at arming | T21 | `fpv-estimators` hand computation | — |
@@ -169,7 +170,7 @@ Each implementation phase writes the tests for its features, and the phase is do
 | 2 | T06, L2 for F02 and F04 | T06 (done) |
 | 3 | T03, T04, T05, L2 for F05, F08 and F15 | T03–T05 (done) |
 | 4 | T01 additions, F16–F19, and `fpv-osd` (Level 2: flags against the sticks, home only at arming with 8+ satellites, cleared and re-taken, distance and bearing on each fix and against true geometry) | T01 (done) |
-| 8 | T07, T08, T22, and the inputs used by T09/T10 | T07, T08, T22 |
+| 8 | T07, T08, T22, the inputs used by T09/T10, and `fpv-failsafe` (Level 2: the throttle-low disarm, and stage-2 recovery by procedure) | T07, T08, T22 (done) |
 | 9 | T21, T19 (heading parts), the no-mag vehicle, L2 for F29 and F35 | T21, T19 (first part) |
 | 10 | T16, T09 | T16, T09 |
 | 11 | T17, T18, T19 (Pos Hold parts) | T17–T19 |

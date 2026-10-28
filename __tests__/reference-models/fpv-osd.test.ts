@@ -80,20 +80,33 @@ describe('FPV flight-controller OSD outputs', () => {
     expect(rows.slice(0, first).every(r => r.armed === 0 || r.sticks[3]! <= FC.airmodeStartThrottle + 0.01)).toBe(true)
   })
 
+  /** Hover, disarm at 2.0 s with the throttle closed, re-arm at 2.5 s, throttle back up at 2.6 s. */
+  const REARM: StickProfile = {
+    ...HOVER_STICKS,
+    throttle: [...HOVER_STICKS.throttle.filter(([t]) => t < 2.0), [2.0, 0], [2.6, 0], [2.7, HOVER_STICKS.throttle[HOVER_STICKS.throttle.length - 1]![1]]],
+    arm: [[0, 0], [0.25, 0], [0.251, 1], [2.0, 1], [2.001, 0], [2.5, 0], [2.501, 1]],
+  }
+
   test('home: taken on the arming sample with 8+ satellites, cleared on disarm, re-taken on re-arm', () => {
-    const sticks: StickProfile = { ...HOVER_STICKS, arm: [[0, 0], [0.25, 0], [0.251, 1], [2.0, 1], [2.001, 0], [2.5, 0], [2.501, 1]] }
-    const rows = run(sticks, 3)
+    const rows = run(REARM, 3)
     for (const r of rows) expect(r.homeValid).toBe(r.armed)
-    expect(rows.filter(r => r.armed === 0 && r.t > 2.1 && r.t < 2.4).every(r => r.dist === 0 && r.bearing === 0)).toBe(true)
+    expect(rows.find(r => r.t > 2.55)!.armed).toBe(1)
+    expect(rows.find(r => r.t > 2.55)!.homeValid).toBe(1)
+    expect(rows.filter(r => r.t > 2.1 && r.t < 2.4).every(r => r.armed === 0 && r.dist === 0 && r.bearing === 0)).toBe(true)
   })
 
-  test('home: arming with 7 satellites gives no home for the flight, even after the count rises', () => {
-    const conditions: ConditionsProfile = { gnssEnv: { satellites: [[0, 7], [1.0, 7], [1.001, 14]] } }
-    const rows = run(HOVER_STICKS, 3, conditions)
-    expect(armTime(rows)).toBeLessThan(1)
-    expect(rows.every(r => r.homeValid === 0 && r.dist === 0)).toBe(true)
-    // With FC.homeMinSats = 8 the same flight does take home
+  test('home: a re-arm with 7 satellites gives no home for that flight, even after the count rises', () => {
+    // The first arming needs 8+ satellites (the GPS arming check); a re-arm does not
+    const conditions: ConditionsProfile = { gnssEnv: { satellites: [[0, 14], [2.2, 14], [2.201, 7], [2.8, 7], [2.801, 14]] } }
+    const rows = run(REARM, 3.5, conditions)
+    expect(rows.find(r => r.t > 2.55)!.armed).toBe(1)
+    expect(rows.filter(r => r.t > 2.55).every(r => r.homeValid === 0 && r.dist === 0)).toBe(true)
     expect(FC.homeMinSats).toBe(8)
+  })
+
+  test('arming: the first arming is refused with fewer than 8 satellites', () => {
+    const rows = run(HOVER_STICKS, 1, { gnssEnv: { satellites: 7 } })
+    expect(rows.every(r => r.armed === 0 && r.homeValid === 0)).toBe(true)
     expect(run(HOVER_STICKS, 1, { gnssEnv: { satellites: 8 } }).some(r => r.homeValid === 1)).toBe(true)
   })
 

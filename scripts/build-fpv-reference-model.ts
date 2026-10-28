@@ -96,7 +96,42 @@ export const FC = {
   airmodeStartThrottle: 0.25,
   /** Satellites needed to take home at arming (Betaflight gps_rescue_min_sats). */
   homeMinSats: 8,
+  /** Throttle below this is "low" for arming (Betaflight min_check 1050 µs). */
+  minCheck: 0.05,
+  /**
+   * The GPS arming check (rescue is always configured: AUX3 is a GPS RESCUE
+   * mode range) is skipped when true (gps_rescue_allow_arming_without_fix).
+   */
+  allowArmingWithoutFix: false,
+  /** Failsafe, after Betaflight (docs/fpv-betaflight-gnss-spec.md §2.1). */
+  failsafe: {
+    /** s invalid channels hold their last value before going to failsafe values */
+    holdS: 0.3,
+    /** s from link loss to stage 2 (failsafe_delay) */
+    delayS: 1.5,
+    /** s of valid link needed to recover (failsafe_recovery_delay) */
+    recoveryS: 0.5,
+    /** roll/pitch/yaw deflection that ends a stage-2 procedure after recovery (failsafe_stick_threshold) */
+    stickThreshold: 0.3,
+    /** s of low throttle before a loss after which DROP and AUTO-LAND disarm at once (failsafe_throttle_low_delay) */
+    throttleLowDelayS: 10,
+  },
 }
+
+/** fc_warnings bits (flags the OSD shows; arming bits only while disarmed). */
+export const FC_WARNING = {
+  rescueNA: 1,
+  rescueOff: 2,
+  posHoldFail: 4,
+  armThrottle: 8,
+  armModeSwitch: 16,
+  armGps: 32,
+  armRxLoss: 64,
+  armSwitchCycle: 128,
+}
+
+/** fc_mode codes, in Betaflight's flight-mode text priority (higher wins). */
+export const FC_MODE = { acro: 0, air: 1, angle: 2, altHold: 4, posHold: 5, rescue: 6, failsafe: 7 }
 
 /**
  * Prairie Creek Park, Texas. The 1 km terrain database is centered here.
@@ -316,6 +351,10 @@ export interface StickProfile {
   aux?: Array<[number, number]>
   /** AUX2 arm switch: above 0.5 is armed; default armed from the start. */
   arm?: Array<[number, number]>
+  /** AUX3 GPS Rescue switch: above 0.5 is on; default off. */
+  rescue?: Array<[number, number]>
+  /** AUX4 hold switch (3-position): below 0.25 off, 0.25–0.75 Alt Hold, above 0.75 Alt + Pos Hold; default off. */
+  hold?: Array<[number, number]>
 }
 
 /** A piecewise-linear schedule ([time s, value] pairs), or a constant. */
@@ -340,13 +379,25 @@ export interface ConditionsProfile {
   gnssEnv?: GnssEnvProfile
   /** Grid convergence γ (deg); default LOCATION.gridConvergenceDeg */
   gridConvergenceDeg?: Schedule
+  /** Radio link valid (1) or lost (0); default 1 */
+  rcLinkValid?: Schedule
+  /** Failsafe stage-2 procedure: 0 DROP, 1 AUTO-LAND, 2 GPS-RESCUE (this model's codes); default 2 */
+  failsafeProcedure?: Schedule
+  /** Wind, grid NED (m/s, the air's velocity); default calm */
+  wind?: { north?: Schedule; east?: Schedule; down?: Schedule }
 }
+
+/** Failsafe procedure codes for the failsafe_procedure input. */
+export const FAILSAFE_PROCEDURE = { drop: 0, autoLand: 1, gpsRescue: 2 }
 
 /** The vehicle's Input Ports, in port order, with their types. */
 export const VEHICLE_INPUTS: Array<[string, string]> = [
-  ['sticks', 'double[6]'],
+  ['sticks', 'double[8]'],
   ['gnss_env', 'double[4]'],
   ['grid_convergence_deg', 'double'],
+  ['rc_link_valid', 'double'],
+  ['failsafe_procedure', 'double'],
+  ['wind_ned', 'double[3]'],
 ]
 
 /**
@@ -571,7 +622,7 @@ const MOTOR_SIZE = { width: 140, height: 80 }
 const FRAME_SIZE = { width: 160, height: 260 }
 const FC_SIZE = { width: 220, height: 180 }
 const SENSORS_SIZE = { width: 170, height: 150 }
-const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'altitude_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg']
+const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'altitude_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage']
 
 // ---------------------------------------------------------------------------
 // Motor / ESC / propeller (one definition, referenced by the other three)
@@ -674,6 +725,7 @@ function buildFrameSheet(
   const { mass, inertia, gravity, rotorXY, rotorYawSign, torqueToThrust, linearDrag } = FPV
   const T = s.input('thrust', 'double[4]')
   const rotorAccel = s.input('rotor_accel', 'double[4]')
+  const wind = s.input('wind_ned', 'double[3]')
 
   // Rotor forces and moments from the four thrusts (allocation matrices)
   const Bf = s.constant('ThrustDirection', [[0, 0, 0, 0], [0, 0, 0, 0], [-1, -1, -1, -1]], 'double[3][4]')
@@ -713,11 +765,15 @@ function buildFrameSheet(
   const Cnb = s.add('transpose', 'C_nb')
   s.wire(Cbn, Cnb)
 
-  // Translation: body-axis linear drag, rotate to NED, add gravity
+  // Translation: body-axis linear drag on the velocity through the air
+  // (ground velocity minus wind), rotate to NED, add gravity
   const vNed = s.add('integrator', 'v_ned', { initialValue: [0, 0, 0] })
+  const vAir = s.add('sum', 'v_air', { signs: '+-', numInputs: 2 })
+  s.wire(vNed, vAir, 0)
+  s.wire(wind, vAir, 1)
   const vBody = s.add('matrix_multiply', 'v_body')
   s.wire(Cbn, vBody, 0)
-  s.wire(vNed, vBody, 1)
+  s.wire(vAir, vBody, 1)
   const kd = s.constant('DragCoeff', linearDrag.map(k => -k), 'double[3]')
   const fDrag = s.add('multiply', 'DragForce', { numInputs: 2 })
   s.wire(vBody, fDrag, 0)
@@ -851,8 +907,8 @@ function buildFrameSheet(
 function buildPilotSheet(sticks: StickProfile): SheetBuilder {
   const s = new SheetBuilder('pilot', 'Pilot')
   const clock = s.add('clock', 'Time')
-  const mux = s.add('mux', 'Sticks', { rows: 6, cols: 1, baseType: 'double', outputType: 'double[6]' })
-  const axes: Array<[keyof StickProfile, string]> = [['roll', 'RollStick'], ['pitch', 'PitchStick'], ['yaw', 'YawStick'], ['throttle', 'ThrottleStick'], ['aux', 'AngleModeSwitch'], ['arm', 'ArmSwitch']]
+  const mux = s.add('mux', 'Sticks', { rows: 8, cols: 1, baseType: 'double', outputType: 'double[8]' })
+  const axes: Array<[keyof StickProfile, string]> = [['roll', 'RollStick'], ['pitch', 'PitchStick'], ['yaw', 'YawStick'], ['throttle', 'ThrottleStick'], ['aux', 'AngleModeSwitch'], ['arm', 'ArmSwitch'], ['rescue', 'RescueSwitch'], ['hold', 'HoldSwitch']]
   axes.forEach(([axis, name], i) => {
     const raw = sticks[axis] ?? [[0, axis === 'arm' ? 1 : 0]]
     const pts = raw.length > 1 ? raw : [raw[0]!, [raw[0]![0] + 1, raw[0]![1]] as [number, number]]
@@ -864,7 +920,7 @@ function buildPilotSheet(sticks: StickProfile): SheetBuilder {
     s.wire(clock, lut)
     s.wire(lut, mux, i)
   })
-  s.output('sticks', mux, 'double[6]')
+  s.output('sticks', mux, 'double[8]')
   return s
 }
 
@@ -894,6 +950,11 @@ function buildConditionsSheet(c: ConditionsProfile = {}): SheetBuilder {
   s.output('gnss_env', mux, 'double[4]')
   const gamma = scheduled(s, clock, 'GridConvergence', c.gridConvergenceDeg ?? LOCATION.gridConvergenceDeg)
   s.output('grid_convergence_deg', gamma, 'double')
+  s.output('rc_link_valid', scheduled(s, clock, 'RcLinkValid', c.rcLinkValid ?? 1), 'double')
+  s.output('failsafe_procedure', scheduled(s, clock, 'FailsafeProcedure', c.failsafeProcedure ?? FAILSAFE_PROCEDURE.gpsRescue), 'double')
+  const wind = s.add('mux', 'Wind', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+  ;(['north', 'east', 'down'] as const).forEach((axis, k) => s.wire(scheduled(s, clock, `Wind${axis[0]!.toUpperCase()}${axis.slice(1)}`, c.wind?.[axis] ?? 0), wind, k))
+  s.output('wind_ned', wind, 'double[3]')
   return s
 }
 
@@ -1419,8 +1480,8 @@ const perAxis = (gains: number[], scale: number) => gains.map(g => g * scale)
 
 function buildRatesSheet(): SheetBuilder {
   const s = new SheetBuilder('rates', 'Rates')
-  const sticks = s.input('sticks', 'double[6]')
-  const split = s.add('demux', 'StickSplit', { outputCount: 6, inputDimensions: [6] })
+  const sticks = s.input('sticks', 'double[8]')
+  const split = s.add('demux', 'StickSplit', { outputCount: 8, inputDimensions: [8] })
   s.wire(sticks, split)
   const setpoint = s.add('mux', 'Setpoint', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
   ;['Roll', 'Pitch', 'Yaw'].forEach((axis, i) => {
@@ -1444,10 +1505,10 @@ function buildRatesSheet(): SheetBuilder {
  */
 function buildAngleModeSheet(): SheetBuilder {
   const s = new SheetBuilder('angle', 'AngleMode')
-  const sticks = s.input('sticks', 'double[6]')
+  const sticks = s.input('sticks', 'double[8]')
   const euler = s.input('euler_est', 'double[3]')
   const acro = s.input('acro_setpoint', 'double[3]')
-  const split = s.add('demux', 'StickSplit', { outputCount: 6, inputDimensions: [6] })
+  const split = s.add('demux', 'StickSplit', { outputCount: 8, inputDimensions: [8] })
   s.wire(sticks, split)
   const est = s.add('demux', 'AttitudeSplit', { outputCount: 3, inputDimensions: [3] })
   s.wire(euler, est)
@@ -1610,17 +1671,172 @@ function buildMixerSheet(): SheetBuilder {
 }
 
 /**
- * Arming, after Betaflight: disarmed stops the motors; armed runs them at
- * idle. Airmode, and with it the I-term, starts once throttle first exceeds
- * airmodeStartThrottle after arming, and stays on until disarmed.
+ * Failsafe, after Betaflight (docs/fpv-betaflight-gnss-spec.md §2.1). On link
+ * loss the last sticks hold for holdS, then roll/pitch/yaw centre and throttle
+ * goes low with the AUX switches held (stage 1); delayS after the loss stage 2
+ * runs the failsafe procedure. Stage 1 ends the moment the link returns;
+ * stage 2 needs recoveryS of valid link and, except after DROP, a stick moved
+ * beyond stickThreshold. Phase 8: every procedure disarms (DROP) until the
+ * altitude controller (AUTO-LAND, Phase 10) and GPS Rescue (Phase 12) exist.
  */
-function buildArmingSheet(): SheetBuilder {
-  const s = new SheetBuilder('arming', 'Arming')
-  const sticks = s.input('sticks', 'double[6]')
-  const split = s.add('demux', 'StickSplit', { outputCount: 6, inputDimensions: [6] })
+function buildFailsafeSheet(): SheetBuilder {
+  const f = FC.failsafe
+  const ts = FC.ts
+  const s = new SheetBuilder('failsafe', 'Failsafe')
+  const sticks = s.input('sticks', 'double[8]')
+  const link = s.input('rc_link_valid', 'double')
+  const procedure = s.input('failsafe_procedure', 'double')
+  const split = s.add('demux', 'StickSplit', { outputCount: 8, inputDimensions: [8] })
   s.wire(sticks, split)
-  const armed = s.add('evaluate', 'Armed', { numInputs: 1, expression: '(in(0) > 0.5) ? 1.0 : 0.0' })
+  const linkOk = s.add('evaluate', 'LinkOk', { numInputs: 1, expression: '(in(0) > 0.5) ? 1.0 : 0.0' })
+  s.wire(link, linkOk)
+  /** A Unit Delay fed back through an Evaluate of [inputs..., previous]. */
+  const state = (name: string, init: number, expression: string, inputs: string[]) => {
+    const prev = s.add('unit_delay', `${name}Prev`, { initialValue: init, sampleInterval: ts })
+    const ev = s.add('evaluate', name, { numInputs: inputs.length + 1, expression })
+    inputs.forEach((x, k) => s.wire(x, ev, k))
+    s.wire(prev, ev, inputs.length)
+    s.wire(ev, prev)
+    return ev
+  }
+  const lost = state('LostTime', 0, `(in(0) > 0.5) ? 0.0 : in(1) + ${ts}`, [linkOk])
+  const valid = state('ValidTime', 0, `(in(0) > 0.5) ? fmin(in(1) + ${ts}, 1000.0) : 0.0`, [linkOk])
+  const moved = s.add('evaluate', 'SticksMoved', { numInputs: 3, expression: `(fmax(fabs(in(0)), fmax(fabs(in(1)), fabs(in(2)))) > ${f.stickThreshold}) ? 1.0 : 0.0` })
+  for (let k = 0; k < 3; k++) s.wire(split, moved, k, k)
+  // Stage 2: entered delayS after the loss; ends after recoveryS of valid link,
+  // and (except after DROP) a stick moved beyond the threshold
+  const stage2Prev = s.add('unit_delay', 'Stage2Prev', { initialValue: 0, sampleInterval: ts })
+  const procPrev = s.add('unit_delay', 'ProcedurePrev', { initialValue: FAILSAFE_PROCEDURE.drop, sampleInterval: ts })
+  // in(0) link, in(1) lost, in(2) valid time, in(3) latched procedure, in(4) moved, in(5) stage 2 before
+  const stage2 = s.add('evaluate', 'Stage2', {
+    numInputs: 6,
+    expression:
+      `(in(5) > 0.5) ? ((in(2) >= ${f.recoveryS} && (fabs(in(3) - ${FAILSAFE_PROCEDURE.drop}) < 0.5 || in(4) > 0.5)) ? 0.0 : 1.0)` +
+      ` : ((in(0) < 0.5 && in(1) >= ${f.delayS - 1e-9}) ? 1.0 : 0.0)`,
+  })
+  ;[linkOk, lost, valid, procPrev, moved, stage2Prev].forEach((x, k) => s.wire(x, stage2, k))
+  s.wire(stage2, stage2Prev)
+  // The procedure is read when stage 2 begins
+  const procLatched = s.add('evaluate', 'Procedure', { numInputs: 4, expression: '(in(0) > 0.5 && in(1) < 0.5) ? in(2) : in(3)' })
+  ;[stage2, stage2Prev, procedure, procPrev].forEach((x, k) => s.wire(x, procLatched, k))
+  s.wire(procLatched, procPrev)
+  const stage = s.add('evaluate', 'Stage', { numInputs: 2, expression: '(in(1) > 0.5) ? 2.0 : ((in(0) > 0.5) ? 0.0 : 1.0)' })
+  s.wire(linkOk, stage, 0)
+  s.wire(stage2, stage, 1)
+  // Time at low throttle while the link is valid; frozen during a loss
+  const lowPrev = s.add('unit_delay', 'ThrottleLowTimePrev', { initialValue: 0, sampleInterval: ts })
+  const low = s.add('evaluate', 'ThrottleLowTime', {
+    numInputs: 3,
+    expression: `(in(0) > 0.5) ? ((in(1) < ${FC.minCheck}) ? fmin(in(2) + ${ts}, 1000.0) : 0.0) : in(2)`,
+  })
+  s.wire(linkOk, low, 0)
+  s.wire(split, low, 1, 3)
+  s.wire(lowPrev, low, 2)
+  s.wire(low, lowPrev)
+  // Disarm: stage 2 (every procedure drops until Phases 10 and 12), or a loss after
+  // long low throttle with DROP or AUTO-LAND
+  const disarm = s.add('evaluate', 'DisarmRequest', {
+    numInputs: 4,
+    expression: `(in(0) > 0.5 || (in(1) < 0.5 && in(2) > ${f.throttleLowDelayS} && fabs(in(3) - ${FAILSAFE_PROCEDURE.gpsRescue}) > 0.5)) ? 1.0 : 0.0`,
+  })
+  s.wire(stage2, disarm, 0)
+  s.wire(linkOk, disarm, 1)
+  s.wire(low, disarm, 2)
+  s.wire(procedure, disarm, 3)
+  // Sticks the controller sees: live; held for holdS after a loss; then failsafe values
+  const lastPrev = s.add('unit_delay', 'LastValidPrev', { initialValue: [0, 0, 0, 0, 0, 0, 0, 0], sampleInterval: ts })
+  const last = s.add('if', 'LastValid')
+  s.wire(lastPrev, last, 0)
+  s.wire(linkOk, last, 1)
+  s.wire(sticks, last, 2)
+  s.wire(last, lastPrev)
+  const lastSplit = s.add('demux', 'LastSplit', { outputCount: 8, inputDimensions: [8] })
+  s.wire(last, lastSplit)
+  const fsValues = s.add('mux', 'FailsafeSticks', { rows: 8, cols: 1, baseType: 'double', outputType: 'double[8]' })
+  const zero = s.constant('Centre', 0, 'double')
+  for (let k = 0; k < 4; k++) s.wire(zero, fsValues, k)
+  for (let k = 4; k < 8; k++) s.wire(lastSplit, fsValues, k, k)
+  const holding = s.add('evaluate', 'Holding', { numInputs: 1, expression: `(in(0) < ${f.holdS}) ? 1.0 : 0.0` })
+  s.wire(lost, holding)
+  const lossSticks = s.add('if', 'LossSticks')
+  s.wire(fsValues, lossSticks, 0)
+  s.wire(holding, lossSticks, 1)
+  s.wire(last, lossSticks, 2)
+  const out = s.add('if', 'SticksOut')
+  s.wire(lossSticks, out, 0)
+  s.wire(linkOk, out, 1)
+  s.wire(sticks, out, 2)
+  s.output('sticks_fs', out, 'double[8]')
+  s.output('stage', stage, 'double')
+  s.output('disarm_request', disarm, 'double')
+  s.output('procedure', procLatched, 'double')
+  return s
+}
+
+/**
+ * Arming, after Betaflight: arms on the arm switch's rising edge when nothing
+ * blocks it (throttle low, rescue and hold switches off, the GPS check on the
+ * first arming, link valid), and disarms on switch off or a disarm request.
+ * After a forced disarm the switch must be cycled. Airmode (and the I-term)
+ * starts once throttle first exceeds airmodeStartThrottle after arming, and
+ * stays on until disarmed. `startArmed` begins armed (airborne starts).
+ */
+function buildArmingSheet(startArmed: boolean): SheetBuilder {
+  const s = new SheetBuilder('arming', 'Arming')
+  const sticks = s.input('sticks', 'double[8]')
+  const fix = s.input('gnss_fix', 'double[3]')
+  const request = s.input('disarm_request', 'double')
+  const link = s.input('rc_link_valid', 'double')
+  const split = s.add('demux', 'StickSplit', { outputCount: 8, inputDimensions: [8] })
+  s.wire(sticks, split)
+  const fixSplit = s.add('demux', 'FixSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(fix, fixSplit)
+  const init = startArmed ? 1 : 0
+  const switchPrev = s.add('unit_delay', 'ArmSwitchPrev', { initialValue: init, sampleInterval: FC.ts })
+  s.wire(split, switchPrev, 0, 5)
+  const everPrev = s.add('unit_delay', 'EverArmedPrev', { initialValue: init, sampleInterval: FC.ts })
+  const W = FC_WARNING
+  // in(0) throttle, in(1) rescue, in(2) hold, in(3) ever armed, in(4) fix type, in(5) satellites, in(6) link
+  const blocks = s.add('evaluate', 'ArmingBlocks', {
+    numInputs: 7,
+    expression:
+      `((in(0) >= ${FC.minCheck}) ? ${W.armThrottle}.0 : 0.0)` +
+      ` + ((in(1) > 0.5 || in(2) > 0.25) ? ${W.armModeSwitch}.0 : 0.0)` +
+      ` + ((in(3) > 0.5 || ${FC.allowArmingWithoutFix ? 1 : 0} > 0 || (in(4) > 2.5 && in(5) >= ${FC.homeMinSats}.0)) ? 0.0 : ${W.armGps}.0)` +
+      ` + ((in(6) > 0.5) ? 0.0 : ${W.armRxLoss}.0)`,
+  })
+  s.wire(split, blocks, 0, 3)
+  s.wire(split, blocks, 1, 6)
+  s.wire(split, blocks, 2, 7)
+  s.wire(everPrev, blocks, 3)
+  s.wire(fixSplit, blocks, 4, 0)
+  s.wire(fixSplit, blocks, 5, 1)
+  s.wire(link, blocks, 6)
+  const armedPrev = s.add('unit_delay', 'ArmedPrev', { initialValue: init, sampleInterval: FC.ts })
+  // in(0) switch, in(1) switch before, in(2) blocks, in(3) request, in(4) armed before
+  const armed = s.add('evaluate', 'Armed', {
+    numInputs: 5,
+    expression: '(in(4) > 0.5) ? ((in(0) > 0.5 && in(3) < 0.5) ? 1.0 : 0.0) : ((in(0) > 0.5 && in(1) < 0.5 && in(2) < 0.5 && in(3) < 0.5) ? 1.0 : 0.0)',
+  })
   s.wire(split, armed, 0, 5)
+  s.wire(switchPrev, armed, 1)
+  s.wire(blocks, armed, 2)
+  s.wire(request, armed, 3)
+  s.wire(armedPrev, armed, 4)
+  s.wire(armed, armedPrev)
+  const ever = s.add('evaluate', 'EverArmed', { numInputs: 2, expression: 'fmax(in(0), in(1))' })
+  s.wire(armed, ever, 0)
+  s.wire(everPrev, ever, 1)
+  s.wire(ever, everPrev)
+  // Warnings while disarmed: the blocks, or "cycle the arm switch" when it is on but nothing else blocks
+  const warnings = s.add('evaluate', 'ArmingWarnings', {
+    numInputs: 3,
+    expression: `(in(0) > 0.5) ? 0.0 : (in(1) + ((in(2) > 0.5 && in(1) < 0.5) ? ${W.armSwitchCycle}.0 : 0.0))`,
+  })
+  s.wire(armed, warnings, 0)
+  s.wire(blocks, warnings, 1)
+  s.wire(split, warnings, 2, 5)
+
   const latchPrev = s.add('unit_delay', 'AirmodePrev', { initialValue: 0, sampleInterval: FC.ts })
   // in(0) armed, in(1) throttle, in(2) latched previously
   const latch = s.add('evaluate', 'AirmodeActive', {
@@ -1633,6 +1849,7 @@ function buildArmingSheet(): SheetBuilder {
   s.wire(latch, latchPrev)
   s.output('armed', armed, 'double')
   s.output('airmode', latch, 'double')
+  s.output('warnings', warnings, 'double')
   return s
 }
 
@@ -1731,7 +1948,7 @@ function buildHomeVectorSheet(): SheetBuilder {
 
 function buildFlightControllerSheet(initialQuat: number[][], altitude0: number): SheetBuilder {
   const s = new SheetBuilder('fc', 'FlightController')
-  const sticks = s.input('sticks', 'double[6]')
+  const rawSticks = s.input('sticks', 'double[8]')
   const gyro = s.input('gyro', 'double[3]')
   const acc = s.input('accel', 'double[3]')
   const mag = s.input('mag', 'double[3]')
@@ -1739,6 +1956,15 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   const gamma = s.input('grid_convergence_deg', 'double')
   const gnssPos = s.input('gnss_pos', 'double[3]')
   const gnssFix = s.input('gnss_fix', 'double[3]')
+  const link = s.input('rc_link_valid', 'double')
+  const procedure = s.input('failsafe_procedure', 'double')
+
+  // Failsafe first: everything below reads the sticks it passes on
+  const failsafe = s.add('subsystem', 'Failsafe', subsystem(['sticks', 'rc_link_valid', 'failsafe_procedure'], ['sticks_fs', 'stage', 'disarm_request', 'procedure'], buildFailsafeSheet()))
+  s.wire(rawSticks, failsafe, 0)
+  s.wire(link, failsafe, 1)
+  s.wire(procedure, failsafe, 2)
+  const sticks = failsafe
 
   // Estimators
   const att = s.add('subsystem', 'AttitudeEstimator', subsystem(['gyro', 'accel', 'mag', 'grid_convergence_deg'], ['quat', 'euler'], buildAttitudeEstimatorSheet(initialQuat)))
@@ -1762,8 +1988,11 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   // Rate loop and mixer
   const filt = s.add('subsystem', 'GyroFilters', subsystem(['gyro'], ['gyro_dps'], buildGyroFilterSheet()))
   s.wire(gyro, filt)
-  const arming = s.add('subsystem', 'Arming', subsystem(['sticks'], ['armed', 'airmode'], buildArmingSheet()))
-  s.wire(sticks, arming)
+  const arming = s.add('subsystem', 'Arming', subsystem(['sticks', 'gnss_fix', 'disarm_request', 'rc_link_valid'], ['armed', 'airmode', 'warnings'], buildArmingSheet(altitude0 > 0)))
+  s.wire(sticks, arming, 0)
+  s.wire(gnssFix, arming, 1)
+  s.wire(failsafe, arming, 2, 2)
+  s.wire(link, arming, 3)
   const pid = s.add('subsystem', 'RatePID', subsystem(['setpoint', 'gyro_dps', 'iterm_enable'], ['pid'], buildRatePidSheet()))
   s.wire(angle, pid, 0, 0)
   s.wire(filt, pid, 1, 0)
@@ -1802,6 +2031,17 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   s.output('home_valid', home, 'double', 0)
   s.output('home_distance_m', home, 'double', 1)
   s.output('home_bearing_deg', home, 'double', 2)
+  // Flight-mode text code (FC_MODE), in Betaflight's priority order
+  const mode = s.add('evaluate', 'FlightMode', {
+    numInputs: 3,
+    expression: `(in(0) > 0.5) ? ${FC_MODE.failsafe}.0 : ((in(1) > 0.5) ? ${FC_MODE.angle}.0 : ((in(2) > 0.5) ? ${FC_MODE.air}.0 : ${FC_MODE.acro}.0))`,
+  })
+  s.wire(failsafe, mode, 0, 1)
+  s.wire(angle, mode, 1, 1)
+  s.wire(arming, mode, 2, 1)
+  s.output('fc_mode', mode, 'double')
+  s.output('fc_warnings', arming, 'double', 2)
+  s.output('failsafe_stage', failsafe, 'double', 1)
   return s
 }
 
@@ -1819,7 +2059,7 @@ export const FPV_VEHICLE_NAME = 'FPV Vehicle'
 export interface FpvModelOptions {
   /**
    * The vehicle alone, for embedding with a model reference: the pilot's
-   * sticks come in on a top-level Input Port "sticks" (double[6]) and the
+   * sticks come in on a top-level Input Port "sticks" (double[8]) and the
    * Telemetry sheet holds only the Output Ports (no scopes, no Tests sheet).
    */
   vehicleOnly?: boolean
@@ -1865,25 +2105,28 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     const src = conditionSource.get(name)
     if (src) main.wire(src[0], to, toPort, src[1])
   }
+  // Input Port order is the vehicle's interface: sticks first, then the rest
+  const sticksPort = opts.vehicleOnly && !opts.openLoop ? main.input('sticks', 'double[8]') : null
+  // The vehicle's other inputs (GNSS conditions, grid convergence, link,
+  // failsafe procedure, wind): Input Ports on the vehicle, or a Conditions schedule
+  if (opts.vehicleOnly) {
+    for (const [name, type] of VEHICLE_INPUTS.slice(1)) conditionSource.set(name, [main.input(name, type), 0])
+  } else {
+    const names = VEHICLE_INPUTS.slice(1).map(([n]) => n)
+    const cond = main.add('subsystem', 'Conditions', subsystem([], names, buildConditionsSheet(opts.conditions)))
+    names.forEach((n, k) => conditionSource.set(n, [cond, k]))
+  }
   if (opts.openLoop) {
     const hover = Number(HOVER_COMMAND.toFixed(6))
     const cmd = main.constant('MotorCmd', opts.motorCommand ?? [hover, hover, hover, hover], 'double[4]')
     main.wire(cmd, split)
   } else {
-    const pilot = opts.vehicleOnly
-      ? main.input('sticks', 'double[6]')
+    const pilot = sticksPort
+      ? sticksPort
       : main.add('subsystem', 'Pilot', subsystem([], ['sticks'], buildPilotSheet(opts.sticks ?? DEMO_STICKS)))
-    // GNSS conditions and grid convergence: Input Ports on the vehicle, or a
-    // Conditions schedule. Wired to their consumers in later phases.
-    if (opts.vehicleOnly) {
-      for (const [name, type] of VEHICLE_INPUTS.slice(1)) conditionSource.set(name, [main.input(name, type), 0])
-    } else {
-      const names = VEHICLE_INPUTS.slice(1).map(([n]) => n)
-      const cond = main.add('subsystem', 'Conditions', subsystem([], names, buildConditionsSheet(opts.conditions)))
-      names.forEach((n, k) => conditionSource.set(n, [cond, k]))
-    }
+
     fc = main.add('subsystem', 'FlightController', {
-      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure', 'grid_convergence_deg', 'gnss_pos', 'gnss_fix'], FC_OUTPUTS, buildFlightControllerSheet(initialQuat, altitude0), FC_SIZE),
+      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure', 'grid_convergence_deg', 'gnss_pos', 'gnss_fix', 'rc_link_valid', 'failsafe_procedure'], FC_OUTPUTS, buildFlightControllerSheet(initialQuat, altitude0), FC_SIZE),
       sampleTimeSec: FC.ts,
     })
     main.wire(pilot, fc, 0)
@@ -1940,9 +2183,10 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   motorIds.forEach(id => main.wire(supply, id, 1, 0))
 
   const z0 = altitude0 > 0 ? -LOCATION.elevationM - altitude0 : -LOCATION.elevationM + GROUND_REST_Z
-  const frame = main.add('subsystem', 'Frame', subsystem(['thrust', 'rotor_accel'], FRAME_OUTPUTS, buildFrameSheet(opts.initialOmega, initialQuat, [0, 0, z0]), FRAME_SIZE))
+  const frame = main.add('subsystem', 'Frame', subsystem(['thrust', 'rotor_accel', 'wind_ned'], FRAME_OUTPUTS, buildFrameSheet(opts.initialOmega, initialQuat, [0, 0, z0]), FRAME_SIZE))
   main.wire(thrustVec, frame, 0)
   main.wire(accelVec, frame, 1)
+  wireCondition('wind_ned', frame, 2)
   if (fc) {
     const sensors = main.add('subsystem', 'Sensors', subsystem(
       ['pos_ned', 'quat', 'omega', 'specific_force', 'grid_convergence_deg', 'vel_ned', 'gnss_env'], ['gyro', 'accel', 'mag', 'pressure', ...GNSS_OUTPUTS],
@@ -1958,6 +2202,8 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     wireCondition('grid_convergence_deg', fc, 5)
     main.wire(sensors, fc, 6, 4)
     main.wire(sensors, fc, 7, 6)
+    wireCondition('rc_link_valid', fc, 8)
+    wireCondition('failsafe_procedure', fc, 9)
     publish('imu_gyro', sensors, 'double[3]', 0)
     publish('imu_accel', sensors, 'double[3]', 1)
     publish('mag', sensors, 'double[3]', 2)
@@ -1975,7 +2221,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     publish('altitude_est', fc, 'double', 4)
     publish('quat_est', fc, 'double[4][1]', 5)
     publish('heading_deg', fc, 'double', 6)
-    ;['fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg'].forEach((name, k) => publish(name, fc!, 'double', 7 + k))
+    ;['fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage'].forEach((name, k) => publish(name, fc!, 'double', 7 + k))
   }
 
   // Scopes, on the Telemetry sheet
@@ -2053,7 +2299,8 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
       '5-inch FPV quadcopter vehicle, for embedding in test models with a Model Reference block. ' +
       'Frame and 6-DOF body, four motor/propeller subsystems, 4S battery, IMU/magnetometer/barometer models, ground contact ' +
       `and a Betaflight-style flight controller (acro and angle modes, arming, Mahony and altitude estimators) at ${LOCATION.name}. ` +
-      'Input: sticks = [roll, pitch, yaw, throttle, AUX1 angle mode, AUX2 arm] (double[6], sticks -1..1, throttle 0..1, switches above 0.5 on). ' +
+      'Inputs: sticks = [roll, pitch, yaw, throttle, AUX1 angle mode, AUX2 arm, AUX3 GPS rescue, AUX4 hold (3-position)] (double[8], sticks -1..1, throttle 0..1, switches above 0.5 on); ' +
+      'gnss_env = [satellites, HDOP, VDOP, UERE scale]; grid_convergence_deg; rc_link_valid; failsafe_procedure (0 drop, 1 auto-land, 2 GPS rescue); wind_ned (m/s). ' +
       'Outputs (Telemetry sheet): the true state, sensor readings, motor commands and speeds, rate setpoints, estimates and battery. ' +
       'Test models such as "FPV Demo Flight" drive it and check it with Assert blocks. Built by scripts/build-fpv-reference-model.ts; ' +
       'see docs/fpv-reference-model-plan.md.'
@@ -2443,7 +2690,9 @@ function testsSheet() {
     s.wire(pick('RollPitch', from('euler'), [0, 1]), deg)
     check('StaysUpright', deg, -60, 60, 0, null, 'stop')
   }
-  return { s, h, from, pick, expr, check, upright }
+  /** 1 when the given fc_warnings bit is set. */
+  const bit = (name: string, warnings: string, value: number) => expr(name, `fmod(floor(in(0) / ${value}.0 + 1e-9), 2.0)`, [warnings])
+  return { s, h, from, pick, expr, check, upright, bit }
 }
 
 /** Disarmed at rest on the field. */
@@ -2618,6 +2867,166 @@ export function buildFpvGnssCourseTestModel() {
   })
 }
 
+/** A switch schedule: on (1) during each [from, to) window, otherwise off. */
+const windows = (...spans: Array<[number, number]>): Array<[number, number]> => {
+  const out: Array<[number, number]> = [[0, 0]]
+  for (const [a, b] of spans) out.push([a - 0.001, 0], [a, 1], [b - 0.001, 1], [b, 0])
+  return out
+}
+
+/** T07 timeline (s): each arming attempt and what should block it. */
+export const ARMING_TEST = {
+  throttleHigh: [0.5, 0.9] as [number, number],
+  rescueOn: [1.5, 2.0] as [number, number], rescueArm: [1.7, 1.9] as [number, number],
+  holdOn: [2.2, 2.7] as [number, number], holdArm: [2.4, 2.6] as [number, number],
+  fewSats: [3.0, 3.2] as [number, number],
+  armed: [3.6, 4.0] as [number, number],
+  rearm: 4.4,
+  linkLost: [5.0, 7.0] as [number, number],
+  cycleOff: 8.0, cycleOn: 8.3,
+  duration: 9,
+}
+
+/** T07: arming checks — throttle, mode switches, the first-arming GPS check, re-arm, and the switch cycle after a forced disarm. */
+export function buildFpvArmingChecksTestModel() {
+  const t = ARMING_TEST
+  const W = FC_WARNING
+  const sticks: StickProfile = {
+    roll: [[0, 0]], pitch: [[0, 0]], yaw: [[0, 0]], aux: [[0, 1]],
+    throttle: [[0, 0], [0.4, 0], [0.401, 0.3], [0.95, 0.3], [0.951, 0]],
+    arm: windows([0.5, 0.9], [t.rescueArm[0], t.rescueArm[1]], [t.holdArm[0], t.holdArm[1]], [t.fewSats[0], t.fewSats[1]], [t.armed[0], t.armed[1]], [t.rearm, t.cycleOff], [t.cycleOn, t.duration + 1]),
+    rescue: windows(t.rescueOn),
+    hold: windows(t.holdOn).map(([time, v]) => [time, v * 0.5] as [number, number]),
+  }
+  const tests = () => {
+    const { s, h, from, expr, check, bit } = testsSheet()
+    const armed = from('fc_armed'), warnings = from('fc_warnings'), home = from('home_valid'), stage = from('failsafe_stage')
+    const e = 0.05
+    check('RefusedWithThrottleUp', armed, 0, 0, t.throttleHigh[0], t.throttleHigh[1])
+    check('ThrottleWarning', bit('WarnThrottle', warnings, W.armThrottle), 1, 1, t.throttleHigh[0] + e, t.throttleHigh[1] - e)
+    check('RefusedWithRescueSwitch', armed, 0, 0, t.rescueArm[0], t.rescueArm[1])
+    const modeBit = bit('WarnModeSwitch', warnings, W.armModeSwitch)
+    check('RescueSwitchWarning', modeBit, 1, 1, t.rescueArm[0] + e, t.rescueArm[1] - e)
+    check('RefusedWithHoldSwitch', armed, 0, 0, t.holdArm[0], t.holdArm[1])
+    check('HoldSwitchWarning', modeBit, 1, 1, t.holdArm[0] + e, t.holdArm[1] - e)
+    check('RefusedFirstArmingWithoutGps', armed, 0, 0, t.fewSats[0], t.fewSats[1])
+    check('GpsWarning', bit('WarnGps', warnings, W.armGps), 1, 1, t.fewSats[0] + e, t.fewSats[1] - e)
+    check('ArmsWithGps', armed, 1, 1, t.armed[0] + e, t.armed[1] - e)
+    check('HomeOnArming', home, 1, 1, t.armed[0] + e, t.armed[1] - e)
+    check('ReArmsWithoutGps', armed, 1, 1, t.rearm + e, t.linkLost[0] + FC.failsafe.delayS - e)
+    check('NoHomeOnReArmWithoutGps', home, 0, 0, t.rearm + e, t.linkLost[0] + FC.failsafe.delayS - e)
+    const stage2At = t.linkLost[0] + FC.failsafe.delayS
+    check('DroppedInStage2', armed, 0, 0, stage2At + e, t.cycleOn - e)
+    check('RxLossWarning', bit('WarnRxLoss', warnings, W.armRxLoss), 1, 1, stage2At + e, t.linkLost[1] - e)
+    check('SwitchCycleWarning', bit('WarnCycle', warnings, W.armSwitchCycle), 1, 1, t.linkLost[1] + e, t.cycleOff - e)
+    check('FailsafeEndsAfterRecovery', stage, 0, 0, t.linkLost[1] + FC.failsafe.recoveryS + e)
+    check('ReArmsAfterSwitchCycle', armed, 1, 1, t.cycleOn + e)
+    void s; void h; void expr
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T07 Arming Checks',
+    description:
+      'Validation test for arming (docs/fpv-hud-gnss-test-plan.md, T07): on the ground, arming is refused with the throttle up, ' +
+      'with the rescue or hold switch on, and on the first arming with 7 satellites; it succeeds with 14 (home taken), and a re-arm ' +
+      'with 7 succeeds without a home. A DROP failsafe disarms, and arming then needs the switch cycled. fc_warnings shows each reason.',
+    sticks,
+    duration: t.duration,
+    displays: [['Armed', 'fc_armed'], ['Warnings', 'fc_warnings'], ['FailsafeStage', 'failsafe_stage']],
+    tests,
+    conditions: {
+      gnssEnv: { satellites: [[0, 7], [3.399, 7], [3.4, 14], [4.099, 14], [4.1, 7]] },
+      rcLinkValid: [[0, 1], [t.linkLost[0] - 0.001, 1], [t.linkLost[0], 0], [t.linkLost[1] - 0.001, 0], [t.linkLost[1], 1]],
+      failsafeProcedure: FAILSAFE_PROCEDURE.drop,
+    },
+  })
+}
+
+/** T08 timeline (s): climb, a 1 s link loss (stage 1 only), then a loss that reaches stage 2. */
+export const FAILSAFE_DROP_TEST = { shortLoss: [5, 6] as [number, number], loss: 9, duration: 11 }
+
+/** Climb to a safe height and hover (angle mode): the T05 take-off without the pitch. */
+export const CLIMB_STICKS: StickProfile = (() => {
+  const hov = Number(HOVER_THROTTLE.toFixed(4))
+  return {
+    roll: [[0, 0]], pitch: [[0, 0]], yaw: [[0, 0]], aux: [[0, 1]], arm: DEMO_STICKS.arm,
+    throttle: [[0, 0], [0.5, 0], [0.6, 0.6], [1.2, 0.6], [1.3, hov]],
+  }
+})()
+
+/** T08: failsafe with DROP — stage 1 holds then centres the sticks and recovers at once; stage 2 at exactly delayS disarms. */
+export function buildFpvFailsafeDropTestModel() {
+  const t = FAILSAFE_DROP_TEST
+  const f = FC.failsafe
+  const tests = () => {
+    const { s, h, from, pick, expr, check, upright } = testsSheet()
+    const stage = from('failsafe_stage'), armed = from('fc_armed'), mode = from('fc_mode')
+    const motorsMax = expr('MotorMax', 'fmax(fmax(in(0), in(1)), fmax(in(2), in(3)))', [0, 1, 2, 3].map(k => pick(`Motor${k}`, from('motor_cmd'), [k])))
+    const e = 0.05
+    const [a, b] = t.shortLoss
+    check('Stage0BeforeLoss', stage, 0, 0, 0, a - e)
+    check('Stage1DuringShortLoss', stage, 1, 1, a + e, b - e)
+    check('FailsafeModeShown', mode, FC_MODE.failsafe, FC_MODE.failsafe, a + e, b - e)
+    // Sticks held for holdS (motors still near hover), then throttle low
+    check('SticksHeldAtFirst', motorsMax, 0.35, 1, a + 0.01, a + f.holdS - 0.02)
+    check('ThrottleLowAfterHold', motorsMax, 0, 0.3, a + f.holdS + 0.1, b - e)
+    check('RecoversAtOnce', stage, 0, 0, b + e, t.loss - e)
+    check('StaysArmedThroughShortLoss', armed, 1, 1, 1.0, t.loss)
+    const stage2 = expr('InStage2', '(in(0) > 1.5) ? 1.0 : 0.0', [stage])
+    check('Stage2AfterDelay', h.firstTime('Stage2Time', stage2), t.loss + f.delayS - 0.002, t.loss + f.delayS + 0.002, t.loss + f.delayS + 0.1)
+    check('DisarmedInStage2', armed, 0, 0, t.loss + f.delayS + 0.002)
+    void s; void upright
+    const deg = s.add('scale', 'RollPitchDeg', { gain: 180 / Math.PI })
+    s.wire(pick('RollPitch', from('euler'), [0, 1]), deg)
+    check('StaysUpright', deg, -60, 60, 0, t.loss + f.delayS, 'stop')
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T08 Failsafe Drop',
+    description:
+      'Validation test for failsafe with the DROP procedure (docs/fpv-hud-gnss-test-plan.md, T08): after a climb the link is lost ' +
+      `for 1 s at ${t.shortLoss[0]} s — stage 1, sticks held for ${f.holdS} s then throttle low, control back at once — and lost again ` +
+      `at ${t.loss} s: stage 2 exactly ${f.delayS} s later, and the quad disarms.`,
+    sticks: CLIMB_STICKS,
+    duration: t.duration,
+    displays: [['FailsafeStage', 'failsafe_stage'], ['MotorCommand', 'motor_cmd'], ['Position', 'pos_ned']],
+    tests,
+    conditions: {
+      rcLinkValid: [[0, 1], [t.shortLoss[0] - 0.001, 1], [t.shortLoss[0], 0], [t.shortLoss[1] - 0.001, 0], [t.shortLoss[1], 1], [t.loss - 0.001, 1], [t.loss, 0]],
+      failsafeProcedure: FAILSAFE_PROCEDURE.drop,
+    },
+  })
+}
+
+/** T22: wind — a level hover drifts with a north wind toward the wind's speed. */
+export const WIND_TEST = { start: 3, speed: 3, duration: 15 }
+
+export function buildFpvWindTestModel() {
+  const t = WIND_TEST
+  const tests = () => {
+    const { s, from, pick, check, upright } = testsSheet()
+    const vn = pick('VelNorth', from('vel_ned'), [0])
+    check('CalmBeforeWind', vn, -0.5, 0.5, 0, t.start)
+    // Linear drag: the air-relative velocity decays with m/c ≈ 2.5 s, so after 10 s the drift is
+    // within 2% of the wind. Angle mode holds the estimated level, and the estimate's small tilt
+    // error leaves a steady push of about 0.25 m/s even in calm air, hence ±15%.
+    check('DriftsWithWind', vn, 0.85 * t.speed, 1.15 * t.speed, t.start + 10)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T22 Wind',
+    description:
+      `Validation test for the wind input (docs/fpv-hud-gnss-test-plan.md, T22): hovering level in angle mode, a ${t.speed} m/s ` +
+      `north wind from ${t.start} s carries the quad north; with linear drag its ground speed approaches the wind's.`,
+    sticks: CLIMB_STICKS,
+    duration: t.duration,
+    displays: [['Velocity', 'vel_ned'], ['Position', 'pos_ned']],
+    tests,
+    conditions: { wind: { north: [[0, 0], [t.start - 0.001, 0], [t.start, t.speed]] } },
+  })
+}
+
 /** A test model renamed for the validation suite ("FPV Tnn …"). */
 const renamed = (model: { name: string; data: Record<string, unknown> }, name: string) => ({ ...model, name })
 
@@ -2636,6 +3045,9 @@ export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<s
     ['t04-gnss-conditions.json', buildFpvGnssConditionsTestModel()],
     ['t05-gnss-course.json', buildFpvGnssCourseTestModel()],
     ['t06-grid-convergence.json', buildFpvGridConvergenceTestModel()],
+    ['t07-arming-checks.json', buildFpvArmingChecksTestModel()],
+    ['t08-failsafe-drop.json', buildFpvFailsafeDropTestModel()],
+    ['t22-wind.json', buildFpvWindTestModel()],
   ]
 }
 

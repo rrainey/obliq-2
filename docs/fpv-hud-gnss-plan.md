@@ -253,7 +253,18 @@ This is listed for interface agreement. It is implemented in that repo. The host
 
 **State machines.** obliq has no state-machine block. The rescue phase, the failsafe stage, the arming latch and the counters are numeric states in Unit Delays, with transitions in Evaluate blocks (C99 conditional expressions). Each machine is one subsystem, with its state and transition logic named after the reference's phases, so the generated C reads against the spec.
 
-### Phase 8: Inputs, arming and mode logic (D7, D8, D11, D12)
+### Phase 8: Inputs, arming and mode logic (D7, D8, D11, D12) (done 2026-10-28)
+
+**As built:**
+- **Interim stage 2.** Until AUTO-LAND (Phase 10) and GPS Rescue (Phase 12) exist, every procedure disarms in stage 2, like DROP. The recovery rules already follow the procedure: DROP needs only the link back for 0.5 s; the others also need a stick moved more than 30%.
+- **Airborne starts.** Builds with `initialAltitude` > 0 start armed, with the arm switch and "ever armed" set, because latched arming would refuse a start at hover throttle.
+- **AUX4 thresholds:** below 0.25 off, 0.25–0.75 Alt Hold, above 0.75 Alt + Pos Hold.
+- **New outputs:**
+  - `fc_mode`: codes in `FC_MODE`; 0 ACRO, 1 AIR, 2 ANGL, 4 ALTH, 5 POSH, 6 RESC, 7 !FS!. Phases 10–12 add ALTH, POSH and RESC.
+  - `fc_warnings`: a sum of `FC_WARNING` bits. The arming bits are 8 throttle, 16 mode switch, 32 GPS, 64 RX loss and 128 cycle the arm switch; they show only while disarmed. 1 RESCUE N/A, 2 RESCUE OFF and 4 POSHOLD FAIL come later.
+  - `failsafe_stage`: 0, 1 or 2.
+- **The throttle-low rule:** with more than 10 s of low throttle before a loss, DROP and AUTO-LAND disarm at once.
+- **Failsafe goes first.** It passes processed sticks (`sticks_fs`) to everything else in the flight controller.
 
 1. **Inputs.**
    - `sticks` grows to double[8]: [roll, pitch, yaw, throttle, AUX1 angle, AUX2 arm, AUX3 rescue, AUX4 hold (3-position)].
@@ -470,9 +481,11 @@ New model states are named in the generated C as `<subsystem path>_<block>_state
   - New `rc_link_valid` (`double`): on radio loss the host sets `rc_link_valid` = 0 and **keeps the last sticks**. It no longer publishes zero sticks, because the flight controller's failsafe now decides what happens.
   - New `failsafe_procedure` (`double`: 0 DROP, 1 AUTO-LAND, 2 GPS-RESCUE). The host sets 2 by default and lets the IOS change it.
   - New `wind_ned` (`double[3]`, m/s, grid frame), from the IOS.
-- **Arming is latched** (D11). It no longer follows `sticks[5]` level by level.
-  - The hover trim must write the arming state (`FlightController_Arming_*`) as armed, with the throttle-raised flag set, because the trim holds the vehicle armed at hover throttle. Arming would otherwise be refused, since the throttle is not low.
-  - The exact state names go in the table above when Phase 8 fixes them.
+- **Arming is latched** (D11). It no longer follows `sticks[5]` level by level. It arms on the switch's rising edge when nothing blocks it, and needs the switch cycled after a forced disarm.
+  - The hover trim holds the vehicle armed at hover throttle, which arming would refuse. It must write `FlightController_Arming_ArmedPrev_state` = 1, `FlightController_Arming_ArmSwitchPrev_state` = 1 and `FlightController_Arming_EverArmedPrev_state` = 1, and leave `FlightController_Home_ArmedPrev_state` at 0, so home still latches on the first step.
+  - The Phase 10 throttle-raised flag joins this list.
+  - Leave the failsafe states (`FlightController_Failsafe_*`) at their initial values; a reset restores them.
+- **The radio map's arm switch** is still AUX2 (CH5). With latched arming, a radio powered up with the switch already on will not arm until the switch is cycled, as on Betaflight.
 - **Altitude estimate** (D9).
   - `altitude_est` is removed. `FpvPlant.altitude_est_m` reads `alt_est` (relative to arming) instead; MSL truth stays −`pos_d`.
   - The trim's writes to `AltitudeEstimator_hPrev`/`vPrev` are replaced by the new estimator's states (the baro and GPS zeros, and the filter states), named in Phase 9.
