@@ -34,6 +34,12 @@
   - Altitude Hold (AUX4 at mid) holds the altitude the quad had when it engaged; the throttle stick climbs or descends at up to 5 m/s outside a deadband around hover. It engages only after the throttle has been raised.
   - The failsafe AUTO-LAND procedure now descends under Altitude Hold, lands, and disarms 60 s into stage 2. Before, it dropped.
   - Both use Betaflight's shared altitude controller with its default gains. On this quad the hold is underdamped, about ±2 m, as an untuned Betaflight quad would be.
+- **FPV Position Hold,** after Betaflight 2025.12. With AUX4 high (Altitude Hold included) the quad holds its GPS position.
+  - It brakes with a stopping phase, then holds against the wind.
+  - Roll or pitch beyond 5% flies it; releasing the stick holds the new point.
+  - It needs a 3D fix and a magnetometer, or a GPS heading established in flight when `posHoldWithoutMag` is set. Otherwise, or if pushed past its sanity distance, it shows `POSHOLD FAIL` and keeps its last angle, as Betaflight does.
+  - AUTO-LAND now holds position while it lands.
+- **Fixed: `gps_heading_ok` now latches once established, until the next arming,** as Betaflight's `canUseGPSHeading` does. Before, it decayed in a hover.
 - **Fixed: a Demux fed by a subsystem named "Conditions" (or anything containing "condition") split its vector wrongly.** It copied only the first element and set the rest to 0, with no warning. A guard for mislabelled relational outputs matched the name; it now matches "condition" only as a whole name segment. Generated code for every stored model is unchanged.
 - **Fixed: with ideal sensors the FPV attitude estimate became NaN** when the accelerometer read zero (free fall at the start of an airborne run). A zero vector now gives no correction instead of 0/0.
 - **FPV validation suite.** `test-models/fpv/` holds test models run with `npm run obliq:test -- test-models/fpv/t*.json`, with its own copy of the vehicle. T03–T05 check the GNSS receiver's error statistics, fix rules and course, T06 grid convergence, T07 arming, T08 failsafe and T22 wind. T00 checks the Tests-sheet helpers that later test models use: event latches, first-event times, running extremes, and windowed mean square and correlation.

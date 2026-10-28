@@ -348,7 +348,18 @@ This is listed for interface agreement. It is implemented in that repo. The host
    - climbs at 5 m/s at full stick;
    - recovers from a 1 m step.
 
-### Phase 11: Position Hold
+### Phase 11: Position Hold (done 2026-10-28)
+
+**As built:**
+- **PosHold (100 Hz)** handles engagement, the sensors check, the stick deadband, the control-OK latch and the 5 Hz PT3 upsampling.
+- **PositionControl (10 Hz, on each fix)** has per-axis P, I, D and A terms with PT1 filters, the stopping phase (D × 1.6), the per-axis target reset when the velocity reverses, the I leak while the sticks are active, the 35° D + A limit, the rotation into body roll and pitch by the estimated grid yaw, and the sanity distance.
+- **AngleMode** takes the autopilot's angle, or the pilot's while the sticks are active, capped at 25° (half of `ap_max_angle`), as `pid.c` does.
+- **When the controller stops** (sensors not OK, or the sanity check failed), its last angle is held, as in Betaflight.
+- **AUTO-LAND** now also runs Pos Hold.
+- **Build option `posHoldWithoutMag`** (Betaflight `pos_hold_without_mag`, default off). The no-magnetometer test vehicle turns it on.
+- **Fixed from 9b:** `gps_heading_ok` latches once established, until the next arming, as `canUseGPSHeading` does. Without the latch, a no-magnetometer Pos Hold lost its heading once the quad stopped.
+- **New outputs:** `pos_hold_active`; `fc_mode` shows POSH; `fc_warnings` adds POSHOLD FAIL (4).
+- **Measured holds:** within 1.4 m in a 3 m/s wind (T17), 3.1 m without a magnetometer (T19), and an AUTO-LAND touchdown within 1.9 m of where the drift was arrested (T09).
 
 1. **Position controller,** on each fix: east and north P, I, D and A terms; the D + A limit; the stopping phase; the sign-change reset; rotation by yaw; the 50° limit; the 5 Hz PT3.
 2. **Pos Hold mode:** the stick deadband, pilot-override angle limits, the sanity limit, and the mag / GPS-heading requirement (`POSHOLD FAIL`).
@@ -508,7 +519,7 @@ New model states are named in the generated C as `<subsystem path>_<block>_state
   - New `wind_ned` (`double[3]`, m/s, grid frame), from the IOS.
 - **Arming is latched** (D11). It no longer follows `sticks[5]` level by level. It arms on the switch's rising edge when nothing blocks it, and needs the switch cycled after a forced disarm.
   - The hover trim holds the vehicle armed at hover throttle, which arming would refuse. It must write `FlightController_Arming_ArmedPrev_state` = 1, `FlightController_Arming_ArmSwitchPrev_state` = 1 and `FlightController_Arming_EverArmedPrev_state` = 1, and leave `FlightController_Home_ArmedPrev_state` at 0, so home still latches on the first step.
-  - Also write `FlightController_AltHold_ThrottleRaisedPrev_state` = 1 (Betaflight's `wasThrottleRaised`), so Alt Hold can engage from a trimmed hover.
+  - Also write `FlightController_AltHold_ThrottleRaisedPrev_state` = 1 (Betaflight's `wasThrottleRaised`), so Alt Hold and Pos Hold can engage from a trimmed hover.
   - Leave the failsafe states (`FlightController_Failsafe_*`) at their initial values; a reset restores them.
 - **The radio map's arm switch** is still AUX2 (CH5). With latched arming, a radio powered up with the switch already on will not arm until the switch is cycled, as on Betaflight.
 - **Altitude estimate** (D9).

@@ -4,11 +4,11 @@
     "version": "2.2",
     "metadata": {
       "created": "2026-10-21T00:00:00.000Z",
-      "description": "Validation test for heading without a magnetometer (docs/fpv-hud-gnss-test-plan.md, T19): the vehicle faces 60° with its estimate at 0°. Flying forward, the estimate snaps to the GPS course at 1 m/s and converges on it (heading within 2° of the track, the true yaw within 8° allowing for sideslip), and GPS heading becomes established."
+      "description": "Validation test for heading without a magnetometer (docs/fpv-hud-gnss-test-plan.md, T19): the vehicle faces 60° with its estimate at 0°. Flying forward, the estimate snaps to the GPS course at 1 m/s and converges on it (heading within 2° of the track, the true yaw within 8° allowing for sideslip), and GPS heading becomes established. Position Hold (pos_hold_without_mag on) is refused before that and holds after."
     },
     "globalSettings": {
       "simulationTimeStep": 0.0005,
-      "simulationDuration": 12,
+      "simulationDuration": 22,
       "integrationAlgorithm": "rk4",
       "debugMath": false
     },
@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 85
+              "y": 24
             },
             "parameters": {
               "showName": true,
@@ -102,12 +102,16 @@
                         "inputValues": [
                           0,
                           4,
-                          4.1
+                          4.1,
+                          11.999,
+                          12
                         ],
                         "outputValues": [
                           0,
                           0,
-                          -0.25
+                          -0.25,
+                          -0.25,
+                          0
                         ],
                         "extrapolation": "clamp"
                       }
@@ -241,11 +245,21 @@
                         "showName": true,
                         "inputValues": [
                           0,
-                          1
+                          1.999,
+                          2,
+                          3.5,
+                          3.501,
+                          11.999,
+                          12
                         ],
                         "outputValues": [
                           0,
-                          0
+                          0,
+                          1,
+                          1,
+                          0,
+                          0,
+                          1
                         ],
                         "extrapolation": "clamp"
                       }
@@ -448,7 +462,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 10
+              "y": -54
             },
             "parameters": {
               "showName": true,
@@ -500,7 +514,8 @@
                 "alt_est",
                 "vario_est",
                 "gps_heading_ok",
-                "alt_hold_active"
+                "alt_hold_active",
+                "pos_hold_active"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -516,7 +531,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 396
+              "y": 343
             },
             "parameters": {
               "showName": true,
@@ -906,11 +921,24 @@
             "name": "Tag_gnss_course",
             "position": {
               "x": 484,
-              "y": 142
+              "y": -64
             },
             "parameters": {
               "showName": true,
               "signalName": "gnss_course"
+            }
+          },
+          {
+            "id": "main__Tag_pos_ned",
+            "type": "sheet_label_sink",
+            "name": "Tag_pos_ned",
+            "position": {
+              "x": 490,
+              "y": 80
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_ned"
             }
           },
           {
@@ -919,7 +947,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 286
+              "y": 224
             },
             "parameters": {
               "showName": true,
@@ -932,7 +960,7 @@
             "name": "Tag_euler_est",
             "position": {
               "x": 486,
-              "y": 430
+              "y": 368
             },
             "parameters": {
               "showName": true,
@@ -945,11 +973,24 @@
             "name": "Tag_heading_deg",
             "position": {
               "x": 484,
-              "y": 574
+              "y": 512
             },
             "parameters": {
               "showName": true,
               "signalName": "heading_deg"
+            }
+          },
+          {
+            "id": "main__Tag_fc_warnings",
+            "type": "sheet_label_sink",
+            "name": "Tag_fc_warnings",
+            "position": {
+              "x": 484,
+              "y": 656
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_warnings"
             }
           },
           {
@@ -958,7 +999,7 @@
             "name": "Tag_gps_heading_ok",
             "position": {
               "x": 484,
-              "y": 718
+              "y": 800
             },
             "parameters": {
               "showName": true,
@@ -1028,50 +1069,73 @@
             "targetBlockId": "main__Tag_gnss_course",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -12
+              "midpointOffset": -24
             }
           },
           {
-            "id": "w_8_main__Vehicle_main__Tag_euler",
+            "id": "w_8_main__Vehicle_main__Tag_pos_ned",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 12,
+            "targetBlockId": "main__Tag_pos_ned",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 13
+            }
+          },
+          {
+            "id": "w_9_main__Vehicle_main__Tag_euler",
             "sourceBlockId": "main__Vehicle",
             "sourcePortIndex": 15,
             "targetBlockId": "main__Tag_euler",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -14
+              "midpointOffset": -18
             }
           },
           {
-            "id": "w_9_main__Vehicle_main__Tag_euler_est",
+            "id": "w_10_main__Vehicle_main__Tag_euler_est",
             "sourceBlockId": "main__Vehicle",
             "sourcePortIndex": 22,
             "targetBlockId": "main__Tag_euler_est",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 3
+              "midpointOffset": -1
             }
           },
           {
-            "id": "w_10_main__Vehicle_main__Tag_heading_deg",
+            "id": "w_11_main__Vehicle_main__Tag_heading_deg",
             "sourceBlockId": "main__Vehicle",
             "sourcePortIndex": 24,
             "targetBlockId": "main__Tag_heading_deg",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 12
+              "midpointOffset": 8
             }
           },
           {
-            "id": "w_11_main__Vehicle_main__Tag_gps_heading_ok",
+            "id": "w_12_main__Vehicle_main__Tag_fc_warnings",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 32,
+            "targetBlockId": "main__Tag_fc_warnings",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 24
+            }
+          },
+          {
+            "id": "w_13_main__Vehicle_main__Tag_gps_heading_ok",
             "sourceBlockId": "main__Vehicle",
             "sourcePortIndex": 36,
             "targetBlockId": "main__Tag_gps_heading_ok",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -16
+            }
           }
         ],
         "extents": {
           "width": 804,
-          "height": 918
+          "height": 1000
         }
       },
       {
@@ -1195,7 +1259,7 @@
             "name": "From_euler_est",
             "position": {
               "x": 102,
-              "y": 734
+              "y": 1027
             },
             "parameters": {
               "showName": true,
@@ -1207,8 +1271,8 @@
             "type": "selector",
             "name": "YawEstimate",
             "position": {
-              "x": 320,
-              "y": 734
+              "x": 406,
+              "y": 1027
             },
             "parameters": {
               "showName": true,
@@ -1222,8 +1286,8 @@
             "type": "evaluate",
             "name": "YawEstimateDeg",
             "position": {
-              "x": 543,
-              "y": 698
+              "x": 735,
+              "y": 1019
             },
             "parameters": {
               "showName": true,
@@ -1237,7 +1301,7 @@
             "name": "From_euler",
             "position": {
               "x": 120,
-              "y": 320
+              "y": 811
             },
             "parameters": {
               "showName": true,
@@ -1249,8 +1313,8 @@
             "type": "selector",
             "name": "YawTrue",
             "position": {
-              "x": 320,
-              "y": 590
+              "x": 406,
+              "y": 883
             },
             "parameters": {
               "showName": true,
@@ -1264,8 +1328,8 @@
             "type": "evaluate",
             "name": "YawTrueDeg",
             "position": {
-              "x": 543,
-              "y": 554
+              "x": 735,
+              "y": 875
             },
             "parameters": {
               "showName": true,
@@ -1278,8 +1342,8 @@
             "type": "assert",
             "name": "EstimateStartsAtZero",
             "position": {
-              "x": 1260,
-              "y": 740
+              "x": 1452,
+              "y": 1064
             },
             "parameters": {
               "showName": true,
@@ -1297,7 +1361,7 @@
             "name": "From_gps_heading_ok",
             "position": {
               "x": 100,
-              "y": 176
+              "y": 248
             },
             "parameters": {
               "showName": true,
@@ -1309,8 +1373,8 @@
             "type": "assert",
             "name": "GpsHeadingNotYet",
             "position": {
-              "x": 1260,
-              "y": 284
+              "x": 1452,
+              "y": 320
             },
             "parameters": {
               "showName": true,
@@ -1327,8 +1391,8 @@
             "type": "sheet_label_source",
             "name": "From_heading_deg",
             "position": {
-              "x": 300,
-              "y": 302
+              "x": 386,
+              "y": -328
             },
             "parameters": {
               "showName": true,
@@ -1341,7 +1405,7 @@
             "name": "From_gnss_course",
             "position": {
               "x": 100,
-              "y": 464
+              "y": -184
             },
             "parameters": {
               "showName": true,
@@ -1353,8 +1417,8 @@
             "type": "selector",
             "name": "Track",
             "position": {
-              "x": 320,
-              "y": 446
+              "x": 406,
+              "y": -184
             },
             "parameters": {
               "showName": true,
@@ -1368,8 +1432,8 @@
             "type": "evaluate",
             "name": "HeadingMinusTrack",
             "position": {
-              "x": 500,
-              "y": 410
+              "x": 692,
+              "y": -256
             },
             "parameters": {
               "showName": true,
@@ -1382,8 +1446,8 @@
             "type": "assert",
             "name": "HeadingFollowsCourse",
             "position": {
-              "x": 1260,
-              "y": 428
+              "x": 1452,
+              "y": -256
             },
             "parameters": {
               "showName": true,
@@ -1391,7 +1455,7 @@
               "lower": -2,
               "upper": 2,
               "checkFrom": 10,
-              "checkUntil": null,
+              "checkUntil": 12,
               "onFailure": "record"
             }
           },
@@ -1400,8 +1464,8 @@
             "type": "evaluate",
             "name": "EstimateYawError",
             "position": {
-              "x": 880,
-              "y": 596
+              "x": 1072,
+              "y": 920
             },
             "parameters": {
               "showName": true,
@@ -1414,8 +1478,8 @@
             "type": "assert",
             "name": "EstimateNearTrueYaw",
             "position": {
-              "x": 1260,
-              "y": 596
+              "x": 1452,
+              "y": 920
             },
             "parameters": {
               "showName": true,
@@ -1432,8 +1496,8 @@
             "type": "assert",
             "name": "GpsHeadingEstablished",
             "position": {
-              "x": 1260,
-              "y": 140
+              "x": 1452,
+              "y": 176
             },
             "parameters": {
               "showName": true,
@@ -1446,12 +1510,218 @@
             }
           },
           {
+            "id": "tests__From_fc_warnings",
+            "type": "sheet_label_source",
+            "name": "From_fc_warnings",
+            "position": {
+              "x": 100,
+              "y": -40
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_warnings"
+            }
+          },
+          {
+            "id": "tests__PosHoldFailBit",
+            "type": "evaluate",
+            "name": "PosHoldFailBit",
+            "position": {
+              "x": 300,
+              "y": -40
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "fmod(floor(in(0) / 4.0 + 1e-9), 2.0)"
+            }
+          },
+          {
+            "id": "tests__PosHoldRefusedBeforeHeading",
+            "type": "assert",
+            "name": "PosHoldRefusedBeforeHeading",
+            "position": {
+              "x": 1452,
+              "y": 32
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 1,
+              "upper": 1,
+              "checkFrom": 2.02,
+              "checkUntil": 3.48,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__PosHoldOkAfterHeading",
+            "type": "assert",
+            "name": "PosHoldOkAfterHeading",
+            "position": {
+              "x": 1452,
+              "y": -112
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 12.02,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__From_pos_ned",
+            "type": "sheet_label_source",
+            "name": "From_pos_ned",
+            "position": {
+              "x": 106,
+              "y": 451
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_ned"
+            }
+          },
+          {
+            "id": "tests__North",
+            "type": "selector",
+            "name": "North",
+            "position": {
+              "x": 406,
+              "y": 595
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                0
+              ]
+            }
+          },
+          {
+            "id": "tests__East",
+            "type": "selector",
+            "name": "East",
+            "position": {
+              "x": 406,
+              "y": 307
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                1
+              ]
+            }
+          },
+          {
+            "id": "tests__Time",
+            "type": "clock",
+            "name": "Time",
+            "position": {
+              "x": 406,
+              "y": 451
+            },
+            "parameters": {
+              "showName": true
+            }
+          },
+          {
+            "id": "tests__NorthAtSettlePrev",
+            "type": "unit_delay",
+            "name": "NorthAtSettlePrev",
+            "position": {
+              "x": 1182,
+              "y": 625
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__NorthAtSettle",
+            "type": "evaluate",
+            "name": "NorthAtSettle",
+            "position": {
+              "x": 721,
+              "y": 544
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) <= 16) ? in(0) : in(2)"
+            }
+          },
+          {
+            "id": "tests__EastAtSettlePrev",
+            "type": "unit_delay",
+            "name": "EastAtSettlePrev",
+            "position": {
+              "x": 1182,
+              "y": 297
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__EastAtSettle",
+            "type": "evaluate",
+            "name": "EastAtSettle",
+            "position": {
+              "x": 721,
+              "y": 384
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) <= 16) ? in(0) : in(2)"
+            }
+          },
+          {
+            "id": "tests__HoldDeviation",
+            "type": "evaluate",
+            "name": "HoldDeviation",
+            "position": {
+              "x": 1072,
+              "y": 445
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 4,
+              "expression": "sqrt((in(0) - in(2)) * (in(0) - in(2)) + (in(1) - in(3)) * (in(1) - in(3)))"
+            }
+          },
+          {
+            "id": "tests__PosHoldHoldsAfterHeading",
+            "type": "assert",
+            "name": "PosHoldHoldsAfterHeading",
+            "position": {
+              "x": 1452,
+              "y": 464
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 5,
+              "checkFrom": 16,
+              "checkUntil": 22,
+              "onFailure": "record"
+            }
+          },
+          {
             "id": "tests__RollPitchDeg",
             "type": "scale",
             "name": "RollPitchDeg",
             "position": {
-              "x": 610,
-              "y": -4
+              "x": 802,
+              "y": 731
             },
             "parameters": {
               "showName": true,
@@ -1463,8 +1733,8 @@
             "type": "selector",
             "name": "RollPitch",
             "position": {
-              "x": 320,
-              "y": -4
+              "x": 406,
+              "y": 739
             },
             "parameters": {
               "showName": true,
@@ -1479,8 +1749,8 @@
             "type": "assert",
             "name": "StaysUpright",
             "position": {
-              "x": 1260,
-              "y": -4
+              "x": 1452,
+              "y": 740
             },
             "parameters": {
               "showName": true,
@@ -1508,7 +1778,7 @@
             "targetBlockId": "tests__YawEstimateDeg",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 0.5
+              "midpointOffset": 59.5
             }
           },
           {
@@ -1518,7 +1788,7 @@
             "targetBlockId": "tests__YawTrue",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4
+              "midpointOffset": -39
             }
           },
           {
@@ -1528,7 +1798,7 @@
             "targetBlockId": "tests__YawTrueDeg",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -7.5
+              "midpointOffset": 51.5
             }
           },
           {
@@ -1538,7 +1808,7 @@
             "targetBlockId": "tests__EstimateStartsAtZero",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 219
+              "midpointOffset": 223
             }
           },
           {
@@ -1548,7 +1818,7 @@
             "targetBlockId": "tests__GpsHeadingNotYet",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 472
+              "midpointOffset": 564
             }
           },
           {
@@ -1556,10 +1826,7 @@
             "sourceBlockId": "tests__From_gnss_course",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__Track",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -6
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_8_tests__From_heading_deg_tests__HeadingMinusTrack",
@@ -1568,7 +1835,7 @@
             "targetBlockId": "tests__HeadingMinusTrack",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -12
+              "midpointOffset": 15
             }
           },
           {
@@ -1578,7 +1845,7 @@
             "targetBlockId": "tests__HeadingMinusTrack",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 6
+              "midpointOffset": 33
             }
           },
           {
@@ -1586,10 +1853,7 @@
             "sourceBlockId": "tests__HeadingMinusTrack",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingFollowsCourse",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 190
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_11_tests__YawEstimateDeg_tests__EstimateYawError",
@@ -1598,7 +1862,7 @@
             "targetBlockId": "tests__EstimateYawError",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 25
+              "midpointOffset": 33
             }
           },
           {
@@ -1608,7 +1872,7 @@
             "targetBlockId": "tests__EstimateYawError",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 17
+              "midpointOffset": 25
             }
           },
           {
@@ -1625,37 +1889,220 @@
             "targetBlockId": "tests__GpsHeadingEstablished",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 472
+              "midpointOffset": 564
             }
           },
           {
-            "id": "w_15_tests__From_euler_tests__RollPitch",
-            "sourceBlockId": "tests__From_euler",
+            "id": "w_15_tests__From_fc_warnings_tests__PosHoldFailBit",
+            "sourceBlockId": "tests__From_fc_warnings",
             "sourcePortIndex": 0,
-            "targetBlockId": "tests__RollPitch",
+            "targetBlockId": "tests__PosHoldFailBit",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_16_tests__PosHoldFailBit_tests__PosHoldRefusedBeforeHeading",
+            "sourceBlockId": "tests__PosHoldFailBit",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__PosHoldRefusedBeforeHeading",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -2
+            }
+          },
+          {
+            "id": "w_17_tests__PosHoldFailBit_tests__PosHoldOkAfterHeading",
+            "sourceBlockId": "tests__PosHoldFailBit",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__PosHoldOkAfterHeading",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -2
+            }
+          },
+          {
+            "id": "w_18_tests__From_pos_ned_tests__North",
+            "sourceBlockId": "tests__From_pos_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__North",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -54
+            }
+          },
+          {
+            "id": "w_19_tests__From_pos_ned_tests__East",
+            "sourceBlockId": "tests__From_pos_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__East",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -54
+            }
+          },
+          {
+            "id": "w_20_tests__North_tests__NorthAtSettle",
+            "sourceBlockId": "tests__North",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NorthAtSettle",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 42.5
+            }
+          },
+          {
+            "id": "w_21_tests__Time_tests__NorthAtSettle",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NorthAtSettle",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 2.5
+            }
+          },
+          {
+            "id": "w_22_tests__NorthAtSettlePrev_tests__NorthAtSettle",
+            "sourceBlockId": "tests__NorthAtSettlePrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NorthAtSettle",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -313.5
+            }
+          },
+          {
+            "id": "w_23_tests__NorthAtSettle_tests__NorthAtSettlePrev",
+            "sourceBlockId": "tests__NorthAtSettle",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NorthAtSettlePrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -45
+            }
+          },
+          {
+            "id": "w_24_tests__East_tests__EastAtSettle",
+            "sourceBlockId": "tests__East",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__EastAtSettle",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 26.5
+            }
+          },
+          {
+            "id": "w_25_tests__Time_tests__EastAtSettle",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__EastAtSettle",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 2.5
+            }
+          },
+          {
+            "id": "w_26_tests__EastAtSettlePrev_tests__EastAtSettle",
+            "sourceBlockId": "tests__EastAtSettlePrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__EastAtSettle",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -353.5
+            }
+          },
+          {
+            "id": "w_27_tests__EastAtSettle_tests__EastAtSettlePrev",
+            "sourceBlockId": "tests__EastAtSettle",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__EastAtSettlePrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -61
+            }
+          },
+          {
+            "id": "w_28_tests__North_tests__HoldDeviation",
+            "sourceBlockId": "tests__North",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__HoldDeviation",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -133
+            }
+          },
+          {
+            "id": "w_29_tests__East_tests__HoldDeviation",
+            "sourceBlockId": "tests__East",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__HoldDeviation",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 273
+            }
+          },
+          {
+            "id": "w_30_tests__NorthAtSettle_tests__HoldDeviation",
+            "sourceBlockId": "tests__NorthAtSettle",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__HoldDeviation",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": 10
+            }
+          },
+          {
+            "id": "w_31_tests__EastAtSettle_tests__HoldDeviation",
+            "sourceBlockId": "tests__EastAtSettle",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__HoldDeviation",
+            "targetPortIndex": 3,
+            "routing": {
+              "midpointOffset": -6
+            }
+          },
+          {
+            "id": "w_32_tests__HoldDeviation_tests__PosHoldHoldsAfterHeading",
+            "sourceBlockId": "tests__HoldDeviation",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__PosHoldHoldsAfterHeading",
             "targetPortIndex": 0,
             "routing": {
               "midpointOffset": -4
             }
           },
           {
-            "id": "w_16_tests__RollPitch_tests__RollPitchDeg",
+            "id": "w_33_tests__From_euler_tests__RollPitch",
+            "sourceBlockId": "tests__From_euler",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RollPitch",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -39
+            }
+          },
+          {
+            "id": "w_34_tests__RollPitch_tests__RollPitchDeg",
             "sourceBlockId": "tests__RollPitch",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__RollPitchDeg",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 10
+            }
           },
           {
-            "id": "w_17_tests__RollPitchDeg_tests__StaysUpright",
+            "id": "w_35_tests__RollPitchDeg_tests__StaysUpright",
             "sourceBlockId": "tests__RollPitchDeg",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__StaysUpright",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 249
+            }
           }
         ],
         "extents": {
-          "width": 1560,
-          "height": 940
+          "width": 1752,
+          "height": 1264
         }
       }
     ]

@@ -142,6 +142,35 @@ export const FC = {
     climbRateCmS: 500,
     deadband: 0.2,
   },
+  /** Position Hold, after Betaflight 2025.12 (docs/fpv-betaflight-gnss-spec.md §3.3). */
+  posHold: {
+    /** ap_position_p / i / d / a (scaled ×0.0012, ×0.0001, ×0.0015, ×0.0008 per cm) */
+    p: 30, i: 30, d: 30, a: 30,
+    /** Hz: velocity and acceleration PT1 (ap_position_cutoff 80) */
+    cutoffHz: 0.8,
+    /** deg: ap_max_angle; the angle target in Pos Hold is limited to half of it (pid.c) */
+    maxAngleDeg: 50,
+    /** deg: limit on the D + A vector */
+    daLimitDeg: 35,
+    /** D boost while stopping */
+    stoppingDBoost: 1.6,
+    /** s: I-term leak time constant while the sticks are active */
+    iLeakS: 2.5,
+    /** pos_hold_deadband: roll/pitch deflection that hands control to the pilot */
+    deadband: 0.05,
+    /** pos_hold_without_mag (default off) */
+    withoutMag: false,
+    /** Hz: PT3 upsampling of the angle at 100 Hz */
+    upsampleHz: 5,
+    /** cm: sanity distance minimum; max(min, 2 s × ground speed) */
+    sanityMinCm: 1000,
+  },
+}
+
+/** Betaflight's PT1 gain: ω / (ω + 1), ω = 2π f dT. */
+export const pt1Gain = (cutoffHz: number, ts: number) => {
+  const w = 2 * Math.PI * cutoffHz * ts
+  return w / (w + 1)
 }
 
 /** fc_warnings bits (flags the OSD shows; arming bits only while disarmed). */
@@ -695,7 +724,7 @@ const MOTOR_SIZE = { width: 140, height: 80 }
 const FRAME_SIZE = { width: 160, height: 260 }
 const FC_SIZE = { width: 220, height: 180 }
 const SENSORS_SIZE = { width: 170, height: 150 }
-const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok', 'alt_hold_active']
+const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok', 'alt_hold_active', 'pos_hold_active']
 
 // ---------------------------------------------------------------------------
 // Motor / ESC / propeller (one definition, referenced by the other three)
@@ -1534,19 +1563,25 @@ function buildAttitudeEstimatorSheet(initialQuat: number[][], magnetometer: bool
   const eCog = s.add('multiply', 'CogError', { numInputs: 2 })
   s.wire(upEst, eCog, 0)
   s.wire(cogScale, eCog, 1)
-  // canUseGPSHeading: confidence += max(gain − |error|, 0)·dt, leaking; reset at arming
+  // canUseGPSHeading: until established, confidence += max(gain − |error|, 0)·dt, leaking;
+  // once above the threshold it latches (imu.c stops updating it) until the next arming
   const armedPrev = s.add('unit_delay', 'ArmedPrev', { initialValue: 0, sampleInterval: ts })
   s.wire(armed, armedPrev)
+  const okPrev = s.add('unit_delay', 'GpsHeadingOkPrev', { initialValue: 0, sampleInterval: ts })
   const confPrev = s.add('unit_delay', 'CogConfidencePrev', { initialValue: 0, sampleInterval: ts })
-  // in(0) armed, in(1) armed before, in(2) gain, in(3) error, in(4) confidence before
+  // in(0) armed, in(1) armed before, in(2) gain, in(3) error, in(4) established before, in(5) confidence before
   const conf = s.add('evaluate', 'CogConfidence', {
-    numInputs: 5,
-    expression: `(in(0) > 0.5 && in(1) < 0.5) ? 0.0 : in(4) + ${ts} * (fmax(in(2) - fabs(in(3)), 0.0) - ${C.confidenceLeak} * in(4))`,
+    numInputs: 6,
+    expression: `(in(0) > 0.5 && in(1) < 0.5) ? 0.0 : ((in(4) > 0.5) ? in(5) : in(5) + ${ts} * (fmax(in(2) - fabs(in(3)), 0.0) - ${C.confidenceLeak} * in(5)))`,
   })
-  ;[armed, armedPrev, gain, courseErr, confPrev].forEach((x, k2) => s.wire(x, conf, k2))
+  ;[armed, armedPrev, gain, courseErr, okPrev, confPrev].forEach((x, k2) => s.wire(x, conf, k2))
   s.wire(conf, confPrev)
-  const headingOk = s.add('evaluate', 'GpsHeadingOk', { numInputs: 1, expression: `(in(0) > ${C.confidenceThreshold}) ? 1.0 : 0.0` })
-  s.wire(conf, headingOk)
+  const headingOk = s.add('evaluate', 'GpsHeadingOk', {
+    numInputs: 4,
+    expression: `(in(0) > 0.5 && in(1) < 0.5) ? 0.0 : ((in(2) > 0.5 || in(3) > ${C.confidenceThreshold}) ? 1.0 : 0.0)`,
+  })
+  ;[armed, armedPrev, okPrev, conf].forEach((x, k2) => s.wire(x, headingOk, k2))
+  s.wire(headingOk, okPrev)
 
   const err = s.add('sum', 'Error', { signs: '+++', numInputs: 3 })
   s.wire(eAcc, err, 0)
@@ -1690,8 +1725,6 @@ function buildAltitudeEstimatorSheet(altitude0: number, startArmed: boolean): Sh
 // ---------------------------------------------------------------------------
 // Flight controller (acro), all at FC.ts
 
-const pt1Gain = (hz: number, ts: number) => ts / (1 / (2 * Math.PI * hz) + ts)
-
 /** PT1 low-pass as a discrete transfer function: y[k] = a u[k] + (1 - a) y[k-1]. */
 function pt1(s: SheetBuilder, name: string, hz: number): string {
   const a = pt1Gain(hz, FC.ts)
@@ -1735,6 +1768,11 @@ function buildAngleModeSheet(): SheetBuilder {
   const sticks = s.input('sticks', 'double[8]')
   const euler = s.input('euler_est', 'double[3]')
   const acro = s.input('acro_setpoint', 'double[3]')
+  const posActive = s.input('pos_hold_active', 'double')
+  const apInControl = s.input('autopilot_in_control', 'double')
+  const apAngle = s.input('autopilot_angle', 'double[2]')
+  const apSplit = s.add('demux', 'AutopilotAngleSplit', { outputCount: 2, inputDimensions: [2] })
+  s.wire(apAngle, apSplit)
   const split = s.add('demux', 'StickSplit', { outputCount: 8, inputDimensions: [8] })
   s.wire(sticks, split)
   const est = s.add('demux', 'AttitudeSplit', { outputCount: 3, inputDimensions: [3] })
@@ -1743,14 +1781,21 @@ function buildAngleModeSheet(): SheetBuilder {
   s.wire(acro, acroSplit)
   const level = s.add('mux', 'LevelSetpoint', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
   const { limitDeg, gain } = FC.angle
+  // Position Hold (pid.c): the autopilot's angle, or the pilot's while the sticks are active,
+  // limited to half of ap_max_angle
+  const half = 0.5 * FC.posHold.maxAngleDeg
   ;['Roll', 'Pitch'].forEach((axis, i) => {
-    // in(0): stick, in(1): estimated angle (rad)
+    // in(0) stick, in(1) estimated angle (rad), in(2) Pos Hold, in(3) autopilot in control, in(4) autopilot angle (deg)
+    const target = `((in(2) > 0.5) ? fmin(fmax((in(3) > 0.5) ? in(4) : ${limitDeg} * in(0), -${half}), ${half}) : ${limitDeg} * in(0))`
     const ev = s.add('evaluate', `${axis}Level`, {
-      numInputs: 2,
-      expression: `${gain} * (${limitDeg} * in(0) - in(1) * ${180 / Math.PI})`,
+      numInputs: 5,
+      expression: `${gain} * (${target} - in(1) * ${180 / Math.PI})`,
     })
     s.wire(split, ev, 0, i)
     s.wire(est, ev, 1, i)
+    s.wire(posActive, ev, 2)
+    s.wire(apInControl, ev, 3)
+    s.wire(apSplit, ev, 4, i)
     s.wire(ev, level, i)
   })
   s.wire(acroSplit, level, 2, 2)
@@ -2284,7 +2329,220 @@ function buildAltHoldSheet(startArmed: boolean): SheetBuilder {
   return s
 }
 
-function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, magnetometer: boolean): SheetBuilder {
+/**
+ * Betaflight's position controller (autopilot_multirotor.c positionControl),
+ * stepping on each GNSS fix (10 Hz). Per grid axis: P on the distance to the
+ * target, I outside the stopping phase, D on the PT1-filtered velocity from
+ * successive positions (× 1.6 while stopping), A on its filtered derivative;
+ * the D + A vector limited to 35°. While the sticks are active the output is
+ * 0, the target follows the vehicle and I leaks; after they centre, each axis
+ * stops when its velocity reverses and its target resets there. The sum is
+ * rotated into body roll and pitch by the estimated yaw and limited to
+ * ap_max_angle. Farther than the sanity distance, it fails (and holds its output).
+ */
+function buildPositionControlSheet(): SheetBuilder {
+  const H = FC.posHold
+  const ts = SENSORS.gnss.ts
+  const freq = 1 / ts
+  const kp = H.p * 0.0012, ki = H.i * 0.0001, kd = H.d * 0.0015, ka = H.a * 0.0008
+  const kva = pt1Gain(H.cutoffHz, ts)
+  const leak = 1 - ts / (ts + H.iLeakS)
+  const s = new SheetBuilder('posctl', 'PositionControl')
+  const enabled = s.input('enabled', 'double')
+  const run = s.input('run', 'double')
+  const pos = s.input('gnss_pos', 'double[3]')
+  const speed = s.input('ground_speed', 'double')
+  const sticksActive = s.input('sticks_active', 'double')
+  const yaw = s.input('yaw_est', 'double')
+  const posSplit = s.add('demux', 'PosSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(pos, posSplit)
+  const delay = (name: string, init: number | number[]) => s.add('unit_delay', `${name}Prev`, { initialValue: init, sampleInterval: ts })
+  const ev = (name: string, expression: string, inputs: Array<string | [string, number]>) => {
+    const id = s.add('evaluate', name, { numInputs: inputs.length, expression })
+    inputs.forEach((x, k) => (Array.isArray(x) ? s.wire(x[0], id, k, x[1]) : s.wire(x, id, k)))
+    return id
+  }
+  const enabledPrev = delay('Enabled', 0)
+  s.wire(enabled, enabledPrev)
+  const entering = ev('Entering', '(in(0) > 0.5 && in(1) < 0.5) ? 1.0 : 0.0', [enabled, enabledPrev])
+  const gsCm = ev('GroundSpeedCm', 'in(0) * 100.0', [speed])
+  const sanityPrev = delay('Sanity', H.sanityMinCm)
+  const sanity0 = ev('Sanity0', `(in(0) > 0.5) ? fmax(${H.sanityMinCm}.0, 2.0 * in(1)) : in(2)`, [entering, gsCm, sanityPrev])
+
+  // Per axis (0 north, 1 east, grid): states, and the values at this sample after an entry reset
+  const axes = ['North', 'East'].map((name, k) => {
+    const target = delay(`${name}Target`, 0), stop = delay(`${name}Stopping`, 1), integ = delay(`${name}Integral`, 0)
+    const vf = delay(`${name}Velocity`, 0), af = delay(`${name}Acceleration`, 0)
+    const prevD = delay(`${name}LastDistance`, 0), prevVf = delay(`${name}LastVelocity`, 0)
+    const p_k: [string, number] = [posSplit, k]
+    return {
+      name, k, target, stop, integ, vf, af, prevD, prevVf, pos: p_k,
+      tgt0: ev(`${name}Target0`, '(in(0) > 0.5) ? in(1) : in(2)', [entering, p_k, target]),
+      stop0: ev(`${name}Stopping0`, '(in(0) > 0.5) ? 1.0 : in(1)', [entering, stop]),
+      integ0: ev(`${name}Integral0`, '(in(0) > 0.5) ? 0.0 : in(1)', [entering, integ]),
+      vf0: ev(`${name}Velocity0`, '(in(0) > 0.5) ? 0.0 : in(1)', [entering, vf]),
+      af0: ev(`${name}Acceleration0`, '(in(0) > 0.5) ? 0.0 : in(1)', [entering, af]),
+    }
+  })
+  // Distance to the target (cm), and the sanity check
+  const dist = axes.map(a => ev(`${a.name}DistanceCm`, '(in(0) - in(1)) * 100.0', [a.tgt0, a.pos]))
+  const fail = ev('SanityFail', '(in(0) > 0.5 && sqrt(in(1) * in(1) + in(2) * in(2)) > in(3)) ? 1.0 : 0.0', [run, dist[0]!, dist[1]!, sanity0])
+  const ok = ev('Update', '(in(0) > 0.5 && in(1) < 0.5) ? 1.0 : 0.0', [run, fail])
+
+  const terms = axes.map((a, i) => {
+    const d = dist[i]!
+    const integC = ev(`${a.name}IntegralSum`, `in(1) + ((in(2) > 0.5) ? 0.0 : in(0) * ${ts})`, [d, a.integ0, a.stop0])
+    const vel = ev(`${a.name}VelocityRaw`, `(in(0) - in(1)) * ${freq}`, [d, a.prevD])
+    const vf = ev(`${a.name}VelocityFiltered`, `in(1) + ${kva} * (in(0) - in(1))`, [vel, a.vf0])
+    const acc = ev(`${a.name}AccelerationRaw`, `(in(0) - in(1)) * ${freq}`, [vf, a.prevVf])
+    const af = ev(`${a.name}AccelerationFiltered`, `in(1) + ${kva} * (in(0) - in(1))`, [acc, a.af0])
+    // Stopping: after the sticks centre, until the velocity reverses
+    const stoppedNow = ev(`${a.name}StoppedNow`, '(in(0) < 0.5 && in(1) > 0.5 && in(2) * in(3) < 0.0) ? 1.0 : 0.0', [sticksActive, a.stop0, vel, vf])
+    const dTerm = ev(`${a.name}D`, `in(0) * ${kd} * ((in(1) < 0.5 && in(2) > 0.5) ? ${H.stoppingDBoost} : 1.0)`, [vf, sticksActive, a.stop0])
+    const daTerm = ev(`${a.name}DA`, `in(0) + in(1) * ${ka}`, [dTerm, af])
+    const pi = ev(`${a.name}PI`, `in(0) * ${kp} + in(1) * ${ki}`, [d, integC])
+    // Next states (written only on an update; otherwise the entry-reset values stand)
+    const stopN = ev(`${a.name}StoppingNext`, '(in(0) > 0.5) ? 1.0 : ((in(1) > 0.5) ? 0.0 : in(2))', [sticksActive, stoppedNow, a.stop0])
+    const integN = ev(`${a.name}IntegralNext`, `(in(0) > 0.5) ? in(1) * ${leak} : in(1)`, [sticksActive, integC])
+    const prevDN = ev(`${a.name}LastDistanceNext`, '(in(0) > 0.5 || in(1) > 0.5) ? 0.0 : in(2)', [sticksActive, stoppedNow, d])
+    const tgtN = ev(`${a.name}TargetNext`, '(in(0) > 0.5 || in(1) > 0.5) ? in(2) : in(3)', [sticksActive, stoppedNow, a.pos, a.tgt0])
+    return { a, d, vf, af, stoppedNow, daTerm, pi, stopN, integN, prevDN, tgtN }
+  })
+  // D + A limited as a vector, then the earth-frame sum
+  const daScale = ev('DAScale', `(sqrt(in(0) * in(0) + in(1) * in(1)) > ${H.daLimitDeg}) ? ${H.daLimitDeg} / sqrt(in(0) * in(0) + in(1) * in(1)) : 1.0`, [terms[0]!.daTerm, terms[1]!.daTerm])
+  const sum = terms.map(t => ev(`${t.a.name}Sum`, 'in(0) + in(1) * in(2)', [t.pi, t.daTerm, daScale]))
+  // Rotate to body (ENU: x east, y north; angle = yaw − 90°), roll = −y_body, forward = x_body; limit; our pitch = −forward
+  const rot = `(in(2) - ${Math.PI / 2})`
+  const bx = `(in(1) * cos(${rot}) - in(0) * sin(${rot}))`
+  const by = `(in(1) * sin(${rot}) + in(0) * cos(${rot}))`
+  const mag = `sqrt(${bx} * ${bx} + ${by} * ${by})`
+  const limit = `((${mag} > ${H.maxAngleDeg}) ? ${H.maxAngleDeg} / ${mag} : 1.0)`
+  // in(0) north sum, in(1) east sum, in(2) yaw, in(3) sticks active
+  const rollCmd = ev('RollCommand', `(in(3) > 0.5) ? 0.0 : -${by} * ${limit}`, [sum[0]!, sum[1]!, yaw, sticksActive])
+  const pitchCmd = ev('PitchCommand', `(in(3) > 0.5) ? 0.0 : -${bx} * ${limit}`, [sum[0]!, sum[1]!, yaw, sticksActive])
+  const anglesPrev = delay('Angles', [0, 0])
+  const anglesSplit = s.add('demux', 'AnglesPrevSplit', { outputCount: 2, inputDimensions: [2] })
+  s.wire(anglesPrev, anglesSplit)
+  const angles = s.add('mux', 'Angles', { rows: 2, cols: 1, baseType: 'double', outputType: 'double[2]' })
+  ;[rollCmd, pitchCmd].forEach((c, k) => s.wire(ev(`AngleOut${k}`, '(in(0) > 0.5) ? in(1) : in(2)', [ok, c, [anglesSplit, k]]), angles, k))
+  s.wire(angles, anglesPrev)
+
+  // State writes on an update; otherwise keep the (entry-reset) values
+  const keep = (next: string, held: string, name: string) => ev(name, '(in(0) > 0.5) ? in(1) : in(2)', [ok, next, held])
+  for (const t of terms) {
+    const a = t.a
+    s.wire(keep(t.tgtN, a.tgt0, `${a.name}TargetWrite`), a.target)
+    s.wire(keep(t.stopN, a.stop0, `${a.name}StoppingWrite`), a.stop)
+    s.wire(keep(t.integN, a.integ0, `${a.name}IntegralWrite`), a.integ)
+    s.wire(keep(t.vf, a.vf0, `${a.name}VelocityWrite`), a.vf)
+    s.wire(keep(t.af, a.af0, `${a.name}AccelerationWrite`), a.af)
+    s.wire(keep(t.prevDN, a.prevD, `${a.name}LastDistanceWrite`), a.prevD)
+    s.wire(keep(t.vf, a.prevVf, `${a.name}LastVelocityWrite`), a.prevVf)
+  }
+  // Sanity distance: follows 2 s of travel while the sticks are active; 20 m once both axes have stopped
+  // (the code's sanityCheckDistance(1000) = max(1000, 2 × 1000))
+  const sanityN = ev('SanityNext',
+    `(in(0) > 0.5) ? fmax(${H.sanityMinCm}.0, 2.0 * in(1)) : (((in(2) > 0.5 || in(3) > 0.5) && in(4) < 0.5 && in(5) < 0.5) ? ${Math.max(H.sanityMinCm, 2 * 1000)}.0 : in(6))`,
+    [sticksActive, gsCm, terms[0]!.stoppedNow, terms[1]!.stoppedNow, terms[0]!.stopN, terms[1]!.stopN, sanity0])
+  s.wire(keep(sanityN, sanity0, 'SanityWrite'), sanityPrev)
+  s.output('angles', angles, 'double[2]')
+  s.output('sanity_fail', fail, 'double')
+  return s
+}
+
+/**
+ * Position Hold, after Betaflight 2025.12 (docs/fpv-betaflight-gnss-spec.md
+ * §3.1, §3.3), at 100 Hz. Active when armed, not in GPS Rescue, the throttle
+ * raised, and AUX4 high or a failsafe AUTO-LAND. The controller runs only with
+ * a 3D fix and either a magnetometer or (without-mag allowed and) GPS heading,
+ * and only until its sanity check fails (POSHOLD FAIL); otherwise its angle
+ * holds. Roll or pitch beyond the deadband hands control to the pilot (not
+ * during failsafe). The angle is upsampled to 100 Hz through a 5 Hz PT3.
+ */
+function buildPosHoldSheet(magnetometer: boolean, withoutMag: boolean): SheetBuilder {
+  const H = FC.posHold
+  const ts = FC.autopilot.ts
+  const s = new SheetBuilder('poshold', 'PosHold')
+  const sticks = s.input('sticks', 'double[8]')
+  const armed = s.input('armed', 'double')
+  const stage = s.input('failsafe_stage', 'double')
+  const procedure = s.input('failsafe_procedure', 'double')
+  const raised = s.input('throttle_raised', 'double')
+  const gnssPos = s.input('gnss_pos', 'double[3]')
+  const gnssFix = s.input('gnss_fix', 'double[3]')
+  const course = s.input('gnss_course', 'double[4]')
+  const euler = s.input('euler_est', 'double[3]')
+  const headingOk = s.input('gps_heading_ok', 'double')
+  const rescue = s.input('rescue_active', 'double')
+  const split = s.add('demux', 'StickSplit', { outputCount: 8, inputDimensions: [8] })
+  s.wire(sticks, split)
+  const ev = (name: string, expression: string, inputs: Array<string | [string, number]>) => {
+    const id = s.add('evaluate', name, { numInputs: inputs.length, expression })
+    inputs.forEach((x, k) => (Array.isArray(x) ? s.wire(x[0], id, k, x[1]) : s.wire(x, id, k)))
+    return id
+  }
+  const delay = (name: string, init: number) => s.add('unit_delay', `${name}Prev`, { initialValue: init, sampleInterval: ts })
+  const fixSplit = s.add('demux', 'FixSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(gnssFix, fixSplit)
+  const crs = s.add('demux', 'CourseSplit', { outputCount: 4, inputDimensions: [4] })
+  s.wire(course, crs)
+  const att = s.add('demux', 'AttitudeSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(euler, att)
+
+  const requested = ev('Requested',
+    `(in(0) > 0.5 && in(1) < 0.5 && in(2) > 0.5 && (in(3) > 0.75 || (in(4) > 1.5 && fabs(in(5) - ${FAILSAFE_PROCEDURE.autoLand}) < 0.5))) ? 1.0 : 0.0`,
+    [armed, rescue, raised, [split, 7], stage, procedure])
+  const reqPrev = delay('Requested', 0)
+  s.wire(requested, reqPrev)
+  const entering = ev('Entering', '(in(0) > 0.5 && in(1) < 0.5) ? 1.0 : 0.0', [requested, reqPrev])
+  const sensorsOk = ev('SensorsOk', `(in(0) > 2.5 && (${magnetometer ? 1 : 0} > 0 || (${withoutMag ? 1 : 0} > 0 && in(1) > 0.5))) ? 1.0 : 0.0`, [[fixSplit, 0], headingOk])
+  const okPrev = delay('ControlOk', 0)
+  // Runs when requested, control still OK (or just entered) and the sensors are OK
+  const run = ev('Run', '(in(0) > 0.5 && (in(1) > 0.5 || in(2) > 0.5) && in(3) > 0.5) ? 1.0 : 0.0', [requested, entering, okPrev, sensorsOk])
+  // Sticks: deflection beyond the deadband, checked only while running and not in failsafe
+  const saPrev = delay('SticksActive', 0)
+  const sticksActive = ev('SticksActive',
+    `(in(0) > 0.5 && in(1) < 1.5) ? ((fabs(in(2)) > ${H.deadband} || fabs(in(3)) > ${H.deadband}) ? 1.0 : 0.0) : ((in(4) > 0.5) ? 0.0 : in(5))`,
+    [run, stage, [split, 0], [split, 1], entering, saPrev])
+  s.wire(sticksActive, saPrev)
+  const ctl = s.add('subsystem', 'PositionControl', {
+    ...subsystem(['enabled', 'run', 'gnss_pos', 'ground_speed', 'sticks_active', 'yaw_est'], ['angles', 'sanity_fail'], buildPositionControlSheet()),
+    sampleTimeSec: SENSORS.gnss.ts,
+  })
+  s.wire(requested, ctl, 0)
+  s.wire(run, ctl, 1)
+  s.wire(gnssPos, ctl, 2)
+  s.wire(crs, ctl, 3, 2)
+  s.wire(sticksActive, ctl, 4)
+  s.wire(att, ctl, 5, 2)
+  // Control OK until the sanity check fails; re-armed on entry
+  const ok = ev('ControlOk', '(in(0) > 0.5) ? ((in(1) > 0.5) ? 1.0 : ((in(2) > 0.5 && !(in(3) > 0.5 && in(4) > 0.5)) ? 1.0 : 0.0)) : 0.0',
+    [requested, entering, okPrev, run, [ctl, 1]])
+  s.wire(ok, okPrev)
+  const fail = ev('PosHoldFail', '(in(0) > 0.5 && (in(1) < 0.5 || in(2) < 0.5)) ? 1.0 : 0.0', [requested, ok, sensorsOk])
+  // Upsampling: a 5 Hz PT3 at 100 Hz, updated while running, cleared on entry, otherwise held
+  const k3 = pt1Gain(H.upsampleHz * 1.961459177, ts)
+  const angleSplit = s.add('demux', 'AngleSplit', { outputCount: 2, inputDimensions: [2] })
+  s.wire(ctl, angleSplit, 0, 0)
+  const out = s.add('mux', 'AutopilotAngle', { rows: 2, cols: 1, baseType: 'double', outputType: 'double[2]' })
+  for (let k = 0; k < 2; k++) {
+    let x: string | [string, number] = [angleSplit, k]
+    for (let st = 1; st <= 3; st++) {
+      const prev = delay(`Upsample${k}Stage${st}`, 0)
+      const y = ev(`Upsample${k}Stage${st}`, `(in(1) > 0.5) ? 0.0 : ((in(2) > 0.5) ? in(3) + ${k3} * (in(0) - in(3)) : in(3))`, [x, entering, run, prev])
+      s.wire(y, prev)
+      x = y
+    }
+    s.wire(x as string, out, k)
+  }
+  s.output('active', requested, 'double')
+  s.output('in_control', ev('InControl', '(in(0) > 0.5) ? 0.0 : 1.0', [sticksActive]), 'double')
+  s.output('angle', out, 'double[2]')
+  s.output('fail', fail, 'double')
+  return s
+}
+
+function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, magnetometer: boolean, posHoldWithoutMag = FC.posHold.withoutMag): SheetBuilder {
   const s = new SheetBuilder('fc', 'FlightController')
   const rawSticks = s.input('sticks', 'double[8]')
   const gyro = s.input('gyro', 'double[3]')
@@ -2344,10 +2602,15 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   // Setpoint: acro rates, or angle mode on the AUX switch
   const rates = s.add('subsystem', 'Rates', subsystem(['sticks'], ['setpoint', 'throttle'], buildRatesSheet()))
   s.wire(apSticks, rates)
-  const angle = s.add('subsystem', 'AngleMode', subsystem(['sticks', 'euler_est', 'acro_setpoint'], ['setpoint', 'angle_mode'], buildAngleModeSheet()))
+  const angle = s.add('subsystem', 'AngleMode', subsystem(
+    ['sticks', 'euler_est', 'acro_setpoint', 'pos_hold_active', 'autopilot_in_control', 'autopilot_angle'], ['setpoint', 'angle_mode'], buildAngleModeSheet()))
   s.wire(apSticks, angle, 0)
   s.wire(att, angle, 1, 1)
   s.wire(rates, angle, 2, 0)
+  const posHoldId = `${s.id}__PosHold`
+  s.wire(posHoldId, angle, 3, 0)
+  s.wire(posHoldId, angle, 4, 1)
+  s.wire(posHoldId, angle, 5, 2)
 
   // Rate loop and mixer
   const filt = s.add('subsystem', 'GyroFilters', subsystem(['gyro'], ['gyro_dps'], buildGyroFilterSheet()))
@@ -2382,7 +2645,26 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.wire(alt, altHold, 4, 0)
   s.wire(alt, altHold, 5, 1)
   s.wire(att, altHold, 6, 1)
-  s.wire(s.constant('RescueActive', 0, 'double'), altHold, 7)
+  const rescueActive = s.constant('RescueActive', 0, 'double')
+  s.wire(rescueActive, altHold, 7)
+  // Position Hold (100 Hz, its controller on each fix); also forces angle mode through Alt Hold's switch rules
+  const posHold = s.add('subsystem', 'PosHold', {
+    ...subsystem(['sticks', 'armed', 'failsafe_stage', 'failsafe_procedure', 'throttle_raised', 'gnss_pos', 'gnss_fix', 'gnss_course', 'euler_est', 'gps_heading_ok', 'rescue_active'],
+      ['active', 'in_control', 'angle', 'fail'], buildPosHoldSheet(magnetometer, posHoldWithoutMag)),
+    sampleTimeSec: FC.autopilot.ts,
+  })
+  if (posHold !== posHoldId) throw new Error('PosHold id')
+  s.wire(sticks, posHold, 0)
+  s.wire(arming, posHold, 1, 0)
+  s.wire(failsafe, posHold, 2, 1)
+  s.wire(failsafe, posHold, 3, 3)
+  s.wire(altHold, posHold, 4, 2)
+  s.wire(gnssPos, posHold, 5)
+  s.wire(gnssFix, posHold, 6)
+  s.wire(gnssCourse, posHold, 7)
+  s.wire(att, posHold, 8, 1)
+  s.wire(att, posHold, 9, 2)
+  s.wire(rescueActive, posHold, 10)
   const pid = s.add('subsystem', 'RatePID', subsystem(['setpoint', 'gyro_dps', 'iterm_enable'], ['pid'], buildRatePidSheet()))
   s.wire(angle, pid, 0, 0)
   s.wire(filt, pid, 1, 0)
@@ -2422,20 +2704,26 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.output('home_bearing_deg', home, 'double', 2)
   // Flight-mode text code (FC_MODE), in Betaflight's priority order
   const mode = s.add('evaluate', 'FlightMode', {
-    numInputs: 4,
-    expression: `(in(0) > 0.5) ? ${FC_MODE.failsafe}.0 : ((in(3) > 0.5) ? ${FC_MODE.altHold}.0 : ((in(1) > 0.5) ? ${FC_MODE.angle}.0 : ((in(2) > 0.5) ? ${FC_MODE.air}.0 : ${FC_MODE.acro}.0)))`,
+    numInputs: 5,
+    expression: `(in(0) > 0.5) ? ${FC_MODE.failsafe}.0 : ((in(4) > 0.5) ? ${FC_MODE.posHold}.0 : ((in(3) > 0.5) ? ${FC_MODE.altHold}.0 : ((in(1) > 0.5) ? ${FC_MODE.angle}.0 : ((in(2) > 0.5) ? ${FC_MODE.air}.0 : ${FC_MODE.acro}.0))))`,
   })
   s.wire(failsafe, mode, 0, 1)
   s.wire(angle, mode, 1, 1)
   s.wire(arming, mode, 2, 1)
   s.wire(altHold, mode, 3, 0)
+  s.wire(posHold, mode, 4, 0)
   s.output('fc_mode', mode, 'double')
-  s.output('fc_warnings', arming, 'double', 2)
+  // Warnings: arming reasons (while disarmed) and POSHOLD FAIL
+  const warnings = s.add('evaluate', 'Warnings', { numInputs: 2, expression: `in(0) + ((in(1) > 0.5) ? ${FC_WARNING.posHoldFail}.0 : 0.0)` })
+  s.wire(arming, warnings, 0, 2)
+  s.wire(posHold, warnings, 1, 3)
+  s.output('fc_warnings', warnings, 'double')
   s.output('failsafe_stage', failsafe, 'double', 1)
   s.output('alt_est', alt, 'double', 0)
   s.output('vario_est', alt, 'double', 1)
   s.output('gps_heading_ok', att, 'double', 2)
   s.output('alt_hold_active', altHold, 'double', 0)
+  s.output('pos_hold_active', posHold, 'double', 0)
   return s
 }
 
@@ -2480,6 +2768,11 @@ export interface FpvModelOptions {
    * comes from GPS course over ground, as in Betaflight.
    */
   magnetometer?: boolean
+  /**
+   * Betaflight pos_hold_without_mag (default off, as Betaflight): allow
+   * Position Hold without a magnetometer once GPS heading is established.
+   */
+  posHoldWithoutMag?: boolean
 }
 
 /** The vehicle model without a magnetometer (validation suite). */
@@ -2531,7 +2824,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
 
     fc = main.add('subsystem', 'FlightController', {
       ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure', 'grid_convergence_deg', 'gnss_pos', 'gnss_fix', 'rc_link_valid', 'failsafe_procedure', 'gnss_course'], FC_OUTPUTS,
-        buildFlightControllerSheet(magnetometer ? initialQuat : eulerToQuat([...(opts.initialEuler ?? [0, 0, 0]).slice(0, 2), 0]), altitude0, magnetometer), FC_SIZE),
+        buildFlightControllerSheet(magnetometer ? initialQuat : eulerToQuat([...(opts.initialEuler ?? [0, 0, 0]).slice(0, 2), 0]), altitude0, magnetometer, opts.posHoldWithoutMag ?? FC.posHold.withoutMag), FC_SIZE),
       sampleTimeSec: FC.ts,
     })
     main.wire(pilot, fc, 0)
@@ -2627,7 +2920,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     publish('gyro_dps', fc, 'double[3]', fcOut('gyro_dps'))
     publish('euler_est', fc, 'double[3]', fcOut('euler_est'))
     publish('quat_est', fc, 'double[4][1]', fcOut('quat_est'))
-    for (const name of ['heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok', 'alt_hold_active']) {
+    for (const name of ['heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok', 'alt_hold_active', 'pos_hold_active']) {
       publish(name, fc, 'double', fcOut(name))
     }
   }
@@ -3489,11 +3782,11 @@ export function buildFpvAltitudeEstimatorTestModel() {
 /**
  * The no-magnetometer vehicle for the validation suite: it starts facing
  * NO_MAG_START_YAW_DEG (grid) while its attitude estimate starts at yaw 0, as
- * after a power-up without a magnetometer.
+ * after a power-up without a magnetometer, and has pos_hold_without_mag on.
  */
 export const NO_MAG_START_YAW_DEG = 60
 export function buildFpvNoMagVehicle() {
-  return buildFpvModel({ vehicleOnly: true, magnetometer: false, initialEuler: [0, 0, NO_MAG_START_YAW_DEG] })
+  return buildFpvModel({ vehicleOnly: true, magnetometer: false, posHoldWithoutMag: true, initialEuler: [0, 0, NO_MAG_START_YAW_DEG] })
 }
 
 /**
@@ -3501,22 +3794,36 @@ export function buildFpvNoMagVehicle() {
  * ground track; the true yaw differs by the sideslip (the hover's small tilt
  * bias gives about 4° at 10 m/s), as on a real quad.
  */
-export const NO_MAG_TEST = { still: 4, converged: 10, courseDeg: 2, truthDeg: 8, headingOkFrom: 8.5, duration: 12 }
+export const NO_MAG_TEST = {
+  still: 4, converged: 10, courseDeg: 2, truthDeg: 8, headingOkFrom: 8.5,
+  /** Pos Hold requested before GPS heading (refused), and after the forward flight (holds) */
+  earlyHold: [2, 3.5] as [number, number], hold: 12, holdM: 5, settled: 16, duration: 22,
+}
 
 /** T19: heading without a magnetometer — from 0 before motion, snapped and converged to the course in flight. */
 export function buildFpvNoMagHeadingTestModel() {
   const t = NO_MAG_TEST
   const R2D = 180 / Math.PI
   const tests = () => {
-    const { s, from, pick, expr, check, upright } = testsSheet()
+    const { s, h, from, pick, expr, check, upright } = testsSheet()
     const yawEst = expr('YawEstimateDeg', `in(0) * ${R2D}`, [pick('YawEstimate', from('euler_est'), [2])])
     const yawTrue = expr('YawTrueDeg', `in(0) * ${R2D}`, [pick('YawTrue', from('euler'), [2])])
     const wrapDiff = (name: string, a: string, b: string) => expr(name, 'fmod(in(0) - in(1) + 540.0, 360.0) - 180.0', [a, b])
     check('EstimateStartsAtZero', yawEst, -1, 1, 0, t.still)
     check('GpsHeadingNotYet', from('gps_heading_ok'), 0, 0, 0, t.still)
-    check('HeadingFollowsCourse', wrapDiff('HeadingMinusTrack', from('heading_deg'), pick('Track', from('gnss_course'), [0])), -t.courseDeg, t.courseDeg, t.converged)
+    // In forward flight, before Pos Hold stops the quad (a hover has no meaningful course)
+    check('HeadingFollowsCourse', wrapDiff('HeadingMinusTrack', from('heading_deg'), pick('Track', from('gnss_course'), [0])), -t.courseDeg, t.courseDeg, t.converged, t.hold)
     check('EstimateNearTrueYaw', wrapDiff('EstimateYawError', yawEst, yawTrue), -t.truthDeg, t.truthDeg, t.converged)
     check('GpsHeadingEstablished', from('gps_heading_ok'), 1, 1, t.headingOkFrom)
+    // Pos Hold without a magnetometer: refused (POSHOLD FAIL) before GPS heading; holds after
+    const fail = expr('PosHoldFailBit', `fmod(floor(in(0) / ${FC_WARNING.posHoldFail}.0 + 1e-9), 2.0)`, [from('fc_warnings')])
+    check('PosHoldRefusedBeforeHeading', fail, 1, 1, t.earlyHold[0] + 0.02, t.earlyHold[1] - 0.02)
+    check('PosHoldOkAfterHeading', fail, 0, 0, t.hold + 0.02)
+    const pos = from('pos_ned')
+    const north = pick('North', pos, [0]), east = pick('East', pos, [1])
+    const dev = expr('HoldDeviation', 'sqrt((in(0) - in(2)) * (in(0) - in(2)) + (in(1) - in(3)) * (in(1) - in(3)))',
+      [north, east, h.heldAt('NorthAtSettle', north, t.settled), h.heldAt('EastAtSettle', east, t.settled)])
+    check('PosHoldHoldsAfterHeading', dev, 0, t.holdM, t.settled, t.duration)
     upright()
     return s
   }
@@ -3526,8 +3833,14 @@ export function buildFpvNoMagHeadingTestModel() {
       'Validation test for heading without a magnetometer (docs/fpv-hud-gnss-test-plan.md, T19): the vehicle faces ' +
       `${NO_MAG_START_YAW_DEG}° with its estimate at 0°. Flying forward, the estimate snaps to the GPS course at 1 m/s and ` +
       `converges on it (heading within ${t.courseDeg}° of the track, the true yaw within ${t.truthDeg}° allowing for sideslip), ` +
-      'and GPS heading becomes established.',
-    sticks: COURSE_STICKS,
+      'and GPS heading becomes established. Position Hold (pos_hold_without_mag on) is refused before that and holds after.',
+    sticks: {
+      ...COURSE_STICKS,
+      // Release the pitch stick when Pos Hold takes over
+      pitch: [...COURSE_STICKS.pitch, [NO_MAG_TEST.hold - 0.001, -0.25], [NO_MAG_TEST.hold, 0]],
+      hold: [[0, 0], [NO_MAG_TEST.earlyHold[0] - 0.001, 0], [NO_MAG_TEST.earlyHold[0], 1], [NO_MAG_TEST.earlyHold[1], 1],
+        [NO_MAG_TEST.earlyHold[1] + 0.001, 0], [NO_MAG_TEST.hold - 0.001, 0], [NO_MAG_TEST.hold, 1]],
+    },
     duration: t.duration,
     displays: [['Heading', 'heading_deg'], ['GnssCourse', 'gnss_course'], ['Attitude', 'euler']],
     tests,
@@ -3595,7 +3908,7 @@ export function buildFpvAltHoldTestModel() {
  */
 export const AUTO_LAND_TEST = {
   loss: 10, wind: 3, arrested: 12.5, landedBy: 15,
-  descentMs: [2, 6] as [number, number], maxSinkMs: 6, end: 75,
+  descentMs: [2, 6] as [number, number], maxSinkMs: 6, end: 75, driftM: 5,
 }
 
 /** T09: failsafe AUTO-LAND — Altitude Hold descends, lands, and disarms after the landing time. */
@@ -3617,6 +3930,12 @@ export function buildFpvAutoLandTestModel() {
     check('OnTheGround', height, -0.1, 0.3, t.landedBy, disarmAt)
     check('ArmedUntilLandingTime', armed, 1, 1, 1, disarmAt - 0.01)
     check('DisarmedAfterLandingTime', armed, 0, 0, disarmAt + 0.01)
+    // Pos Hold runs during the landing: after it brakes the stage-1 drift, the quad lands near where it stopped
+    check('PosHoldDuringLanding', from('pos_hold_active'), 1, 1, stage2 + 0.02, disarmAt - 0.02)
+    const north = pick('North', from('pos_ned'), [0]), east = pick('East', from('pos_ned'), [1])
+    const drift = expr('LandingDrift', 'sqrt((in(0) - in(2)) * (in(0) - in(2)) + (in(1) - in(3)) * (in(1) - in(3)))',
+      [north, east, h.heldAt('NorthAtArrest', north, t.arrested), h.heldAt('EastAtArrest', east, t.arrested)])
+    check('LandsNearArrestPoint', drift, 0, t.driftM, t.arrested, disarmAt)
     const deg = s.add('scale', 'RollPitchDeg', { gain: 180 / Math.PI })
     s.wire(pick('RollPitch', from('euler'), [0, 1]), deg)
     check('StaysUpright', deg, -60, 60, 0, disarmAt, 'stop')
@@ -3627,7 +3946,7 @@ export function buildFpvAutoLandTestModel() {
     description:
       'Validation test for failsafe AUTO-LAND (docs/fpv-hud-gnss-test-plan.md, T09): after a climb, in a ' +
       `${t.wind} m/s north wind, the link is lost at ${t.loss} s. Stage 2 at ${stage2} s runs Altitude Hold, which arrests the ` +
-      `stage-1 drop, descends under control and lands; the quad disarms ${f.landingTimeS} s into stage 2. Phase 11 adds Position Hold.`,
+      `stage-1 drop, descends under control and lands within ${t.driftM} m of where it was arrested, Position Hold holding against the wind; the quad disarms ${f.landingTimeS} s into stage 2.`,
     sticks: CLIMB_STICKS,
     duration: t.end,
     displays: [['Position', 'pos_ned'], ['FailsafeStage', 'failsafe_stage'], ['AltHold', 'alt_hold_active']],
@@ -3637,6 +3956,81 @@ export function buildFpvAutoLandTestModel() {
       failsafeProcedure: FAILSAFE_PROCEDURE.autoLand,
       wind: { north: t.wind },
     },
+  })
+}
+
+/** T17 timeline (s) and limits: a 3 m/s wind from the north; stick override; a loss of fix. */
+export const POS_HOLD_TEST = {
+  engage: 5, held: [10, 25] as [number, number], roll: [25, 28] as [number, number], moveM: 5,
+  reheld: [35, 44] as [number, number], noFix: [45, 50] as [number, number], resumed: [56, 60] as [number, number],
+  holdM: 3, wind: -3,
+}
+
+/** T17: Position Hold — holds against wind, stick override and a new hold point, POSHOLD FAIL while the fix is lost, resume. */
+export function buildFpvPosHoldTestModel() {
+  const t = POS_HOLD_TEST
+  const reacq = SENSORS.gnss.reacquireS
+  const tests = () => {
+    const { s, h, from, pick, expr, check, upright, bit } = testsSheet()
+    const pos = from('pos_ned')
+    const north = pick('North', pos, [0]), east = pick('East', pos, [1])
+    const devFrom = (name: string, at: number) => expr(name, 'sqrt((in(0) - in(2)) * (in(0) - in(2)) + (in(1) - in(3)) * (in(1) - in(3)))',
+      [north, east, h.heldAt(`${name}North`, north, at), h.heldAt(`${name}East`, east, at)])
+    check('Engaged', from('pos_hold_active'), 1, 1, t.engage + 0.02)
+    check('ModeIsPosHold', from('fc_mode'), FC_MODE.posHold, FC_MODE.posHold, t.engage + 0.02)
+    check('HoldsAgainstWind', devFrom('Hold1', t.held[0]), 0, t.holdM, t.held[0], t.held[1])
+    check('StickMovesIt', expr('EastMoved', 'in(0) - in(1)', [east, h.heldAt('EastBeforeStick', east, t.roll[0])]), t.moveM, null, t.roll[1], t.roll[1] + 0.5)
+    check('HoldsNewPoint', devFrom('Hold2', t.reheld[0]), 0, t.holdM, t.reheld[0], t.reheld[1])
+    const fail = bit('FailBit', from('fc_warnings'), FC_WARNING.posHoldFail)
+    check('PosHoldFailWithoutFix', fail, 1, 1, t.noFix[0] + 0.02, t.noFix[1] + reacq - 0.02)
+    check('NoFailBeforeLoss', fail, 0, 0, t.engage + 0.02, t.noFix[0] - 0.02)
+    check('ResumesTowardTarget', devFrom('Hold3', t.reheld[1]), 0, t.holdM, t.resumed[0], t.resumed[1])
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T17 Position Hold',
+    description:
+      'Validation test for Position Hold (docs/fpv-hud-gnss-test-plan.md, T17): in a 3 m/s wind from the north, AUX4 high ' +
+      `at ${t.engage} s stops the drift and holds; a 30% roll stick (${t.roll[0]}–${t.roll[1]} s) moves the quad and it holds the ` +
+      `new point; with the fix lost (${t.noFix[0]}–${t.noFix[1]} s) it shows POSHOLD FAIL and holds its last angle, then returns.`,
+    sticks: { ...CLIMB_STICKS, roll: [[0, 0], [t.roll[0] - 0.001, 0], [t.roll[0], 0.3], [t.roll[1], 0.3], [t.roll[1] + 0.001, 0]], hold: [[0, 0], [t.engage - 0.001, 0], [t.engage, 1]] },
+    duration: t.resumed[1],
+    displays: [['Position', 'pos_ned'], ['Mode', 'fc_mode'], ['Warnings', 'fc_warnings']],
+    tests,
+    conditions: {
+      wind: { north: t.wind },
+      gnssEnv: { satellites: step([[0, 14], [t.noFix[0], 2], [t.noFix[1], 14]]) },
+    },
+  })
+}
+
+/** T18: a 12 m/s gust overpowers the 25° angle limit; past the sanity distance Pos Hold fails and stays failed. */
+export const POS_HOLD_SANITY_TEST = { engage: 5, gust: 10, gustMs: -12, failBy: 25, duration: 30 }
+
+export function buildFpvPosHoldSanityTestModel() {
+  const t = POS_HOLD_SANITY_TEST
+  const tests = () => {
+    const { s, from, check, upright, bit, h } = testsSheet()
+    const fail = bit('FailBit', from('fc_warnings'), FC_WARNING.posHoldFail)
+    check('HoldsBeforeGust', fail, 0, 0, t.engage + 0.02, t.gust)
+    check('FailsAfterGust', h.latch('FailedOnce', fail), 1, 1, t.failBy)
+    // Latched until re-entry: still failed at the end though the controller has not been re-armed
+    check('StaysFailed', fail, 1, 1, t.failBy, t.duration)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T18 Position Hold Sanity',
+    description:
+      'Validation test for the Position Hold sanity check (docs/fpv-hud-gnss-test-plan.md, T18): holding from ' +
+      `${t.engage} s, a ${-t.gustMs} m/s gust from ${t.gust} s overpowers the 25° angle limit; once the quad is farther than ` +
+      'the sanity distance, POSHOLD FAIL shows and stays until Pos Hold is re-entered.',
+    sticks: { ...CLIMB_STICKS, hold: [[0, 0], [t.engage - 0.001, 0], [t.engage, 1]] },
+    duration: t.duration,
+    displays: [['Position', 'pos_ned'], ['Warnings', 'fc_warnings']],
+    tests,
+    conditions: { wind: { north: [[0, 0], [t.gust - 0.001, 0], [t.gust, t.gustMs]] } },
   })
 }
 
@@ -3663,6 +4057,8 @@ export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<s
     ['t08-failsafe-drop.json', buildFpvFailsafeDropTestModel()],
     ['t09-failsafe-auto-land.json', buildFpvAutoLandTestModel()],
     ['t16-altitude-hold.json', buildFpvAltHoldTestModel()],
+    ['t17-position-hold.json', buildFpvPosHoldTestModel()],
+    ['t18-position-hold-sanity.json', buildFpvPosHoldSanityTestModel()],
     ['t19-no-mag-heading.json', buildFpvNoMagHeadingTestModel()],
     ['t21-altitude-estimator.json', buildFpvAltitudeEstimatorTestModel()],
     ['t22-wind.json', buildFpvWindTestModel()],

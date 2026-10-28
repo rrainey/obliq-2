@@ -4,7 +4,7 @@
     "version": "2.2",
     "metadata": {
       "created": "2026-10-21T00:00:00.000Z",
-      "description": "Validation test for failsafe AUTO-LAND (docs/fpv-hud-gnss-test-plan.md, T09): after a climb, in a 3 m/s north wind, the link is lost at 10 s. Stage 2 at 11.5 s runs Altitude Hold, which arrests the stage-1 drop, descends under control and lands; the quad disarms 60 s into stage 2. Phase 11 adds Position Hold."
+      "description": "Validation test for failsafe AUTO-LAND (docs/fpv-hud-gnss-test-plan.md, T09): after a climb, in a 3 m/s north wind, the link is lost at 10 s. Stage 2 at 11.5 s runs Altitude Hold, which arrests the stage-1 drop, descends under control and lands within 5 m of where it was arrested, Position Hold holding against the wind; the quad disarms 60 s into stage 2."
     },
     "globalSettings": {
       "simulationTimeStep": 0.0005,
@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": -4
+              "y": -52
             },
             "parameters": {
               "showName": true,
@@ -442,7 +442,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": -79
+              "y": -130
             },
             "parameters": {
               "showName": true,
@@ -494,7 +494,8 @@
                 "alt_est",
                 "vario_est",
                 "gps_heading_ok",
-                "alt_hold_active"
+                "alt_hold_active",
+                "pos_hold_active"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -510,7 +511,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 307
+              "y": 267
             },
             "parameters": {
               "showName": true,
@@ -926,8 +927,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_pos_ned",
             "position": {
-              "x": 490,
-              "y": -49
+              "x": 494,
+              "y": -136
             },
             "parameters": {
               "showName": true,
@@ -939,8 +940,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_vel_ned",
             "position": {
-              "x": 490,
-              "y": 95
+              "x": 494,
+              "y": 8
             },
             "parameters": {
               "showName": true,
@@ -952,8 +953,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler",
             "position": {
-              "x": 504,
-              "y": 239
+              "x": 508,
+              "y": 152
             },
             "parameters": {
               "showName": true,
@@ -965,8 +966,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_armed",
             "position": {
-              "x": 488,
-              "y": 383
+              "x": 492,
+              "y": 296
             },
             "parameters": {
               "showName": true,
@@ -978,8 +979,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_mode",
             "position": {
-              "x": 490,
-              "y": 527
+              "x": 494,
+              "y": 440
             },
             "parameters": {
               "showName": true,
@@ -991,8 +992,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_failsafe_stage",
             "position": {
-              "x": 484,
-              "y": 671
+              "x": 488,
+              "y": 584
             },
             "parameters": {
               "showName": true,
@@ -1004,12 +1005,25 @@
             "type": "sheet_label_sink",
             "name": "Tag_alt_hold_active",
             "position": {
-              "x": 484,
-              "y": 815
+              "x": 488,
+              "y": 728
             },
             "parameters": {
               "showName": true,
               "signalName": "alt_hold_active"
+            }
+          },
+          {
+            "id": "main__Tag_pos_hold_active",
+            "type": "sheet_label_sink",
+            "name": "Tag_pos_hold_active",
+            "position": {
+              "x": 488,
+              "y": 872
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_hold_active"
             }
           }
         ],
@@ -1075,7 +1089,7 @@
             "targetBlockId": "main__Tag_pos_ned",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -27
+              "midpointOffset": -31
             }
           },
           {
@@ -1085,7 +1099,7 @@
             "targetBlockId": "main__Tag_vel_ned",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 13
+              "midpointOffset": 17
             }
           },
           {
@@ -1095,7 +1109,7 @@
             "targetBlockId": "main__Tag_euler",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -18
+              "midpointOffset": -22
             }
           },
           {
@@ -1105,7 +1119,7 @@
             "targetBlockId": "main__Tag_fc_armed",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -2
+              "midpointOffset": -6
             }
           },
           {
@@ -1115,7 +1129,7 @@
             "targetBlockId": "main__Tag_fc_mode",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 5
+              "midpointOffset": 1
             }
           },
           {
@@ -1125,7 +1139,7 @@
             "targetBlockId": "main__Tag_failsafe_stage",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 24
+              "midpointOffset": 12
             }
           },
           {
@@ -1135,13 +1149,23 @@
             "targetBlockId": "main__Tag_alt_hold_active",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -16
+              "midpointOffset": 28
+            }
+          },
+          {
+            "id": "w_14_main__Vehicle_main__Tag_pos_hold_active",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 38,
+            "targetBlockId": "main__Tag_pos_hold_active",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -20
             }
           }
         ],
         "extents": {
-          "width": 804,
-          "height": 1015
+          "width": 808,
+          "height": 1072
         }
       },
       {
@@ -1265,7 +1289,7 @@
             "name": "From_failsafe_stage",
             "position": {
               "x": 100,
-              "y": 871
+              "y": 653
             },
             "parameters": {
               "showName": true,
@@ -1278,7 +1302,7 @@
             "name": "From_fc_armed",
             "position": {
               "x": 104,
-              "y": -63
+              "y": -270
             },
             "parameters": {
               "showName": true,
@@ -1291,7 +1315,7 @@
             "name": "From_pos_ned",
             "position": {
               "x": 106,
-              "y": 727
+              "y": 1078
             },
             "parameters": {
               "showName": true,
@@ -1304,7 +1328,7 @@
             "name": "Down",
             "position": {
               "x": 368,
-              "y": 727
+              "y": 1222
             },
             "parameters": {
               "showName": true,
@@ -1318,8 +1342,8 @@
             "type": "evaluate",
             "name": "HeightAboveArming",
             "position": {
-              "x": 669,
-              "y": 729
+              "x": 681,
+              "y": 1220
             },
             "parameters": {
               "showName": true,
@@ -1333,7 +1357,7 @@
             "name": "From_vel_ned",
             "position": {
               "x": 106,
-              "y": 369
+              "y": 162
             },
             "parameters": {
               "showName": true,
@@ -1346,7 +1370,7 @@
             "name": "VelDown",
             "position": {
               "x": 368,
-              "y": 369
+              "y": 162
             },
             "parameters": {
               "showName": true,
@@ -1361,7 +1385,7 @@
             "name": "InStage2",
             "position": {
               "x": 300,
-              "y": 871
+              "y": 646
             },
             "parameters": {
               "showName": true,
@@ -1375,7 +1399,7 @@
             "name": "Time",
             "position": {
               "x": 368,
-              "y": 1015
+              "y": 790
             },
             "parameters": {
               "showName": true
@@ -1386,8 +1410,8 @@
             "type": "unit_delay",
             "name": "Stage2TimePrev",
             "position": {
-              "x": 975,
-              "y": 950
+              "x": 1097,
+              "y": 651
             },
             "parameters": {
               "showName": true,
@@ -1400,8 +1424,8 @@
             "type": "evaluate",
             "name": "Stage2Time",
             "position": {
-              "x": 595,
-              "y": 942
+              "x": 607,
+              "y": 662
             },
             "parameters": {
               "showName": true,
@@ -1414,8 +1438,8 @@
             "type": "assert",
             "name": "Stage2AfterDelay",
             "position": {
-              "x": 1135,
-              "y": 950
+              "x": 1367,
+              "y": 686
             },
             "parameters": {
               "showName": true,
@@ -1433,7 +1457,7 @@
             "name": "From_alt_hold_active",
             "position": {
               "x": 100,
-              "y": -279
+              "y": -486
             },
             "parameters": {
               "showName": true,
@@ -1445,8 +1469,8 @@
             "type": "assert",
             "name": "AltHoldLands",
             "position": {
-              "x": 1135,
-              "y": -279
+              "x": 1367,
+              "y": -486
             },
             "parameters": {
               "showName": true,
@@ -1464,7 +1488,7 @@
             "name": "From_fc_mode",
             "position": {
               "x": 106,
-              "y": 153
+              "y": -54
             },
             "parameters": {
               "showName": true,
@@ -1476,8 +1500,8 @@
             "type": "assert",
             "name": "FailsafeModeShown",
             "position": {
-              "x": 1135,
-              "y": 153
+              "x": 1367,
+              "y": -54
             },
             "parameters": {
               "showName": true,
@@ -1494,8 +1518,8 @@
             "type": "assert",
             "name": "ControlledDescent",
             "position": {
-              "x": 1135,
-              "y": 297
+              "x": 1367,
+              "y": 90
             },
             "parameters": {
               "showName": true,
@@ -1512,8 +1536,8 @@
             "type": "assert",
             "name": "NoFasterThanMaxSink",
             "position": {
-              "x": 1135,
-              "y": 441
+              "x": 1367,
+              "y": 234
             },
             "parameters": {
               "showName": true,
@@ -1530,8 +1554,8 @@
             "type": "assert",
             "name": "OnTheGround",
             "position": {
-              "x": 1135,
-              "y": 729
+              "x": 1367,
+              "y": 1220
             },
             "parameters": {
               "showName": true,
@@ -1548,8 +1572,8 @@
             "type": "assert",
             "name": "ArmedUntilLandingTime",
             "position": {
-              "x": 1135,
-              "y": -135
+              "x": 1367,
+              "y": -342
             },
             "parameters": {
               "showName": true,
@@ -1566,8 +1590,8 @@
             "type": "assert",
             "name": "DisarmedAfterLandingTime",
             "position": {
-              "x": 1135,
-              "y": 9
+              "x": 1367,
+              "y": -198
             },
             "parameters": {
               "showName": true,
@@ -1580,12 +1604,161 @@
             }
           },
           {
+            "id": "tests__From_pos_hold_active",
+            "type": "sheet_label_source",
+            "name": "From_pos_hold_active",
+            "position": {
+              "x": 100,
+              "y": 365
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_hold_active"
+            }
+          },
+          {
+            "id": "tests__PosHoldDuringLanding",
+            "type": "assert",
+            "name": "PosHoldDuringLanding",
+            "position": {
+              "x": 1367,
+              "y": 378
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 1,
+              "upper": 1,
+              "checkFrom": 11.52,
+              "checkUntil": 71.48,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__North",
+            "type": "selector",
+            "name": "North",
+            "position": {
+              "x": 368,
+              "y": 1078
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                0
+              ]
+            }
+          },
+          {
+            "id": "tests__East",
+            "type": "selector",
+            "name": "East",
+            "position": {
+              "x": 368,
+              "y": 934
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                1
+              ]
+            }
+          },
+          {
+            "id": "tests__NorthAtArrestPrev",
+            "type": "unit_delay",
+            "name": "NorthAtArrestPrev",
+            "position": {
+              "x": 1097,
+              "y": 1119
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__NorthAtArrest",
+            "type": "evaluate",
+            "name": "NorthAtArrest",
+            "position": {
+              "x": 629,
+              "y": 1039
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) <= 12.5) ? in(0) : in(2)"
+            }
+          },
+          {
+            "id": "tests__EastAtArrestPrev",
+            "type": "unit_delay",
+            "name": "EastAtArrestPrev",
+            "position": {
+              "x": 1097,
+              "y": 795
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__EastAtArrest",
+            "type": "evaluate",
+            "name": "EastAtArrest",
+            "position": {
+              "x": 629,
+              "y": 879
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) <= 12.5) ? in(0) : in(2)"
+            }
+          },
+          {
+            "id": "tests__LandingDrift",
+            "type": "evaluate",
+            "name": "LandingDrift",
+            "position": {
+              "x": 987,
+              "y": 939
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 4,
+              "expression": "sqrt((in(0) - in(2)) * (in(0) - in(2)) + (in(1) - in(3)) * (in(1) - in(3)))"
+            }
+          },
+          {
+            "id": "tests__LandsNearArrestPoint",
+            "type": "assert",
+            "name": "LandsNearArrestPoint",
+            "position": {
+              "x": 1367,
+              "y": 957
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 5,
+              "checkFrom": 12.5,
+              "checkUntil": 71.5,
+              "onFailure": "record"
+            }
+          },
+          {
             "id": "tests__RollPitchDeg",
             "type": "scale",
             "name": "RollPitchDeg",
             "position": {
-              "x": 705,
-              "y": 585
+              "x": 717,
+              "y": 518
             },
             "parameters": {
               "showName": true,
@@ -1598,7 +1771,7 @@
             "name": "From_euler",
             "position": {
               "x": 120,
-              "y": 583
+              "y": 509
             },
             "parameters": {
               "showName": true,
@@ -1611,7 +1784,7 @@
             "name": "RollPitch",
             "position": {
               "x": 368,
-              "y": 583
+              "y": 502
             },
             "parameters": {
               "showName": true,
@@ -1626,8 +1799,8 @@
             "type": "assert",
             "name": "StaysUpright",
             "position": {
-              "x": 1135,
-              "y": 585
+              "x": 1367,
+              "y": 522
             },
             "parameters": {
               "showName": true,
@@ -1646,7 +1819,10 @@
             "sourceBlockId": "tests__From_pos_ned",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__Down",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -23
+            }
           },
           {
             "id": "w_2_tests__Down_tests__HeightAboveArming",
@@ -1655,7 +1831,7 @@
             "targetBlockId": "tests__HeightAboveArming",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -3.5
+              "midpointOffset": 4.5
             }
           },
           {
@@ -1670,7 +1846,10 @@
             "sourceBlockId": "tests__From_failsafe_stage",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__InStage2",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 0
+            }
           },
           {
             "id": "w_5_tests__InStage2_tests__Stage2Time",
@@ -1679,7 +1858,7 @@
             "targetBlockId": "tests__Stage2Time",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 8
+              "midpointOffset": -8
             }
           },
           {
@@ -1689,7 +1868,7 @@
             "targetBlockId": "tests__Stage2Time",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 17.5
+              "midpointOffset": 9.5
             }
           },
           {
@@ -1699,7 +1878,7 @@
             "targetBlockId": "tests__Stage2Time",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -254
+              "midpointOffset": -331
             }
           },
           {
@@ -1707,14 +1886,20 @@
             "sourceBlockId": "tests__Stage2Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__Stage2TimePrev",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -63
+            }
           },
           {
             "id": "w_9_tests__Stage2Time_tests__Stage2AfterDelay",
             "sourceBlockId": "tests__Stage2Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__Stage2AfterDelay",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -198
+            }
           },
           {
             "id": "w_10_tests__From_alt_hold_active_tests__AltHoldLands",
@@ -1737,7 +1922,7 @@
             "targetBlockId": "tests__ControlledDescent",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 307.5
+              "midpointOffset": 23.5
             }
           },
           {
@@ -1747,7 +1932,7 @@
             "targetBlockId": "tests__NoFasterThanMaxSink",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 307.5
+              "midpointOffset": 23.5
             }
           },
           {
@@ -1764,7 +1949,7 @@
             "targetBlockId": "tests__ArmedUntilLandingTime",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 415.5
+              "midpointOffset": 527.5
             }
           },
           {
@@ -1774,37 +1959,197 @@
             "targetBlockId": "tests__DisarmedAfterLandingTime",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 415.5
+              "midpointOffset": 527.5
             }
           },
           {
-            "id": "w_17_tests__From_euler_tests__RollPitch",
-            "sourceBlockId": "tests__From_euler",
+            "id": "w_17_tests__From_pos_hold_active_tests__PosHoldDuringLanding",
+            "sourceBlockId": "tests__From_pos_hold_active",
             "sourcePortIndex": 0,
-            "targetBlockId": "tests__RollPitch",
+            "targetBlockId": "tests__PosHoldDuringLanding",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 533.5
+            }
+          },
+          {
+            "id": "w_18_tests__From_pos_ned_tests__North",
+            "sourceBlockId": "tests__From_pos_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__North",
             "targetPortIndex": 0
           },
           {
-            "id": "w_18_tests__RollPitch_tests__RollPitchDeg",
+            "id": "w_19_tests__From_pos_ned_tests__East",
+            "sourceBlockId": "tests__From_pos_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__East",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -23
+            }
+          },
+          {
+            "id": "w_20_tests__North_tests__NorthAtArrest",
+            "sourceBlockId": "tests__North",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NorthAtArrest",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 46.5
+            }
+          },
+          {
+            "id": "w_21_tests__Time_tests__NorthAtArrest",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NorthAtArrest",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -1.5
+            }
+          },
+          {
+            "id": "w_22_tests__NorthAtArrestPrev_tests__NorthAtArrest",
+            "sourceBlockId": "tests__NorthAtArrestPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NorthAtArrest",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -310
+            }
+          },
+          {
+            "id": "w_23_tests__NorthAtArrest_tests__NorthAtArrestPrev",
+            "sourceBlockId": "tests__NorthAtArrest",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__NorthAtArrestPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -28.5
+            }
+          },
+          {
+            "id": "w_24_tests__East_tests__EastAtArrest",
+            "sourceBlockId": "tests__East",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__EastAtArrest",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -9.5
+            }
+          },
+          {
+            "id": "w_25_tests__Time_tests__EastAtArrest",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__EastAtArrest",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -1.5
+            }
+          },
+          {
+            "id": "w_26_tests__EastAtArrestPrev_tests__EastAtArrest",
+            "sourceBlockId": "tests__EastAtArrestPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__EastAtArrest",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -326
+            }
+          },
+          {
+            "id": "w_27_tests__EastAtArrest_tests__EastAtArrestPrev",
+            "sourceBlockId": "tests__EastAtArrest",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__EastAtArrestPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -44.5
+            }
+          },
+          {
+            "id": "w_28_tests__North_tests__LandingDrift",
+            "sourceBlockId": "tests__North",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__LandingDrift",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -132.5
+            }
+          },
+          {
+            "id": "w_29_tests__East_tests__LandingDrift",
+            "sourceBlockId": "tests__East",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__LandingDrift",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 237.5
+            }
+          },
+          {
+            "id": "w_30_tests__NorthAtArrest_tests__LandingDrift",
+            "sourceBlockId": "tests__NorthAtArrest",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__LandingDrift",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": 26.5
+            }
+          },
+          {
+            "id": "w_31_tests__EastAtArrest_tests__LandingDrift",
+            "sourceBlockId": "tests__EastAtArrest",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__LandingDrift",
+            "targetPortIndex": 3,
+            "routing": {
+              "midpointOffset": 10.5
+            }
+          },
+          {
+            "id": "w_32_tests__LandingDrift_tests__LandsNearArrestPoint",
+            "sourceBlockId": "tests__LandingDrift",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__LandsNearArrestPoint",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_33_tests__From_euler_tests__RollPitch",
+            "sourceBlockId": "tests__From_euler",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RollPitch",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -32
+            }
+          },
+          {
+            "id": "w_34_tests__RollPitch_tests__RollPitchDeg",
             "sourceBlockId": "tests__RollPitch",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__RollPitchDeg",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -29.5
+              "midpointOffset": -37.5
             }
           },
           {
-            "id": "w_19_tests__RollPitchDeg_tests__StaysUpright",
+            "id": "w_35_tests__RollPitchDeg_tests__StaysUpright",
             "sourceBlockId": "tests__RollPitchDeg",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__StaysUpright",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 253
+            }
           }
         ],
         "extents": {
-          "width": 1435,
-          "height": 1215
+          "width": 1667,
+          "height": 1422
         }
       }
     ]

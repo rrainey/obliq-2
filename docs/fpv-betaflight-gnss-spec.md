@@ -97,7 +97,7 @@ While disarmed, the filter input is held at 0, so **altitude reads 0 at arming**
     - roll factor `(12° − |roll|)/12°`, or 0 above 12°;
     - pitch factor `pitch/45°` when nose-down, 0 when level or nose-up.
   - During GPS Rescue, the rescue supplies the gain instead (§2.4).
-- **`canUseGPSHeading`.** Reset to false at every arming.
+- **`canUseGPSHeading`.** Reset to false at every arming. It **latches**: the confidence only accumulates while it is still false, so once established it stays true until the next arming, even in a stationary hover.
   - `confidence += max(gain − |courseErr|, 0)·dt`, with a leak of `0.4·dt·confidence`.
   - It becomes true when confidence > 2.0.
   - It gates Position Hold when there is no mag.
@@ -330,9 +330,9 @@ It runs on each new GPS sample, with separate east and north PIDs in the earth f
 - **Output.**
   - The earth-frame sum is rotated into body pitch and roll by IMU yaw, then limited to ap_max_angle.
   - It is upsampled to 100 Hz through a 5 Hz PT3.
-  - It replaces the stick angle, with the angle limit raised to 85°.
-- **Sanity check.** If the distance to the target exceeds max(10 m, 2 s × ground speed at entry), Pos Hold stops and shows `POSHOLD FAIL` until it is re-entered.
-- **GPS loss.** The controller stops updating and shows `POSHOLD FAIL`; the vehicle stays in angle mode. It resumes toward the original target when sensors recover. Alt Hold continues on baro.
+  - It replaces the stick angle. **[DOC≠CODE]** The angle limit is then set to 85°, but the next line of `pid.c` caps it at half of `ap_max_angle` in every case, for the autopilot and the pilot alike: 25° with the defaults.
+- **Sanity check.** If the distance to the target exceeds max(10 m, 2 s × ground speed at entry), Pos Hold stops and shows `POSHOLD FAIL` until it is re-entered. While the sticks are active the distance follows 2 s of travel. **[COMMENT≠CODE]** Once both axes have stopped it resets to `sanityCheckDistance(1000)` = max(10 m, 20 m) = 20 m; the comment says 10 m.
+- **GPS loss.** The controller stops updating and shows `POSHOLD FAIL`. The last upsampled angle stays in effect, because `positionControl` is no longer called, so the quad keeps leaning and drifts. It resumes toward the original target when sensors recover. Alt Hold continues on baro.
 
 ### 3.4 Priority
 
