@@ -6,6 +6,7 @@
 
 import {
   AIRBORNE_DEMO_STICKS,
+  DEMO_TESTS,
   buildFpvModel,
   ESTIMATOR,
   FC,
@@ -53,7 +54,7 @@ function fly(name: string, sticks: StickProfile | undefined, seconds: number) {
     printf(" %.12g", o->pressure);
     for (int k = 0; k < 3; ++k) printf(" %.12g", o->pos_ned[k]);
     for (int k = 0; k < 4; ++k) printf(" %.12g %.12g", o->quat[k][0], o->quat_est[k][0]);
-    printf(" %.12g\\n", o->altitude_est);
+    printf(" %.12g\\n", o->alt_est);
   }
   return 0;
 `,
@@ -210,8 +211,10 @@ describe('FPV reference model: sensors and estimators', () => {
     expect(worst).toBeLessThan(15)
   })
 
-  it('altitude estimate follows the true altitude within 0.5 m, including the sink during the demo', () => {
-    for (const r of [...hover, ...demo]) expect(Math.abs(r.altEst - trueAltitude(r))).toBeLessThan(0.5)
+  it('altitude estimate follows the height above the arming point, including the sink during the demo', () => {
+    // Airborne runs start armed at ALT0 above the field, so that is the arming point
+    const armedAt = LOCATION.elevationM + ALT0
+    for (const r of [...hover, ...demo]) expect(Math.abs(r.altEst - (trueAltitude(r) - armedAt))).toBeLessThan(DEMO_TESTS.altitudeEstimateM)
     // The demo loses real altitude, so this is tracking, not a constant
     expect(trueAltitude(demo[demo.length - 1]!)).toBeLessThan(LOCATION.elevationM + ALT0 - 5)
   })

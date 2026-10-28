@@ -27,7 +27,7 @@ describe('FPV vehicle model', () => {
     expect(vehicle.name).toBe(FPV_VEHICLE_NAME)
     const iface = modelInterface(vehicle.data as any)
     expect(iface.inputs).toEqual(['sticks', 'gnss_env', 'grid_convergence_deg', 'rc_link_valid', 'failsafe_procedure', 'wind_ned'])
-    expect(iface.outputs).toEqual(expect.arrayContaining(['pos_ned', 'euler', 'gyro_dps', 'rate_setpoint', 'motor_cmd', 'altitude_est', 'battery_voltage']))
+    expect(iface.outputs).toEqual(expect.arrayContaining(['pos_ned', 'euler', 'gyro_dps', 'rate_setpoint', 'motor_cmd', 'alt_est', 'vario_est', 'battery_voltage']))
     const sheets = (vehicle.data as any).sheets as any[]
     expect(sheets.map(s => s.name)).toEqual(['Main', 'Telemetry'])
     const types = new Set(sheets.flatMap(s => s.blocks.map((b: any) => b.type)))

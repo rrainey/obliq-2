@@ -1,0 +1,2172 @@
+{
+  "name": "FPV T21 Altitude Estimator",
+  "data": {
+    "version": "2.2",
+    "metadata": {
+      "created": "2026-10-21T00:00:00.000Z",
+      "description": "Validation test for the Betaflight altitude estimate (docs/fpv-hud-gnss-test-plan.md, T21): alt_est is 0 until arming and then tracks the height above the arming point within 1.5 m while climbing at pDOP 1.5, at pDOP 6 from 10 s, on baro alone without a fix from 20 s, and with the fix back from 25 s; vario_est follows the climb rate."
+    },
+    "globalSettings": {
+      "simulationTimeStep": 0.0005,
+      "simulationDuration": 30,
+      "integrationAlgorithm": "rk4",
+      "debugMath": false
+    },
+    "parameters": [],
+    "dataStores": [],
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "main__Pilot",
+            "type": "subsystem",
+            "name": "Pilot",
+            "position": {
+              "x": 125,
+              "y": 63
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [],
+              "outputPorts": [
+                "sticks"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "flatten",
+              "sheets": [
+                {
+                  "id": "pilot",
+                  "name": "Pilot",
+                  "blocks": [
+                    {
+                      "id": "pilot__Time",
+                      "type": "clock",
+                      "name": "Time",
+                      "position": {
+                        "x": 100,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "pilot__Sticks",
+                      "type": "mux",
+                      "name": "Sticks",
+                      "position": {
+                        "x": 424,
+                        "y": 310
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "rows": 8,
+                        "cols": 1,
+                        "baseType": "double",
+                        "outputType": "double[8]"
+                      }
+                    },
+                    {
+                      "id": "pilot__RollStick",
+                      "type": "lookup_1d",
+                      "name": "RollStick",
+                      "position": {
+                        "x": 260,
+                        "y": -136
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          0,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__PitchStick",
+                      "type": "lookup_1d",
+                      "name": "PitchStick",
+                      "position": {
+                        "x": 260,
+                        "y": 8
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          0,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__YawStick",
+                      "type": "lookup_1d",
+                      "name": "YawStick",
+                      "position": {
+                        "x": 260,
+                        "y": 152
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          0,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__ThrottleStick",
+                      "type": "lookup_1d",
+                      "name": "ThrottleStick",
+                      "position": {
+                        "x": 260,
+                        "y": 296
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          0.5,
+                          0.6,
+                          1.2,
+                          1.3
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          0.6,
+                          0.6,
+                          0.4383
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__AngleModeSwitch",
+                      "type": "lookup_1d",
+                      "name": "AngleModeSwitch",
+                      "position": {
+                        "x": 260,
+                        "y": 440
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          1,
+                          1
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__ArmSwitch",
+                      "type": "lookup_1d",
+                      "name": "ArmSwitch",
+                      "position": {
+                        "x": 260,
+                        "y": 584
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          0.25,
+                          0.251
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          1
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__RescueSwitch",
+                      "type": "lookup_1d",
+                      "name": "RescueSwitch",
+                      "position": {
+                        "x": 260,
+                        "y": 728
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          0,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__HoldSwitch",
+                      "type": "lookup_1d",
+                      "name": "HoldSwitch",
+                      "position": {
+                        "x": 260,
+                        "y": 872
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          0,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__sticks",
+                      "type": "output_port",
+                      "name": "sticks",
+                      "position": {
+                        "x": 594,
+                        "y": 378
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "sticks",
+                        "dataType": "double[8]"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_pilot__Time_pilot__RollStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__RollStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_2_pilot__RollStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__RollStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 20
+                      }
+                    },
+                    {
+                      "id": "w_3_pilot__Time_pilot__PitchStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__PitchStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_4_pilot__PitchStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__PitchStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_5_pilot__Time_pilot__YawStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__YawStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_6_pilot__YawStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__YawStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -12
+                      }
+                    },
+                    {
+                      "id": "w_7_pilot__Time_pilot__ThrottleStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__ThrottleStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_8_pilot__ThrottleStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__ThrottleStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": -28
+                      }
+                    },
+                    {
+                      "id": "w_9_pilot__Time_pilot__AngleModeSwitch",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__AngleModeSwitch",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_10_pilot__AngleModeSwitch_pilot__Sticks",
+                      "sourceBlockId": "pilot__AngleModeSwitch",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 4,
+                      "routing": {
+                        "midpointOffset": -20
+                      }
+                    },
+                    {
+                      "id": "w_11_pilot__Time_pilot__ArmSwitch",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__ArmSwitch",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_12_pilot__ArmSwitch_pilot__Sticks",
+                      "sourceBlockId": "pilot__ArmSwitch",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 5,
+                      "routing": {
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_13_pilot__Time_pilot__RescueSwitch",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__RescueSwitch",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_14_pilot__RescueSwitch_pilot__Sticks",
+                      "sourceBlockId": "pilot__RescueSwitch",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 6,
+                      "routing": {
+                        "midpointOffset": 12
+                      }
+                    },
+                    {
+                      "id": "w_15_pilot__Time_pilot__HoldSwitch",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__HoldSwitch",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_16_pilot__HoldSwitch_pilot__Sticks",
+                      "sourceBlockId": "pilot__HoldSwitch",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 7,
+                      "routing": {
+                        "midpointOffset": 28
+                      }
+                    },
+                    {
+                      "id": "w_17_pilot__Sticks_pilot__sticks",
+                      "sourceBlockId": "pilot__Sticks",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__sticks",
+                      "targetPortIndex": 0
+                    }
+                  ],
+                  "extents": {
+                    "width": 894,
+                    "height": 1072
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "main__Vehicle",
+            "type": "subsystem",
+            "name": "Vehicle",
+            "position": {
+              "x": 310,
+              "y": -7
+            },
+            "parameters": {
+              "showName": true,
+              "showPortNames": true,
+              "sheets": [],
+              "inputPorts": [
+                "sticks",
+                "gnss_env",
+                "grid_convergence_deg",
+                "rc_link_valid",
+                "failsafe_procedure",
+                "wind_ned"
+              ],
+              "outputPorts": [
+                "battery_voltage",
+                "battery_current",
+                "battery_soc",
+                "battery_mah_drawn",
+                "imu_gyro",
+                "imu_accel",
+                "mag",
+                "pressure",
+                "gnss_pos",
+                "gnss_vel_ned",
+                "gnss_fix",
+                "gnss_course",
+                "pos_ned",
+                "vel_ned",
+                "quat",
+                "euler",
+                "omega",
+                "accel",
+                "motor_omega",
+                "motor_cmd",
+                "rate_setpoint",
+                "gyro_dps",
+                "euler_est",
+                "quat_est",
+                "heading_deg",
+                "fc_armed",
+                "fc_angle_mode",
+                "fc_airmode",
+                "home_valid",
+                "home_distance_m",
+                "home_bearing_deg",
+                "fc_mode",
+                "fc_warnings",
+                "failsafe_stage",
+                "alt_est",
+                "vario_est"
+              ],
+              "modelRef": {
+                "modelId": "reference-model:fpv-vehicle",
+                "version": null,
+                "name": "FPV Vehicle"
+              },
+              "modelRefName": "FPV Vehicle"
+            }
+          },
+          {
+            "id": "main__Conditions",
+            "type": "subsystem",
+            "name": "Conditions",
+            "position": {
+              "x": 100,
+              "y": 356
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [],
+              "outputPorts": [
+                "gnss_env",
+                "grid_convergence_deg",
+                "rc_link_valid",
+                "failsafe_procedure",
+                "wind_ned"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "flatten",
+              "sheets": [
+                {
+                  "id": "conditions",
+                  "name": "Conditions",
+                  "blocks": [
+                    {
+                      "id": "conditions__GnssEnv",
+                      "type": "mux",
+                      "name": "GnssEnv",
+                      "position": {
+                        "x": 430,
+                        "y": 710
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "rows": 4,
+                        "cols": 1,
+                        "baseType": "double",
+                        "outputType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "conditions__Satellites",
+                      "type": "lookup_1d",
+                      "name": "Satellites",
+                      "position": {
+                        "x": 265,
+                        "y": 512
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          19.999,
+                          20,
+                          24.999,
+                          25
+                        ],
+                        "outputValues": [
+                          14,
+                          14,
+                          2,
+                          2,
+                          14
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "conditions__Time",
+                      "type": "clock",
+                      "name": "Time",
+                      "position": {
+                        "x": 100,
+                        "y": 656
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "conditions__HDOP",
+                      "type": "source",
+                      "name": "HDOP",
+                      "position": {
+                        "x": 265,
+                        "y": 656
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 0.8,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__VDOP",
+                      "type": "lookup_1d",
+                      "name": "VDOP",
+                      "position": {
+                        "x": 265,
+                        "y": 800
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          9.999,
+                          10,
+                          19.999,
+                          20
+                        ],
+                        "outputValues": [
+                          1.3,
+                          1.3,
+                          5.946427498927402,
+                          5.946427498927402,
+                          1.3
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "conditions__UereScale",
+                      "type": "source",
+                      "name": "UereScale",
+                      "position": {
+                        "x": 265,
+                        "y": 944
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__gnss_env",
+                      "type": "output_port",
+                      "name": "gnss_env",
+                      "position": {
+                        "x": 648,
+                        "y": 737
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "gnss_env",
+                        "dataType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "conditions__GridConvergence",
+                      "type": "source",
+                      "name": "GridConvergence",
+                      "position": {
+                        "x": 100,
+                        "y": -64
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1.2425,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__grid_convergence_deg",
+                      "type": "output_port",
+                      "name": "grid_convergence_deg",
+                      "position": {
+                        "x": 600,
+                        "y": -42
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "grid_convergence_deg",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__RcLinkValid",
+                      "type": "source",
+                      "name": "RcLinkValid",
+                      "position": {
+                        "x": 100,
+                        "y": 80
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__rc_link_valid",
+                      "type": "output_port",
+                      "name": "rc_link_valid",
+                      "position": {
+                        "x": 628,
+                        "y": 102
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "rc_link_valid",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__FailsafeProcedure",
+                      "type": "source",
+                      "name": "FailsafeProcedure",
+                      "position": {
+                        "x": 100,
+                        "y": -208
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 2,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__failsafe_procedure",
+                      "type": "output_port",
+                      "name": "failsafe_procedure",
+                      "position": {
+                        "x": 608,
+                        "y": -186
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "failsafe_procedure",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__Wind",
+                      "type": "mux",
+                      "name": "Wind",
+                      "position": {
+                        "x": 260,
+                        "y": 348
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "rows": 3,
+                        "cols": 1,
+                        "baseType": "double",
+                        "outputType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "conditions__WindNorth",
+                      "type": "source",
+                      "name": "WindNorth",
+                      "position": {
+                        "x": 100,
+                        "y": 224
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 0,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__WindEast",
+                      "type": "source",
+                      "name": "WindEast",
+                      "position": {
+                        "x": 100,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 0,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__WindDown",
+                      "type": "source",
+                      "name": "WindDown",
+                      "position": {
+                        "x": 100,
+                        "y": 512
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 0,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__wind_ned",
+                      "type": "output_port",
+                      "name": "wind_ned",
+                      "position": {
+                        "x": 648,
+                        "y": 366
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "wind_ned",
+                        "dataType": "double[3]"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_conditions__Time_conditions__Satellites",
+                      "sourceBlockId": "conditions__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__Satellites",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 9.5
+                      }
+                    },
+                    {
+                      "id": "w_2_conditions__Satellites_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__Satellites",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 18.5
+                      }
+                    },
+                    {
+                      "id": "w_3_conditions__HDOP_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__HDOP",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -21.5
+                      }
+                    },
+                    {
+                      "id": "w_4_conditions__Time_conditions__VDOP",
+                      "sourceBlockId": "conditions__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__VDOP",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 9.5
+                      }
+                    },
+                    {
+                      "id": "w_5_conditions__VDOP_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__VDOP",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -13.5
+                      }
+                    },
+                    {
+                      "id": "w_6_conditions__UereScale_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__UereScale",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": 26.5
+                      }
+                    },
+                    {
+                      "id": "w_7_conditions__GnssEnv_conditions__gnss_env",
+                      "sourceBlockId": "conditions__GnssEnv",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__gnss_env",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_8_conditions__GridConvergence_conditions__grid_convergence_deg",
+                      "sourceBlockId": "conditions__GridConvergence",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__grid_convergence_deg",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_9_conditions__RcLinkValid_conditions__rc_link_valid",
+                      "sourceBlockId": "conditions__RcLinkValid",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__rc_link_valid",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -6
+                      }
+                    },
+                    {
+                      "id": "w_10_conditions__FailsafeProcedure_conditions__failsafe_procedure",
+                      "sourceBlockId": "conditions__FailsafeProcedure",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__failsafe_procedure",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -12
+                      }
+                    },
+                    {
+                      "id": "w_11_conditions__WindNorth_conditions__Wind",
+                      "sourceBlockId": "conditions__WindNorth",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__Wind",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -12
+                      }
+                    },
+                    {
+                      "id": "w_12_conditions__WindEast_conditions__Wind",
+                      "sourceBlockId": "conditions__WindEast",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__Wind",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_13_conditions__WindDown_conditions__Wind",
+                      "sourceBlockId": "conditions__WindDown",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__Wind",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_14_conditions__Wind_conditions__wind_ned",
+                      "sourceBlockId": "conditions__Wind",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__wind_ned",
+                      "targetPortIndex": 0
+                    }
+                  ],
+                  "extents": {
+                    "width": 948,
+                    "height": 1144
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "main__Tag_pos_ned",
+            "type": "sheet_label_sink",
+            "name": "Tag_pos_ned",
+            "position": {
+              "x": 488,
+              "y": 104
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_ned"
+            }
+          },
+          {
+            "id": "main__Tag_vel_ned",
+            "type": "sheet_label_sink",
+            "name": "Tag_vel_ned",
+            "position": {
+              "x": 488,
+              "y": 248
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "vel_ned"
+            }
+          },
+          {
+            "id": "main__Tag_euler",
+            "type": "sheet_label_sink",
+            "name": "Tag_euler",
+            "position": {
+              "x": 502,
+              "y": 392
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "euler"
+            }
+          },
+          {
+            "id": "main__Tag_alt_est",
+            "type": "sheet_label_sink",
+            "name": "Tag_alt_est",
+            "position": {
+              "x": 488,
+              "y": 599
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "alt_est"
+            }
+          },
+          {
+            "id": "main__Tag_vario_est",
+            "type": "sheet_label_sink",
+            "name": "Tag_vario_est",
+            "position": {
+              "x": 484,
+              "y": 743
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "vario_est"
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_main__Pilot_main__Vehicle",
+            "sourceBlockId": "main__Pilot",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_2_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -12
+            }
+          },
+          {
+            "id": "w_3_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": 4
+            }
+          },
+          {
+            "id": "w_4_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 3
+          },
+          {
+            "id": "w_5_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 4,
+            "routing": {
+              "midpointOffset": 12
+            }
+          },
+          {
+            "id": "w_6_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 4,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 5,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_7_main__Vehicle_main__Tag_pos_ned",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 12,
+            "targetBlockId": "main__Tag_pos_ned",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -18
+            }
+          },
+          {
+            "id": "w_8_main__Vehicle_main__Tag_vel_ned",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 13,
+            "targetBlockId": "main__Tag_vel_ned",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -10
+            }
+          },
+          {
+            "id": "w_9_main__Vehicle_main__Tag_euler",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 15,
+            "targetBlockId": "main__Tag_euler",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -9
+            }
+          },
+          {
+            "id": "w_10_main__Vehicle_main__Tag_alt_est",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 34,
+            "targetBlockId": "main__Tag_alt_est",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 6
+            }
+          },
+          {
+            "id": "w_11_main__Vehicle_main__Tag_vario_est",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 35,
+            "targetBlockId": "main__Tag_vario_est",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 16
+            }
+          }
+        ],
+        "extents": {
+          "width": 802,
+          "height": 943
+        }
+      },
+      {
+        "id": "telemetry",
+        "name": "Telemetry",
+        "blocks": [
+          {
+            "id": "telemetry__From_alt_est",
+            "type": "sheet_label_source",
+            "name": "From_alt_est",
+            "position": {
+              "x": 104,
+              "y": 224
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "alt_est"
+            }
+          },
+          {
+            "id": "telemetry__AltitudeEstimate",
+            "type": "signal_display",
+            "name": "AltitudeEstimate",
+            "position": {
+              "x": 296,
+              "y": 224
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "telemetry__From_vario_est",
+            "type": "sheet_label_source",
+            "name": "From_vario_est",
+            "position": {
+              "x": 100,
+              "y": 512
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "vario_est"
+            }
+          },
+          {
+            "id": "telemetry__Vario",
+            "type": "signal_display",
+            "name": "Vario",
+            "position": {
+              "x": 296,
+              "y": 512
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "telemetry__From_pos_ned",
+            "type": "sheet_label_source",
+            "name": "From_pos_ned",
+            "position": {
+              "x": 104,
+              "y": 368
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_ned"
+            }
+          },
+          {
+            "id": "telemetry__Position",
+            "type": "signal_display",
+            "name": "Position",
+            "position": {
+              "x": 296,
+              "y": 368
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_telemetry__From_alt_est_telemetry__AltitudeEstimate",
+            "sourceBlockId": "telemetry__From_alt_est",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__AltitudeEstimate",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_2_telemetry__From_vario_est_telemetry__Vario",
+            "sourceBlockId": "telemetry__From_vario_est",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__Vario",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_3_telemetry__From_pos_ned_telemetry__Position",
+            "sourceBlockId": "telemetry__From_pos_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__Position",
+            "targetPortIndex": 0
+          }
+        ],
+        "extents": {
+          "width": 596,
+          "height": 712
+        }
+      },
+      {
+        "id": "tests",
+        "name": "Tests",
+        "blocks": [
+          {
+            "id": "tests__From_alt_est",
+            "type": "sheet_label_source",
+            "name": "From_alt_est",
+            "position": {
+              "x": 100,
+              "y": 30
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "alt_est"
+            }
+          },
+          {
+            "id": "tests__From_pos_ned",
+            "type": "sheet_label_source",
+            "name": "From_pos_ned",
+            "position": {
+              "x": 100,
+              "y": 226
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_ned"
+            }
+          },
+          {
+            "id": "tests__Down",
+            "type": "selector",
+            "name": "Down",
+            "position": {
+              "x": 398,
+              "y": 226
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                2
+              ]
+            }
+          },
+          {
+            "id": "tests__HeightAboveArming",
+            "type": "evaluate",
+            "name": "HeightAboveArming",
+            "position": {
+              "x": 742,
+              "y": 226
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "-in(0) - 178.132"
+            }
+          },
+          {
+            "id": "tests__AltitudeError",
+            "type": "evaluate",
+            "name": "AltitudeError",
+            "position": {
+              "x": 1048,
+              "y": 215
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "in(0) - in(1)"
+            }
+          },
+          {
+            "id": "tests__ZeroUntilArming",
+            "type": "assert",
+            "name": "ZeroUntilArming",
+            "position": {
+              "x": 2004,
+              "y": -145
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 0,
+              "checkUntil": 0.24,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__TracksAtLowPdop",
+            "type": "assert",
+            "name": "TracksAtLowPdop",
+            "position": {
+              "x": 2004,
+              "y": 143
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -1.5,
+              "upper": 1.5,
+              "checkFrom": 0,
+              "checkUntil": 10,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__TracksAtHighPdop",
+            "type": "assert",
+            "name": "TracksAtHighPdop",
+            "position": {
+              "x": 2004,
+              "y": -1
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -1.5,
+              "upper": 1.5,
+              "checkFrom": 10,
+              "checkUntil": 20,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__TracksOnBaroWithoutFix",
+            "type": "assert",
+            "name": "TracksOnBaroWithoutFix",
+            "position": {
+              "x": 2004,
+              "y": 287
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -1.5,
+              "upper": 1.5,
+              "checkFrom": 20,
+              "checkUntil": 26,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__TracksWithFixBack",
+            "type": "assert",
+            "name": "TracksWithFixBack",
+            "position": {
+              "x": 2004,
+              "y": 431
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -1.5,
+              "upper": 1.5,
+              "checkFrom": 26,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__From_vel_ned",
+            "type": "sheet_label_source",
+            "name": "From_vel_ned",
+            "position": {
+              "x": 100,
+              "y": 999
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "vel_ned"
+            }
+          },
+          {
+            "id": "tests__VelDown",
+            "type": "selector",
+            "name": "VelDown",
+            "position": {
+              "x": 398,
+              "y": 999
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                2
+              ]
+            }
+          },
+          {
+            "id": "tests__ClimbRate",
+            "type": "evaluate",
+            "name": "ClimbRate",
+            "position": {
+              "x": 768,
+              "y": 983
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "-in(0)"
+            }
+          },
+          {
+            "id": "tests__From_vario_est",
+            "type": "sheet_label_source",
+            "name": "From_vario_est",
+            "position": {
+              "x": 760,
+              "y": 839
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "vario_est"
+            }
+          },
+          {
+            "id": "tests__VarioError",
+            "type": "evaluate",
+            "name": "VarioError",
+            "position": {
+              "x": 1048,
+              "y": 797
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "in(0) - in(1)"
+            }
+          },
+          {
+            "id": "tests__VarioMSGpsWindow",
+            "type": "evaluate",
+            "name": "VarioMSGpsWindow",
+            "position": {
+              "x": 288,
+              "y": 855
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "(in(0) >= 3 && in(0) < 20) ? 1.0 : 0.0"
+            }
+          },
+          {
+            "id": "tests__Time",
+            "type": "clock",
+            "name": "Time",
+            "position": {
+              "x": 114,
+              "y": 711
+            },
+            "parameters": {
+              "showName": true
+            }
+          },
+          {
+            "id": "tests__VarioMSGpsSumPrev",
+            "type": "unit_delay",
+            "name": "VarioMSGpsSumPrev",
+            "position": {
+              "x": 1742,
+              "y": 1025
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__VarioMSGpsSum",
+            "type": "evaluate",
+            "name": "VarioMSGpsSum",
+            "position": {
+              "x": 1259,
+              "y": 940
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0) * in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__VarioMSGpsOne",
+            "type": "source",
+            "name": "VarioMSGpsOne",
+            "position": {
+              "x": 398,
+              "y": 711
+            },
+            "parameters": {
+              "showName": true,
+              "signalType": "constant",
+              "value": 1,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "tests__VarioMSGpsCountPrev",
+            "type": "unit_delay",
+            "name": "VarioMSGpsCountPrev",
+            "position": {
+              "x": 1074,
+              "y": 653
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__VarioMSGpsCount",
+            "type": "evaluate",
+            "name": "VarioMSGpsCount",
+            "position": {
+              "x": 668,
+              "y": 679
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__VarioMSGps",
+            "type": "evaluate",
+            "name": "VarioMSGps",
+            "position": {
+              "x": 1639,
+              "y": 881
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "(in(1) > 0.0) ? in(0) / in(1) : 0.0"
+            }
+          },
+          {
+            "id": "tests__VarioRmsWithGps",
+            "type": "assert",
+            "name": "VarioRmsWithGps",
+            "position": {
+              "x": 2004,
+              "y": 881
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 1,
+              "checkFrom": 20.1,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__VarioMSBaroWindow",
+            "type": "evaluate",
+            "name": "VarioMSBaroWindow",
+            "position": {
+              "x": 288,
+              "y": 567
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "(in(0) >= 21 && in(0) < 25) ? 1.0 : 0.0"
+            }
+          },
+          {
+            "id": "tests__VarioMSBaroSumPrev",
+            "type": "unit_delay",
+            "name": "VarioMSBaroSumPrev",
+            "position": {
+              "x": 1742,
+              "y": 737
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__VarioMSBaroSum",
+            "type": "evaluate",
+            "name": "VarioMSBaroSum",
+            "position": {
+              "x": 1259,
+              "y": 652
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0) * in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__VarioMSBaroOne",
+            "type": "source",
+            "name": "VarioMSBaroOne",
+            "position": {
+              "x": 398,
+              "y": 423
+            },
+            "parameters": {
+              "showName": true,
+              "signalType": "constant",
+              "value": 1,
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "tests__VarioMSBaroCountPrev",
+            "type": "unit_delay",
+            "name": "VarioMSBaroCountPrev",
+            "position": {
+              "x": 1074,
+              "y": 509
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__VarioMSBaroCount",
+            "type": "evaluate",
+            "name": "VarioMSBaroCount",
+            "position": {
+              "x": 668,
+              "y": 519
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) > 0.5) ? in(2) + (in(0)) : in(2)"
+            }
+          },
+          {
+            "id": "tests__VarioMSBaro",
+            "type": "evaluate",
+            "name": "VarioMSBaro",
+            "position": {
+              "x": 1639,
+              "y": 593
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "(in(1) > 0.0) ? in(0) / in(1) : 0.0"
+            }
+          },
+          {
+            "id": "tests__VarioRmsOnBaro",
+            "type": "assert",
+            "name": "VarioRmsOnBaro",
+            "position": {
+              "x": 2004,
+              "y": 593
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0.09,
+              "checkFrom": 25.1,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__RollPitchDeg",
+            "type": "scale",
+            "name": "RollPitchDeg",
+            "position": {
+              "x": 778,
+              "y": -289
+            },
+            "parameters": {
+              "showName": true,
+              "gain": 57.29577951308232
+            }
+          },
+          {
+            "id": "tests__From_euler",
+            "type": "sheet_label_source",
+            "name": "From_euler",
+            "position": {
+              "x": 114,
+              "y": -289
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "euler"
+            }
+          },
+          {
+            "id": "tests__RollPitch",
+            "type": "selector",
+            "name": "RollPitch",
+            "position": {
+              "x": 398,
+              "y": -289
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "id": "tests__StaysUpright",
+            "type": "assert",
+            "name": "StaysUpright",
+            "position": {
+              "x": 2004,
+              "y": -289
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -60,
+              "upper": 60,
+              "checkFrom": 0,
+              "checkUntil": null,
+              "onFailure": "stop"
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_tests__From_pos_ned_tests__Down",
+            "sourceBlockId": "tests__From_pos_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__Down",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_2_tests__Down_tests__HeightAboveArming",
+            "sourceBlockId": "tests__Down",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__HeightAboveArming",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_3_tests__From_alt_est_tests__AltitudeError",
+            "sourceBlockId": "tests__From_alt_est",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__AltitudeError",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 372
+            }
+          },
+          {
+            "id": "w_4_tests__HeightAboveArming_tests__AltitudeError",
+            "sourceBlockId": "tests__HeightAboveArming",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__AltitudeError",
+            "targetPortIndex": 1
+          },
+          {
+            "id": "w_5_tests__From_alt_est_tests__ZeroUntilArming",
+            "sourceBlockId": "tests__From_alt_est",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ZeroUntilArming",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -862
+            }
+          },
+          {
+            "id": "w_6_tests__AltitudeError_tests__TracksAtLowPdop",
+            "sourceBlockId": "tests__AltitudeError",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TracksAtLowPdop",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -0.5
+            }
+          },
+          {
+            "id": "w_7_tests__AltitudeError_tests__TracksAtHighPdop",
+            "sourceBlockId": "tests__AltitudeError",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TracksAtHighPdop",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -0.5
+            }
+          },
+          {
+            "id": "w_8_tests__AltitudeError_tests__TracksOnBaroWithoutFix",
+            "sourceBlockId": "tests__AltitudeError",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TracksOnBaroWithoutFix",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -0.5
+            }
+          },
+          {
+            "id": "w_9_tests__AltitudeError_tests__TracksWithFixBack",
+            "sourceBlockId": "tests__AltitudeError",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TracksWithFixBack",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -0.5
+            }
+          },
+          {
+            "id": "w_10_tests__From_vel_ned_tests__VelDown",
+            "sourceBlockId": "tests__From_vel_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VelDown",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_11_tests__VelDown_tests__ClimbRate",
+            "sourceBlockId": "tests__VelDown",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ClimbRate",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 21
+            }
+          },
+          {
+            "id": "w_12_tests__From_vario_est_tests__VarioError",
+            "sourceBlockId": "tests__From_vario_est",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioError",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 30
+            }
+          },
+          {
+            "id": "w_13_tests__ClimbRate_tests__VarioError",
+            "sourceBlockId": "tests__ClimbRate",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioError",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 66
+            }
+          },
+          {
+            "id": "w_14_tests__Time_tests__VarioMSGpsWindow",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSGpsWindow",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 11
+            }
+          },
+          {
+            "id": "w_15_tests__VarioError_tests__VarioMSGpsSum",
+            "sourceBlockId": "tests__VarioError",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSGpsSum",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -12
+            }
+          },
+          {
+            "id": "w_16_tests__VarioMSGpsWindow_tests__VarioMSGpsSum",
+            "sourceBlockId": "tests__VarioMSGpsWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSGpsSum",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -271.5
+            }
+          },
+          {
+            "id": "w_17_tests__VarioMSGpsSumPrev_tests__VarioMSGpsSum",
+            "sourceBlockId": "tests__VarioMSGpsSumPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSGpsSum",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -317.5
+            }
+          },
+          {
+            "id": "w_18_tests__VarioMSGpsSum_tests__VarioMSGpsSumPrev",
+            "sourceBlockId": "tests__VarioMSGpsSum",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSGpsSumPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -43.5
+            }
+          },
+          {
+            "id": "w_19_tests__VarioMSGpsOne_tests__VarioMSGpsCount",
+            "sourceBlockId": "tests__VarioMSGpsOne",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSGpsCount",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 31
+            }
+          },
+          {
+            "id": "w_20_tests__VarioMSGpsWindow_tests__VarioMSGpsCount",
+            "sourceBlockId": "tests__VarioMSGpsWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSGpsCount",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 24
+            }
+          },
+          {
+            "id": "w_21_tests__VarioMSGpsCountPrev_tests__VarioMSGpsCount",
+            "sourceBlockId": "tests__VarioMSGpsCountPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSGpsCount",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -275
+            }
+          },
+          {
+            "id": "w_22_tests__VarioMSGpsCount_tests__VarioMSGpsCountPrev",
+            "sourceBlockId": "tests__VarioMSGpsCount",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSGpsCountPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -5
+            }
+          },
+          {
+            "id": "w_23_tests__VarioMSGpsSum_tests__VarioMSGps",
+            "sourceBlockId": "tests__VarioMSGpsSum",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSGps",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 8
+            }
+          },
+          {
+            "id": "w_24_tests__VarioMSGpsCount_tests__VarioMSGps",
+            "sourceBlockId": "tests__VarioMSGpsCount",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSGps",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -287.5
+            }
+          },
+          {
+            "id": "w_25_tests__VarioMSGps_tests__VarioRmsWithGps",
+            "sourceBlockId": "tests__VarioMSGps",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioRmsWithGps",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_26_tests__Time_tests__VarioMSBaroWindow",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSBaroWindow",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 11
+            }
+          },
+          {
+            "id": "w_27_tests__VarioError_tests__VarioMSBaroSum",
+            "sourceBlockId": "tests__VarioError",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSBaroSum",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -12
+            }
+          },
+          {
+            "id": "w_28_tests__VarioMSBaroWindow_tests__VarioMSBaroSum",
+            "sourceBlockId": "tests__VarioMSBaroWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSBaroSum",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 291.5
+            }
+          },
+          {
+            "id": "w_29_tests__VarioMSBaroSumPrev_tests__VarioMSBaroSum",
+            "sourceBlockId": "tests__VarioMSBaroSumPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSBaroSum",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -309.5
+            }
+          },
+          {
+            "id": "w_30_tests__VarioMSBaroSum_tests__VarioMSBaroSumPrev",
+            "sourceBlockId": "tests__VarioMSBaroSum",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSBaroSumPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -51.5
+            }
+          },
+          {
+            "id": "w_31_tests__VarioMSBaroOne_tests__VarioMSBaroCount",
+            "sourceBlockId": "tests__VarioMSBaroOne",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSBaroCount",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 39
+            }
+          },
+          {
+            "id": "w_32_tests__VarioMSBaroWindow_tests__VarioMSBaroCount",
+            "sourceBlockId": "tests__VarioMSBaroWindow",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSBaroCount",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 0
+            }
+          },
+          {
+            "id": "w_33_tests__VarioMSBaroCountPrev_tests__VarioMSBaroCount",
+            "sourceBlockId": "tests__VarioMSBaroCountPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSBaroCount",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -291
+            }
+          },
+          {
+            "id": "w_34_tests__VarioMSBaroCount_tests__VarioMSBaroCountPrev",
+            "sourceBlockId": "tests__VarioMSBaroCount",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSBaroCountPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -13
+            }
+          },
+          {
+            "id": "w_35_tests__VarioMSBaroSum_tests__VarioMSBaro",
+            "sourceBlockId": "tests__VarioMSBaroSum",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSBaro",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 0
+            }
+          },
+          {
+            "id": "w_36_tests__VarioMSBaroCount_tests__VarioMSBaro",
+            "sourceBlockId": "tests__VarioMSBaroCount",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioMSBaro",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -295.5
+            }
+          },
+          {
+            "id": "w_37_tests__VarioMSBaro_tests__VarioRmsOnBaro",
+            "sourceBlockId": "tests__VarioMSBaro",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__VarioRmsOnBaro",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_38_tests__From_euler_tests__RollPitch",
+            "sourceBlockId": "tests__From_euler",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RollPitch",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_39_tests__RollPitch_tests__RollPitchDeg",
+            "sourceBlockId": "tests__RollPitch",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RollPitchDeg",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_40_tests__RollPitchDeg_tests__StaysUpright",
+            "sourceBlockId": "tests__RollPitchDeg",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__StaysUpright",
+            "targetPortIndex": 0
+          }
+        ],
+        "extents": {
+          "width": 2304,
+          "height": 1225
+        }
+      }
+    ]
+  }
+}

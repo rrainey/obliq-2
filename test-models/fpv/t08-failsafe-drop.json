@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 31
+              "y": 39
             },
             "parameters": {
               "showName": true,
@@ -442,7 +442,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": -36
+              "y": -31
             },
             "parameters": {
               "showName": true,
@@ -480,7 +480,6 @@
                 "rate_setpoint",
                 "gyro_dps",
                 "euler_est",
-                "altitude_est",
                 "quat_est",
                 "heading_deg",
                 "fc_armed",
@@ -491,7 +490,9 @@
                 "home_bearing_deg",
                 "fc_mode",
                 "fc_warnings",
-                "failsafe_stage"
+                "failsafe_stage",
+                "alt_est",
+                "vario_est"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -507,7 +508,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 315
+              "y": 332
             },
             "parameters": {
               "showName": true,
@@ -932,7 +933,7 @@
             "name": "Tag_pos_ned",
             "position": {
               "x": 490,
-              "y": 52
+              "y": 47
             },
             "parameters": {
               "showName": true,
@@ -945,7 +946,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 196
+              "y": 191
             },
             "parameters": {
               "showName": true,
@@ -958,7 +959,7 @@
             "name": "Tag_motor_cmd",
             "position": {
               "x": 486,
-              "y": 340
+              "y": 335
             },
             "parameters": {
               "showName": true,
@@ -971,7 +972,7 @@
             "name": "Tag_fc_armed",
             "position": {
               "x": 488,
-              "y": 484
+              "y": 479
             },
             "parameters": {
               "showName": true,
@@ -984,7 +985,7 @@
             "name": "Tag_fc_mode",
             "position": {
               "x": 490,
-              "y": 628
+              "y": 623
             },
             "parameters": {
               "showName": true,
@@ -997,7 +998,7 @@
             "name": "Tag_failsafe_stage",
             "position": {
               "x": 484,
-              "y": 772
+              "y": 767
             },
             "parameters": {
               "showName": true,
@@ -1077,7 +1078,7 @@
             "targetBlockId": "main__Tag_euler",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -22
+              "midpointOffset": 2
             }
           },
           {
@@ -1093,7 +1094,7 @@
           {
             "id": "w_10_main__Vehicle_main__Tag_fc_armed",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 26,
+            "sourcePortIndex": 25,
             "targetBlockId": "main__Tag_fc_armed",
             "targetPortIndex": 0,
             "routing": {
@@ -1103,27 +1104,27 @@
           {
             "id": "w_11_main__Vehicle_main__Tag_fc_mode",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 32,
+            "sourcePortIndex": 31,
             "targetBlockId": "main__Tag_fc_mode",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 9
+              "midpointOffset": 17
             }
           },
           {
             "id": "w_12_main__Vehicle_main__Tag_failsafe_stage",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 34,
+            "sourcePortIndex": 33,
             "targetBlockId": "main__Tag_failsafe_stage",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 20
+              "midpointOffset": -12
             }
           }
         ],
         "extents": {
           "width": 804,
-          "height": 972
+          "height": 967
         }
       },
       {

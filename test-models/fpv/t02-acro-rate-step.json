@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 107
+              "y": 100
             },
             "parameters": {
               "showName": true,
@@ -452,7 +452,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 40
+              "y": 30
             },
             "parameters": {
               "showName": true,
@@ -490,7 +490,6 @@
                 "rate_setpoint",
                 "gyro_dps",
                 "euler_est",
-                "altitude_est",
                 "quat_est",
                 "heading_deg",
                 "fc_armed",
@@ -501,7 +500,9 @@
                 "home_bearing_deg",
                 "fc_mode",
                 "fc_warnings",
-                "failsafe_stage"
+                "failsafe_stage",
+                "alt_est",
+                "vario_est"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -517,7 +518,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 391
+              "y": 393
             },
             "parameters": {
               "showName": true,
@@ -907,7 +908,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 187
+              "y": 177
             },
             "parameters": {
               "showName": true,
@@ -920,7 +921,7 @@
             "name": "Tag_motor_cmd",
             "position": {
               "x": 486,
-              "y": 331
+              "y": 321
             },
             "parameters": {
               "showName": true,
@@ -933,7 +934,7 @@
             "name": "Tag_rate_setpoint",
             "position": {
               "x": 484,
-              "y": 475
+              "y": 465
             },
             "parameters": {
               "showName": true,
@@ -946,7 +947,7 @@
             "name": "Tag_gyro_dps",
             "position": {
               "x": 488,
-              "y": 619
+              "y": 609
             },
             "parameters": {
               "showName": true,
@@ -1052,7 +1053,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 819
+          "height": 809
         }
       },
       {

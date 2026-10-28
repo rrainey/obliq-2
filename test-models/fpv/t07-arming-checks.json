@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 28
+              "y": 41
             },
             "parameters": {
               "showName": true,
@@ -506,7 +506,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": -39
+              "y": -29
             },
             "parameters": {
               "showName": true,
@@ -544,7 +544,6 @@
                 "rate_setpoint",
                 "gyro_dps",
                 "euler_est",
-                "altitude_est",
                 "quat_est",
                 "heading_deg",
                 "fc_armed",
@@ -555,7 +554,9 @@
                 "home_bearing_deg",
                 "fc_mode",
                 "fc_warnings",
-                "failsafe_stage"
+                "failsafe_stage",
+                "alt_est",
+                "vario_est"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -571,7 +572,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 312
+              "y": 334
             },
             "parameters": {
               "showName": true,
@@ -1029,7 +1030,7 @@
             "name": "Tag_fc_armed",
             "position": {
               "x": 488,
-              "y": 343
+              "y": 333
             },
             "parameters": {
               "showName": true,
@@ -1042,7 +1043,7 @@
             "name": "Tag_home_valid",
             "position": {
               "x": 484,
-              "y": 487
+              "y": 477
             },
             "parameters": {
               "showName": true,
@@ -1055,7 +1056,7 @@
             "name": "Tag_fc_warnings",
             "position": {
               "x": 484,
-              "y": 631
+              "y": 621
             },
             "parameters": {
               "showName": true,
@@ -1068,7 +1069,7 @@
             "name": "Tag_failsafe_stage",
             "position": {
               "x": 484,
-              "y": 775
+              "y": 765
             },
             "parameters": {
               "showName": true,
@@ -1134,7 +1135,7 @@
           {
             "id": "w_7_main__Vehicle_main__Tag_fc_armed",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 26,
+            "sourcePortIndex": 25,
             "targetBlockId": "main__Tag_fc_armed",
             "targetPortIndex": 0,
             "routing": {
@@ -1144,7 +1145,7 @@
           {
             "id": "w_8_main__Vehicle_main__Tag_home_valid",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 29,
+            "sourcePortIndex": 28,
             "targetBlockId": "main__Tag_home_valid",
             "targetPortIndex": 0,
             "routing": {
@@ -1154,7 +1155,7 @@
           {
             "id": "w_9_main__Vehicle_main__Tag_fc_warnings",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 33,
+            "sourcePortIndex": 32,
             "targetBlockId": "main__Tag_fc_warnings",
             "targetPortIndex": 0,
             "routing": {
@@ -1164,7 +1165,7 @@
           {
             "id": "w_10_main__Vehicle_main__Tag_failsafe_stage",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 34,
+            "sourcePortIndex": 33,
             "targetBlockId": "main__Tag_failsafe_stage",
             "targetPortIndex": 0,
             "routing": {
@@ -1174,7 +1175,7 @@
         ],
         "extents": {
           "width": 788,
-          "height": 975
+          "height": 965
         }
       },
       {

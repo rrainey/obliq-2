@@ -52,10 +52,10 @@ describe('FPV reference model: Tests sheet', () => {
     // Estimates against the truth: roll estimate vs true roll (degrees), and
     // altitude estimate vs field elevation at rest (metres above MSL)
     expect(Math.abs(first('AttitudeEstimateTracks').firstFailValue!)).toBeLessThan(1)
-    expect(first('AltitudeEstimateTracks').firstFailValue).toBeCloseTo(LOCATION.elevationM, 0)
+    expect(first('AltEstTracks').firstFailValue).toBeCloseTo(0, 6)
     // Worst estimate errors stay inside the real limits
     expect(first('AttitudeEstimateTracks').worstViolation).toBeLessThan(t.attitudeEstimateDeg)
-    expect(first('AltitudeEstimateTracks').worstViolation).toBeLessThan(t.altitudeEstimateM)
+    expect(first('AltEstTracks').worstViolation).toBeLessThan(t.altitudeEstimateM)
   })
 
   test('other builds (custom sticks, open loop, airborne) have no Tests sheet', () => {

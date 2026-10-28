@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 107
+              "y": 100
             },
             "parameters": {
               "showName": true,
@@ -448,7 +448,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 40
+              "y": 30
             },
             "parameters": {
               "showName": true,
@@ -486,7 +486,6 @@
                 "rate_setpoint",
                 "gyro_dps",
                 "euler_est",
-                "altitude_est",
                 "quat_est",
                 "heading_deg",
                 "fc_armed",
@@ -497,7 +496,9 @@
                 "home_bearing_deg",
                 "fc_mode",
                 "fc_warnings",
-                "failsafe_stage"
+                "failsafe_stage",
+                "alt_est",
+                "vario_est"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -513,7 +514,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 391
+              "y": 393
             },
             "parameters": {
               "showName": true,
@@ -930,7 +931,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 297
+              "y": 281
             },
             "parameters": {
               "showName": true,
@@ -943,7 +944,7 @@
             "name": "Tag_euler_est",
             "position": {
               "x": 486,
-              "y": 441
+              "y": 425
             },
             "parameters": {
               "showName": true,
@@ -956,7 +957,7 @@
             "name": "Tag_heading_deg",
             "position": {
               "x": 484,
-              "y": 585
+              "y": 569
             },
             "parameters": {
               "showName": true,
@@ -1042,7 +1043,7 @@
           {
             "id": "w_9_main__Vehicle_main__Tag_heading_deg",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 25,
+            "sourcePortIndex": 24,
             "targetBlockId": "main__Tag_heading_deg",
             "targetPortIndex": 0,
             "routing": {
@@ -1052,7 +1053,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 785
+          "height": 769
         }
       },
       {

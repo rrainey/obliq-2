@@ -281,9 +281,33 @@ export const standardPressure = (z: number) => ussa1976(z).pressure_Pa
 export const ESTIMATOR = {
   /** Mahony proportional gain, 1/s (Betaflight imu_dcm_kp 2500 / 10000). */
   mahonyKp: 0.25,
-  /** Altitude complementary filter: natural frequency (rad/s) and damping. */
-  altOmega: 1.0,
-  altZeta: 1.0,
+  /**
+   * Altitude, after Betaflight 2025.12 (docs/fpv-betaflight-gnss-spec.md §1.1):
+   * a 100 Hz blend of baro and GPS altitude, relative to the arming point.
+   */
+  altitude: {
+    ts: 0.01,
+    /** Hz: altitude_lpf 300 and altitude_d_lpf 100, each a PT2 */
+    lpfHz: 3.0,
+    varioLpfHz: 1.0,
+    /** altitude_prefer_baro (0–100) */
+    preferBaro: 100,
+    /** GPS trust cap, and the trust when the receiver gives no pDOP */
+    maxGpsTrust: 0.9,
+    noPdopTrust: 0.3,
+    /** Baro zero offset smoothing while disarmed: off = a·baro + (1 − a)·off */
+    zeroSmoothing: 0.2,
+  },
+}
+
+/** Betaflight's pressure altitude (m): (1 − (P/101325)^0.190295) × 44330. */
+export const betaflightBaroAltitude = (pa: number) => (1 - Math.pow(pa / 101325, 0.190295)) * 44330
+
+/** PT2 gain per stage for a cutoff (Hz) at a sample interval, as Betaflight's pt2 (cutoff corrected for two stages). */
+export function pt2Gain(cutoffHz: number, ts: number): number {
+  const corrected = cutoffHz * 1.553773974 // 1 / sqrt(2^(1/2) − 1)
+  const rc = 1 / (2 * Math.PI * corrected)
+  return ts / (rc + ts)
 }
 
 /**
@@ -439,7 +463,12 @@ export const DEMO_TESTS = {
   yawDeg: [80, 100] as [number, number],
   /** The estimators against the true state, over the whole flight */
   attitudeEstimateDeg: 5,
-  altitudeEstimateM: 0.5,
+  /**
+   * alt_est against height above the arming point (about 4σ): the blend weights GPS 0.65 at pDOP 1.5,
+   * whose vertical white noise (0.39 m) is in both the fix and the zero taken at arming, and the
+   * 10 Hz fix and 3 Hz PT2 lag a 2.5 m/s climb by about 0.3 m.
+   */
+  altitudeEstimateM: 1.5,
   /** 3.5 V per cell under load */
   minBatteryV: 4 * 3.5,
   /** Roll or pitch beyond this ends the run (stop on failure) */
@@ -622,7 +651,7 @@ const MOTOR_SIZE = { width: 140, height: 80 }
 const FRAME_SIZE = { width: 160, height: 260 }
 const FC_SIZE = { width: 220, height: 180 }
 const SENSORS_SIZE = { width: 170, height: 150 }
-const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'altitude_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage']
+const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est']
 
 // ---------------------------------------------------------------------------
 // Motor / ESC / propeller (one definition, referenced by the other three)
@@ -1407,56 +1436,97 @@ function buildAttitudeEstimatorSheet(initialQuat: number[][]): SheetBuilder {
 }
 
 /**
- * Vertical complementary filter: integrates the accelerometer's vertical
- * acceleration (rotated with the attitude estimate) and corrects with the
- * barometric altitude through gains k1 = 2 zeta w, k2 = w^2.
+ * Altitude estimate after Betaflight 2025.12 (docs/fpv-betaflight-gnss-spec.md
+ * §1.1), at 100 Hz. Baro altitude is zeroed by an offset that smooths while
+ * disarmed and latches at arming; GPS altitude (3D fix only) is zeroed while
+ * disarmed, or against baro when a fix first comes after arming. Armed, the
+ * blend trusts GPS 1/pDOP (≤ 0.9), less when the two disagree by over 1 m;
+ * disarmed its input is 0. A 3 Hz PT2 gives alt_est, and the derivative
+ * through a 1 Hz PT2 gives vario_est. `startArmed` begins armed at altitude0.
  */
-function buildAltitudeEstimatorSheet(altitude0: number): SheetBuilder {
+function buildAltitudeEstimatorSheet(altitude0: number, startArmed: boolean): SheetBuilder {
+  const A = ESTIMATOR.altitude
+  const ts = A.ts
   const s = new SheetBuilder('alt', 'AltitudeEstimator')
-  const acc = s.input('accel', 'double[3]')
-  const q = s.input('quat', 'double[4][1]')
   const p = s.input('pressure', 'double')
-  const { altOmega: w, altZeta: z } = ESTIMATOR
-  const k1 = 2 * z * w, k2 = w * w, ts = FC.ts
+  const gnssPos = s.input('gnss_pos', 'double[3]')
+  const gnssFix = s.input('gnss_fix', 'double[3]')
+  const armed = s.input('armed', 'double')
+  const fixSplit = s.add('demux', 'FixSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(gnssFix, fixSplit)
+  const gpsAlt = s.add('selector', 'GpsAltitude', { indices: [2] })
+  s.wire(gnssPos, gpsAlt)
+  const fix3 = s.add('evaluate', 'Fix3D', { numInputs: 1, expression: '(in(0) > 2.5) ? 1.0 : 0.0' })
+  s.wire(fixSplit, fix3, 0, 0)
+  /** prev → Evaluate([inputs…, prev]) → prev */
+  const state = (name: string, init: number, expression: string, inputs: string[]) => {
+    const prev = s.add('unit_delay', `${name}Prev`, { initialValue: init, sampleInterval: ts })
+    const ev = s.add('evaluate', name, { numInputs: inputs.length + 1, expression })
+    inputs.forEach((x, k) => s.wire(x, ev, k))
+    s.wire(prev, ev, inputs.length)
+    s.wire(ev, prev)
+    return ev
+  }
 
-  // Pressure altitude: invert the standard atmosphere's lowest layer
-  // (geopotential H from pressure, then geometric z = r0 H / (r0 - H))
-  const { Tb, Lb } = USSA1976.layers[0]
-  const gmr = (USSA1976.g0 * USSA1976.M0) / USSA1976.Rstar
-  const H = `(${Tb / Lb} * (pow(in(0) / ${USSA1976.P0}, ${-Lb / gmr}) - 1.0))`
-  const baroAlt = s.add('evaluate', 'BaroAltitude', {
-    numInputs: 1,
-    expression: `${USSA1976.r0} * ${H} / (${USSA1976.r0} - ${H})`,
+  // Baro: Betaflight's pressure altitude, zeroed by a smoothed offset latched at arming
+  const baro = s.add('evaluate', 'BaroAltitude', { numInputs: 1, expression: `(1.0 - pow(in(0) / 101325.0, 0.190295)) * 44330.0` })
+  s.wire(p, baro)
+  const off0 = betaflightBaroAltitude(standardPressure(LOCATION.elevationM + altitude0))
+  const baroOff = state('BaroOffset', Number(off0.toFixed(6)), `(in(1) > 0.5) ? in(2) : ${A.zeroSmoothing} * in(0) + ${1 - A.zeroSmoothing} * in(2)`, [baro, armed])
+  const baroRel = s.add('evaluate', 'BaroRelative', { numInputs: 2, expression: 'in(0) - in(1)' })
+  s.wire(baro, baroRel, 0)
+  s.wire(baroOff, baroRel, 1)
+
+  // GPS zero: tracked while disarmed with a fix; after an arming without one, set against baro at the first fix
+  // in(0) GPS altitude, in(1) 3D fix, in(2) armed, in(3) baro relative, in(4) zero valid before, in(5) zero before
+  const zeroValidPrev = s.add('unit_delay', 'GpsZeroValidPrev', { initialValue: 0, sampleInterval: ts })
+  const zero = state('GpsZero', 0,
+    '(in(1) > 0.5 && in(2) < 0.5) ? in(0) : ((in(1) > 0.5 && in(2) > 0.5 && in(4) < 0.5) ? in(0) - in(3) : in(5))',
+    [gpsAlt, fix3, armed, baroRel, zeroValidPrev])
+  const zeroValid = s.add('evaluate', 'GpsZeroValid', { numInputs: 2, expression: 'fmax(in(0), in(1))' })
+  s.wire(fix3, zeroValid, 0)
+  s.wire(zeroValidPrev, zeroValid, 1)
+  s.wire(zeroValid, zeroValidPrev)
+  const gpsRel = s.add('evaluate', 'GpsRelative', { numInputs: 2, expression: 'in(0) - in(1)' })
+  s.wire(gpsAlt, gpsRel, 0)
+  s.wire(zero, gpsRel, 1)
+
+  // Trust: 1/pDOP (≤ cap; fixed without pDOP), divided by the disagreement over 1 m; 0 without a fix
+  // in(0) 3D fix, in(1) zero valid, in(2) pDOP, in(3) GPS rel, in(4) baro rel
+  const trust = s.add('evaluate', 'GpsTrust', {
+    numInputs: 5,
+    expression:
+      `(in(0) > 0.5 && in(1) > 0.5) ? (fmin((in(2) > 0.0) ? 1.0 / in(2) : ${A.noPdopTrust}, ${A.maxGpsTrust})` +
+      ` / fmax(1.0, fabs(in(3) - in(4)) * ${A.preferBaro / 100})) : 0.0`,
   })
-  s.wire(p, baroAlt)
+  s.wire(fix3, trust, 0)
+  s.wire(zeroValid, trust, 1)
+  s.wire(fixSplit, trust, 2, 2)
+  s.wire(gpsRel, trust, 3)
+  s.wire(baroRel, trust, 4)
+  // Blend; held at 0 while disarmed, so the estimate reads 0 at arming
+  const raw = s.add('evaluate', 'AltitudeBlend', { numInputs: 4, expression: '(in(0) > 0.5) ? in(1) * in(2) + in(3) * (1.0 - in(2)) : 0.0' })
+  s.wire(armed, raw, 0)
+  s.wire(gpsRel, raw, 1)
+  s.wire(trust, raw, 2)
+  s.wire(baroRel, raw, 3)
 
-  const cbn = s.add('orientation_conversion', 'C_bn', { conversionType: 'quat_to_dcm' })
-  s.wire(q, cbn)
-  const cnb = s.add('transpose', 'C_nb')
-  s.wire(cbn, cnb)
-  const fNed = s.add('matrix_multiply', 'ForceNED')
-  s.wire(cnb, fNed, 0)
-  s.wire(acc, fNed, 1)
-  const fDown = s.add('selector', 'ForceDown', { indices: [2] })
-  s.wire(fNed, fDown)
-  const aUp = s.add('evaluate', 'AccelUp', { numInputs: 1, expression: `-(in(0) + ${FPV.gravity})` })
-  s.wire(fDown, aUp)
-
-  const hPrev = s.add('unit_delay', 'hPrev', { initialValue: LOCATION.elevationM + altitude0, sampleInterval: ts })
-  const vPrev = s.add('unit_delay', 'vPrev', { initialValue: 0, sampleInterval: ts })
-  const v = s.add('evaluate', 'ClimbRate', { numInputs: 4, expression: `in(0) + ${ts} * (in(1) + ${k2} * (in(2) - in(3)))` })
-  s.wire(vPrev, v, 0)
-  s.wire(aUp, v, 1)
-  s.wire(baroAlt, v, 2)
-  s.wire(hPrev, v, 3)
-  const h = s.add('evaluate', 'Altitude', { numInputs: 3, expression: `in(0) + ${ts} * (in(1) + ${k1} * (in(2) - in(0)))` })
-  s.wire(hPrev, h, 0)
-  s.wire(vPrev, h, 1)
-  s.wire(baroAlt, h, 2)
-  s.wire(v, vPrev)
-  s.wire(h, hPrev)
-  s.output('altitude', h, 'double')
-  s.output('climb_rate', v, 'double')
+  /** Two cascaded PT1 stages with Betaflight's PT2 cutoff correction. */
+  const pt2 = (name: string, x: string, hz: number) => {
+    const k = pt2Gain(hz, ts)
+    const a = state(`${name}Stage1`, 0, `in(1) + ${k} * (in(0) - in(1))`, [x])
+    return state(`${name}Stage2`, 0, `in(1) + ${k} * (in(0) - in(1))`, [a])
+  }
+  const alt = pt2('AltitudeLpf', raw, A.lpfHz)
+  const altPrev = s.add('unit_delay', 'AltitudeLast', { initialValue: 0, sampleInterval: ts })
+  s.wire(alt, altPrev)
+  const deriv = s.add('evaluate', 'AltitudeRate', { numInputs: 2, expression: `(in(0) - in(1)) / ${ts}` })
+  s.wire(alt, deriv, 0)
+  s.wire(altPrev, deriv, 1)
+  const vario = pt2('VarioLpf', deriv, A.varioLpfHz)
+  void startArmed
+  s.output('alt_est', alt, 'double')
+  s.output('vario_est', vario, 'double')
   return s
 }
 
@@ -1972,10 +2042,6 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   s.wire(acc, att, 1)
   s.wire(mag, att, 2)
   s.wire(gamma, att, 3)
-  const alt = s.add('subsystem', 'AltitudeEstimator', subsystem(['accel', 'quat', 'pressure'], ['altitude', 'climb_rate'], buildAltitudeEstimatorSheet(altitude0)))
-  s.wire(acc, alt, 0)
-  s.wire(att, alt, 1, 0)
-  s.wire(pressure, alt, 2)
 
   // Setpoint: acro rates, or angle mode on the AUX switch
   const rates = s.add('subsystem', 'Rates', subsystem(['sticks'], ['setpoint', 'throttle'], buildRatesSheet()))
@@ -1993,6 +2059,15 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   s.wire(gnssFix, arming, 1)
   s.wire(failsafe, arming, 2, 2)
   s.wire(link, arming, 3)
+  // Altitude: Betaflight's baro/GPS blend at 100 Hz, relative to the arming point
+  const alt = s.add('subsystem', 'AltitudeEstimator', {
+    ...subsystem(['pressure', 'gnss_pos', 'gnss_fix', 'armed'], ['alt_est', 'vario_est'], buildAltitudeEstimatorSheet(altitude0, altitude0 > 0)),
+    sampleTimeSec: ESTIMATOR.altitude.ts,
+  })
+  s.wire(pressure, alt, 0)
+  s.wire(gnssPos, alt, 1)
+  s.wire(gnssFix, alt, 2)
+  s.wire(arming, alt, 3, 0)
   const pid = s.add('subsystem', 'RatePID', subsystem(['setpoint', 'gyro_dps', 'iterm_enable'], ['pid'], buildRatePidSheet()))
   s.wire(angle, pid, 0, 0)
   s.wire(filt, pid, 1, 0)
@@ -2009,7 +2084,6 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   s.output('setpoint', angle, 'double[3]')
   s.output('gyro_dps', filt, 'double[3]')
   s.output('euler_est', att, 'double[3]', 1)
-  s.output('altitude_est', alt, 'double', 0)
   s.output('quat_est', att, 'double[4][1]', 0)
   // True heading: the estimate's grid yaw plus the grid convergence, 0–360°
   const yawEst = s.add('selector', 'YawEstimate', { indices: [2] })
@@ -2042,6 +2116,8 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   s.output('fc_mode', mode, 'double')
   s.output('fc_warnings', arming, 'double', 2)
   s.output('failsafe_stage', failsafe, 'double', 1)
+  s.output('alt_est', alt, 'double', 0)
+  s.output('vario_est', alt, 'double', 1)
   return s
 }
 
@@ -2214,14 +2290,16 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   FRAME_OUTPUTS.forEach((name, i) => publish(name, frame, FRAME_OUTPUT_TYPES[i]!, i))
   publish('motor_omega', omegaVec, 'double[4]')
   if (fc) {
-    publish('motor_cmd', fc, 'double[4]', 0)
-    publish('rate_setpoint', fc, 'double[3]', 1)
-    publish('gyro_dps', fc, 'double[3]', 2)
-    publish('euler_est', fc, 'double[3]', 3)
-    publish('altitude_est', fc, 'double', 4)
-    publish('quat_est', fc, 'double[4][1]', 5)
-    publish('heading_deg', fc, 'double', 6)
-    ;['fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage'].forEach((name, k) => publish(name, fc!, 'double', 7 + k))
+    // Flight-controller outputs, published under their port names
+    const fcOut = (name: string) => FC_OUTPUTS.indexOf(name)
+    publish('motor_cmd', fc, 'double[4]', fcOut('motors'))
+    publish('rate_setpoint', fc, 'double[3]', fcOut('setpoint'))
+    publish('gyro_dps', fc, 'double[3]', fcOut('gyro_dps'))
+    publish('euler_est', fc, 'double[3]', fcOut('euler_est'))
+    publish('quat_est', fc, 'double[4][1]', fcOut('quat_est'))
+    for (const name of ['heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est']) {
+      publish(name, fc, 'double', fcOut(name))
+    }
   }
 
   // Scopes, on the Telemetry sheet
@@ -2232,7 +2310,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   ]
   if (fc) {
     displays.push(['RateSetpoint', 'rate_setpoint'], ['GyroRate', 'gyro_dps'], ['MotorCommand', 'motor_cmd'],
-      ['AttitudeEstimate', 'euler_est'], ['AltitudeEstimate', 'altitude_est'], ['Battery', 'battery_voltage'])
+      ['AttitudeEstimate', 'euler_est'], ['AltitudeEstimate', 'alt_est'], ['Battery', 'battery_voltage'])
   } else {
     displays.push(['BodyRates', 'omega'])
   }
@@ -2410,7 +2488,7 @@ export const FPV_VEHICLE_REF_ID = 'reference-model:fpv-vehicle'
 const DEMO_DISPLAYS: Array<[string, string]> = [
   ['Position', 'pos_ned'], ['Attitude', 'euler'], ['RotorSpeed', 'motor_omega'], ['RateSetpoint', 'rate_setpoint'],
   ['GyroRate', 'gyro_dps'], ['MotorCommand', 'motor_cmd'], ['AttitudeEstimate', 'euler_est'],
-  ['AltitudeEstimate', 'altitude_est'], ['Battery', 'battery_voltage'],
+  ['AltitudeEstimate', 'alt_est'], ['Battery', 'battery_voltage'],
 ]
 
 /** The default demo flight as a test model: the original FPV model's Pilot, scopes and Tests sheet. */
@@ -3027,6 +3105,57 @@ export function buildFpvWindTestModel() {
   })
 }
 
+/** T21 schedule (s): pDOP 1.5, then 6, then no fix, then the fix back. */
+/**
+ * The vario differentiates an estimate that carries 10 Hz GPS steps, so with
+ * GPS it is noisy (±1.5 m/s; Betaflight's OSD gives it a deadband): checked
+ * as an RMS. On baro alone it is far quieter.
+ */
+export const ALTITUDE_TEST = { highPdop: 10, noFix: 20, fixBack: 25, duration: 30, varioRmsWithGps: 1.0, varioRmsOnBaro: 0.3, varioFrom: 3 }
+
+/** T21: the altitude estimate — 0 until arming, tracking at low and high pDOP and on baro alone, and the vario. */
+export function buildFpvAltitudeEstimatorTestModel() {
+  const t = ALTITUDE_TEST
+  const tol = DEMO_TESTS.altitudeEstimateM
+  const highVdop = Math.sqrt(36 - DEFAULT_GNSS_ENV.hdop ** 2) // pDOP 6
+  const tests = () => {
+    const { s, h, from, pick, expr, check, upright } = testsSheet()
+    const alt = from('alt_est')
+    const height = expr('HeightAboveArming', `-in(0) - ${LOCATION.elevationM - GROUND_REST_Z}`, [pick('Down', from('pos_ned'), [2])])
+    const err = expr('AltitudeError', 'in(0) - in(1)', [alt, height])
+    const arm = DEMO_TESTS.armTime
+    check('ZeroUntilArming', alt, 0, 0, 0, arm - 0.01)
+    check('TracksAtLowPdop', err, -tol, tol, 0, t.highPdop)
+    check('TracksAtHighPdop', err, -tol, tol, t.highPdop, t.noFix)
+    check('TracksOnBaroWithoutFix', err, -tol, tol, t.noFix, t.fixBack + SENSORS.gnss.reacquireS)
+    check('TracksWithFixBack', err, -tol, tol, t.fixBack + SENSORS.gnss.reacquireS)
+    const climb = expr('ClimbRate', '-in(0)', [pick('VelDown', from('vel_ned'), [2])])
+    const varioErr = expr('VarioError', 'in(0) - in(1)', [from('vario_est'), climb])
+    check('VarioRmsWithGps', h.windowMeanSquare('VarioMSGps', varioErr, t.varioFrom, t.noFix), 0, t.varioRmsWithGps ** 2, t.noFix + 0.1)
+    // From 1 s after the fix is lost (the PT2s forget the GPS steps) until it returns
+    check('VarioRmsOnBaro', h.windowMeanSquare('VarioMSBaro', varioErr, t.noFix + 1, t.fixBack), 0, t.varioRmsOnBaro ** 2, t.fixBack + 0.1)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T21 Altitude Estimator',
+    description:
+      'Validation test for the Betaflight altitude estimate (docs/fpv-hud-gnss-test-plan.md, T21): alt_est is 0 until arming and ' +
+      `then tracks the height above the arming point within ${tol} m while climbing at pDOP 1.5, at pDOP 6 from ${t.highPdop} s, ` +
+      `on baro alone without a fix from ${t.noFix} s, and with the fix back from ${t.fixBack} s; vario_est follows the climb rate.`,
+    sticks: CLIMB_STICKS,
+    duration: t.duration,
+    displays: [['AltitudeEstimate', 'alt_est'], ['Vario', 'vario_est'], ['Position', 'pos_ned']],
+    tests,
+    conditions: {
+      gnssEnv: {
+        vdop: step([[0, DEFAULT_GNSS_ENV.vdop], [t.highPdop, highVdop], [t.noFix, DEFAULT_GNSS_ENV.vdop]]),
+        satellites: step([[0, 14], [t.noFix, 2], [t.fixBack, 14]]),
+      },
+    },
+  })
+}
+
 /** A test model renamed for the validation suite ("FPV Tnn …"). */
 const renamed = (model: { name: string; data: Record<string, unknown> }, name: string) => ({ ...model, name })
 
@@ -3047,6 +3176,7 @@ export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<s
     ['t06-grid-convergence.json', buildFpvGridConvergenceTestModel()],
     ['t07-arming-checks.json', buildFpvArmingChecksTestModel()],
     ['t08-failsafe-drop.json', buildFpvFailsafeDropTestModel()],
+    ['t21-altitude-estimator.json', buildFpvAltitudeEstimatorTestModel()],
     ['t22-wind.json', buildFpvWindTestModel()],
   ]
 }
@@ -3085,8 +3215,9 @@ function buildTestsSheet(): SheetBuilder {
   const down = pick('Down', pos, [2])
   const height = s.add('evaluate', 'HeightAboveField', { numInputs: 1, expression: `-${LOCATION.elevationM} - in(0)` })
   s.wire(down, height)
-  const trueAltitude = s.add('evaluate', 'TrueAltitude', { numInputs: 1, expression: `${SENSORS.baro.homeAltitude} - in(0)` })
-  s.wire(down, trueAltitude)
+  // Height above the arming point (the vehicle armed at rest on the field), what alt_est reports
+  const heightAboveArming = s.add('evaluate', 'HeightAboveArming', { numInputs: 1, expression: `-in(0) - ${LOCATION.elevationM - GROUND_REST_Z}` })
+  s.wire(down, heightAboveArming)
 
   check('DisarmedMotorsOff', motorCmd, { lower: 0, upper: 0, checkUntil: t.armTime - 0.01 })
   check('ArmedMotorsAtIdle', motorCmd, { lower: FC.motorIdle - 1e-9, upper: 1, checkFrom: t.armTime + 0.05 })
@@ -3096,7 +3227,7 @@ function buildTestsSheet(): SheetBuilder {
   check('PitchFollowsStick', pick('Pitch', eulerDeg, [1]), { lower: t.pitchDeg[0], upper: t.pitchDeg[1], checkFrom: t.pitchWindow[0], checkUntil: t.pitchWindow[1] })
   check('YawTurnCompletes', pick('Yaw', eulerDeg, [2]), { lower: t.yawDeg[0], upper: t.yawDeg[1], checkFrom: t.yawFrom })
   check('AttitudeEstimateTracks', eulerEstDeg, { mode: 'near', absTol: t.attitudeEstimateDeg, relTol: 0 }, eulerDeg)
-  check('AltitudeEstimateTracks', from('altitude_est'), { mode: 'near', absTol: t.altitudeEstimateM, relTol: 0 }, trueAltitude)
+  check('AltEstTracks', from('alt_est'), { mode: 'near', absTol: t.altitudeEstimateM, relTol: 0 }, heightAboveArming)
   check('BatteryAboveCutoff', from('battery_voltage'), { lower: t.minBatteryV, upper: null })
   check('StaysUpright', rollPitch, { lower: -t.uprightDeg, upper: t.uprightDeg, onFailure: 'stop' })
 

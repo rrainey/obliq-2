@@ -69,7 +69,7 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | Model | Duration | Scenario | Asserts (summary) |
 |---|---|---|---|
 | **T00 Test Helpers** | 6 s | No vehicle: a ramp, a 0.5 Hz sine and unit Gaussian noise | Each helper in section 2.2 against its known answer (latch, first time 2.0 s, max 1 and min −1, value held at 3 s, mean square 0.5 and 1 ± 0.05, correlation −1 at half a period and 0 at a quarter, phase visited). The Jest runner also sets impossible limits on every Assert, to show none passes vacuously. |
-| **T01 Demo Flight** (Shipped; existing, extended) | 5 s | The current demo flight | Existing 11. Added in Phase 4 (19 in all): `ArmedFlagOffBeforeArming`, `ArmedFlagOnAfterArming`, `ModeIsAngle`, `HomeUnsetBeforeArming`, `HomeSetOnArm`, `GnssTracksTruth` (horizontal < 6 m), `HomeDistanceTracks` (< 6 m), `MahDrawnMatchesSoc`. Phase 9 adds `AltEstTracks` (< 0.5 m of height above the arming point). |
+| **T01 Demo Flight** (Shipped; existing, extended) | 5 s | The current demo flight | Existing 11. Added in Phase 4 (19 in all): `ArmedFlagOffBeforeArming`, `ArmedFlagOnAfterArming`, `ModeIsAngle`, `HomeUnsetBeforeArming`, `HomeSetOnArm`, `GnssTracksTruth` (horizontal < 6 m), `HomeDistanceTracks` (< 6 m), `MahDrawnMatchesSoc`. Phase 9 replaced `AltitudeEstimateTracks` with `AltEstTracks` (within 1.5 m of the height above the arming point). |
 | **T02 Acro Rate Step** (Shipped; existing) | 3 s | Unchanged | Existing 6, with the 8-channel sticks |
 | **T03 GNSS Statistics** | 3000 s | Disarmed at rest in open sky, so the fix is all error. One window, 10–2990 s | North, east and altitude RMS within ±30% of the specified σ: with τ = 60 s the window holds about 25 independent samples, so RMS varies by about ±10% (1σ). Velocity RMS within ±10% (white noise, 30 000 samples); 1 s correlation of the north error > 0.9; position on the 1 cm grid; fix 3D throughout. Scaling with UERE scale, HDOP and VDOP is checked exactly in Jest (F08), because windows short enough for one run cannot measure a ratio to ±25%. |
 | **T04 GNSS Conditions** (Shipped) | 30 s | Hover; satellites 14 → 3 (t = 8) → 2 (t = 14) → 14 (t = 20) | Fix 3 / 2 / 0 / 3 in their windows; altitude held and vd = 0 while 2D; all outputs held while 0; `firstTime(fix == 3 after t = 20)` ∈ [20.95, 21.05]; pDOP = √(HDOP² + VDOP²); `home_valid` stays 1 throughout |
@@ -89,7 +89,7 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | **T18 Position Hold Sanity** | 30 s | Pos Hold, then a sudden 12 m/s wind gust from t = 10 | Distance to target exceeds max(10 m, 2 s × speed), so `POSHOLD FAIL` and no further control until re-entry |
 | **T19 No-Mag Heading** (vehicle without mag) | 60 s | Arm; hover; pitch forward to 3 m/s for 20 s on a straight course; Pos Hold before and after | `heading_deg` snaps to the course when ground speed first passes 1 m/s (within 5°); yaw then converges within 5° of truth; Pos Hold shows `POSHOLD FAIL` before GPS heading is established and holds after |
 | **T20 No-Mag Rescue** (vehicle without mag) | 80 s | As T11 without a mag | Same sequence and landing tolerance as T11 |
-| **T21 Altitude Estimator** | 60 s | Climb and hover profile; pDOP schedule 1.5 → 6 → 1.5; fix lost from t = 40 to 50 | `alt_est` = 0 at the arming sample; tracks height above the arming point within 0.5 m at pDOP 1.5 and within 1.5 m at pDOP 6; follows the baro alone while the fix is lost (GPS weight 0); `vario_est` within 0.3 m/s of −vd in steady climb |
+| **T21 Altitude Estimator** | 30 s | Climb; pDOP 1.5, then 6 from 10 s, no fix from 20 s, the fix back at 25 s | `alt_est` = 0 until arming; then within 1.5 m of the height above the arming point in each phase (measured worst 0.96, 0.57 and 0.26 m); `vario_est` RMS error within 1.0 m/s with GPS and 0.3 m/s on baro alone (measured 0.42 and 0.15). The trust is 0 without a fix in `fpv-estimators`. |
 | **T22 Wind** | 15 s | Angle-mode hover after a climb (no position control); wind 3 m/s north from t = 3 | North velocity within ±0.5 m/s before the wind; from t = 13, within ±15% of the wind speed. Drag balances at the wind's speed; the margin covers the hover's drift of about 0.25 m/s from the estimator's tilt error. |
 | **T23 OSD Outputs** | 20 s | Arm, angle, acro with airmode, hold, rescue, failsafe, in sequence | `fc_mode` follows the priority order (!FS! > RESC > POSH > ALTH > ANGL > AIR > ACRO); `fc_airmode` latches at 25% throttle; `battery_mah_drawn` = (1 − SOC) × 1300; `RESCUE N/A` after 2 s with fewer than 4 satellites while armed with a home |
 
@@ -128,7 +128,7 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | F26 | Stage-2 recovery needs link and stick movement | T10 | `fpv-failsafe`: DROP needs only 0.5 s of link; AUTO-LAND also a stick past 30% | — |
 | F27 | `rc_link_valid` input | T08–T10, T13 | — | — |
 | F28 | Wind input | T22, T09, T14, T17 | — | — |
-| F29 | Altitude blend, trust and zero at arming | T21 | `fpv-estimators` hand computation | — |
+| F29 | Altitude blend, trust and zero at arming | T21, T01 | `fpv-estimators`: trust and blend formulas at every 100 Hz sample, and both PT2s against an independent computation | — |
 | F30 | Baro fallback on fix loss | T21 | — | — |
 | F31 | Vario | T21 | — | — |
 | F32 | Course snap and course-over-ground yaw correction | T19 | — | — |
@@ -171,7 +171,7 @@ Each implementation phase writes the tests for its features, and the phase is do
 | 3 | T03, T04, T05, L2 for F05, F08 and F15 | T03–T05 (done) |
 | 4 | T01 additions, F16–F19, and `fpv-osd` (Level 2: flags against the sticks, home only at arming with 8+ satellites, cleared and re-taken, distance and bearing on each fix and against true geometry) | T01 (done) |
 | 8 | T07, T08, T22, the inputs used by T09/T10, and `fpv-failsafe` (Level 2: the throttle-low disarm, and stage-2 recovery by procedure) | T07, T08, T22 (done) |
-| 9 | T21, T19 (heading parts), the no-mag vehicle, L2 for F29 and F35 | T21, T19 (first part) |
+| 9 | T21, T19 (heading parts), the no-mag vehicle, L2 for F29 and F35 | 9a: T21 and `fpv-estimators` (done); 9b: T19 (heading parts) |
 | 10 | T16, T09 | T16, T09 |
 | 11 | T17, T18, T19 (Pos Hold parts) | T17–T19 |
 | 12 | T10–T15, T20 | T10–T15, T20 |

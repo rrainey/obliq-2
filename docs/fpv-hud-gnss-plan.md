@@ -297,6 +297,16 @@ This is listed for interface agreement. It is implemented in that repo. The host
 
 ### Phase 9: Estimators (D9, D10)
 
+**9a, altitude (done 2026-10-28). As built:**
+- The estimator is Betaflight's blend at 100 Hz (`ESTIMATOR.altitude`). It uses Betaflight's own pressure-altitude formula; the estimate is relative to the arming point, so the offset from the standard atmosphere cancels.
+- `alt_est` and `vario_est` replace `altitude_est`. Flight-controller outputs are now published by port name.
+- Airborne starts set the baro offset to the start altitude, and take the GPS zero against baro at the first fix.
+- **Tolerances:**
+  - `alt_est` is checked within 1.5 m, not 0.5 m. Betaflight's blend weights GPS 0.65 at pDOP 1.5, and the GPS vertical white noise (0.39 m) is in both the fix and the zero taken at arming. The 10 Hz fix and the 3 Hz PT2 also lag a climb by about 0.3 m. Measured worst errors: 0.96 m at pDOP 1.5, 0.57 m at pDOP 6, 0.26 m on baro alone.
+  - `vario_est` carries the GPS steps (±1.5 m/s), so T21 checks its RMS: 0.42 m/s with GPS (limit 1.0), 0.15 m/s on baro (limit 0.3).
+
+**9b, heading:** course over ground and the no-magnetometer build.
+
 1. **Altitude.** The Betaflight blend replaces the AltitudeEstimator internals:
    - a baro zero that smooths while disarmed and latches at arming;
    - a GPS zero;
@@ -488,7 +498,10 @@ New model states are named in the generated C as `<subsystem path>_<block>_state
 - **The radio map's arm switch** is still AUX2 (CH5). With latched arming, a radio powered up with the switch already on will not arm until the switch is cycled, as on Betaflight.
 - **Altitude estimate** (D9).
   - `altitude_est` is removed. `FpvPlant.altitude_est_m` reads `alt_est` (relative to arming) instead; MSL truth stays −`pos_d`.
-  - The trim's writes to `AltitudeEstimator_hPrev`/`vPrev` are replaced by the new estimator's states (the baro and GPS zeros, and the filter states), named in Phase 9.
+  - The trim's writes to `AltitudeEstimator_hPrev` and `vPrev` no longer apply. For a hover start it must write:
+    - `FlightController_AltitudeEstimator_BaroOffsetPrev_state` = Betaflight's pressure altitude at the hover pressure, (1 − (P/101325)^0.190295) × 44330, with P the standard pressure at the hover's MSL altitude;
+    - `FlightController_AltitudeEstimator_GpsZeroValidPrev_state` = 0, so the GPS zero is taken against baro at the first fix.
+  - Leave the filter states (`AltitudeLpfStage1/2Prev`, `AltitudeLast`, `VarioLpfStage1/2Prev`) at 0; the trim's armed start then reads `alt_est` ≈ 0 at the hover point.
 - **The OSD struct** gains `fc_mode`, `fc_warnings`, `rescue_phase` and `failsafe_stage`.
 
 ## Order and checkpoints

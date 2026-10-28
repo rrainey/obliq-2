@@ -5,6 +5,7 @@
 import {
   buildFpvModel,
   DEMO_STICKS,
+  DEMO_TESTS,
   FC,
   FPV,
   GROUND_REST_Z,
@@ -36,7 +37,7 @@ function fly(name: string, opts: { sticks?: StickProfile; initialAltitude?: numb
     for (int k = 0; k < 3; ++k) printf(" %.9g", o->euler[k] * ${R2D});
     for (int k = 0; k < 4; ++k) printf(" %.9g", o->motor_cmd[k]);
     for (int k = 0; k < 3; ++k) printf(" %.9g", o->accel[k]);
-    printf(" %.9g\\n", o->altitude_est);
+    printf(" %.9g\\n", o->alt_est);
   }
   return 0;
 `,
@@ -124,7 +125,8 @@ describe('FPV reference model: ground, arming and take-off', () => {
     // Airborne and climbing: more than 1 m above the field plane
     expect(at(rows, 1.5).z).toBeLessThan(fieldZ - 1)
     for (const r of between(rows, 0.6, 2.0)) expect(Math.hypot(r.e[0]!, r.e[1]!)).toBeLessThan(2)
-    // The altitude estimate follows the climb from the field elevation
-    for (const r of rows) expect(Math.abs(r.altEst - (SENSORS.baro.homeAltitude - r.z))).toBeLessThan(0.5)
+    // The altitude estimate is 0 until arming, then follows the height above the arming point
+    for (const r of between(rows, 0, 0.24)) expect(r.altEst).toBe(0)
+    for (const r of rows) expect(Math.abs(r.altEst - (-r.z - (LOCATION.elevationM - GROUND_REST_Z)))).toBeLessThan(DEMO_TESTS.altitudeEstimateM)
   })
 })
