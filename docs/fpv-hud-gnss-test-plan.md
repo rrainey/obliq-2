@@ -87,7 +87,7 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | **T16 Altitude Hold** | 40 s | Hover in angle mode; AUX4 mid at t = 5 (before raising throttle on a fresh arming, then after); throttle at hover for 10 s; full stick for 3 s; low stick | Does not engage before the throttle has been raised; holds ±0.5 m for 10 s; climbs at 5 ± 0.5 m/s; throttle in the deadband holds; mode ALTH |
 | **T17 Position Hold** (Shipped) | 60 s | Hover; 3 m/s wind from the north; AUX4 high at t = 5; roll stick 30% from t = 25 to 28; released; GPS lost (2 satellites) from t = 45 to 50 | Holds within 3 m of the entry point for 15 s; stick override moves the vehicle and the target follows it; after release, stops and holds a new point within 3 m; `POSHOLD FAIL` while the fix is lost; resumes toward its target afterwards; mode POSH + ALTH |
 | **T18 Position Hold Sanity** | 30 s | Pos Hold, then a sudden 12 m/s wind gust from t = 10 | Distance to target exceeds max(10 m, 2 s × speed), so `POSHOLD FAIL` and no further control until re-entry |
-| **T19 No-Mag Heading** (vehicle without mag) | 60 s | Arm; hover; pitch forward to 3 m/s for 20 s on a straight course; Pos Hold before and after | `heading_deg` snaps to the course when ground speed first passes 1 m/s (within 5°); yaw then converges within 5° of truth; Pos Hold shows `POSHOLD FAIL` before GPS heading is established and holds after |
+| **T19 No-Mag Heading** (vehicle without mag, facing 60° with the estimate at 0°) | 12 s | Take off, hover, then fly forward in angle mode on a straight course | The estimate stays at 0° before motion; `gps_heading_ok` is 0, then 1 by 8.5 s; from 10 s heading is within 2° of the course and the estimated yaw within 8° of the true yaw (sideslip). The exact snap is in `fpv-estimators`. Phase 11 adds Pos Hold refused before GPS heading and holding after. |
 | **T20 No-Mag Rescue** (vehicle without mag) | 80 s | As T11 without a mag | Same sequence and landing tolerance as T11 |
 | **T21 Altitude Estimator** | 30 s | Climb; pDOP 1.5, then 6 from 10 s, no fix from 20 s, the fix back at 25 s | `alt_est` = 0 until arming; then within 1.5 m of the height above the arming point in each phase (measured worst 0.96, 0.57 and 0.26 m); `vario_est` RMS error within 1.0 m/s with GPS and 0.3 m/s on baro alone (measured 0.42 and 0.15). The trust is 0 without a fix in `fpv-estimators`. |
 | **T22 Wind** | 15 s | Angle-mode hover after a climb (no position control); wind 3 m/s north from t = 3 | North velocity within ±0.5 m/s before the wind; from t = 13, within ±15% of the wind speed. Drag balances at the wind's speed; the margin covers the hover's drift of about 0.25 m/s from the estimator's tilt error. |
@@ -131,10 +131,10 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | F29 | Altitude blend, trust and zero at arming | T21, T01 | `fpv-estimators`: trust and blend formulas at every 100 Hz sample, and both PT2s against an independent computation | — |
 | F30 | Baro fallback on fix loss | T21 | — | — |
 | F31 | Vario | T21 | — | — |
-| F32 | Course snap and course-over-ground yaw correction | T19 | — | — |
+| F32 | Course snap and course-over-ground yaw correction | T19 | `fpv-estimators`: one snap, at the first sample above 1 m/s, to exactly the grid course; no correction before it | — |
 | F33 | `canUseGPSHeading` gating | T19 | — | — |
-| F34 | A healthy mag suppresses course correction; mag ignored in FLY_HOME | T06, T11, T14 | — | — |
-| F35 | `magnetometer: false` build | T19, T20 | `fpv-estimators` build check | — |
+| F34 | A healthy mag suppresses course correction; mag ignored in FLY_HOME | T06, T11, T14 | `fpv-estimators`: with a mag the course path never engages | — |
+| F35 | `magnetometer: false` build | T19, T20 | `fpv-estimators`: no Magnetometer subsystem; `mag` reads 0 | — |
 | F36 | Altitude controller (P, I, D, F, tilt, limits) | T16, T11 | — | — |
 | F37 | Alt Hold deadband, climb rate, engagement rules | T16 | — | — |
 | F38 | Pos Hold against wind | T17 | — | — |
@@ -171,7 +171,7 @@ Each implementation phase writes the tests for its features, and the phase is do
 | 3 | T03, T04, T05, L2 for F05, F08 and F15 | T03–T05 (done) |
 | 4 | T01 additions, F16–F19, and `fpv-osd` (Level 2: flags against the sticks, home only at arming with 8+ satellites, cleared and re-taken, distance and bearing on each fix and against true geometry) | T01 (done) |
 | 8 | T07, T08, T22, the inputs used by T09/T10, and `fpv-failsafe` (Level 2: the throttle-low disarm, and stage-2 recovery by procedure) | T07, T08, T22 (done) |
-| 9 | T21, T19 (heading parts), the no-mag vehicle, L2 for F29 and F35 | 9a: T21 and `fpv-estimators` (done); 9b: T19 (heading parts) |
+| 9 | T21, T19 (heading parts), the no-mag vehicle, L2 for F29 and F35 | 9a: T21 and `fpv-estimators` (done); 9b: T19 and the heading tests in `fpv-estimators` (done) |
 | 10 | T16, T09 | T16, T09 |
 | 11 | T17, T18, T19 (Pos Hold parts) | T17–T19 |
 | 12 | T10–T15, T20 | T10–T15, T20 |

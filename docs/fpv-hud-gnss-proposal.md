@@ -332,7 +332,7 @@ These are interface notes for the Unity plan. They are not obliq-2 work.
 | Item | Why |
 |---|---|
 | GPS communication loss (Betaflight's GPSLOST) | Our receiver never stops talking; a lost fix is LOWSATS. A later `gnss_env` flag could add it. |
-| Mahony gain scheduling and the accelerometer gate | The existing attitude filter keeps its own gains; changing them would alter every current test. This could be a separate fidelity item. |
+| Mahony gain scheduling (10× while disarmed, 100× after a disarm) | The existing attitude filter keeps its own gain; changing it would alter every current test. This could be a separate fidelity item. The 0.9–1.1 g accelerometer gate is already modelled. |
 | Earth-referenced yaw, horizon mode, crash recovery, lap timer | Not needed for these modes |
 | The unreleased Kalman estimator in Betaflight `master` | Not in the 2025.12 baseline |
 

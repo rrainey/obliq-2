@@ -8,6 +8,8 @@
 import {
   buildFpvModel,
   CLIMB_STICKS,
+  COURSE_STICKS,
+  NO_MAG_START_YAW_DEG,
   DEFAULT_GNSS_ENV,
   ESTIMATOR,
   FPV,
@@ -103,5 +105,70 @@ describe('FPV altitude estimator (Betaflight blend)', () => {
       expect(Math.abs(r.alt - a2)).toBeLessThan(1e-9)
       expect(Math.abs(r.vario - v2)).toBeLessThan(1e-6)
     }
+  })
+})
+
+describe('FPV heading from GPS course over ground (Betaflight imu.c)', () => {
+  interface H { cogAllowed: number; snapDone: number; gain: number; courseGrid: number; yawEst: number; mag: number[]; speed: number }
+  function fly(name: string, magnetometer: boolean): H[] {
+    const model = buildFpvModel({ sticks: COURSE_STICKS, magnetometer, initialEuler: [0, 0, NO_MAG_START_YAW_DEG] })
+    const result = compileAndRunNative({
+      modelName: name,
+      sheets: (model.data as any).sheets,
+      dt: FPV.dt,
+      smokeMainBody: `
+  ${name}_seed_from_inputs(&model);
+  for (int i = 0; i < ${Math.round(10 / FPV.dt)}; ++i) {
+    ${name}_step(&model);
+    if (i % 2 != 0) continue;
+    const ${name}_outputs_t *o = &model.outputs;
+    const ${name}_signals_t *g = &model.signals;
+    printf("%.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g\\n",
+      g->FlightController_AttitudeEstimator_CogAllowed, g->FlightController_AttitudeEstimator_CogSnapDone,
+      g->FlightController_AttitudeEstimator_CogGain, g->FlightController_AttitudeEstimator_CourseGrid,
+      o->euler_est[2], o->mag[0], o->mag[1], o->mag[2], o->gnss_course[2]);
+  }
+  return 0;
+`,
+    })
+    dirs.push(result.outDir)
+    return result.stdout.trim().split('\n').map(line => {
+      const v = line.trim().split(' ').map(Number)
+      return { cogAllowed: v[0]!, snapDone: v[1]!, gain: v[2]!, courseGrid: v[3]!, yawEst: v[4]!, mag: v.slice(5, 8), speed: v[8]! }
+    })
+  }
+  const wrap = (r: number) => Math.atan2(Math.sin(r), Math.cos(r))
+
+  test('without a magnetometer: one snap to the course at 1 m/s, no correction before it', () => {
+    const rows = fly('fpvcognomag', false)
+    expect(rows.every(r => r.cogAllowed === 1)).toBe(true)
+    expect(rows.every(r => r.mag.every(m => m === 0))).toBe(true)
+    const k = rows.findIndex(r => r.snapDone === 1)
+    expect(k).toBeGreaterThan(0)
+    // Snapped on the first sample above the snap speed, to exactly the grid course
+    expect(rows[k]!.speed).toBeGreaterThan(ESTIMATOR.cog.snapSpeed)
+    expect(rows.slice(0, k).every(r => r.speed <= ESTIMATOR.cog.snapSpeed || r.snapDone === 0)).toBe(true)
+    expect(Math.abs(wrap(rows[k]!.yawEst - rows[k]!.courseGrid))).toBeLessThan(1e-6)
+    expect(rows.slice(0, k + 1).every(r => r.gain === 0)).toBe(true)
+    expect(rows.slice(k).every(r => r.snapDone === 1)).toBe(true)
+    // Before the snap the estimate stayed at the power-up yaw, far from the course
+    expect(Math.abs(rows[k - 1]!.yawEst)).toBeLessThan(0.02)
+    expect(rows.slice(k + 1).some(r => r.gain > 0)).toBe(true)
+  })
+
+  test('with a magnetometer the course is never used', () => {
+    const rows = fly('fpvcogmag', true)
+    expect(rows.every(r => r.cogAllowed === 0 && r.gain === 0 && r.snapDone === 0)).toBe(true)
+    expect(rows.some(r => r.mag.some(m => m !== 0))).toBe(true)
+  })
+
+  test('the no-magnetometer build has no Magnetometer subsystem', () => {
+    const blocksOf = (magnetometer: boolean) => {
+      const main = ((buildFpvModel({ vehicleOnly: true, magnetometer }).data as any).sheets as any[])[0]
+      const sensors = main.blocks.find((b: any) => b.name === 'Sensors')
+      return (sensors.parameters.sheets[0].blocks as any[]).map(b => b.name)
+    }
+    expect(blocksOf(true)).toContain('Magnetometer')
+    expect(blocksOf(false)).not.toContain('Magnetometer')
   })
 })

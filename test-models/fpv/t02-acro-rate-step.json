@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 100
+              "y": 93
             },
             "parameters": {
               "showName": true,
@@ -452,7 +452,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 30
+              "y": 20
             },
             "parameters": {
               "showName": true,
@@ -502,7 +502,8 @@
                 "fc_warnings",
                 "failsafe_stage",
                 "alt_est",
-                "vario_est"
+                "vario_est",
+                "gps_heading_ok"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -518,7 +519,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 393
+              "y": 394
             },
             "parameters": {
               "showName": true,
@@ -908,7 +909,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 177
+              "y": 167
             },
             "parameters": {
               "showName": true,
@@ -921,7 +922,7 @@
             "name": "Tag_motor_cmd",
             "position": {
               "x": 486,
-              "y": 321
+              "y": 311
             },
             "parameters": {
               "showName": true,
@@ -934,7 +935,7 @@
             "name": "Tag_rate_setpoint",
             "position": {
               "x": 484,
-              "y": 465
+              "y": 455
             },
             "parameters": {
               "showName": true,
@@ -947,7 +948,7 @@
             "name": "Tag_gyro_dps",
             "position": {
               "x": 488,
-              "y": 609
+              "y": 599
             },
             "parameters": {
               "showName": true,
@@ -1053,7 +1054,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 809
+          "height": 799
         }
       },
       {

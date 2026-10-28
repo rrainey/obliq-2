@@ -298,6 +298,24 @@ export const ESTIMATOR = {
     /** Baro zero offset smoothing while disarmed: off = a·baro + (1 − a)·off */
     zeroSmoothing: 0.2,
   },
+  /** Yaw from GPS course over ground, after Betaflight imu.c (docs/fpv-betaflight-gnss-spec.md §1.2). */
+  cog: {
+    /** m/s: the one-time snap to the course */
+    snapSpeed: 1.0,
+    /** Satellites must exceed this (GPS_MIN_SAT_COUNT) */
+    minSatsExclusive: 4,
+    /** m/s: speed factor r = speed / this; r² below 1, else min(r, maxSpeedFactor) */
+    speedRef: 1.0,
+    maxSpeedFactor: 10,
+    /** Yaw-stick factor (1 − |yaw|)^5 through a negative-peak detector releasing with this time constant (s) */
+    yawReleaseS: 2.5,
+    /** deg: roll factor (limit − |roll|)/limit; pitch factor nose-down pitch / pitchFullDeg */
+    rollLimitDeg: 12,
+    pitchFullDeg: 45,
+    /** canUseGPSHeading: confidence leak (1/s) and threshold */
+    confidenceLeak: 0.4,
+    confidenceThreshold: 2.0,
+  },
 }
 
 /** Betaflight's pressure altitude (m): (1 − (P/101325)^0.190295) × 44330. */
@@ -651,7 +669,7 @@ const MOTOR_SIZE = { width: 140, height: 80 }
 const FRAME_SIZE = { width: 160, height: 260 }
 const FC_SIZE = { width: 220, height: 180 }
 const SENSORS_SIZE = { width: 170, height: 150 }
-const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est']
+const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok']
 
 // ---------------------------------------------------------------------------
 // Motor / ESC / propeller (one definition, referenced by the other three)
@@ -1288,7 +1306,7 @@ function buildGnssSheet(ideal: boolean, altitude0: number): SheetBuilder {
   return s
 }
 
-function buildSensorsSheet(ideal: boolean, altitude0: number): SheetBuilder {
+function buildSensorsSheet(ideal: boolean, altitude0: number, magnetometer = true): SheetBuilder {
   const s = new SheetBuilder('sensors', 'Sensors')
   const pos = s.input('pos_ned', 'double[3]')
   const quat = s.input('quat', 'double[4][1]')
@@ -1300,9 +1318,15 @@ function buildSensorsSheet(ideal: boolean, altitude0: number): SheetBuilder {
   const imu = s.add('subsystem', 'IMU', { ...subsystem(['omega', 'specific_force'], ['gyro', 'accel'], buildImuSheet(ideal)), sampleTimeSec: SENSORS.imu.ts })
   s.wire(omega, imu, 0)
   s.wire(force, imu, 1)
-  const mag = s.add('subsystem', 'Magnetometer', { ...subsystem(['quat', 'grid_convergence_deg'], ['mag'], buildMagSheet(ideal)), sampleTimeSec: SENSORS.mag.ts })
-  s.wire(quat, mag, 0)
-  s.wire(gamma, mag, 1)
+  // Without a magnetometer the output reads 0 (the estimator does not use it)
+  let mag: string
+  if (magnetometer) {
+    mag = s.add('subsystem', 'Magnetometer', { ...subsystem(['quat', 'grid_convergence_deg'], ['mag'], buildMagSheet(ideal)), sampleTimeSec: SENSORS.mag.ts })
+    s.wire(quat, mag, 0)
+    s.wire(gamma, mag, 1)
+  } else {
+    mag = s.constant('NoMagnetometer', [0, 0, 0], 'double[3]')
+  }
   const baro = s.add('subsystem', 'Barometer', { ...subsystem(['pos_ned'], ['pressure'], buildBaroSheet(ideal, altitude0)), sampleTimeSec: SENSORS.baro.ts })
   s.wire(pos, baro)
   s.output('gyro', imu, 'double[3]', 0)
@@ -1353,12 +1377,17 @@ const normalize = (s: SheetBuilder, name: string, v: string) => normalizeWithNor
  * body -z, so tilted flight pulls the estimate toward level; that drift (the
  * familiar FPV horizon drift) is real behaviour, not a modelling error.
  */
-function buildAttitudeEstimatorSheet(initialQuat: number[][]): SheetBuilder {
+function buildAttitudeEstimatorSheet(initialQuat: number[][], magnetometer: boolean): SheetBuilder {
   const s = new SheetBuilder('att', 'AttitudeEstimator')
   const gyro = s.input('gyro', 'double[3]')
   const acc = s.input('accel', 'double[3]')
   const mag = s.input('mag', 'double[3]')
   const gamma = s.input('grid_convergence_deg', 'double')
+  const course = s.input('gnss_course', 'double[4]')
+  const fix = s.input('gnss_fix', 'double[3]')
+  const yawStick = s.input('yaw_stick', 'double')
+  const armed = s.input('armed', 'double')
+  const magDisable = s.input('mag_disable', 'double')
   const qPrev = s.add('unit_delay', 'qPrev', { initialValue: initialQuat, sampleInterval: FC.ts })
   const cbn = s.add('orientation_conversion', 'C_bn', { conversionType: 'quat_to_dcm' })
   s.wire(qPrev, cbn)
@@ -1404,9 +1433,99 @@ function buildAttitudeEstimatorSheet(initialQuat: number[][]): SheetBuilder {
   s.wire(upEst, eYaw, 0)
   s.wire(yawPart, eYaw, 1)
 
-  const err = s.add('sum', 'Error', { signs: '++', numInputs: 2 })
+  // The magnetometer is used when fitted and not disabled (GPS Rescue's fly-home phase, Phase 12)
+  const magUsed = s.add('evaluate', 'MagUsed', { numInputs: 1, expression: `(${magnetometer ? 1 : 0} > 0 && in(0) < 0.5) ? 1.0 : 0.0` })
+  s.wire(magDisable, magUsed)
+  const eYawUsed = s.add('multiply', 'MagYawErrorUsed', { numInputs: 2 })
+  s.wire(eYaw, eYawUsed, 0)
+  s.wire(magUsed, eYawUsed, 1)
+
+  // Course over ground (docs/fpv-betaflight-gnss-spec.md §1.2): only without the magnetometer,
+  // with a 3D fix and more than 4 satellites. A one-time snap to the course, then a gain schedule.
+  const C = ESTIMATOR.cog
+  const D2R = Math.PI / 180, R2D = 180 / Math.PI
+  const ts = FC.ts
+  const crs = s.add('demux', 'CourseSplit', { outputCount: 4, inputDimensions: [4] })
+  s.wire(course, crs)
+  const fixSplit = s.add('demux', 'FixSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(fix, fixSplit)
+  const eulerPrev = s.add('orientation_conversion', 'EulerPrev', { conversionType: 'quat_to_euler' })
+  s.wire(qPrev, eulerPrev)
+  const ePrev = s.add('demux', 'EulerPrevSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(eulerPrev, ePrev)
+  const cogAllowed = s.add('evaluate', 'CogAllowed', { numInputs: 3, expression: `(in(0) < 0.5 && in(1) > 2.5 && in(2) > ${C.minSatsExclusive}.0) ? 1.0 : 0.0` })
+  s.wire(magUsed, cogAllowed, 0)
+  s.wire(fixSplit, cogAllowed, 1, 0)
+  s.wire(fixSplit, cogAllowed, 2, 1)
+  // The course in the grid frame (rad): true track − γ
+  const cogGrid = s.add('evaluate', 'CourseGrid', { numInputs: 2, expression: `(in(0) - in(1)) * ${D2R}` })
+  s.wire(crs, cogGrid, 0, 0)
+  s.wire(gamma, cogGrid, 1)
+  const snapDonePrev = s.add('unit_delay', 'CogSnapDonePrev', { initialValue: 0, sampleInterval: ts })
+  // in(0) allowed, in(1) snapped before, in(2) ground speed, in(3) track valid
+  const snapNow = s.add('evaluate', 'CogSnapNow', { numInputs: 4, expression: `(in(0) > 0.5 && in(1) < 0.5 && in(2) > ${C.snapSpeed} && in(3) > 0.5) ? 1.0 : 0.0` })
+  s.wire(cogAllowed, snapNow, 0)
+  s.wire(snapDonePrev, snapNow, 1)
+  s.wire(crs, snapNow, 2, 2)
+  s.wire(crs, snapNow, 3, 3)
+  const snapDone = s.add('evaluate', 'CogSnapDone', { numInputs: 2, expression: 'fmax(in(0), in(1))' })
+  s.wire(snapNow, snapDone, 0)
+  s.wire(snapDonePrev, snapDone, 1)
+  s.wire(snapDone, snapDonePrev)
+  // Course error: sin(error) within ±90°, else ±1 (error = course − estimated yaw)
+  const courseErr = s.add('evaluate', 'CourseError', {
+    numInputs: 2,
+    expression: `(fabs(atan2(sin(in(0) - in(1)), cos(in(0) - in(1)))) < ${Math.PI / 2}) ? sin(in(0) - in(1)) : ((atan2(sin(in(0) - in(1)), cos(in(0) - in(1))) > 0.0) ? 1.0 : -1.0)`,
+  })
+  s.wire(cogGrid, courseErr, 0)
+  s.wire(ePrev, courseErr, 1, 2)
+  // Gain: speed × yaw stick (negative-peak, released over yawReleaseS) × roll × nose-down pitch
+  const speedF = s.add('evaluate', 'CogSpeedFactor', { numInputs: 1, expression: `(in(0) / ${C.speedRef} <= 1.0) ? (in(0) / ${C.speedRef}) * (in(0) / ${C.speedRef}) : fmin(in(0) / ${C.speedRef}, ${C.maxSpeedFactor}.0)` })
+  s.wire(crs, speedF, 0, 2)
+  const kRel = ts / (C.yawReleaseS + ts)
+  const yawPrev = s.add('unit_delay', 'CogYawFactorPrev', { initialValue: 1, sampleInterval: ts })
+  const yawF = s.add('evaluate', 'CogYawFactor', { numInputs: 2, expression: `(pow(1.0 - fabs(in(0)), 5.0) < in(1)) ? pow(1.0 - fabs(in(0)), 5.0) : in(1) + ${kRel} * (pow(1.0 - fabs(in(0)), 5.0) - in(1))` })
+  s.wire(yawStick, yawF, 0)
+  s.wire(yawPrev, yawF, 1)
+  s.wire(yawF, yawPrev)
+  const attF = s.add('evaluate', 'CogAttitudeFactor', {
+    numInputs: 2,
+    expression: `((fabs(in(0)) * ${R2D} < ${C.rollLimitDeg}.0) ? (${C.rollLimitDeg}.0 - fabs(in(0)) * ${R2D}) / ${C.rollLimitDeg}.0 : 0.0) * ((in(1) < 0.0) ? -in(1) * ${R2D} / ${C.pitchFullDeg}.0 : 0.0)`,
+  })
+  s.wire(ePrev, attF, 0, 0)
+  s.wire(ePrev, attF, 1, 1)
+  // in(0) allowed, in(1) snapped, in(2) speed, in(3) yaw, in(4) attitude
+  const gain = s.add('evaluate', 'CogGain', { numInputs: 5, expression: '(in(0) > 0.5 && in(1) > 0.5) ? in(2) * in(3) * in(4) : 0.0' })
+  s.wire(cogAllowed, gain, 0)
+  s.wire(snapDonePrev, gain, 1)
+  s.wire(speedF, gain, 2)
+  s.wire(yawF, gain, 3)
+  s.wire(attF, gain, 4)
+  // Correction about the earth's down axis (in the body: −up), turning the estimate toward the course
+  const cogScale = s.add('evaluate', 'CogErrorScale', { numInputs: 2, expression: '-in(0) * in(1)' })
+  s.wire(courseErr, cogScale, 0)
+  s.wire(gain, cogScale, 1)
+  const eCog = s.add('multiply', 'CogError', { numInputs: 2 })
+  s.wire(upEst, eCog, 0)
+  s.wire(cogScale, eCog, 1)
+  // canUseGPSHeading: confidence += max(gain − |error|, 0)·dt, leaking; reset at arming
+  const armedPrev = s.add('unit_delay', 'ArmedPrev', { initialValue: 0, sampleInterval: ts })
+  s.wire(armed, armedPrev)
+  const confPrev = s.add('unit_delay', 'CogConfidencePrev', { initialValue: 0, sampleInterval: ts })
+  // in(0) armed, in(1) armed before, in(2) gain, in(3) error, in(4) confidence before
+  const conf = s.add('evaluate', 'CogConfidence', {
+    numInputs: 5,
+    expression: `(in(0) > 0.5 && in(1) < 0.5) ? 0.0 : in(4) + ${ts} * (fmax(in(2) - fabs(in(3)), 0.0) - ${C.confidenceLeak} * in(4))`,
+  })
+  ;[armed, armedPrev, gain, courseErr, confPrev].forEach((x, k2) => s.wire(x, conf, k2))
+  s.wire(conf, confPrev)
+  const headingOk = s.add('evaluate', 'GpsHeadingOk', { numInputs: 1, expression: `(in(0) > ${C.confidenceThreshold}) ? 1.0 : 0.0` })
+  s.wire(conf, headingOk)
+
+  const err = s.add('sum', 'Error', { signs: '+++', numInputs: 3 })
   s.wire(eAcc, err, 0)
-  s.wire(eYaw, err, 1)
+  s.wire(eYawUsed, err, 1)
+  s.wire(eCog, err, 2)
   const kp = s.add('scale', 'Kp', { gain: ESTIMATOR.mahonyKp })
   s.wire(err, kp)
   const wc = s.add('sum', 'CorrectedRate', { signs: '++', numInputs: 2 })
@@ -1425,13 +1544,25 @@ function buildAttitudeEstimatorSheet(initialQuat: number[][]): SheetBuilder {
   const qSum = s.add('sum', 'qIntegrate', { signs: '++', numInputs: 2 })
   s.wire(qPrev, qSum, 0)
   s.wire(step, qSum, 1)
-  const q = normalize(s, 'q', qSum)
+  const qIntegrated = normalize(s, 'qNormalized', qSum)
+  // The snap: keep roll and pitch, take yaw from the course
+  const snapEuler = s.add('mux', 'CogSnapEuler', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+  s.wire(ePrev, snapEuler, 0, 0)
+  s.wire(ePrev, snapEuler, 1, 1)
+  s.wire(cogGrid, snapEuler, 2)
+  const qSnap = s.add('orientation_conversion', 'CogSnapQuat', { conversionType: 'euler_to_quat' })
+  s.wire(snapEuler, qSnap)
+  const q = s.add('if', 'q')
+  s.wire(qIntegrated, q, 0)
+  s.wire(snapNow, q, 1)
+  s.wire(qSnap, q, 2)
   s.wire(q, qPrev)
 
   const euler = s.add('orientation_conversion', 'Euler', { conversionType: 'quat_to_euler' })
   s.wire(q, euler)
   s.output('quat', q, 'double[4][1]')
   s.output('euler', euler, 'double[3]')
+  s.output('gps_heading_ok', headingOk, 'double')
   return s
 }
 
@@ -2016,7 +2147,7 @@ function buildHomeVectorSheet(): SheetBuilder {
   return s
 }
 
-function buildFlightControllerSheet(initialQuat: number[][], altitude0: number): SheetBuilder {
+function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, magnetometer: boolean): SheetBuilder {
   const s = new SheetBuilder('fc', 'FlightController')
   const rawSticks = s.input('sticks', 'double[8]')
   const gyro = s.input('gyro', 'double[3]')
@@ -2028,6 +2159,7 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   const gnssFix = s.input('gnss_fix', 'double[3]')
   const link = s.input('rc_link_valid', 'double')
   const procedure = s.input('failsafe_procedure', 'double')
+  const gnssCourse = s.input('gnss_course', 'double[4]')
 
   // Failsafe first: everything below reads the sticks it passes on
   const failsafe = s.add('subsystem', 'Failsafe', subsystem(['sticks', 'rc_link_valid', 'failsafe_procedure'], ['sticks_fs', 'stage', 'disarm_request', 'procedure'], buildFailsafeSheet()))
@@ -2037,11 +2169,19 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   const sticks = failsafe
 
   // Estimators
-  const att = s.add('subsystem', 'AttitudeEstimator', subsystem(['gyro', 'accel', 'mag', 'grid_convergence_deg'], ['quat', 'euler'], buildAttitudeEstimatorSheet(initialQuat)))
+  const att = s.add('subsystem', 'AttitudeEstimator', subsystem(
+    ['gyro', 'accel', 'mag', 'grid_convergence_deg', 'gnss_course', 'gnss_fix', 'yaw_stick', 'armed', 'mag_disable'],
+    ['quat', 'euler', 'gps_heading_ok'],
+    buildAttitudeEstimatorSheet(initialQuat, magnetometer)))
   s.wire(gyro, att, 0)
   s.wire(acc, att, 1)
   s.wire(mag, att, 2)
   s.wire(gamma, att, 3)
+  s.wire(gnssCourse, att, 4)
+  s.wire(gnssFix, att, 5)
+  s.wire(s.add('selector', 'YawStick', { indices: [2] }), att, 6)
+  // GPS Rescue disables the magnetometer in its fly-home phase (Phase 12); until then never
+  s.wire(s.constant('RescueMagDisable', 0, 'double'), att, 8)
 
   // Setpoint: acro rates, or angle mode on the AUX switch
   const rates = s.add('subsystem', 'Rates', subsystem(['sticks'], ['setpoint', 'throttle'], buildRatesSheet()))
@@ -2059,6 +2199,8 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   s.wire(gnssFix, arming, 1)
   s.wire(failsafe, arming, 2, 2)
   s.wire(link, arming, 3)
+  s.wire(arming, att, 7, 0)
+  s.wire(sticks, `${s.id}__YawStick`)
   // Altitude: Betaflight's baro/GPS blend at 100 Hz, relative to the arming point
   const alt = s.add('subsystem', 'AltitudeEstimator', {
     ...subsystem(['pressure', 'gnss_pos', 'gnss_fix', 'armed'], ['alt_est', 'vario_est'], buildAltitudeEstimatorSheet(altitude0, altitude0 > 0)),
@@ -2118,6 +2260,7 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   s.output('failsafe_stage', failsafe, 'double', 1)
   s.output('alt_est', alt, 'double', 0)
   s.output('vario_est', alt, 'double', 1)
+  s.output('gps_heading_ok', att, 'double', 2)
   return s
 }
 
@@ -2156,7 +2299,16 @@ export interface FpvModelOptions {
   initialAltitude?: number
   /** Scheduled GNSS conditions and grid convergence (builds with a Pilot; vehicleOnly takes them as inputs) */
   conditions?: ConditionsProfile
+  /**
+   * A magnetometer is fitted (default true). Without one the mag output reads
+   * 0, the attitude estimate starts at yaw 0 (as after power-up) and heading
+   * comes from GPS course over ground, as in Betaflight.
+   */
+  magnetometer?: boolean
 }
+
+/** The vehicle model without a magnetometer (validation suite). */
+export const FPV_VEHICLE_NO_MAG_NAME = 'FPV Vehicle No Mag'
 
 export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data: Record<string, unknown> } {
   const main = new SheetBuilder('main', 'Main')
@@ -2172,6 +2324,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     published.set(name, src)
   }
   const initialQuat = eulerToQuat(opts.initialEuler ?? [0, 0, 0])
+  const magnetometer = opts.magnetometer ?? true
   const altitude0 = Math.max(0, opts.initialAltitude ?? 0)
   const split = main.add('demux', 'MotorCmdSplit', { outputCount: 4, inputDimensions: [4] })
   let fc: string | null = null
@@ -2202,7 +2355,8 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
       : main.add('subsystem', 'Pilot', subsystem([], ['sticks'], buildPilotSheet(opts.sticks ?? DEMO_STICKS)))
 
     fc = main.add('subsystem', 'FlightController', {
-      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure', 'grid_convergence_deg', 'gnss_pos', 'gnss_fix', 'rc_link_valid', 'failsafe_procedure'], FC_OUTPUTS, buildFlightControllerSheet(initialQuat, altitude0), FC_SIZE),
+      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure', 'grid_convergence_deg', 'gnss_pos', 'gnss_fix', 'rc_link_valid', 'failsafe_procedure', 'gnss_course'], FC_OUTPUTS,
+        buildFlightControllerSheet(magnetometer ? initialQuat : eulerToQuat([...(opts.initialEuler ?? [0, 0, 0]).slice(0, 2), 0]), altitude0, magnetometer), FC_SIZE),
       sampleTimeSec: FC.ts,
     })
     main.wire(pilot, fc, 0)
@@ -2266,7 +2420,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   if (fc) {
     const sensors = main.add('subsystem', 'Sensors', subsystem(
       ['pos_ned', 'quat', 'omega', 'specific_force', 'grid_convergence_deg', 'vel_ned', 'gnss_env'], ['gyro', 'accel', 'mag', 'pressure', ...GNSS_OUTPUTS],
-      buildSensorsSheet(opts.sensors === 'ideal', altitude0), SENSORS_SIZE))
+      buildSensorsSheet(opts.sensors === 'ideal', altitude0, magnetometer), SENSORS_SIZE))
     main.wire(frame, sensors, 0, 0)
     main.wire(frame, sensors, 1, 2)
     main.wire(frame, sensors, 2, 4)
@@ -2280,6 +2434,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     main.wire(sensors, fc, 7, 6)
     wireCondition('rc_link_valid', fc, 8)
     wireCondition('failsafe_procedure', fc, 9)
+    main.wire(sensors, fc, 10, 7)
     publish('imu_gyro', sensors, 'double[3]', 0)
     publish('imu_accel', sensors, 'double[3]', 1)
     publish('mag', sensors, 'double[3]', 2)
@@ -2297,7 +2452,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     publish('gyro_dps', fc, 'double[3]', fcOut('gyro_dps'))
     publish('euler_est', fc, 'double[3]', fcOut('euler_est'))
     publish('quat_est', fc, 'double[4][1]', fcOut('quat_est'))
-    for (const name of ['heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est']) {
+    for (const name of ['heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok']) {
       publish(name, fc, 'double', fcOut(name))
     }
   }
@@ -2372,7 +2527,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     },
   }
   if (opts.vehicleOnly) {
-    model.name = FPV_VEHICLE_NAME
+    model.name = magnetometer ? FPV_VEHICLE_NAME : FPV_VEHICLE_NO_MAG_NAME
     model.data.metadata.description =
       '5-inch FPV quadcopter vehicle, for embedding in test models with a Model Reference block. ' +
       'Frame and 6-DOF body, four motor/propeller subsystems, 4S battery, IMU/magnetometer/barometer models, ground contact ' +
@@ -3156,6 +3311,55 @@ export function buildFpvAltitudeEstimatorTestModel() {
   })
 }
 
+/**
+ * The no-magnetometer vehicle for the validation suite: it starts facing
+ * NO_MAG_START_YAW_DEG (grid) while its attitude estimate starts at yaw 0, as
+ * after a power-up without a magnetometer.
+ */
+export const NO_MAG_START_YAW_DEG = 60
+export function buildFpvNoMagVehicle() {
+  return buildFpvModel({ vehicleOnly: true, magnetometer: false, initialEuler: [0, 0, NO_MAG_START_YAW_DEG] })
+}
+
+/**
+ * T19 windows and limits. Course over ground aligns the heading with the
+ * ground track; the true yaw differs by the sideslip (the hover's small tilt
+ * bias gives about 4° at 10 m/s), as on a real quad.
+ */
+export const NO_MAG_TEST = { still: 4, converged: 10, courseDeg: 2, truthDeg: 8, headingOkFrom: 8.5, duration: 12 }
+
+/** T19: heading without a magnetometer — from 0 before motion, snapped and converged to the course in flight. */
+export function buildFpvNoMagHeadingTestModel() {
+  const t = NO_MAG_TEST
+  const R2D = 180 / Math.PI
+  const tests = () => {
+    const { s, from, pick, expr, check, upright } = testsSheet()
+    const yawEst = expr('YawEstimateDeg', `in(0) * ${R2D}`, [pick('YawEstimate', from('euler_est'), [2])])
+    const yawTrue = expr('YawTrueDeg', `in(0) * ${R2D}`, [pick('YawTrue', from('euler'), [2])])
+    const wrapDiff = (name: string, a: string, b: string) => expr(name, 'fmod(in(0) - in(1) + 540.0, 360.0) - 180.0', [a, b])
+    check('EstimateStartsAtZero', yawEst, -1, 1, 0, t.still)
+    check('GpsHeadingNotYet', from('gps_heading_ok'), 0, 0, 0, t.still)
+    check('HeadingFollowsCourse', wrapDiff('HeadingMinusTrack', from('heading_deg'), pick('Track', from('gnss_course'), [0])), -t.courseDeg, t.courseDeg, t.converged)
+    check('EstimateNearTrueYaw', wrapDiff('EstimateYawError', yawEst, yawTrue), -t.truthDeg, t.truthDeg, t.converged)
+    check('GpsHeadingEstablished', from('gps_heading_ok'), 1, 1, t.headingOkFrom)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T19 No-Mag Heading',
+    description:
+      'Validation test for heading without a magnetometer (docs/fpv-hud-gnss-test-plan.md, T19): the vehicle faces ' +
+      `${NO_MAG_START_YAW_DEG}° with its estimate at 0°. Flying forward, the estimate snaps to the GPS course at 1 m/s and ` +
+      `converges on it (heading within ${t.courseDeg}° of the track, the true yaw within ${t.truthDeg}° allowing for sideslip), ` +
+      'and GPS heading becomes established.',
+    sticks: COURSE_STICKS,
+    duration: t.duration,
+    displays: [['Heading', 'heading_deg'], ['GnssCourse', 'gnss_course'], ['Attitude', 'euler']],
+    tests,
+    vehicleName: FPV_VEHICLE_NO_MAG_NAME,
+  })
+}
+
 /** A test model renamed for the validation suite ("FPV Tnn …"). */
 const renamed = (model: { name: string; data: Record<string, unknown> }, name: string) => ({ ...model, name })
 
@@ -3167,6 +3371,7 @@ const renamed = (model: { name: string; data: Record<string, unknown> }, name: s
 export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<string, unknown> }]> {
   return [
     ['fpv-vehicle.json', buildFpvModel({ vehicleOnly: true })],
+    ['fpv-vehicle-no-mag.json', buildFpvNoMagVehicle()],
     ['t00-test-helpers.json', buildFpvHelpersTestModel()],
     ['t01-demo-flight.json', renamed(buildFpvDemoFlightModel(), 'FPV T01 Demo Flight')],
     ['t02-acro-rate-step.json', renamed(buildFpvAcroRateStepModel(), 'FPV T02 Acro Rate Step')],
@@ -3176,6 +3381,7 @@ export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<s
     ['t06-grid-convergence.json', buildFpvGridConvergenceTestModel()],
     ['t07-arming-checks.json', buildFpvArmingChecksTestModel()],
     ['t08-failsafe-drop.json', buildFpvFailsafeDropTestModel()],
+    ['t19-no-mag-heading.json', buildFpvNoMagHeadingTestModel()],
     ['t21-altitude-estimator.json', buildFpvAltitudeEstimatorTestModel()],
     ['t22-wind.json', buildFpvWindTestModel()],
   ]

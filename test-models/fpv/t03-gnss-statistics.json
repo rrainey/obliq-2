@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 174
+              "y": 167
             },
             "parameters": {
               "showName": true,
@@ -434,7 +434,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 104
+              "y": 94
             },
             "parameters": {
               "showName": true,
@@ -484,7 +484,8 @@
                 "fc_warnings",
                 "failsafe_stage",
                 "alt_est",
-                "vario_est"
+                "vario_est",
+                "gps_heading_ok"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -500,7 +501,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 467
+              "y": 469
             },
             "parameters": {
               "showName": true,
@@ -890,7 +891,7 @@
             "name": "Tag_gnss_pos",
             "position": {
               "x": 488,
-              "y": -44
+              "y": -54
             },
             "parameters": {
               "showName": true,
@@ -903,7 +904,7 @@
             "name": "Tag_gnss_vel_ned",
             "position": {
               "x": 484,
-              "y": 100
+              "y": 90
             },
             "parameters": {
               "showName": true,
@@ -916,7 +917,7 @@
             "name": "Tag_gnss_fix",
             "position": {
               "x": 488,
-              "y": 244
+              "y": 234
             },
             "parameters": {
               "showName": true,
@@ -929,7 +930,7 @@
             "name": "Tag_pos_ned",
             "position": {
               "x": 490,
-              "y": 388
+              "y": 378
             },
             "parameters": {
               "showName": true,
@@ -942,7 +943,7 @@
             "name": "Tag_vel_ned",
             "position": {
               "x": 490,
-              "y": 532
+              "y": 522
             },
             "parameters": {
               "showName": true,
@@ -955,7 +956,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 676
+              "y": 666
             },
             "parameters": {
               "showName": true,
@@ -1081,7 +1082,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 876
+          "height": 866
         }
       },
       {

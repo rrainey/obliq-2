@@ -305,7 +305,12 @@ This is listed for interface agreement. It is implemented in that repo. The host
   - `alt_est` is checked within 1.5 m, not 0.5 m. Betaflight's blend weights GPS 0.65 at pDOP 1.5, and the GPS vertical white noise (0.39 m) is in both the fix and the zero taken at arming. The 10 Hz fix and the 3 Hz PT2 also lag a climb by about 0.3 m. Measured worst errors: 0.96 m at pDOP 1.5, 0.57 m at pDOP 6, 0.26 m on baro alone.
   - `vario_est` carries the GPS steps (±1.5 m/s), so T21 checks its RMS: 0.42 m/s with GPS (limit 1.0), 0.15 m/s on baro (limit 0.3).
 
-**9b, heading:** course over ground and the no-magnetometer build.
+**9b, heading (done 2026-10-28). As built:**
+- **Course-over-ground correction in the attitude estimator (`ESTIMATOR.cog`):** used only without a magnetometer, with a 3D fix and more than 4 satellites. It starts with a one-time snap of yaw to the course at 1 m/s, then follows Betaflight's gain schedule (speed, the yaw stick through a negative-peak detector, roll, nose-down pitch).
+- **`gps_heading_ok`** is Betaflight's `canUseGPSHeading` confidence, reset at arming.
+- **Magnetometer disable.** It is a `mag_disable` input to the estimator, fed a constant 0 until Phase 12 drives it from the rescue's fly-home phase.
+- **The `magnetometer: false` build** ("FPV Vehicle No Mag"): no Magnetometer subsystem, `mag` reads 0, and the estimate starts at yaw 0 (power-up). In the validation suite it starts facing 60°.
+- **Course versus heading.** The course correction aligns heading with the ground track, as Betaflight's does. With sideslip, about 4° at 10 m/s from the hover's tilt bias, the estimated yaw differs from the true yaw by that much. T19 therefore checks heading against the course (2°, from 10 s, after the gain schedule converges) and against the true yaw (8°).
 
 1. **Altitude.** The Betaflight blend replaces the AltitudeEstimator internals:
    - a baro zero that smooths while disarmed and latches at arming;
@@ -414,6 +419,7 @@ These are appended to `FPV_Vehicle_outputs_t`. Existing fields keep their names,
 | `gnss_vel_ned` | `double[3]` | **true**-north NED, m/s, 1 cm/s | 10 Hz | Holds the last fix (2D: down = 0) |
 | `gnss_fix` | `double[3]` | [fix type 0/2/3 (UBX), satellites, pDOP] | 10 Hz | fix type 0 |
 | `gnss_course` | `double[4]` | [track true °, track magnetic °, ground speed m/s, track valid 0/1] | 10 Hz | track held, valid = 0 (below 0.5 m/s or no fix) |
+| `gps_heading_ok` | `double` | 1 once GPS course has established the heading (Betaflight `canUseGPSHeading`); reset at arming; only rises without a magnetometer | 1 kHz | 0 |
 | `fc_armed`, `fc_angle_mode`, `fc_airmode` | `double` | 0 or 1 | 1 kHz | — |
 | `vario_est` (Phase 9) | `double` | m/s, positive up: the derivative of `alt_est` through a 1 Hz PT2 | 100 Hz | — |
 | `alt_est` (Phase 9) | `double` | m, relative to the arming point (Betaflight's estimate) | 100 Hz | 0 while disarmed |
