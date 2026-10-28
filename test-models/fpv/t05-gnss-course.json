@@ -1,0 +1,1472 @@
+{
+  "name": "FPV T05 GNSS Course",
+  "data": {
+    "version": "2.2",
+    "metadata": {
+      "created": "2026-10-21T00:00:00.000Z",
+      "description": "Validation test for the GNSS course and ground speed (docs/fpv-hud-gnss-test-plan.md, T05): in a hover the track is not valid and holds; in forward flight above 3 m/s the true track matches the truth (grid track + γ) within 3° and the ground speed within 0.5 m/s (the 10 Hz hold lags an accelerating vehicle); the magnetic track is the true track minus the WMM declination."
+    },
+    "globalSettings": {
+      "simulationTimeStep": 0.0005,
+      "simulationDuration": 12,
+      "integrationAlgorithm": "rk4",
+      "debugMath": false
+    },
+    "parameters": [],
+    "dataStores": [],
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "main__Pilot",
+            "type": "subsystem",
+            "name": "Pilot",
+            "position": {
+              "x": 125,
+              "y": 234
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [],
+              "outputPorts": [
+                "sticks"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "flatten",
+              "sheets": [
+                {
+                  "id": "pilot",
+                  "name": "Pilot",
+                  "blocks": [
+                    {
+                      "id": "pilot__Time",
+                      "type": "clock",
+                      "name": "Time",
+                      "position": {
+                        "x": 100,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "pilot__Sticks",
+                      "type": "mux",
+                      "name": "Sticks",
+                      "position": {
+                        "x": 420,
+                        "y": 330
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "rows": 6,
+                        "cols": 1,
+                        "baseType": "double",
+                        "outputType": "double[6]"
+                      }
+                    },
+                    {
+                      "id": "pilot__RollStick",
+                      "type": "lookup_1d",
+                      "name": "RollStick",
+                      "position": {
+                        "x": 260,
+                        "y": 8
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          0,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__PitchStick",
+                      "type": "lookup_1d",
+                      "name": "PitchStick",
+                      "position": {
+                        "x": 260,
+                        "y": 152
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          4,
+                          4.1
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          -0.25
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__YawStick",
+                      "type": "lookup_1d",
+                      "name": "YawStick",
+                      "position": {
+                        "x": 260,
+                        "y": 296
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          0,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__ThrottleStick",
+                      "type": "lookup_1d",
+                      "name": "ThrottleStick",
+                      "position": {
+                        "x": 260,
+                        "y": 440
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          0.5,
+                          0.6,
+                          1.2,
+                          1.3,
+                          4,
+                          4.1
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          0.6,
+                          0.6,
+                          0.4383,
+                          0.4383,
+                          0.47330000000000005
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__AngleModeSwitch",
+                      "type": "lookup_1d",
+                      "name": "AngleModeSwitch",
+                      "position": {
+                        "x": 260,
+                        "y": 584
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          1,
+                          1
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__ArmSwitch",
+                      "type": "lookup_1d",
+                      "name": "ArmSwitch",
+                      "position": {
+                        "x": 260,
+                        "y": 728
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          0.25,
+                          0.251
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          1
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__sticks",
+                      "type": "output_port",
+                      "name": "sticks",
+                      "position": {
+                        "x": 590,
+                        "y": 378
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "sticks",
+                        "dataType": "double[6]"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_pilot__Time_pilot__RollStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__RollStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_2_pilot__RollStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__RollStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 12
+                      }
+                    },
+                    {
+                      "id": "w_3_pilot__Time_pilot__PitchStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__PitchStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_4_pilot__PitchStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__PitchStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_5_pilot__Time_pilot__YawStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__YawStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_6_pilot__YawStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__YawStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -20
+                      }
+                    },
+                    {
+                      "id": "w_7_pilot__Time_pilot__ThrottleStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__ThrottleStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_8_pilot__ThrottleStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__ThrottleStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": -12
+                      }
+                    },
+                    {
+                      "id": "w_9_pilot__Time_pilot__AngleModeSwitch",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__AngleModeSwitch",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_10_pilot__AngleModeSwitch_pilot__Sticks",
+                      "sourceBlockId": "pilot__AngleModeSwitch",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 4,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_11_pilot__Time_pilot__ArmSwitch",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__ArmSwitch",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_12_pilot__ArmSwitch_pilot__Sticks",
+                      "sourceBlockId": "pilot__ArmSwitch",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 5,
+                      "routing": {
+                        "midpointOffset": 20
+                      }
+                    },
+                    {
+                      "id": "w_13_pilot__Sticks_pilot__sticks",
+                      "sourceBlockId": "pilot__Sticks",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__sticks",
+                      "targetPortIndex": 0
+                    }
+                  ],
+                  "extents": {
+                    "width": 890,
+                    "height": 928
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "main__Vehicle",
+            "type": "subsystem",
+            "name": "Vehicle",
+            "position": {
+              "x": 310,
+              "y": 140
+            },
+            "parameters": {
+              "showName": true,
+              "showPortNames": true,
+              "sheets": [],
+              "inputPorts": [
+                "sticks",
+                "gnss_env",
+                "grid_convergence_deg"
+              ],
+              "outputPorts": [
+                "battery_voltage",
+                "battery_current",
+                "battery_soc",
+                "imu_gyro",
+                "imu_accel",
+                "mag",
+                "pressure",
+                "gnss_pos",
+                "gnss_vel_ned",
+                "gnss_fix",
+                "gnss_course",
+                "pos_ned",
+                "vel_ned",
+                "quat",
+                "euler",
+                "omega",
+                "accel",
+                "motor_omega",
+                "motor_cmd",
+                "rate_setpoint",
+                "gyro_dps",
+                "euler_est",
+                "altitude_est",
+                "quat_est",
+                "heading_deg"
+              ],
+              "modelRef": {
+                "modelId": "reference-model:fpv-vehicle",
+                "version": null,
+                "name": "FPV Vehicle"
+              },
+              "modelRefName": "FPV Vehicle"
+            }
+          },
+          {
+            "id": "main__Conditions",
+            "type": "subsystem",
+            "name": "Conditions",
+            "position": {
+              "x": 100,
+              "y": 429
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [],
+              "outputPorts": [
+                "gnss_env",
+                "grid_convergence_deg"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "flatten",
+              "sheets": [
+                {
+                  "id": "conditions",
+                  "name": "Conditions",
+                  "blocks": [
+                    {
+                      "id": "conditions__GnssEnv",
+                      "type": "mux",
+                      "name": "GnssEnv",
+                      "position": {
+                        "x": 260,
+                        "y": 422
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "rows": 4,
+                        "cols": 1,
+                        "baseType": "double",
+                        "outputType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "conditions__Satellites",
+                      "type": "source",
+                      "name": "Satellites",
+                      "position": {
+                        "x": 100,
+                        "y": 224
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 14,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__HDOP",
+                      "type": "source",
+                      "name": "HDOP",
+                      "position": {
+                        "x": 100,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 0.8,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__VDOP",
+                      "type": "source",
+                      "name": "VDOP",
+                      "position": {
+                        "x": 100,
+                        "y": 512
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1.3,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__UereScale",
+                      "type": "source",
+                      "name": "UereScale",
+                      "position": {
+                        "x": 100,
+                        "y": 656
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__gnss_env",
+                      "type": "output_port",
+                      "name": "gnss_env",
+                      "position": {
+                        "x": 478,
+                        "y": 450
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "gnss_env",
+                        "dataType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "conditions__GridConvergence",
+                      "type": "source",
+                      "name": "GridConvergence",
+                      "position": {
+                        "x": 100,
+                        "y": 80
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1.2425,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__grid_convergence_deg",
+                      "type": "output_port",
+                      "name": "grid_convergence_deg",
+                      "position": {
+                        "x": 430,
+                        "y": 90
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "grid_convergence_deg",
+                        "dataType": "double"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_conditions__Satellites_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__Satellites",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_2_conditions__HDOP_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__HDOP",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -12
+                      }
+                    },
+                    {
+                      "id": "w_3_conditions__VDOP_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__VDOP",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_4_conditions__UereScale_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__UereScale",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": 12
+                      }
+                    },
+                    {
+                      "id": "w_5_conditions__GnssEnv_conditions__gnss_env",
+                      "sourceBlockId": "conditions__GnssEnv",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__gnss_env",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_6_conditions__GridConvergence_conditions__grid_convergence_deg",
+                      "sourceBlockId": "conditions__GridConvergence",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__grid_convergence_deg",
+                      "targetPortIndex": 0
+                    }
+                  ],
+                  "extents": {
+                    "width": 778,
+                    "height": 856
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "main__Tag_gnss_course",
+            "type": "sheet_label_sink",
+            "name": "Tag_gnss_course",
+            "position": {
+              "x": 484,
+              "y": 224
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "gnss_course"
+            }
+          },
+          {
+            "id": "main__Tag_vel_ned",
+            "type": "sheet_label_sink",
+            "name": "Tag_vel_ned",
+            "position": {
+              "x": 490,
+              "y": 368
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "vel_ned"
+            }
+          },
+          {
+            "id": "main__Tag_euler",
+            "type": "sheet_label_sink",
+            "name": "Tag_euler",
+            "position": {
+              "x": 504,
+              "y": 512
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "euler"
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_main__Pilot_main__Vehicle",
+            "sourceBlockId": "main__Pilot",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_2_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_3_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": 4
+            }
+          },
+          {
+            "id": "w_4_main__Vehicle_main__Tag_gnss_course",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 10,
+            "targetBlockId": "main__Tag_gnss_course",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_5_main__Vehicle_main__Tag_vel_ned",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 12,
+            "targetBlockId": "main__Tag_vel_ned",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_6_main__Vehicle_main__Tag_euler",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 14,
+            "targetBlockId": "main__Tag_euler",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -6
+            }
+          }
+        ],
+        "extents": {
+          "width": 804,
+          "height": 712
+        }
+      },
+      {
+        "id": "telemetry",
+        "name": "Telemetry",
+        "blocks": [
+          {
+            "id": "telemetry__From_gnss_course",
+            "type": "sheet_label_source",
+            "name": "From_gnss_course",
+            "position": {
+              "x": 100,
+              "y": 296
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "gnss_course"
+            }
+          },
+          {
+            "id": "telemetry__GnssCourse",
+            "type": "signal_display",
+            "name": "GnssCourse",
+            "position": {
+              "x": 300,
+              "y": 296
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "telemetry__From_vel_ned",
+            "type": "sheet_label_source",
+            "name": "From_vel_ned",
+            "position": {
+              "x": 106,
+              "y": 440
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "vel_ned"
+            }
+          },
+          {
+            "id": "telemetry__Velocity",
+            "type": "signal_display",
+            "name": "Velocity",
+            "position": {
+              "x": 300,
+              "y": 440
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_telemetry__From_gnss_course_telemetry__GnssCourse",
+            "sourceBlockId": "telemetry__From_gnss_course",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__GnssCourse",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_2_telemetry__From_vel_ned_telemetry__Velocity",
+            "sourceBlockId": "telemetry__From_vel_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__Velocity",
+            "targetPortIndex": 0
+          }
+        ],
+        "extents": {
+          "width": 600,
+          "height": 640
+        }
+      },
+      {
+        "id": "tests",
+        "name": "Tests",
+        "blocks": [
+          {
+            "id": "tests__From_gnss_course",
+            "type": "sheet_label_source",
+            "name": "From_gnss_course",
+            "position": {
+              "x": 100,
+              "y": 259
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "gnss_course"
+            }
+          },
+          {
+            "id": "tests__From_vel_ned",
+            "type": "sheet_label_source",
+            "name": "From_vel_ned",
+            "position": {
+              "x": 106,
+              "y": 691
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "vel_ned"
+            }
+          },
+          {
+            "id": "tests__Track",
+            "type": "selector",
+            "name": "Track",
+            "position": {
+              "x": 300,
+              "y": 475
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                0
+              ]
+            }
+          },
+          {
+            "id": "tests__TrackMagnetic",
+            "type": "selector",
+            "name": "TrackMagnetic",
+            "position": {
+              "x": 300,
+              "y": 187
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                1
+              ]
+            }
+          },
+          {
+            "id": "tests__GroundSpeed",
+            "type": "selector",
+            "name": "GroundSpeed",
+            "position": {
+              "x": 300,
+              "y": 331
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                2
+              ]
+            }
+          },
+          {
+            "id": "tests__TrackValid",
+            "type": "selector",
+            "name": "TrackValid",
+            "position": {
+              "x": 300,
+              "y": 43
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                3
+              ]
+            }
+          },
+          {
+            "id": "tests__TrackInvalidInHover",
+            "type": "assert",
+            "name": "TrackInvalidInHover",
+            "position": {
+              "x": 1051,
+              "y": -27
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 0.5,
+              "checkUntil": 3.5,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__Time",
+            "type": "clock",
+            "name": "Time",
+            "position": {
+              "x": 300,
+              "y": 907
+            },
+            "parameters": {
+              "showName": true
+            }
+          },
+          {
+            "id": "tests__TrackAtHoverPrev",
+            "type": "unit_delay",
+            "name": "TrackAtHoverPrev",
+            "position": {
+              "x": 866,
+              "y": 780
+            },
+            "parameters": {
+              "showName": true,
+              "initialValue": 0,
+              "sampleInterval": 0
+            }
+          },
+          {
+            "id": "tests__TrackAtHover",
+            "type": "evaluate",
+            "name": "TrackAtHover",
+            "position": {
+              "x": 485,
+              "y": 632
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "(in(1) <= 0.5) ? in(0) : in(2)"
+            }
+          },
+          {
+            "id": "tests__TrackChange",
+            "type": "evaluate",
+            "name": "TrackChange",
+            "position": {
+              "x": 840,
+              "y": 573
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "in(0) - in(1)"
+            }
+          },
+          {
+            "id": "tests__TrackHeldInHover",
+            "type": "assert",
+            "name": "TrackHeldInHover",
+            "position": {
+              "x": 1051,
+              "y": 573
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 0.5,
+              "checkUntil": 3.5,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__TrackValidInFlight",
+            "type": "assert",
+            "name": "TrackValidInFlight",
+            "position": {
+              "x": 1051,
+              "y": 117
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 1,
+              "upper": 1,
+              "checkFrom": 6,
+              "checkUntil": 12,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__TruthVelNorth",
+            "type": "selector",
+            "name": "TruthVelNorth",
+            "position": {
+              "x": 300,
+              "y": 619
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                0
+              ]
+            }
+          },
+          {
+            "id": "tests__TruthVelEast",
+            "type": "selector",
+            "name": "TruthVelEast",
+            "position": {
+              "x": 300,
+              "y": 763
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                1
+              ]
+            }
+          },
+          {
+            "id": "tests__TrackError",
+            "type": "evaluate",
+            "name": "TrackError",
+            "position": {
+              "x": 460,
+              "y": 792
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "fmod(in(0) - (atan2(in(2), in(1)) * 57.29577951308232 + 1.2425) + 540.0, 360.0) - 180.0"
+            }
+          },
+          {
+            "id": "tests__TrackMatchesTruth",
+            "type": "assert",
+            "name": "TrackMatchesTruth",
+            "position": {
+              "x": 1051,
+              "y": 717
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -3,
+              "upper": 3,
+              "checkFrom": 6,
+              "checkUntil": 12,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__SpeedError",
+            "type": "evaluate",
+            "name": "SpeedError",
+            "position": {
+              "x": 460,
+              "y": 425
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 3,
+              "expression": "in(0) - sqrt(in(1) * in(1) + in(2) * in(2))"
+            }
+          },
+          {
+            "id": "tests__GroundSpeedMatchesTruth",
+            "type": "assert",
+            "name": "GroundSpeedMatchesTruth",
+            "position": {
+              "x": 1051,
+              "y": 429
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -0.5,
+              "upper": 0.5,
+              "checkFrom": 6,
+              "checkUntil": 12,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__MagneticError",
+            "type": "evaluate",
+            "name": "MagneticError",
+            "position": {
+              "x": 460,
+              "y": 281
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "fmod(in(0) - in(1) + 2.484937570673121 + 540.0, 360.0) - 180.0"
+            }
+          },
+          {
+            "id": "tests__MagneticIsTrueMinusDeclination",
+            "type": "assert",
+            "name": "MagneticIsTrueMinusDeclination",
+            "position": {
+              "x": 1051,
+              "y": 285
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -1e-9,
+              "upper": 1e-9,
+              "checkFrom": 0,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__RollPitchDeg",
+            "type": "scale",
+            "name": "RollPitchDeg",
+            "position": {
+              "x": 570,
+              "y": -171
+            },
+            "parameters": {
+              "showName": true,
+              "gain": 57.29577951308232
+            }
+          },
+          {
+            "id": "tests__From_euler",
+            "type": "sheet_label_source",
+            "name": "From_euler",
+            "position": {
+              "x": 120,
+              "y": -171
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "euler"
+            }
+          },
+          {
+            "id": "tests__RollPitch",
+            "type": "selector",
+            "name": "RollPitch",
+            "position": {
+              "x": 300,
+              "y": -171
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "id": "tests__StaysUpright",
+            "type": "assert",
+            "name": "StaysUpright",
+            "position": {
+              "x": 1051,
+              "y": -171
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -60,
+              "upper": 60,
+              "checkFrom": 0,
+              "checkUntil": null,
+              "onFailure": "stop"
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_tests__From_gnss_course_tests__Track",
+            "sourceBlockId": "tests__From_gnss_course",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__Track",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_2_tests__From_gnss_course_tests__TrackMagnetic",
+            "sourceBlockId": "tests__From_gnss_course",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackMagnetic",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_3_tests__From_gnss_course_tests__GroundSpeed",
+            "sourceBlockId": "tests__From_gnss_course",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__GroundSpeed",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_4_tests__From_gnss_course_tests__TrackValid",
+            "sourceBlockId": "tests__From_gnss_course",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackValid",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_5_tests__TrackValid_tests__TrackInvalidInHover",
+            "sourceBlockId": "tests__TrackValid",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackInvalidInHover",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 287.5
+            }
+          },
+          {
+            "id": "w_6_tests__Track_tests__TrackAtHover",
+            "sourceBlockId": "tests__Track",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackAtHover",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 3.5
+            }
+          },
+          {
+            "id": "w_7_tests__Time_tests__TrackAtHover",
+            "sourceBlockId": "tests__Time",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackAtHover",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -20.5
+            }
+          },
+          {
+            "id": "w_8_tests__TrackAtHoverPrev_tests__TrackAtHover",
+            "sourceBlockId": "tests__TrackAtHoverPrev",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackAtHover",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -271.5
+            }
+          },
+          {
+            "id": "w_9_tests__TrackAtHover_tests__TrackAtHoverPrev",
+            "sourceBlockId": "tests__TrackAtHover",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackAtHoverPrev",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -0.5
+            }
+          },
+          {
+            "id": "w_10_tests__Track_tests__TrackChange",
+            "sourceBlockId": "tests__Track",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackChange",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 182
+            }
+          },
+          {
+            "id": "w_11_tests__TrackAtHover_tests__TrackChange",
+            "sourceBlockId": "tests__TrackAtHover",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackChange",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 12.5
+            }
+          },
+          {
+            "id": "w_12_tests__TrackChange_tests__TrackHeldInHover",
+            "sourceBlockId": "tests__TrackChange",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackHeldInHover",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_13_tests__TrackValid_tests__TrackValidInFlight",
+            "sourceBlockId": "tests__TrackValid",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackValidInFlight",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 287.5
+            }
+          },
+          {
+            "id": "w_14_tests__From_vel_ned_tests__TruthVelNorth",
+            "sourceBlockId": "tests__From_vel_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TruthVelNorth",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 7
+            }
+          },
+          {
+            "id": "w_15_tests__From_vel_ned_tests__TruthVelEast",
+            "sourceBlockId": "tests__From_vel_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TruthVelEast",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 7
+            }
+          },
+          {
+            "id": "w_16_tests__Track_tests__TrackError",
+            "sourceBlockId": "tests__Track",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackError",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 16
+            }
+          },
+          {
+            "id": "w_17_tests__TruthVelNorth_tests__TrackError",
+            "sourceBlockId": "tests__TruthVelNorth",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackError",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -16
+            }
+          },
+          {
+            "id": "w_18_tests__TruthVelEast_tests__TrackError",
+            "sourceBlockId": "tests__TruthVelEast",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackError",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -24
+            }
+          },
+          {
+            "id": "w_19_tests__TrackError_tests__TrackMatchesTruth",
+            "sourceBlockId": "tests__TrackError",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__TrackMatchesTruth",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -97.5
+            }
+          },
+          {
+            "id": "w_20_tests__GroundSpeed_tests__SpeedError",
+            "sourceBlockId": "tests__GroundSpeed",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SpeedError",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 8
+            }
+          },
+          {
+            "id": "w_21_tests__TruthVelNorth_tests__SpeedError",
+            "sourceBlockId": "tests__TruthVelNorth",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SpeedError",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -16
+            }
+          },
+          {
+            "id": "w_22_tests__TruthVelEast_tests__SpeedError",
+            "sourceBlockId": "tests__TruthVelEast",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__SpeedError",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -24
+            }
+          },
+          {
+            "id": "w_23_tests__SpeedError_tests__GroundSpeedMatchesTruth",
+            "sourceBlockId": "tests__SpeedError",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__GroundSpeedMatchesTruth",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 113.5
+            }
+          },
+          {
+            "id": "w_24_tests__TrackMagnetic_tests__MagneticError",
+            "sourceBlockId": "tests__TrackMagnetic",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__MagneticError",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 0
+            }
+          },
+          {
+            "id": "w_25_tests__Track_tests__MagneticError",
+            "sourceBlockId": "tests__Track",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__MagneticError",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": 16
+            }
+          },
+          {
+            "id": "w_26_tests__MagneticError_tests__MagneticIsTrueMinusDeclination",
+            "sourceBlockId": "tests__MagneticError",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__MagneticIsTrueMinusDeclination",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 105.5
+            }
+          },
+          {
+            "id": "w_27_tests__From_euler_tests__RollPitch",
+            "sourceBlockId": "tests__From_euler",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RollPitch",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_28_tests__RollPitch_tests__RollPitchDeg",
+            "sourceBlockId": "tests__RollPitch",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RollPitchDeg",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_29_tests__RollPitchDeg_tests__StaysUpright",
+            "sourceBlockId": "tests__RollPitchDeg",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__StaysUpright",
+            "targetPortIndex": 0
+          }
+        ],
+        "extents": {
+          "width": 1351,
+          "height": 1107
+        }
+      }
+    ]
+  }
+}

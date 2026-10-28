@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 219
+              "y": 199
             },
             "parameters": {
               "showName": true,
@@ -366,7 +366,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 145
+              "y": 105
             },
             "parameters": {
               "showName": true,
@@ -385,6 +385,10 @@
                 "imu_accel",
                 "mag",
                 "pressure",
+                "gnss_pos",
+                "gnss_vel_ned",
+                "gnss_fix",
+                "gnss_course",
                 "pos_ned",
                 "vel_ned",
                 "quat",
@@ -414,7 +418,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 384
+              "y": 394
             },
             "parameters": {
               "showName": true,
@@ -647,7 +651,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 303
+              "y": 343
             },
             "parameters": {
               "showName": true,
@@ -660,7 +664,7 @@
             "name": "Tag_euler_est",
             "position": {
               "x": 486,
-              "y": 447
+              "y": 487
             },
             "parameters": {
               "showName": true,
@@ -673,7 +677,7 @@
             "name": "Tag_heading_deg",
             "position": {
               "x": 484,
-              "y": 591
+              "y": 631
             },
             "parameters": {
               "showName": true,
@@ -712,7 +716,7 @@
           {
             "id": "w_4_main__Vehicle_main__Tag_euler",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 10,
+            "sourcePortIndex": 14,
             "targetBlockId": "main__Tag_euler",
             "targetPortIndex": 0,
             "routing": {
@@ -722,7 +726,7 @@
           {
             "id": "w_5_main__Vehicle_main__Tag_euler_est",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 17,
+            "sourcePortIndex": 21,
             "targetBlockId": "main__Tag_euler_est",
             "targetPortIndex": 0,
             "routing": {
@@ -732,7 +736,7 @@
           {
             "id": "w_6_main__Vehicle_main__Tag_heading_deg",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 20,
+            "sourcePortIndex": 24,
             "targetBlockId": "main__Tag_heading_deg",
             "targetPortIndex": 0,
             "routing": {
@@ -742,7 +746,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 791
+          "height": 831
         }
       },
       {

@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 210
+              "y": 158
             },
             "parameters": {
               "showName": true,
@@ -378,7 +378,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 136
+              "y": 64
             },
             "parameters": {
               "showName": true,
@@ -397,6 +397,10 @@
                 "imu_accel",
                 "mag",
                 "pressure",
+                "gnss_pos",
+                "gnss_vel_ned",
+                "gnss_fix",
+                "gnss_course",
                 "pos_ned",
                 "vel_ned",
                 "quat",
@@ -426,7 +430,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 375
+              "y": 353
             },
             "parameters": {
               "showName": true,
@@ -785,7 +789,7 @@
           {
             "id": "w_5_main__Vehicle_main__Tag_pos_ned",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 7,
+            "sourcePortIndex": 11,
             "targetBlockId": "main__Tag_pos_ned",
             "targetPortIndex": 0,
             "routing": {
@@ -795,7 +799,7 @@
           {
             "id": "w_6_main__Vehicle_main__Tag_euler",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 10,
+            "sourcePortIndex": 14,
             "targetBlockId": "main__Tag_euler",
             "targetPortIndex": 0,
             "routing": {
@@ -805,7 +809,7 @@
           {
             "id": "w_7_main__Vehicle_main__Tag_motor_omega",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 13,
+            "sourcePortIndex": 17,
             "targetBlockId": "main__Tag_motor_omega",
             "targetPortIndex": 0,
             "routing": {
@@ -815,7 +819,7 @@
           {
             "id": "w_8_main__Vehicle_main__Tag_motor_cmd",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 14,
+            "sourcePortIndex": 18,
             "targetBlockId": "main__Tag_motor_cmd",
             "targetPortIndex": 0,
             "routing": {
@@ -825,7 +829,7 @@
           {
             "id": "w_9_main__Vehicle_main__Tag_rate_setpoint",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 15,
+            "sourcePortIndex": 19,
             "targetBlockId": "main__Tag_rate_setpoint",
             "targetPortIndex": 0,
             "routing": {
@@ -835,7 +839,7 @@
           {
             "id": "w_10_main__Vehicle_main__Tag_gyro_dps",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 16,
+            "sourcePortIndex": 20,
             "targetBlockId": "main__Tag_gyro_dps",
             "targetPortIndex": 0,
             "routing": {
@@ -845,7 +849,7 @@
           {
             "id": "w_11_main__Vehicle_main__Tag_euler_est",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 17,
+            "sourcePortIndex": 21,
             "targetBlockId": "main__Tag_euler_est",
             "targetPortIndex": 0,
             "routing": {
@@ -855,7 +859,7 @@
           {
             "id": "w_12_main__Vehicle_main__Tag_altitude_est",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 18,
+            "sourcePortIndex": 22,
             "targetBlockId": "main__Tag_altitude_est",
             "targetPortIndex": 0,
             "routing": {

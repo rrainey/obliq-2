@@ -189,6 +189,52 @@ export const SENSORS = {
     lag: 0.03,
     seed: 104,
   },
+  /**
+   * GNSS receiver (u-blox M10 class; docs/fpv-hud-gnss-proposal.md §2). Errors
+   * are DOP × UERE: a first-order Gauss–Markov part (τ) plus white noise per
+   * axis, scaled each sample by the current HDOP/VDOP and UERE scale.
+   */
+  gnss: {
+    /** s: 10 Hz, the M10's default maximum for GPS + Galileo */
+    ts: 0.1,
+    /** s, correlation time of the slow error */
+    tau: 60,
+    /** m per unit DOP, 1σ per axis */
+    uere: { hCorr: 1.5, hWhite: 0.15, vCorr: 1.5, vWhite: 0.3 },
+    /** m/s per unit DOP, 1σ per axis */
+    vel: { h: 0.05, v: 0.1 },
+    /** s a lost fix needs its satellite condition back before it is reported again */
+    reacquireS: 1.0,
+    /** m and m/s output resolution */
+    quantPos: 0.01,
+    quantVel: 0.01,
+    /** m/s: below this ground speed the track is not valid and holds */
+    trackMinSpeed: 0.5,
+    seeds: { corr: 120, white: 121, vel: 122 },
+  },
+}
+
+/**
+ * Deterministic N(0,1) draws for the builder (mulberry32 + Box–Muller), used
+ * for values fixed at build time such as a Gauss–Markov state's stationary
+ * starting value. Not the model's run-time generator.
+ */
+export function builderGaussians(seed: number, count: number): number[] {
+  let a = seed >>> 0
+  const uniform = () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+  const out: number[] = []
+  while (out.length < count) {
+    const u1 = 1 - uniform()
+    const u2 = uniform()
+    out.push(Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2))
+  }
+  return out
 }
 
 /** Standard-atmosphere pressure (Pa) at geometric altitude z (m): what the Atmosphere block computes. */
@@ -969,6 +1015,185 @@ function buildBaroSheet(ideal: boolean, altitude0: number): SheetBuilder {
   return s
 }
 
+/**
+ * GNSS receiver at 10 Hz (docs/fpv-hud-gnss-plan.md, Phase 3). Truth comes in
+ * on the grid frame; the fix is reported as grid north/east metres and MSL
+ * altitude, velocity in true NED, with fix type, satellites, pDOP, and a
+ * VTG-style course computed from the receiver's own velocity.
+ */
+function buildGnssSheet(ideal: boolean, altitude0: number): SheetBuilder {
+  const g = SENSORS.gnss
+  const s = new SheetBuilder('gnss', 'GNSS')
+  const pos = s.input('pos_ned', 'double[3]')
+  const vel = s.input('vel_ned', 'double[3]')
+  const env = s.input('gnss_env', 'double[4]')
+  const gamma = s.input('grid_convergence_deg', 'double')
+  const R2D = 180 / Math.PI
+
+  const envSplit = s.add('demux', 'EnvSplit', { outputCount: 4, inputDimensions: [4] })
+  s.wire(env, envSplit)
+  // [0] satellites, [1] HDOP, [2] VDOP, [3] UERE scale
+  const posSplit = s.add('demux', 'TruthPos', { outputCount: 3, inputDimensions: [3] })
+  s.wire(pos, posSplit)
+
+  // Measured position [n, e, altitude MSL] and velocity (grid frame, before rotation)
+  let measPos: string
+  let measVelGrid: string
+  if (ideal) {
+    const alt = s.add('evaluate', 'AltitudeMSL', { numInputs: 1, expression: '-in(0)' })
+    s.wire(posSplit, alt, 0, 2)
+    measPos = s.add('mux', 'Position', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+    s.wire(posSplit, measPos, 0, 0)
+    s.wire(posSplit, measPos, 1, 1)
+    s.wire(alt, measPos, 2)
+    measVelGrid = vel
+  } else {
+    // Unit-variance Gauss–Markov state per axis: x⁺ = a·x + √(1−a²)·w
+    const a = Math.exp(-g.ts / g.tau)
+    const b = Math.sqrt(1 - a * a)
+    const x0 = builderGaussians(g.seeds.corr, 3).map(v => Number(v.toFixed(6)))
+    const gmPrev = s.add('unit_delay', 'GmPrev', { initialValue: x0, sampleInterval: g.ts })
+    const gmDecay = s.add('scale', 'GmDecay', { gain: a })
+    s.wire(gmPrev, gmDecay)
+    const gmDrive = s.add('scale', 'GmDrive', { gain: b })
+    s.wire(noise(s, 'GmNoise', 3, { stdDev: 1, seed: g.seeds.corr }), gmDrive)
+    const gm = s.add('sum', 'GmState', { signs: '++', numInputs: 2 })
+    s.wire(gmDecay, gm, 0)
+    s.wire(gmDrive, gm, 1)
+    s.wire(gm, gmPrev)
+    const gmSplit = s.add('demux', 'GmSplit', { outputCount: 3, inputDimensions: [3] })
+    s.wire(gm, gmSplit)
+    const whiteSplit = s.add('demux', 'WhiteSplit', { outputCount: 3, inputDimensions: [3] })
+    s.wire(noise(s, 'PosNoise', 3, { stdDev: 1, seed: g.seeds.white }), whiteSplit)
+    const velNoiseSplit = s.add('demux', 'VelNoiseSplit', { outputCount: 3, inputDimensions: [3] })
+    s.wire(noise(s, 'VelNoise', 3, { stdDev: 1, seed: g.seeds.vel }), velNoiseSplit)
+
+    // Position: truth + (corr·x + white·w)·DOP·scale per axis; altitude = −(d + e_d)
+    const posOut = s.add('mux', 'PositionRaw', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+    ;(['North', 'East', 'Down'] as const).forEach((axis, k) => {
+      const vertical = k === 2
+      const corr = vertical ? g.uere.vCorr : g.uere.hCorr
+      const white = vertical ? g.uere.vWhite : g.uere.hWhite
+      // in(0) truth, in(1) GM state, in(2) white, in(3) DOP, in(4) scale
+      const expr = `(${corr} * in(1) + ${white} * in(2)) * in(3) * in(4)`
+      const ev = s.add('evaluate', `Pos${axis}`, { numInputs: 5, expression: vertical ? `-(in(0) + ${expr})` : `in(0) + ${expr}` })
+      s.wire(posSplit, ev, 0, k)
+      s.wire(gmSplit, ev, 1, k)
+      s.wire(whiteSplit, ev, 2, k)
+      s.wire(envSplit, ev, 3, vertical ? 2 : 1)
+      s.wire(envSplit, ev, 4, 3)
+      s.wire(ev, posOut, k)
+    })
+    measPos = s.add('quantizer', 'PositionQuantize', { quantum: g.quantPos })
+    s.wire(posOut, measPos)
+
+    // Velocity: truth + white·σ·DOP·scale per axis
+    const velSplit = s.add('demux', 'TruthVel', { outputCount: 3, inputDimensions: [3] })
+    s.wire(vel, velSplit)
+    measVelGrid = s.add('mux', 'VelocityRaw', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+    ;(['North', 'East', 'Down'] as const).forEach((axis, k) => {
+      const vertical = k === 2
+      const ev = s.add('evaluate', `Vel${axis}`, { numInputs: 4, expression: `in(0) + ${vertical ? g.vel.v : g.vel.h} * in(1) * in(2) * in(3)` })
+      s.wire(velSplit, ev, 0, k)
+      s.wire(velNoiseSplit, ev, 1, k)
+      s.wire(envSplit, ev, 2, vertical ? 2 : 1)
+      s.wire(envSplit, ev, 3, 3)
+      s.wire(ev, measVelGrid, k)
+    })
+  }
+  // Receivers report velocity relative to true north
+  let measVel = rotateNorthEast(s, 'VelocityTrue', measVelGrid, gamma, false)
+  if (!ideal) {
+    const q = s.add('quantizer', 'VelocityQuantize', { quantum: g.quantVel })
+    s.wire(measVel, q)
+    measVel = q
+  }
+
+  // Fix: a counter of samples with the satellite condition met; a lost fix
+  // comes back reacquireS after the condition returns (no fix needs N + 1)
+  const n = Math.round(g.reacquireS / g.ts)
+  const countPrev = s.add('unit_delay', 'FixCountPrev', { initialValue: n + 1, sampleInterval: g.ts })
+  const count = s.add('evaluate', 'FixCount', { numInputs: 3, expression: `(in(0) >= 3.0 && in(1) > 0.0) ? fmin(in(2) + 1.0, ${n + 1}.0) : 0.0` })
+  s.wire(envSplit, count, 0, 0)
+  s.wire(envSplit, count, 1, 1)
+  s.wire(countPrev, count, 2)
+  s.wire(count, countPrev)
+  const fix = s.add('evaluate', 'FixType', { numInputs: 2, expression: `(in(1) > ${n}.0) ? ((in(0) >= 4.0) ? 3.0 : 2.0) : 0.0` })
+  s.wire(envSplit, fix, 0, 0)
+  s.wire(count, fix, 1)
+
+  // Hold: [n, e, alt, vn, ve, vd]. 3D: new; 2D: altitude held, vd = 0; none: all held
+  const msl0 = altitude0 > 0 ? LOCATION.elevationM + altitude0 : LOCATION.elevationM - GROUND_REST_Z
+  const holdPrev = s.add('unit_delay', 'HoldPrev', { initialValue: [0, 0, Number(msl0.toFixed(6)), 0, 0, 0], sampleInterval: g.ts })
+  const prevSplit = s.add('demux', 'HoldSplit', { outputCount: 6, inputDimensions: [6] })
+  s.wire(holdPrev, prevSplit)
+  const newPos = s.add('demux', 'NewPos', { outputCount: 3, inputDimensions: [3] })
+  s.wire(measPos, newPos)
+  const newVel = s.add('demux', 'NewVel', { outputCount: 3, inputDimensions: [3] })
+  s.wire(measVel, newVel)
+  const held = s.add('mux', 'Held', { rows: 6, cols: 1, baseType: 'double', outputType: 'double[6]' })
+  const fields = ['N', 'E', 'Alt', 'VN', 'VE', 'VD']
+  fields.forEach((f, k) => {
+    // in(0) new, in(1) previous, in(2) fix type
+    const expr =
+      f === 'Alt' ? '(in(2) > 2.5) ? in(0) : in(1)'
+      : f === 'VD' ? '(in(2) > 2.5) ? in(0) : ((in(2) > 1.5) ? 0.0 : in(1))'
+      : '(in(2) > 1.5) ? in(0) : in(1)'
+    const ev = s.add('evaluate', `Hold${f}`, { numInputs: 3, expression: expr })
+    if (k < 3) s.wire(newPos, ev, 0, k)
+    else s.wire(newVel, ev, 0, k - 3)
+    s.wire(prevSplit, ev, 1, k)
+    s.wire(fix, ev, 2)
+    s.wire(ev, held, k)
+  })
+  s.wire(held, holdPrev)
+  const heldSplit = s.add('demux', 'HeldSplit', { outputCount: 6, inputDimensions: [6] })
+  s.wire(held, heldSplit)
+  const posOutput = s.add('mux', 'GnssPos', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+  const velOutput = s.add('mux', 'GnssVel', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+  for (let k = 0; k < 3; k++) {
+    s.wire(heldSplit, posOutput, k, k)
+    s.wire(heldSplit, velOutput, k, k + 3)
+  }
+
+  // [fix type, satellites, pDOP]
+  const pdop = s.add('evaluate', 'PDOP', { numInputs: 2, expression: 'sqrt(in(0) * in(0) + in(1) * in(1))' })
+  s.wire(envSplit, pdop, 0, 1)
+  s.wire(envSplit, pdop, 1, 2)
+  const fixOut = s.add('mux', 'GnssFix', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+  s.wire(fix, fixOut, 0)
+  s.wire(envSplit, fixOut, 1, 0)
+  s.wire(pdop, fixOut, 2)
+
+  // Course (VTG) from the reported velocity: track true/magnetic, ground speed, valid
+  const speed = s.add('evaluate', 'GroundSpeed', { numInputs: 2, expression: 'sqrt(in(0) * in(0) + in(1) * in(1))' })
+  s.wire(heldSplit, speed, 0, 3)
+  s.wire(heldSplit, speed, 1, 4)
+  const valid = s.add('evaluate', 'TrackValid', { numInputs: 2, expression: `(in(0) > 0.5 && in(1) >= ${g.trackMinSpeed}) ? 1.0 : 0.0` })
+  s.wire(fix, valid, 0)
+  s.wire(speed, valid, 1)
+  const trackPrev = s.add('unit_delay', 'TrackPrev', { initialValue: 0, sampleInterval: g.ts })
+  const track = s.add('evaluate', 'TrackTrue', { numInputs: 4, expression: `(in(2) > 0.5) ? fmod(atan2(in(1), in(0)) * ${R2D} + 360.0, 360.0) : in(3)` })
+  s.wire(heldSplit, track, 0, 3)
+  s.wire(heldSplit, track, 1, 4)
+  s.wire(valid, track, 2)
+  s.wire(trackPrev, track, 3)
+  s.wire(track, trackPrev)
+  const trackMag = s.add('evaluate', 'TrackMagnetic', { numInputs: 1, expression: `fmod(in(0) - ${SITE_FIELD.declinationDeg} + 360.0, 360.0)` })
+  s.wire(track, trackMag)
+  const course = s.add('mux', 'GnssCourse', { rows: 4, cols: 1, baseType: 'double', outputType: 'double[4]' })
+  s.wire(track, course, 0)
+  s.wire(trackMag, course, 1)
+  s.wire(speed, course, 2)
+  s.wire(valid, course, 3)
+
+  s.output('gnss_pos', posOutput, 'double[3]')
+  s.output('gnss_vel_ned', velOutput, 'double[3]')
+  s.output('gnss_fix', fixOut, 'double[3]')
+  s.output('gnss_course', course, 'double[4]')
+  return s
+}
+
 function buildSensorsSheet(ideal: boolean, altitude0: number): SheetBuilder {
   const s = new SheetBuilder('sensors', 'Sensors')
   const pos = s.input('pos_ned', 'double[3]')
@@ -976,6 +1201,8 @@ function buildSensorsSheet(ideal: boolean, altitude0: number): SheetBuilder {
   const omega = s.input('omega', 'double[3]')
   const force = s.input('specific_force', 'double[3]')
   const gamma = s.input('grid_convergence_deg', 'double')
+  const vel = s.input('vel_ned', 'double[3]')
+  const env = s.input('gnss_env', 'double[4]')
   const imu = s.add('subsystem', 'IMU', { ...subsystem(['omega', 'specific_force'], ['gyro', 'accel'], buildImuSheet(ideal)), sampleTimeSec: SENSORS.imu.ts })
   s.wire(omega, imu, 0)
   s.wire(force, imu, 1)
@@ -988,8 +1215,21 @@ function buildSensorsSheet(ideal: boolean, altitude0: number): SheetBuilder {
   s.output('accel', imu, 'double[3]', 1)
   s.output('mag', mag, 'double[3]')
   s.output('pressure', baro, 'double')
+  const gnss = s.add('subsystem', 'GNSS', {
+    ...subsystem(['pos_ned', 'vel_ned', 'gnss_env', 'grid_convergence_deg'], GNSS_OUTPUTS, buildGnssSheet(ideal, altitude0)),
+    sampleTimeSec: SENSORS.gnss.ts,
+  })
+  s.wire(pos, gnss, 0)
+  s.wire(vel, gnss, 1)
+  s.wire(env, gnss, 2)
+  s.wire(gamma, gnss, 3)
+  GNSS_OUTPUTS.forEach((name, k) => s.output(name, gnss, GNSS_OUTPUT_TYPES[k]!, k))
   return s
 }
+
+/** The GNSS receiver's outputs (Sensors outputs 4–7, published as vehicle outputs). */
+const GNSS_OUTPUTS = ['gnss_pos', 'gnss_vel_ned', 'gnss_fix', 'gnss_course']
+const GNSS_OUTPUT_TYPES = ['double[3]', 'double[3]', 'double[3]', 'double[4]']
 
 // ---------------------------------------------------------------------------
 // Estimators
@@ -1586,19 +1826,22 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   main.wire(accelVec, frame, 1)
   if (fc) {
     const sensors = main.add('subsystem', 'Sensors', subsystem(
-      ['pos_ned', 'quat', 'omega', 'specific_force', 'grid_convergence_deg'], ['gyro', 'accel', 'mag', 'pressure'],
+      ['pos_ned', 'quat', 'omega', 'specific_force', 'grid_convergence_deg', 'vel_ned', 'gnss_env'], ['gyro', 'accel', 'mag', 'pressure', ...GNSS_OUTPUTS],
       buildSensorsSheet(opts.sensors === 'ideal', altitude0), SENSORS_SIZE))
     main.wire(frame, sensors, 0, 0)
     main.wire(frame, sensors, 1, 2)
     main.wire(frame, sensors, 2, 4)
     main.wire(frame, sensors, 3, 5)
     wireCondition('grid_convergence_deg', sensors, 4)
+    main.wire(frame, sensors, 5, 1)
+    wireCondition('gnss_env', sensors, 6)
     for (let i = 0; i < 4; i++) main.wire(sensors, fc, i + 1, i)
     wireCondition('grid_convergence_deg', fc, 5)
     publish('imu_gyro', sensors, 'double[3]', 0)
     publish('imu_accel', sensors, 'double[3]', 1)
     publish('mag', sensors, 'double[3]', 2)
     publish('pressure', sensors, 'double', 3)
+    GNSS_OUTPUTS.forEach((name, k) => publish(name, sensors, GNSS_OUTPUT_TYPES[k]!, 4 + k))
   }
 
   FRAME_OUTPUTS.forEach((name, i) => publish(name, frame, FRAME_OUTPUT_TYPES[i]!, i))
@@ -2043,6 +2286,216 @@ export function buildFpvGridConvergenceTestModel() {
   })
 }
 
+/**
+ * Scaffolding for validation Tests sheets: one sheet label per vehicle
+ * signal, element pickers, Evaluate expressions and Assert blocks.
+ */
+function testsSheet() {
+  const s = new SheetBuilder('tests', 'Tests')
+  const h = new TestHelpers(s)
+  const labels = new Map<string, string>()
+  const from = (signal: string) => {
+    let id = labels.get(signal)
+    if (!id) {
+      id = s.add('sheet_label_source', `From_${signal}`, { signalName: signal })
+      labels.set(signal, id)
+    }
+    return id
+  }
+  const pick = (name: string, src: string, indices: number[]) => {
+    const id = s.add('selector', name, { indices })
+    s.wire(src, id)
+    return id
+  }
+  const expr = (name: string, expression: string, inputs: string[]) => {
+    const id = s.add('evaluate', name, { numInputs: inputs.length, expression })
+    inputs.forEach((x, i) => s.wire(x, id, i))
+    return id
+  }
+  const check = (name: string, input: string, lower: number | null, upper: number | null, from_ = 0, until: number | null = null, onFailure = 'record') => {
+    const id = s.add('assert', name, { mode: 'bounds', lower, upper, checkFrom: from_, checkUntil: until, onFailure })
+    s.wire(input, id, 0)
+  }
+  const upright = () => {
+    const deg = s.add('scale', 'RollPitchDeg', { gain: 180 / Math.PI })
+    s.wire(pick('RollPitch', from('euler'), [0, 1]), deg)
+    check('StaysUpright', deg, -60, 60, 0, null, 'stop')
+  }
+  return { s, h, from, pick, expr, check, upright }
+}
+
+/** Disarmed at rest on the field. */
+export const REST_STICKS: StickProfile = { roll: [[0, 0]], pitch: [[0, 0]], yaw: [[0, 0]], throttle: [[0, 0]], arm: [[0, 0]] }
+
+/** Expected per-axis 1σ of the GNSS errors at the default conditions (position includes nothing else; velocity adds quantization). */
+export const GNSS_SIGMA = (() => {
+  const g = SENSORS.gnss, e = DEFAULT_GNSS_ENV
+  const qv = g.quantVel / Math.sqrt(12)
+  return {
+    horizontal: Math.hypot(g.uere.hCorr, g.uere.hWhite) * e.hdop * e.uereScale,
+    vertical: Math.hypot(g.uere.vCorr, g.uere.vWhite) * e.vdop * e.uereScale,
+    velHorizontal: Math.hypot(g.vel.h * e.hdop * e.uereScale, qv),
+    velVertical: Math.hypot(g.vel.v * e.vdop * e.uereScale, qv),
+  }
+})()
+
+/** T03 window and tolerances: the position RMS within ±30% (about 25 correlation times), velocity (white) within ±10%. */
+export const GNSS_STATS_TEST = { duration: 3000, window: [10, 2990] as [number, number], posTol: 0.3, velTol: 0.1, minCorr1s: 0.9 }
+
+/** T03: GNSS error statistics, disarmed at rest (the fix is all error). */
+export function buildFpvGnssStatisticsTestModel() {
+  const t = GNSS_STATS_TEST
+  const sig = GNSS_SIGMA
+  const tests = () => {
+    const { s, h, from, pick, expr, check, upright } = testsSheet()
+    const g = from('gnss_pos'), p = from('pos_ned'), gv = from('gnss_vel_ned'), v = from('vel_ned')
+    const err = (name: string, k: number, alt: boolean) =>
+      expr(name, alt ? 'in(0) + in(1)' : 'in(0) - in(1)', [pick(`${name}Fix`, g, [k]), pick(`${name}Truth`, p, [k])])
+    const errs: Array<[string, string, number, number]> = [
+      ['North', err('ErrNorth', 0, false), sig.horizontal, t.posTol],
+      ['East', err('ErrEast', 1, false), sig.horizontal, t.posTol],
+      ['Altitude', err('ErrAltitude', 2, true), sig.vertical, t.posTol],
+      ['VelNorth', expr('ErrVelNorth', 'in(0) - in(1)', [pick('VelNorthFix', gv, [0]), pick('VelNorthTruth', v, [0])]), sig.velHorizontal, t.velTol],
+      ['VelDown', expr('ErrVelDown', 'in(0) - in(1)', [pick('VelDownFix', gv, [2]), pick('VelDownTruth', v, [2])]), sig.velVertical, t.velTol],
+    ]
+    const [w0, w1] = t.window
+    for (const [name, e, sigma, tol] of errs) {
+      const ms = h.windowMeanSquare(`MS${name}`, e, w0, w1, SENSORS.gnss.ts)
+      check(`RMS${name}MatchesSigma`, ms, ((1 - tol) * sigma) ** 2, ((1 + tol) * sigma) ** 2, w1 + 1)
+    }
+    check('ErrorCorrelated1s', h.windowCorr('CorrNorth1s', errs[0]![1], Math.round(1 / SENSORS.gnss.ts), SENSORS.gnss.ts, w0, w1), t.minCorr1s, 1, w1 + 1)
+    // Reported to the centimetre
+    const offGrid = expr('NorthOffGrid', `fabs(in(0) / ${SENSORS.gnss.quantPos} - round(in(0) / ${SENSORS.gnss.quantPos}))`, [pick('NorthFix', g, [0])])
+    check('PositionOnCentimetreGrid', offGrid, 0, 1e-6)
+    check('Fix3DThroughout', pick('FixType', from('gnss_fix'), [0]), 3, 3)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T03 GNSS Statistics',
+    description:
+      `Validation test for the GNSS error model (docs/fpv-hud-gnss-test-plan.md, T03): ${t.duration} s disarmed at rest in open sky. ` +
+      'Per-axis RMS position and velocity errors match DOP × UERE, the slow error is correlated over 1 s, the fix is on the ' +
+      'centimetre grid and stays 3D. Exact DOP and UERE-scale scaling is checked in __tests__/reference-models/fpv-gnss.test.ts.',
+    sticks: REST_STICKS,
+    duration: t.duration,
+    displays: [['GnssPosition', 'gnss_pos'], ['GnssVelocity', 'gnss_vel_ned']],
+    tests,
+  })
+}
+
+/** T04 schedule: satellites 14 → 3 at 8 s → 2 at 14 s → 14 at 20 s; reacquisition 1 s. */
+export const GNSS_CONDITIONS_TEST = { to2D: 8, toNone: 14, back: 20, duration: 24 }
+
+/** A step schedule: value v0 until t, then v1 (the change is visible at t). */
+const step = (pairs: Array<[number, number]>): Array<[number, number]> => {
+  const out: Array<[number, number]> = [[0, pairs[0]![1]]]
+  for (let i = 1; i < pairs.length; i++) out.push([pairs[i]![0] - 0.001, pairs[i - 1]![1]], [pairs[i]![0], pairs[i]![1]])
+  return out
+}
+
+/** Hover sticks: the demo take-off in angle mode, then hold. */
+export const HOVER_STICKS: StickProfile = {
+  roll: [[0, 0]], pitch: [[0, 0]], yaw: [[0, 0]], throttle: DEMO_STICKS.throttle, aux: [[0, 1]], arm: DEMO_STICKS.arm,
+}
+
+/** T04: GNSS fix rules — 3D, 2D (altitude and vd held), none (all held), and 1 s reacquisition. */
+export function buildFpvGnssConditionsTestModel() {
+  const t = GNSS_CONDITIONS_TEST
+  const reacq = SENSORS.gnss.reacquireS
+  const tests = () => {
+    const { s, h, from, pick, expr, check, upright } = testsSheet()
+    const g = from('gnss_pos'), gv = from('gnss_vel_ned'), fix = from('gnss_fix')
+    const fixType = pick('FixType', fix, [0])
+    const e = 0.05 // window margin around each change (half a GNSS sample)
+    check('Fix3DBefore', fixType, 3, 3, 0, t.to2D - e)
+    check('Fix2DWithThreeSatellites', fixType, 2, 2, t.to2D + e, t.toNone - e)
+    check('NoFixWithTwoSatellites', fixType, 0, 0, t.toNone + e, t.back + reacq - e)
+    check('Fix3DAfterReacquisition', fixType, 3, 3, t.back + reacq + e)
+    const back = expr('Fix3DAfterReturn', `(in(1) > ${t.back} && in(0) > 2.5) ? 1.0 : 0.0`, [fixType, h.clock()])
+    check('ReacquiredAfter1s', h.firstTime('FirstFixAfterReturn', back), t.back + reacq - e, t.back + reacq + e, t.back + reacq + 0.5)
+    // 2D: altitude held and vertical velocity zero, while north still updates
+    const alt = pick('FixAltitude', g, [2])
+    const held = (name: string, x: string, at: number) => expr(`${name}Change`, 'in(0) - in(1)', [x, h.heldAt(`${name}At`, x, at)])
+    check('AltitudeHeldIn2D', held('Altitude2D', alt, t.to2D + e), 0, 0, t.to2D + e, t.toNone - e)
+    check('VerticalVelocityZeroIn2D', pick('FixVelDown', gv, [2]), 0, 0, t.to2D + e, t.toNone - e)
+    // No fix: every output holds
+    ;(['North', 'East', 'Altitude'] as const).forEach((axis, k) => {
+      check(`${axis}HeldWithoutFix`, held(`${axis}None`, k === 2 ? alt : pick(`Fix${axis}`, g, [k]), t.toNone + e), 0, 0, t.toNone + e, t.back + reacq - e)
+    })
+    check('VelocityHeldWithoutFix', held('VelNorthNone', pick('FixVelNorth', gv, [0]), t.toNone + e), 0, 0, t.toNone + e, t.back + reacq - e)
+    check('SatellitesReported', pick('Satellites', fix, [1]), 2, 2, t.toNone + e, t.back - e)
+    check('PdopReported', expr('PdopError', `in(0) - ${Math.hypot(DEFAULT_GNSS_ENV.hdop, DEFAULT_GNSS_ENV.vdop)}`, [pick('Pdop', fix, [2])]), -1e-9, 1e-9)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T04 GNSS Conditions',
+    description:
+      'Validation test for the GNSS fix rules (docs/fpv-hud-gnss-test-plan.md, T04): hovering while the satellites go ' +
+      `14 → 3 at ${t.to2D} s → 2 at ${t.toNone} s → 14 at ${t.back} s. The fix is 3D, then 2D with altitude and vertical ` +
+      `velocity held, then none with every output held, and 3D again ${reacq} s after the satellites return.`,
+    sticks: HOVER_STICKS,
+    duration: t.duration,
+    displays: [['GnssFix', 'gnss_fix'], ['GnssPosition', 'gnss_pos']],
+    tests,
+    conditions: { gnssEnv: { satellites: step([[0, 14], [t.to2D, 3], [t.toNone, 2], [t.back, 14]]) } },
+  })
+}
+
+/** T05 sticks: take off, hover, then pitch forward in angle mode (about 18°) toward grid north. */
+export const COURSE_STICKS: StickProfile = (() => {
+  const hov = Number(HOVER_THROTTLE.toFixed(4))
+  return {
+    roll: [[0, 0]], yaw: [[0, 0]], aux: [[0, 1]], arm: DEMO_STICKS.arm,
+    throttle: [[0, 0], [0.5, 0], [0.6, 0.6], [1.2, 0.6], [1.3, hov], [4.0, hov], [4.1, hov + 0.035]],
+    pitch: [[0, 0], [4.0, 0], [4.1, -0.25]],
+  }
+})()
+
+/**
+ * T05 windows (s) and limits. The fix holds for up to 0.1 s while the vehicle
+ * accelerates (up to about 2.5 m/s²), so ground speed lags truth by up to
+ * 0.25 m/s by design; the 0.5 m/s limit is that plus 4σ of velocity noise.
+ */
+export const GNSS_COURSE_TEST = { hover: [0.5, 3.5] as [number, number], flight: [6, 12] as [number, number], trackDeg: 3, speedMs: 0.5, duration: 12 }
+
+/** T05: the receiver's course (VTG) — invalid and held in a hover, true track and ground speed in flight, magnetic track. */
+export function buildFpvGnssCourseTestModel() {
+  const t = GNSS_COURSE_TEST
+  const R2D = 180 / Math.PI
+  const tests = () => {
+    const { s, h, from, pick, expr, check, upright } = testsSheet()
+    const course = from('gnss_course'), v = from('vel_ned')
+    const track = pick('Track', course, [0]), trackMag = pick('TrackMagnetic', course, [1])
+    const speed = pick('GroundSpeed', course, [2]), valid = pick('TrackValid', course, [3])
+    const [h0, h1] = t.hover, [f0, f1] = t.flight
+    check('TrackInvalidInHover', valid, 0, 0, h0, h1)
+    check('TrackHeldInHover', expr('TrackChange', 'in(0) - in(1)', [track, h.heldAt('TrackAtHover', track, h0)]), 0, 0, h0, h1)
+    check('TrackValidInFlight', valid, 1, 1, f0, f1)
+    const vn = pick('TruthVelNorth', v, [0]), ve = pick('TruthVelEast', v, [1])
+    // Truth track over the ground, true north: grid track + γ (this model's conditions use the site's γ)
+    const trackErr = expr('TrackError', `fmod(in(0) - (atan2(in(2), in(1)) * ${R2D} + ${LOCATION.gridConvergenceDeg}) + 540.0, 360.0) - 180.0`, [track, vn, ve])
+    check('TrackMatchesTruth', trackErr, -t.trackDeg, t.trackDeg, f0, f1)
+    check('GroundSpeedMatchesTruth', expr('SpeedError', 'in(0) - sqrt(in(1) * in(1) + in(2) * in(2))', [speed, vn, ve]), -t.speedMs, t.speedMs, f0, f1)
+    check('MagneticIsTrueMinusDeclination',
+      expr('MagneticError', `fmod(in(0) - in(1) + ${SITE_FIELD.declinationDeg} + 540.0, 360.0) - 180.0`, [trackMag, track]), -1e-9, 1e-9)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T05 GNSS Course',
+    description:
+      'Validation test for the GNSS course and ground speed (docs/fpv-hud-gnss-test-plan.md, T05): in a hover the track is ' +
+      'not valid and holds; in forward flight above 3 m/s the true track matches the truth (grid track + γ) within 3° and the ' +
+      'ground speed within 0.5 m/s (the 10 Hz hold lags an accelerating vehicle); the magnetic track is the true track minus the WMM declination.',
+    sticks: COURSE_STICKS,
+    duration: t.duration,
+    displays: [['GnssCourse', 'gnss_course'], ['Velocity', 'vel_ned']],
+    tests,
+  })
+}
+
 /** A test model renamed for the validation suite ("FPV Tnn …"). */
 const renamed = (model: { name: string; data: Record<string, unknown> }, name: string) => ({ ...model, name })
 
@@ -2057,6 +2510,9 @@ export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<s
     ['t00-test-helpers.json', buildFpvHelpersTestModel()],
     ['t01-demo-flight.json', renamed(buildFpvDemoFlightModel(), 'FPV T01 Demo Flight')],
     ['t02-acro-rate-step.json', renamed(buildFpvAcroRateStepModel(), 'FPV T02 Acro Rate Step')],
+    ['t03-gnss-statistics.json', buildFpvGnssStatisticsTestModel()],
+    ['t04-gnss-conditions.json', buildFpvGnssConditionsTestModel()],
+    ['t05-gnss-course.json', buildFpvGnssCourseTestModel()],
     ['t06-grid-convergence.json', buildFpvGridConvergenceTestModel()],
   ]
 }

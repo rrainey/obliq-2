@@ -70,7 +70,7 @@
 
 **Done when** both tests pass and the eight FPV suites are unchanged.
 
-## Phase 3: The GNSS receiver
+## Phase 3: The GNSS receiver (done 2026-10-28)
 
 `buildGnssSheet(ideal)` is a subsystem inside Sensors with `sampleTimeSec: 0.1`. Name it `GNSS`, and use the block names listed in [Embedded model integration](#embedded-model-integration-for-the-obliq-fpv-unity-agent): the host refers to their generated C state names.
 
@@ -124,7 +124,7 @@ seeds: { corr: 120, white: 121, vel: 122 }
 
 **Tests:** a new `__tests__/reference-models/fpv-gnss.test.ts`.
 - Ideal: the fix equals truth (n, e, −d) at every 10 Hz sample, and velocity equals rotated truth.
-- A 600 s hover at the default `gnss_env` (native run; samples at 10 Hz):
+- A long run at the default `gnss_env` (native run; samples at 10 Hz). As built: T03, 3000 s at rest, so the statistics have about 25 correlation times; see the test plan:
   - per-axis standard deviation of horizontal error within ±25% of √(1.5² + 0.15²) × 0.8, and of vertical error within ±25% of √(1.5² + 0.3²) × 1.3;
   - lag-10 (1 s) autocorrelation of the horizontal error above 0.9;
   - velocity error standard deviation within ±25% of 0.05 × 0.8.

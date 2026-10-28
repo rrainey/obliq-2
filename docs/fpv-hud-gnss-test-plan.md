@@ -71,9 +71,9 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | **T00 Test Helpers** | 6 s | No vehicle: a ramp, a 0.5 Hz sine and unit Gaussian noise | Each helper in section 2.2 against its known answer (latch, first time 2.0 s, max 1 and min −1, value held at 3 s, mean square 0.5 and 1 ± 0.05, correlation −1 at half a period and 0 at a quarter, phase visited). The Jest runner also sets impossible limits on every Assert, to show none passes vacuously. |
 | **T01 Demo Flight** (Shipped; existing, extended) | 5 s | The current demo flight | Existing 11. Added: `GnssTracksTruth` (horizontal < 6 m), `HomeSetOnArm`, `HomeDistanceTracks` (< 6 m), `AltEstTracks` (< 0.5 m of height above the arming point), `ModeIsAngleAfterSwitch`, `ArmedFlagMatches`, `MahDrawnMatchesSoc` |
 | **T02 Acro Rate Step** (Shipped; existing) | 3 s | Unchanged | Existing 6, with the 8-channel sticks |
-| **T03 GNSS Statistics** | 900 s | Armed angle-mode hover. Windows: 0–300 s default; 300–600 s UERE scale 2; 600–900 s HDOP 2.5, VDOP 4 | Per window: horizontal and vertical RMS error and velocity RMS within ±25% of the specified σ; 1 s correlation of horizontal error > 0.9 (first window); RMS ratio between windows matches the scale or DOP ratio ±25% |
+| **T03 GNSS Statistics** | 3000 s | Disarmed at rest in open sky, so the fix is all error. One window, 10–2990 s | North, east and altitude RMS within ±30% of the specified σ: with τ = 60 s the window holds about 25 independent samples, so RMS varies by about ±10% (1σ). Velocity RMS within ±10% (white noise, 30 000 samples); 1 s correlation of the north error > 0.9; position on the 1 cm grid; fix 3D throughout. Scaling with UERE scale, HDOP and VDOP is checked exactly in Jest (F08), because windows short enough for one run cannot measure a ratio to ±25%. |
 | **T04 GNSS Conditions** (Shipped) | 30 s | Hover; satellites 14 → 3 (t = 8) → 2 (t = 14) → 14 (t = 20) | Fix 3 / 2 / 0 / 3 in their windows; altitude held and vd = 0 while 2D; all outputs held while 0; `firstTime(fix == 3 after t = 20)` ∈ [20.95, 21.05]; pDOP = √(HDOP² + VDOP²); `home_valid` stays 1 throughout |
-| **T05 GNSS Course** | 20 s | Hover, then forward flight in angle mode at about 5 m/s on a constant heading | Track valid = 0 and track held in the hover; track true within 3° of the truth track (true north) while valid; magnetic = true − 2.48°; ground speed within 0.3 m/s of truth |
+| **T05 GNSS Course** | 12 s | Take-off and hover, then forward flight in angle mode, reaching 4–10 m/s toward grid north | Track valid = 0 and track held in the hover; in flight, valid = 1 and the true track within 3° of the truth (grid track + γ); magnetic = true − 2.48°; ground speed within 0.5 m/s of truth (the 10 Hz hold lags an accelerating vehicle by up to 0.25 m/s) |
 | **T06 Grid Convergence** | 10 s | Angle-mode take-off, then a yaw turn of about 90°; γ 1.2425, then γ 0 from t = 6 | `heading_deg` = estimate yaw + γ within 0.01° (catches a missing or wrong-signed γ); after the change, heading = estimate yaw within 0.01°; `euler_est` yaw within 3° of truth yaw (the estimator's error during the turn); the turn exceeds 60° |
 | **T07 Arming Checks** | 20 s | Arm attempts in this order: with throttle up; with the rescue switch on; with the hold switch on; first arming with 7 satellites; with 14 satellites (succeeds); disarm; 7 satellites, re-arm (succeeds, no home); ABORT forced by an impact, then arming without cycling the switch | Each refused attempt: `fc_armed` stays 0 and its `fc_warnings` bit is set; the 14-satellite arming succeeds; the re-arm succeeds with `home_valid` = 0 and `RESCUE OFF` shown for 3 s; after ABORT, arming is refused until the switch is cycled |
 | **T08 Failsafe Drop** | 15 s | Hover at 10 m; procedure DROP. Link lost at t = 5 for 1 s (recovers in stage 1); lost again at t = 9 | First loss: sticks centred after 0.3 s, control back immediately, no stage 2; second loss: `failsafe_stage` = 2 at t = 10.5 ± 0.05; disarmed at stage 2 |
@@ -106,7 +106,7 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | F05 | Ideal GNSS equals truth | — | `fpv-gnss` exact | — |
 | F06 | GNSS position and velocity error statistics | T03 | — | — |
 | F07 | Time correlation of GNSS error | T03 | — | — |
-| F08 | UERE scale and DOP scaling | T03 | — | — |
+| F08 | UERE scale and DOP scaling | — | `fpv-gnss`: same seeds at scale 2, HDOP 1.6 and VDOP 2.6 give exactly 2× the errors on the scaled axes, sample by sample | — |
 | F09 | Fix rules: 3D, 2D and none | T04 | — | check 5 |
 | F10 | 2D altitude hold and vd = 0; outputs held without a fix | T04 | — | check 5 |
 | F11 | 1 s reacquisition | T04 | — | check 5 |
@@ -167,7 +167,7 @@ Each implementation phase writes the tests for its features, and the phase is do
 |---|---|---|
 | 1 | `test-models/fpv/` folder, `fpv-test-models` Jest runner, the Conditions schedules, the helpers in section 2.2 and T00 | T00, T01, T02, F01 (done) |
 | 2 | T06, L2 for F02 and F04 | T06 (done) |
-| 3 | T03, T04, T05, L2 for F05 and F15 | T03–T05 |
+| 3 | T03, T04, T05, L2 for F05, F08 and F15 | T03–T05 (done) |
 | 4 | T01 additions, F16–F19 | T01 |
 | 8 | T07, T08, T22, and the inputs used by T09/T10 | T07, T08, T22 |
 | 9 | T21, T19 (heading parts), the no-mag vehicle, L2 for F29 and F35 | T21, T19 (first part) |
