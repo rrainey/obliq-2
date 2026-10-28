@@ -33,7 +33,7 @@
 - **FPV Altitude Hold and AUTO-LAND,** after Betaflight 2025.12.
   - Altitude Hold (AUX4 at mid) holds the altitude the quad had when it engaged; the throttle stick climbs or descends at up to 5 m/s outside a deadband around hover. It engages only after the throttle has been raised.
   - The failsafe AUTO-LAND procedure now descends under Altitude Hold, lands, and disarms 60 s into stage 2. Before, it dropped.
-  - Both use Betaflight's shared altitude controller with its default gains. On this quad the hold is underdamped, about ±2 m, as an untuned Betaflight quad would be.
+  - Both use Betaflight's shared altitude controller.
 - **FPV Position Hold,** after Betaflight 2025.12. With AUX4 high (Altitude Hold included) the quad holds its GPS position.
   - It brakes with a stopping phase, then holds against the wind.
   - Roll or pitch beyond 5% flies it; releasing the stick holds the new point.
@@ -45,6 +45,11 @@
   - Its sanity checks are Betaflight's: too few satellites, a fly-away (first disabling the magnetometer and steering by course over ground), no home, and a stalled climb or descent. With the switch it then does nothing for 20 s before disarming; in a real link loss it disarms at once.
   - A failsafe rescue ends only when the link is back and a stick moves past 30%.
   - New outputs `rescue_active` and `rescue_phase`; `fc_mode` shows RESC, and `fc_warnings` adds RESCUE N/A and RESCUE OFF. A new build option, `apThrottleMaxUs`, sets Betaflight's `ap_throttle_max`.
+- **The FPV flight controller is tuned for this quad.** Betaflight's default gains suit no quad in particular; these are tuned using Betaflight's own settings, inner loop first.
+  - Rate: I-term relax, which Betaflight runs by default, was missing; with it and D 40/46, a roll step overshoots 14% instead of 29%.
+  - Angle mode: level strength 80 (was 50), about 40% quicker to a new angle.
+  - Altitude Hold and the rescue's climbs: P 30, D 40, F 30 (were 15). The hold no longer swings ±2 m; it holds within about 0.3 m RMS.
+  - Position Hold: P 40, I 60, D 40 (were 30), settling after a stop in about a third of the time.
 - **Fixed: `gps_heading_ok` now latches once established, until the next arming,** as Betaflight's `canUseGPSHeading` does. Before, it decayed in a hover.
 - **Fixed: a Demux fed by a subsystem named "Conditions" (or anything containing "condition") split its vector wrongly.** It copied only the first element and set the rest to 0, with no warning. A guard for mislabelled relational outputs matched the name; it now matches "condition" only as a whole name segment. Generated code for every stored model is unchanged.
 - **Fixed: with ideal sensors the FPV attitude estimate became NaN** when the accelerometer read zero (free fall at the start of an airborne run). A zero vector now gives no correction instead of 0/0.

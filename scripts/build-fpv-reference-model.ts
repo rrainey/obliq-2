@@ -78,11 +78,22 @@ export const FC = {
   ts: 0.001,
   /** Rates ("Actual"): center sensitivity, max rate (deg/s), expo; roll, pitch, yaw. */
   rates: { center: [70, 70, 70], max: [670, 670, 670], expo: [0, 0, 0] },
-  /** P, I, D, FF per axis [roll, pitch, yaw]. */
-  pid: { p: [45, 47, 45], i: [80, 84, 80], d: [30, 34, 0], ff: [120, 125, 120] },
+  /**
+   * P, I, D, FF per axis [roll, pitch, yaw]. Betaflight's defaults, except D: tuned
+   * for this quad to Betaflight's d_max values (40/46) with D-max disabled (d_max = D).
+   * With I-term relax, a 124 deg/s roll step overshoots 14% (t90 15 ms); default D gave 20%.
+   */
+  pid: { p: [45, 47, 45], i: [80, 84, 80], d: [40, 46, 0], ff: [120, 125, 120] },
   /** Per-unit scale of each gain. Betaflight's FF coefficient is FEEDFORWARD_SCALE * (F / 100). */
   scale: { p: 0.032029, i: 0.244381, d: 0.000529, ff: 0.013754 / 100 },
   itermLimit: 400,
+  /**
+   * I-term relax (iterm_relax RP, type SETPOINT, cutoff 15): on roll and pitch the I
+   * error is scaled by max(0, 1 − |setpoint − PT1(setpoint)| / threshold), the
+   * threshold 40 deg/s (× 0.2 in angle mode), so I does not wind up while the
+   * setpoint moves faster than the quad can follow.
+   */
+  itermRelax: { cutoffHz: 15, thresholdDps: 40, angleModeFactor: 0.2 },
   pidSumLimit: [500, 500, 400],
   /** PID sum is per-mille of the motor range. */
   mixerScaling: 1000,
@@ -90,8 +101,11 @@ export const FC = {
   dtermLpfHz: 150,
   /** Digital idle: lowest motor output while armed. */
   motorIdle: 0.055,
-  /** Angle (self-level) mode: full stick = angleLimitDeg; rate setpoint = gain * angle error (deg/s per deg). */
-  angle: { limitDeg: 60, gain: 5 },
+  /**
+   * Angle (self-level) mode: full stick = angleLimitDeg; rate setpoint = gain * angle error (deg/s per deg).
+   * Gain 8 (angle P 80, tuned; Betaflight 50): a 15° step reaches 90% in 0.28 s instead of 0.46 s, with no overshoot up to 22.
+   */
+  angle: { limitDeg: 60, gain: 8 },
   /** Airmode (and the I-term) starts once throttle first exceeds this after arming (airmode_start_throttle_percent 25). */
   airmodeStartThrottle: 0.25,
   /** Satellites needed to take home at arming (Betaflight gps_rescue_min_sats). */
@@ -131,8 +145,14 @@ export const FC = {
     },
     throttleMinUs: 1100,
     throttleMaxUs: 1700,
-    /** ap_altitude_p / i / d / f (scaled ×0.01, ×0.003, ×0.01, ×0.01 per cm) */
-    p: 15, i: 15, d: 15, f: 15,
+    /**
+     * ap_altitude_p / i / d / f (scaled ×0.01, ×0.003, ×0.01, ×0.01 per cm). Tuned for
+     * this quad from Betaflight's 15/15/15/15, which left the hold underdamped (ζ ≈ 0.4:
+     * 2.1 m overshoot after a climb, 1.35 m RMS in a hover): P 30, D 40 give 0.3 m RMS.
+     * D acts on the vertical speed, so in a steady climb it opposes the motion; F 30
+     * offsets most of it (the climb reaches the stick's rate) for a 0.8 m overshoot on release.
+     */
+    p: 30, i: 15, d: 40, f: 30,
     /** µs: altitude I limit; cm: the error above which I accumulates at 0.1× */
     iLimitUs: 200,
     iRelaxCm: 200,
@@ -144,8 +164,12 @@ export const FC = {
   },
   /** Position Hold, after Betaflight 2025.12 (docs/fpv-betaflight-gnss-spec.md §3.3). */
   posHold: {
-    /** ap_position_p / i / d / a (scaled ×0.0012, ×0.0001, ×0.0015, ×0.0008 per cm) */
-    p: 30, i: 30, d: 30, a: 30,
+    /**
+     * ap_position_p / i / d / a (scaled ×0.0012, ×0.0001, ×0.0015, ×0.0008 per cm). Tuned
+     * for this quad from Betaflight's 30/30/30/30: with ideal sensors a stop settles within
+     * 1 m in 1.2 s instead of 3.7 s; with GNSS the hold is limited by the GNSS error either way.
+     */
+    p: 40, i: 60, d: 40, a: 30,
     /** Hz: velocity and acceleration PT1 (ap_position_cutoff 80) */
     cutoffHz: 0.8,
     /** deg: ap_max_angle; the angle target in Pos Hold is limited to half of it (pid.c) */
@@ -1896,6 +1920,26 @@ function buildRatePidSheet(): SheetBuilder {
   s.wire(sp, err, 0)
   s.wire(gyro, err, 1)
 
+  // I-term relax on roll and pitch: the I error scaled down while the setpoint moves fast
+  const R = FC.itermRelax
+  const angleMode = s.input('angle_mode', 'double')
+  const spLpf = pt1(s, 'ItermRelaxLPF', R.cutoffHz)
+  s.wire(sp, spLpf)
+  const spSplit = s.add('demux', 'SetpointSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(sp, spSplit)
+  const lpfSplit = s.add('demux', 'SetpointLpfSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(spLpf, lpfSplit)
+  const relax = s.add('mux', 'ItermRelaxFactor', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+  for (let k = 0; k < 2; k++) {
+    const f = namedEval(s, `ItermRelax${'RP'[k]}`, { sp: [spSplit, k], lpf: [lpfSplit, k], am: angleMode },
+      `fmax(0.0, 1.0 - fabs({sp} - {lpf}) / (({am} > 0.5) ? ${R.thresholdDps * R.angleModeFactor} : ${R.thresholdDps}.0))`)
+    s.wire(f, relax, k)
+  }
+  s.wire(s.constant('ItermRelaxYaw', 1, 'double'), relax, 2)
+  const iErr = s.add('multiply', 'ItermError', { numInputs: 2 })
+  s.wire(err, iErr, 0)
+  s.wire(relax, iErr, 1)
+
   // P
   const kp = s.constant('Kp', perAxis(FC.pid.p, FC.scale.p), 'double[3]')
   const pTerm = s.add('multiply', 'P', { numInputs: 2 })
@@ -1906,7 +1950,7 @@ function buildRatePidSheet(): SheetBuilder {
   const ki = s.constant('KiTs', perAxis(FC.pid.i, FC.scale.i * FC.ts), 'double[3]')
   const iInc = s.add('multiply', 'IIncrement', { numInputs: 2 })
   s.wire(ki, iInc, 0)
-  s.wire(err, iInc, 1)
+  s.wire(iErr, iInc, 1)
   const iEnable = s.input('iterm_enable', 'double')
   const iPrev = s.add('unit_delay', 'IPrev', { initialValue: [0, 0, 0], sampleInterval: FC.ts })
   const iSum = s.add('sum', 'IAccumulate', { signs: '++', numInputs: 2 })
@@ -3096,10 +3140,11 @@ function buildFlightControllerSheet(
   s.wire(att, posHold, 8, 1)
   s.wire(att, posHold, 9, 2)
   s.wire(rescueActive[0], posHold, 10, rescueActive[1])
-  const pid = s.add('subsystem', 'RatePID', subsystem(['setpoint', 'gyro_dps', 'iterm_enable'], ['pid'], buildRatePidSheet()))
+  const pid = s.add('subsystem', 'RatePID', subsystem(['setpoint', 'gyro_dps', 'iterm_enable', 'angle_mode'], ['pid'], buildRatePidSheet()))
   s.wire(setpoint, pid, 0)
   s.wire(filt, pid, 1, 0)
   s.wire(arming, pid, 2, 1)
+  s.wire(angle, pid, 3, 1)
   const mixer = s.add('subsystem', 'Mixer', subsystem(['pid', 'throttle'], ['motors'], buildMixerSheet()))
   s.wire(pid, mixer, 0, 0)
   s.wire(rates, mixer, 1, 1)
@@ -4244,7 +4289,7 @@ export function buildFpvNoMagVehicle() {
  * bias gives about 4° at 10 m/s), as on a real quad.
  */
 export const NO_MAG_TEST = {
-  still: 4, converged: 10, courseDeg: 2, truthDeg: 8, headingOkFrom: 8.5,
+  still: 4, converged: 10, courseDeg: 2, truthDeg: 9, headingOkFrom: 8.5,
   /** Pos Hold requested before GPS heading (refused), and after the forward flight (holds) */
   earlyHold: [2, 3.5] as [number, number], hold: 12, holdM: 5, settled: 16, duration: 22,
 }
@@ -4306,7 +4351,8 @@ export function buildFpvNoMagHeadingTestModel() {
 export const ALT_HOLD_TEST = {
   earlySwitch: [0.5, 0.9] as [number, number],
   engage: 4, fullStick: [14, 17] as [number, number], end: 22,
-  holdM: 3, holdVzMs: 1.5, climbMs: [4.5, 6.0] as [number, number],
+  /** climb 2–3 s into full stick: the tuned controller lags the 5 m/s target a little (D opposes the climb; measured 4.35–4.5) */
+  holdM: 3, holdVzMs: 1.5, climbMs: [4.0, 6.0] as [number, number],
 }
 
 /** T16: Altitude Hold — not before the throttle is raised; holds; climbs at full stick; holds at low stick. */
@@ -4357,7 +4403,11 @@ export function buildFpvAltHoldTestModel() {
  */
 export const AUTO_LAND_TEST = {
   loss: 10, wind: 3, arrested: 12.5, landedBy: 15,
-  descentMs: [2, 6] as [number, number], maxSinkMs: 6, end: 75, driftM: 5,
+  /**
+   * The first second after the arrest dips to 1.85 m/s. Betaflight's target descent is
+   * (0.9 + alt / 20 m) × 5 m/s, about 9 m/s at 18 m; the tuned controller reaches 6.0 m/s of it.
+   */
+  descentMs: [1.5, 6] as [number, number], maxSinkMs: 7, end: 75, driftM: 5,
 }
 
 /** T09: failsafe AUTO-LAND — Altitude Hold descends, lands, and disarms after the landing time. */
@@ -4572,11 +4622,11 @@ function rescueReturnChecks(ctx: ReturnType<typeof testsSheet>, o: {
 }
 
 /** Return-check limits (m, deg). */
-/** (The heading is checked a sample after ROTATE hands over below 30°; the speed and mean altitude limits cover T11 and T20, measured 6.8 and 8.5 m/s, −0.2 and +1.0 m.) */
+/** (The heading is checked a sample after ROTATE hands over below 30°; the speed limits cover T11 and T20, measured 6.8 and 8.8 m/s.) */
 export const RESCUE_RETURN_TEST = { altitudeM: 1.5, swingM: 3, headingDeg: 32, descentDistM: 1, landM: 5 }
 
 /** T11 / T20: rescue switch at 20 s, about 82 m east; FLY_HOME settles 4.5 s after entry (ATTAIN_ALT overshoots). */
-export const RESCUE_SWITCH_TEST = { on: 20, flyHomeSettleS: 4.5, speed: [6, 9] as [number, number], duration: 60, noMagDuration: 62 }
+export const RESCUE_SWITCH_TEST = { on: 20, flyHomeSettleS: 4.5, speed: [6, 9.5] as [number, number], duration: 60, noMagDuration: 62 }
 
 function buildRescueSwitchTestModel(noMag: boolean) {
   const t = RESCUE_SWITCH_TEST

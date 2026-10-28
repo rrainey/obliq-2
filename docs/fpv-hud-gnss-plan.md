@@ -337,7 +337,7 @@ This is listed for interface agreement. It is implemented in that repo. The host
 - **`ap_hover_throttle`** is this quad's hover, about 1440 µs. Betaflight's default 1275 is a per-quad setting.
 - **AUTO-LAND** now runs Altitude Hold in stage 2 and disarms after the 60 s landing time. GPS-RESCUE still drops until Phase 12.
 - **New outputs:** `alt_hold_active`; `fc_mode` shows ALTH.
-- **With Betaflight's default gains (P, I, D, F = 15) the hold is underdamped on this quad.** It overshoots about 2 m on entry and swings ±1.7 m with an 8 s period. P works out to about 0.6 m/s² per metre and damping to about 0.4, reduced further by the vario's lag. T16 checks ±3 m.
+- **With Betaflight's default gains (P, I, D, F = 15) the hold is underdamped on this quad.** It overshoots about 2 m on entry and swings ±1.7 m with an 8 s period. P works out to about 0.6 m/s² per metre and damping to about 0.4, reduced further by the vario's lag. T16 checks ±3 m. (Tuned after Phase 12; see [Controller tuning](#controller-tuning-done-2026-10-28).)
 - **The AUTO-LAND descent factor** follows Betaflight's code: × the 5 m/s climb rate, so 5 m/s near the ground. A comment in Betaflight's own source still assumes 1 m/s. In practice the descent runs below target (measured about 3.8 m/s), because the target only moves within 5 m of the altitude.
 - **The 1100 and 1700 µs throttle limits** were never reached in testing (measured 1255–1638 µs). That includes a 36° banked full-stick climb and an AUTO-LAND arresting a 10 m/s sink.
 
@@ -398,6 +398,23 @@ This is listed for interface agreement. It is implemented in that repo. The host
    - starting within 15 m: climbs, pitches out to 15 m, returns;
    - satellites dropped to 2 mid-rescue: LOWSATS after 10 s gives DO_NOTHING (switch) or ABORT (link lost);
    - no home: `RESCUE OFF` warning, and the failure path.
+
+### Controller tuning (done 2026-10-28)
+
+Phases 8–12 used Betaflight's default gains. They are firmware defaults for an unknown quad, so they were tuned for this one, inner loop first, as a pilot would: only Betaflight configuration values change, never the algorithms. Each loop was measured in a native harness, with ideal sensors where the GNSS noise hid the dynamics.
+
+| Loop | Setting | Default → tuned | Effect |
+|---|---|---|---|
+| Rate | `iterm_relax` | (missing) → RP, setpoint, 15 Hz | A fidelity fix: Betaflight runs it by default. The I-term no longer winds up while the gyro lags a stick move. A 124 deg/s roll step overshot 29%; 20% with relax. |
+| Rate | D (roll, pitch) | 30, 34 → 40, 46, D-max off | Betaflight's `d_max` values as a fixed D: 14% overshoot, t90 15 ms, tracking within 0.3 deg/s. P, I, FF and yaw stay at the defaults (yaw: 7%, t90 74 ms). |
+| Angle | level P (`angle_p`) | 50 → 80 | A 15° step reaches 90% in 0.28 s instead of 0.46 s; no overshoot up to 220, so ample margin. |
+| Altitude | `ap_altitude_p/i/d/f` | 15/15/15/15 → 30/15/40/30 | Damped (ζ ≈ 0.4 before): after a climb, 0.6 m overshoot settling in 1.6 s (was 2.1 m, 8.5 s); hover RMS 0.3 m (1.35 m). D acts on vertical speed and opposes steady climbs; F 30 offsets most of it, so a full-stick climb runs at about 4.5 m/s of the 5 m/s target. F = D would track the stick fully but overshoots 1.6 m on release. |
+| Position | `ap_position_p/i/d/a` | 30/30/30/30 → 40/60/40/30 | With ideal sensors a stop settles within 1 m in 1.2 s (was 3.7 s) and a wind step is absorbed faster. With GNSS the true-position hold is about 0.4 m RMS for any of the gains tried: the GNSS error sets it. |
+| Rescue | `gps_rescue_velocity_p/i/d` | 8/40/12 kept | I 80 brought FLY_HOME to 7.46 m/s with ideal sensors (7.25), but with GNSS the gain is lost in the noise of the velocity to home, and T20 then overspeeds. |
+
+**Not modelled, noted:** Betaflight's angle-mode feed-forward (on stick motion), D-max's dynamic boost, TPA and anti-gravity. The first two shape pilot stick response only; TPA matters above 1350 µs throttle.
+
+**GNSS noise limits the outer loops.** Position Hold's D and the rescue's velocity to home difference 10 Hz positions, and the receiver model's white position noise (0.12 m per axis at HDOP 0.8) gives about 1.7 m/s of velocity noise. In a 3 m/s wind Position Hold's tilt swings to 15–20° (8° with ideal sensors), and the rescue's FLY_HOME pitch jitters about 8° (0.1° ideal). Real receivers smooth their 10 Hz positions far more; reducing the white term is a GNSS model decision, not a gain.
 
 ### Phase 13: OSD outputs and test models
 

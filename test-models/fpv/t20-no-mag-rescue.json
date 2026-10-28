@@ -2266,7 +2266,7 @@
               "showName": true,
               "mode": "bounds",
               "lower": 6,
-              "upper": 9,
+              "upper": 9.5,
               "checkFrom": 61.5,
               "checkUntil": null,
               "onFailure": "record"

@@ -85,9 +85,9 @@ describe('FPV reference model: angle mode', () => {
     for (const r of between(runs['bank']!, 1.2, 2.0)) {
       expect(Math.abs(r.est[0]! - target)).toBeLessThan(3)
       // The accelerometer sees thrust, so the estimate lags toward level and the
-      // controller banks a little further to hold it
+      // controller banks a little further to hold it (up to 6.0 deg with the tuned level gain)
       expect(r.e[0]! - target).toBeGreaterThan(-1)
-      expect(r.e[0]! - target).toBeLessThan(6)
+      expect(r.e[0]! - target).toBeLessThan(7)
     }
   })
 

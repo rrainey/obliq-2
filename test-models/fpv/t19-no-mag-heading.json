@@ -4,7 +4,7 @@
     "version": "2.2",
     "metadata": {
       "created": "2026-10-21T00:00:00.000Z",
-      "description": "Validation test for heading without a magnetometer (docs/fpv-hud-gnss-test-plan.md, T19): the vehicle faces 60° with its estimate at 0°. Flying forward, the estimate snaps to the GPS course at 1 m/s and converges on it (heading within 2° of the track, the true yaw within 8° allowing for sideslip), and GPS heading becomes established. Position Hold (pos_hold_without_mag on) is refused before that and holds after."
+      "description": "Validation test for heading without a magnetometer (docs/fpv-hud-gnss-test-plan.md, T19): the vehicle faces 60° with its estimate at 0°. Flying forward, the estimate snaps to the GPS course at 1 m/s and converges on it (heading within 2° of the track, the true yaw within 9° allowing for sideslip), and GPS heading becomes established. Position Hold (pos_hold_without_mag on) is refused before that and holds after."
     },
     "globalSettings": {
       "simulationTimeStep": 0.0005,
@@ -1486,8 +1486,8 @@
             "parameters": {
               "showName": true,
               "mode": "bounds",
-              "lower": -8,
-              "upper": 8,
+              "lower": -9,
+              "upper": 9,
               "checkFrom": 10,
               "checkUntil": null,
               "onFailure": "record"

@@ -1526,7 +1526,7 @@
             "parameters": {
               "showName": true,
               "mode": "bounds",
-              "lower": 2,
+              "lower": 1.5,
               "upper": 6,
               "checkFrom": 12.5,
               "checkUntil": 13.5,
@@ -1545,7 +1545,7 @@
               "showName": true,
               "mode": "bounds",
               "lower": null,
-              "upper": 6,
+              "upper": 7,
               "checkFrom": 12.5,
               "checkUntil": 71.5,
               "onFailure": "record"

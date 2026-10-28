@@ -1495,7 +1495,7 @@
             "parameters": {
               "showName": true,
               "mode": "bounds",
-              "lower": 4.5,
+              "lower": 4,
               "upper": 6,
               "checkFrom": 16,
               "checkUntil": 17,
