@@ -74,7 +74,7 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | **T03 GNSS Statistics** | 900 s | Armed angle-mode hover. Windows: 0–300 s default; 300–600 s UERE scale 2; 600–900 s HDOP 2.5, VDOP 4 | Per window: horizontal and vertical RMS error and velocity RMS within ±25% of the specified σ; 1 s correlation of horizontal error > 0.9 (first window); RMS ratio between windows matches the scale or DOP ratio ±25% |
 | **T04 GNSS Conditions** (Shipped) | 30 s | Hover; satellites 14 → 3 (t = 8) → 2 (t = 14) → 14 (t = 20) | Fix 3 / 2 / 0 / 3 in their windows; altitude held and vd = 0 while 2D; all outputs held while 0; `firstTime(fix == 3 after t = 20)` ∈ [20.95, 21.05]; pDOP = √(HDOP² + VDOP²); `home_valid` stays 1 throughout |
 | **T05 GNSS Course** | 20 s | Hover, then forward flight in angle mode at about 5 m/s on a constant heading | Track valid = 0 and track held in the hover; track true within 3° of the truth track (true north) while valid; magnetic = true − 2.48°; ground speed within 0.3 m/s of truth |
-| **T06 Grid Convergence** | 10 s | Rest, then a 90° yaw turn; γ 1.2425, then γ 0 from t = 6 | `heading_deg` within 3° of truth yaw + γ; `euler_est` yaw within 3° of truth yaw; after the γ change, heading follows truth yaw within 3° |
+| **T06 Grid Convergence** | 10 s | Angle-mode take-off, then a yaw turn of about 90°; γ 1.2425, then γ 0 from t = 6 | `heading_deg` = estimate yaw + γ within 0.01° (catches a missing or wrong-signed γ); after the change, heading = estimate yaw within 0.01°; `euler_est` yaw within 3° of truth yaw (the estimator's error during the turn); the turn exceeds 60° |
 | **T07 Arming Checks** | 20 s | Arm attempts in this order: with throttle up; with the rescue switch on; with the hold switch on; first arming with 7 satellites; with 14 satellites (succeeds); disarm; 7 satellites, re-arm (succeeds, no home); ABORT forced by an impact, then arming without cycling the switch | Each refused attempt: `fc_armed` stays 0 and its `fc_warnings` bit is set; the 14-satellite arming succeeds; the re-arm succeeds with `home_valid` = 0 and `RESCUE OFF` shown for 3 s; after ABORT, arming is refused until the switch is cycled |
 | **T08 Failsafe Drop** | 15 s | Hover at 10 m; procedure DROP. Link lost at t = 5 for 1 s (recovers in stage 1); lost again at t = 9 | First loss: sticks centred after 0.3 s, control back immediately, no stage 2; second loss: `failsafe_stage` = 2 at t = 10.5 ± 0.05; disarmed at stage 2 |
 | **T09 Failsafe Auto-Land** | 75 s | Hover at 15 m with 3 m/s wind; procedure AUTO-LAND; link lost at t = 5 | Stage 2 at 6.5 s; mode ALTH + POSH; descent rate within the reference profile ±20%; horizontal drift < 5 m; on the ground before 60 s; disarmed by `failsafe_landing_time` |
@@ -100,9 +100,9 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | ID | Feature | L1 | L2 | L3 |
 |---|---|---|---|---|
 | F01 | WMM at the ellipsoid height | — | `fpv-sensors` field value | — |
-| F02 | γ rotates the magnetometer field and the estimator reference | T06 | `fpv-sensors` ideal mag = C_bn R(γ) field | — |
+| F02 | γ rotates the magnetometer field and the estimator reference | T06 | `fpv-sensors`: ideal mag = C_bn R(γ) field to 1e-9; after 5 s the estimate is within 0.2° of truth yaw, which a reference left in true north fails (checked by planting that bug) | — |
 | F03 | `heading_deg` is true heading | T06, T19 | — | check 2 |
-| F04 | γ = 0 reproduces the Phase 1 build | — | `fpv-sensors` exact equality | — |
+| F04 | γ = 0 reproduces the unrotated behaviour | — | `fpv-sensors`: at γ = 0 the ideal mag is C_bn·field to 1e-9 and heading equals the estimate's yaw | — |
 | F05 | Ideal GNSS equals truth | — | `fpv-gnss` exact | — |
 | F06 | GNSS position and velocity error statistics | T03 | — | — |
 | F07 | Time correlation of GNSS error | T03 | — | — |
@@ -166,7 +166,7 @@ Each implementation phase writes the tests for its features, and the phase is do
 | Phase | Writes | Must pass |
 |---|---|---|
 | 1 | `test-models/fpv/` folder, `fpv-test-models` Jest runner, the Conditions schedules, the helpers in section 2.2 and T00 | T00, T01, T02, F01 (done) |
-| 2 | T06 (γ parts), L2 for F02 and F04 | T06 (first part) |
+| 2 | T06, L2 for F02 and F04 | T06 (done) |
 | 3 | T03, T04, T05, L2 for F05 and F15 | T03–T05 |
 | 4 | T01 additions, F16–F19 | T01 |
 | 8 | T07, T08, T22, and the inputs used by T09/T10 | T07, T08, T22 |

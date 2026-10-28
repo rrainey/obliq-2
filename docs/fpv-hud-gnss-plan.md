@@ -47,7 +47,7 @@
 - the regenerated `fpv-vehicle.json` shows three inputs;
 - the Demo Flight and Acro Rate Step models compile against it.
 
-## Phase 2: Grid convergence in the magnetometer and the estimator
+## Phase 2: Grid convergence in the magnetometer and the estimator (done 2026-10-28)
 
 1. **Helper `rotateTrueToGrid(s, vec3, gamma)`.** It splits the vector, then computes:
    - N_g = N cos γ + E sin γ

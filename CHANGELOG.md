@@ -4,7 +4,9 @@
 
 - **The FPV vehicle is at Prairie Creek Park, Texas, and its NED origin is 0 m MSL.** It was at Tri-County Aerodrome (48TX). Altitude MSL is −z. The field plane is the terrain database's origin cell, z = −178.133 m, and the vehicle rests 1 mm into that plane. The barometer and the altitude estimate still start at the field elevation. The magnetic field is WMM2025 at the park, evaluated at the field's height above the ellipsoid.
 - **The FPV Vehicle has two more inputs:** `gnss_env` (GNSS conditions: satellites, HDOP, VDOP and a UERE scale) and `grid_convergence_deg` (the angle between true north and the terrain's UTM grid north). They prepare for the GNSS receiver. Test models feed them from a new Conditions subsystem that schedules them over time like the Pilot's sticks.
-- **FPV validation suite.** `test-models/fpv/` holds test models run with `npm run obliq:test -- test-models/fpv/t*.json`, with its own copy of the vehicle. T00 checks the Tests-sheet helpers that later test models use: event latches, first-event times, running extremes, and windowed mean square and correlation.
+- **The FPV Vehicle uses the grid convergence.** The magnetometer reads the WMM field rotated from true north into the terrain's grid frame, and the attitude estimator's reference is rotated the same way, so its yaw stays on the grid yaw like the true state. A new output, `heading_deg`, is true heading (estimated yaw plus γ, 0–360°).
+- **Fixed: with ideal sensors the FPV attitude estimate became NaN** when the accelerometer read zero (free fall at the start of an airborne run). A zero vector now gives no correction instead of 0/0.
+- **FPV validation suite.** `test-models/fpv/` holds test models run with `npm run obliq:test -- test-models/fpv/t*.json`, with its own copy of the vehicle. T06 checks grid convergence. T00 checks the Tests-sheet helpers that later test models use: event latches, first-event times, running extremes, and windowed mean square and correlation.
 
 ## What's New in 3.4.0
 

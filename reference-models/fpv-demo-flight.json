@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 205
+              "y": 210
             },
             "parameters": {
               "showName": true,
@@ -409,7 +409,8 @@
                 "gyro_dps",
                 "euler_est",
                 "altitude_est",
-                "quat_est"
+                "quat_est",
+                "heading_deg"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -425,7 +426,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 362
+              "y": 375
             },
             "parameters": {
               "showName": true,

@@ -521,7 +521,7 @@ const MOTOR_SIZE = { width: 140, height: 80 }
 const FRAME_SIZE = { width: 160, height: 260 }
 const FC_SIZE = { width: 220, height: 180 }
 const SENSORS_SIZE = { width: 170, height: 150 }
-const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'altitude_est', 'quat_est']
+const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'altitude_est', 'quat_est', 'heading_deg']
 
 // ---------------------------------------------------------------------------
 // Motor / ESC / propeller (one definition, referenced by the other three)
@@ -890,13 +890,44 @@ function buildImuSheet(ideal: boolean): SheetBuilder {
   return s
 }
 
+/**
+ * Rotate a NED vector between true north and grid north by the grid
+ * convergence γ (deg, grid north east of true north is positive):
+ * true→grid  N_g = N cos γ + E sin γ,  E_g = −N sin γ + E cos γ;
+ * grid→true  the inverse. Down is unchanged. At γ = 0 the result is exact.
+ */
+function rotateNorthEast(s: SheetBuilder, name: string, vec: string, gammaDeg: string, toGrid: boolean): string {
+  const split = s.add('demux', `${name}Split`, { outputCount: 3, inputDimensions: [3] })
+  s.wire(vec, split)
+  const r = `(${Math.PI / 180} * in(2))`
+  // in(0) N, in(1) E, in(2) γ
+  const [nExpr, eExpr] = toGrid
+    ? [`in(0) * cos(${r}) + in(1) * sin(${r})`, `-in(0) * sin(${r}) + in(1) * cos(${r})`]
+    : [`in(0) * cos(${r}) - in(1) * sin(${r})`, `in(0) * sin(${r}) + in(1) * cos(${r})`]
+  const n = s.add('evaluate', `${name}N`, { numInputs: 3, expression: nExpr })
+  const e = s.add('evaluate', `${name}E`, { numInputs: 3, expression: eExpr })
+  for (const ev of [n, e]) {
+    s.wire(split, ev, 0, 0)
+    s.wire(split, ev, 1, 1)
+    s.wire(gammaDeg, ev, 2)
+  }
+  const out = s.add('mux', name, { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+  s.wire(n, out, 0)
+  s.wire(e, out, 1)
+  s.wire(split, out, 2, 2)
+  return out
+}
+
 function buildMagSheet(ideal: boolean): SheetBuilder {
   const s = new SheetBuilder('magn', 'Magnetometer')
   const q = s.input('quat', 'double[4][1]')
+  const gamma = s.input('grid_convergence_deg', 'double')
   const m = SENSORS.mag
   const cbn = s.add('orientation_conversion', 'C_bn', { conversionType: 'quat_to_dcm' })
   s.wire(q, cbn)
-  const field = s.constant('EarthField', m.field, 'double[3]')
+  // The WMM field is in true NED; the vehicle's frame is grid NED
+  const fieldTrue = s.constant('EarthField', m.field, 'double[3]')
+  const field = rotateNorthEast(s, 'EarthFieldGrid', fieldTrue, gamma, true)
   const body = s.add('matrix_multiply', 'FieldInBody')
   s.wire(cbn, body, 0)
   s.wire(field, body, 1)
@@ -944,11 +975,13 @@ function buildSensorsSheet(ideal: boolean, altitude0: number): SheetBuilder {
   const quat = s.input('quat', 'double[4][1]')
   const omega = s.input('omega', 'double[3]')
   const force = s.input('specific_force', 'double[3]')
+  const gamma = s.input('grid_convergence_deg', 'double')
   const imu = s.add('subsystem', 'IMU', { ...subsystem(['omega', 'specific_force'], ['gyro', 'accel'], buildImuSheet(ideal)), sampleTimeSec: SENSORS.imu.ts })
   s.wire(omega, imu, 0)
   s.wire(force, imu, 1)
-  const mag = s.add('subsystem', 'Magnetometer', { ...subsystem(['quat'], ['mag'], buildMagSheet(ideal)), sampleTimeSec: SENSORS.mag.ts })
-  s.wire(quat, mag)
+  const mag = s.add('subsystem', 'Magnetometer', { ...subsystem(['quat', 'grid_convergence_deg'], ['mag'], buildMagSheet(ideal)), sampleTimeSec: SENSORS.mag.ts })
+  s.wire(quat, mag, 0)
+  s.wire(gamma, mag, 1)
   const baro = s.add('subsystem', 'Barometer', { ...subsystem(['pos_ned'], ['pressure'], buildBaroSheet(ideal, altitude0)), sampleTimeSec: SENSORS.baro.ts })
   s.wire(pos, baro)
   s.output('gyro', imu, 'double[3]', 0)
@@ -965,9 +998,14 @@ function buildSensorsSheet(ideal: boolean, altitude0: number): SheetBuilder {
 function normalizeWithNorm(s: SheetBuilder, name: string, v: string): { unit: string; norm: string } {
   const norm = s.add('mag', `${name}Norm`)
   s.wire(v, norm)
+  // A zero vector (an ideal accelerometer in free fall) gives a zero unit
+  // vector, so no correction, instead of 0/0 = NaN latching into the state.
+  // For any non-negligible norm this is the norm itself, bit for bit.
+  const safe = s.add('evaluate', `${name}NormSafe`, { numInputs: 1, expression: 'fmax(in(0), 1e-9)' })
+  s.wire(norm, safe)
   const unit = s.add('divide', name)
   s.wire(v, unit, 0)
-  s.wire(norm, unit, 1)
+  s.wire(safe, unit, 1)
   return { unit, norm }
 }
 
@@ -986,6 +1024,7 @@ function buildAttitudeEstimatorSheet(initialQuat: number[][]): SheetBuilder {
   const gyro = s.input('gyro', 'double[3]')
   const acc = s.input('accel', 'double[3]')
   const mag = s.input('mag', 'double[3]')
+  const gamma = s.input('grid_convergence_deg', 'double')
   const qPrev = s.add('unit_delay', 'qPrev', { initialValue: initialQuat, sampleInterval: FC.ts })
   const cbn = s.add('orientation_conversion', 'C_bn', { conversionType: 'quat_to_dcm' })
   s.wire(qPrev, cbn)
@@ -1013,7 +1052,10 @@ function buildAttitudeEstimatorSheet(initialQuat: number[][]): SheetBuilder {
   // Heading: compare measured and predicted field directions, yaw part only
   const m = SENSORS.mag.field
   const mn = Math.hypot(...m)
-  const fieldRef = s.constant('FieldDirectionNED', m.map(x => x / mn), 'double[3]')
+  // The reference is the same field in the grid frame, so the estimate's yaw
+  // is grid yaw like the true state's (heading_deg adds γ for true heading)
+  const fieldRefTrue = s.constant('FieldDirectionNED', m.map(x => x / mn), 'double[3]')
+  const fieldRef = rotateNorthEast(s, 'FieldDirectionGrid', fieldRefTrue, gamma, true)
   const fieldEst = s.add('matrix_multiply', 'FieldEstimated')
   s.wire(cbn, fieldEst, 0)
   s.wire(fieldRef, fieldEst, 1)
@@ -1354,12 +1396,14 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   const acc = s.input('accel', 'double[3]')
   const mag = s.input('mag', 'double[3]')
   const pressure = s.input('pressure', 'double')
+  const gamma = s.input('grid_convergence_deg', 'double')
 
   // Estimators
-  const att = s.add('subsystem', 'AttitudeEstimator', subsystem(['gyro', 'accel', 'mag'], ['quat', 'euler'], buildAttitudeEstimatorSheet(initialQuat)))
+  const att = s.add('subsystem', 'AttitudeEstimator', subsystem(['gyro', 'accel', 'mag', 'grid_convergence_deg'], ['quat', 'euler'], buildAttitudeEstimatorSheet(initialQuat)))
   s.wire(gyro, att, 0)
   s.wire(acc, att, 1)
   s.wire(mag, att, 2)
+  s.wire(gamma, att, 3)
   const alt = s.add('subsystem', 'AltitudeEstimator', subsystem(['accel', 'quat', 'pressure'], ['altitude', 'climb_rate'], buildAltitudeEstimatorSheet(altitude0)))
   s.wire(acc, alt, 0)
   s.wire(att, alt, 1, 0)
@@ -1396,6 +1440,13 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   s.output('euler_est', att, 'double[3]', 1)
   s.output('altitude_est', alt, 'double', 0)
   s.output('quat_est', att, 'double[4][1]', 0)
+  // True heading: the estimate's grid yaw plus the grid convergence, 0–360°
+  const yawEst = s.add('selector', 'YawEstimate', { indices: [2] })
+  s.wire(att, yawEst, 0, 1)
+  const heading = s.add('evaluate', 'HeadingTrue', { numInputs: 2, expression: `fmod(in(0) * ${180 / Math.PI} + in(1) + 720.0, 360.0)` })
+  s.wire(yawEst, heading, 0)
+  s.wire(gamma, heading, 1)
+  s.output('heading_deg', heading, 'double')
   return s
 }
 
@@ -1453,6 +1504,12 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   const altitude0 = Math.max(0, opts.initialAltitude ?? 0)
   const split = main.add('demux', 'MotorCmdSplit', { outputCount: 4, inputDimensions: [4] })
   let fc: string | null = null
+  /** Where each non-stick vehicle input comes from: [block id, port] */
+  const conditionSource = new Map<string, [string, number]>()
+  const wireCondition = (name: string, to: string, toPort: number) => {
+    const src = conditionSource.get(name)
+    if (src) main.wire(src[0], to, toPort, src[1])
+  }
   if (opts.openLoop) {
     const hover = Number(HOVER_COMMAND.toFixed(6))
     const cmd = main.constant('MotorCmd', opts.motorCommand ?? [hover, hover, hover, hover], 'double[4]')
@@ -1464,12 +1521,14 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     // GNSS conditions and grid convergence: Input Ports on the vehicle, or a
     // Conditions schedule. Wired to their consumers in later phases.
     if (opts.vehicleOnly) {
-      for (const [name, type] of VEHICLE_INPUTS.slice(1)) main.input(name, type)
+      for (const [name, type] of VEHICLE_INPUTS.slice(1)) conditionSource.set(name, [main.input(name, type), 0])
     } else {
-      main.add('subsystem', 'Conditions', subsystem([], VEHICLE_INPUTS.slice(1).map(([n]) => n), buildConditionsSheet(opts.conditions)))
+      const names = VEHICLE_INPUTS.slice(1).map(([n]) => n)
+      const cond = main.add('subsystem', 'Conditions', subsystem([], names, buildConditionsSheet(opts.conditions)))
+      names.forEach((n, k) => conditionSource.set(n, [cond, k]))
     }
     fc = main.add('subsystem', 'FlightController', {
-      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure'], FC_OUTPUTS, buildFlightControllerSheet(initialQuat, altitude0), FC_SIZE),
+      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure', 'grid_convergence_deg'], FC_OUTPUTS, buildFlightControllerSheet(initialQuat, altitude0), FC_SIZE),
       sampleTimeSec: FC.ts,
     })
     main.wire(pilot, fc, 0)
@@ -1527,13 +1586,15 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   main.wire(accelVec, frame, 1)
   if (fc) {
     const sensors = main.add('subsystem', 'Sensors', subsystem(
-      ['pos_ned', 'quat', 'omega', 'specific_force'], ['gyro', 'accel', 'mag', 'pressure'],
+      ['pos_ned', 'quat', 'omega', 'specific_force', 'grid_convergence_deg'], ['gyro', 'accel', 'mag', 'pressure'],
       buildSensorsSheet(opts.sensors === 'ideal', altitude0), SENSORS_SIZE))
     main.wire(frame, sensors, 0, 0)
     main.wire(frame, sensors, 1, 2)
     main.wire(frame, sensors, 2, 4)
     main.wire(frame, sensors, 3, 5)
+    wireCondition('grid_convergence_deg', sensors, 4)
     for (let i = 0; i < 4; i++) main.wire(sensors, fc, i + 1, i)
+    wireCondition('grid_convergence_deg', fc, 5)
     publish('imu_gyro', sensors, 'double[3]', 0)
     publish('imu_accel', sensors, 'double[3]', 1)
     publish('mag', sensors, 'double[3]', 2)
@@ -1549,6 +1610,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     publish('euler_est', fc, 'double[3]', 3)
     publish('altitude_est', fc, 'double', 4)
     publish('quat_est', fc, 'double[4][1]', 5)
+    publish('heading_deg', fc, 'double', 6)
   }
 
   // Scopes, on the Telemetry sheet
@@ -1907,6 +1969,80 @@ export function buildFpvHelpersTestModel(): { name: string; data: Record<string,
   }
 }
 
+/** Sticks for T06: the demo take-off in angle mode, then a yaw turn of about 90°. */
+export const GRID_TEST_STICKS: StickProfile = {
+  roll: [[0, 0]],
+  pitch: [[0, 0]],
+  yaw: [[0, 0], [3.0, 0], [3.05, 0.5], [3.5, 0.5], [3.55, 0]],
+  throttle: DEMO_STICKS.throttle,
+  aux: [[0, 1]],
+  arm: DEMO_STICKS.arm,
+}
+
+/** T06 limits (deg) and the γ step time (s). */
+export const GRID_TEST = { gammaStepTime: 6, headingDeg: 0.01, estimateDeg: 3, turnedDeg: 60, duration: 10 }
+
+/**
+ * T06 Tests sheet: heading is the estimate's grid yaw plus γ (exactly: the
+ * arithmetic is checked to 0.01°), it follows a change of γ, and the estimate
+ * stays on the true grid yaw (3°, the estimator's error during the turn).
+ */
+function buildGridConvergenceTestsSheet(): SheetBuilder {
+  const t = GRID_TEST
+  const s = new SheetBuilder('tests', 'Tests')
+  const R2D = 180 / Math.PI
+  const from = (signal: string) => s.add('sheet_label_source', `From_${signal}`, { signalName: signal })
+  const pick = (name: string, src: string, indices: number[]) => {
+    const id = s.add('selector', name, { indices })
+    s.wire(src, id)
+    return id
+  }
+  const check = (name: string, input: string, params: Record<string, unknown>) => {
+    const id = s.add('assert', name, { mode: 'bounds', checkFrom: 0, checkUntil: null, onFailure: 'record', ...params })
+    s.wire(input, id, 0)
+  }
+  const euler = from('euler')
+  const yawTrue = pick('YawTrue', euler, [2])
+  const yawEst = pick('YawEstimate', from('euler_est'), [2])
+  const heading = from('heading_deg')
+  /** wrap(a − b·R2D − offset) to ±180° */
+  const angleError = (name: string, a: string, b: string, aScale: number, offsetDeg: number) => {
+    const id = s.add('evaluate', name, { numInputs: 2, expression: `fmod(in(0) * ${aScale} - in(1) * ${R2D} - ${offsetDeg} + 540.0, 360.0) - 180.0` })
+    s.wire(a, id, 0)
+    s.wire(b, id, 1)
+    return id
+  }
+  const yawTrueDeg = s.add('scale', 'YawTrueDeg', { gain: R2D })
+  s.wire(yawTrue, yawTrueDeg)
+  check('YawTurnHappened', yawTrueDeg, { lower: t.turnedDeg, upper: null, checkFrom: 4.0 })
+  check('HeadingIsEstimatePlusGamma', angleError('HeadingErrorSite', heading, yawEst, 1, LOCATION.gridConvergenceDeg),
+    { lower: -t.headingDeg, upper: t.headingDeg, checkFrom: 0.01, checkUntil: t.gammaStepTime - 0.01 })
+  check('HeadingFollowsGammaZero', angleError('HeadingErrorZero', heading, yawEst, 1, 0),
+    { lower: -t.headingDeg, upper: t.headingDeg, checkFrom: t.gammaStepTime + 0.01 })
+  check('EstimateOnGridYaw', angleError('EstimateYawError', yawEst, yawTrue, R2D, 0),
+    { lower: -t.estimateDeg, upper: t.estimateDeg, checkFrom: 0.5 })
+  const rollPitch = s.add('scale', 'RollPitchDeg', { gain: R2D })
+  s.wire(pick('RollPitch', euler, [0, 1]), rollPitch)
+  check('StaysUpright', rollPitch, { lower: -60, upper: 60, onFailure: 'stop' })
+  return s
+}
+
+/** T06: grid convergence. */
+export function buildFpvGridConvergenceTestModel() {
+  return buildFpvTestModel({
+    name: 'FPV T06 Grid Convergence',
+    description:
+      'Validation test for grid convergence (docs/fpv-hud-gnss-test-plan.md, T06): take off in angle mode, turn about 90° ' +
+      `in yaw, and switch γ from ${LOCATION.gridConvergenceDeg}° to 0 at ${GRID_TEST.gammaStepTime} s. heading_deg is the ` +
+      'grid yaw plus γ, the attitude estimate stays on grid yaw, and heading follows the change of γ.',
+    sticks: GRID_TEST_STICKS,
+    duration: GRID_TEST.duration,
+    displays: [['Attitude', 'euler'], ['AttitudeEstimate', 'euler_est'], ['Heading', 'heading_deg']],
+    tests: buildGridConvergenceTestsSheet,
+    conditions: { gridConvergenceDeg: [[0, LOCATION.gridConvergenceDeg], [GRID_TEST.gammaStepTime, LOCATION.gridConvergenceDeg], [GRID_TEST.gammaStepTime + 0.001, 0]] },
+  })
+}
+
 /** A test model renamed for the validation suite ("FPV Tnn …"). */
 const renamed = (model: { name: string; data: Record<string, unknown> }, name: string) => ({ ...model, name })
 
@@ -1921,6 +2057,7 @@ export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<s
     ['t00-test-helpers.json', buildFpvHelpersTestModel()],
     ['t01-demo-flight.json', renamed(buildFpvDemoFlightModel(), 'FPV T01 Demo Flight')],
     ['t02-acro-rate-step.json', renamed(buildFpvAcroRateStepModel(), 'FPV T02 Acro Rate Step')],
+    ['t06-grid-convergence.json', buildFpvGridConvergenceTestModel()],
   ]
 }
 

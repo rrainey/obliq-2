@@ -80,6 +80,11 @@ const qAngle = (a: number[], b: number[]) => {
   const d = Math.abs(a.reduce((s, x, i) => s + x * b[i]!, 0))
   return (2 * Math.acos(Math.min(1, d)) * 180) / Math.PI
 }
+/** True NED → grid NED by the grid convergence γ (deg). */
+const toGrid = (v: number[], gammaDeg: number) => {
+  const r = (gammaDeg * Math.PI) / 180
+  return [v[0]! * Math.cos(r) + v[1]! * Math.sin(r), -v[0]! * Math.sin(r) + v[1]! * Math.cos(r), v[2]!]
+}
 const trueAltitude = (r: Row) => SENSORS.baro.homeAltitude - r.pos[2]!
 /** C_bn(q) v for a scalar-first unit quaternion (same convention as quat_to_dcm). */
 const toBody = (q: number[], v: number[]) => {
@@ -161,9 +166,11 @@ describe('FPV reference model: sensors and estimators', () => {
       }
     }
     expect(changes).toBeGreaterThan(200) // 3 s at 100 Hz, most samples differ
-    // Measured minus the true field rotated into the body: hard iron plus noise
+    // Measured minus the field (rotated from true into the grid frame by the
+    // default γ, then into the body): hard iron plus noise
+    const field = toGrid(m.field, LOCATION.gridConvergenceDeg)
     for (let k = 0; k < 3; k++) {
-      const resid = hover.map(r => r.mag[k]! - toBody(r.q, m.field)[k]!)
+      const resid = hover.map(r => r.mag[k]! - toBody(r.q, field)[k]!)
       expect(Math.abs(mean(resid) - m.hardIron[k]!)).toBeLessThan(0.1)
     }
   })
@@ -215,5 +222,69 @@ describe('FPV reference model: sensors and estimators', () => {
     expect(hold(0.8, 1.0, 0)).toBeCloseTo(185, -1)
     expect(hold(1.3, 1.5, 0)).toBeCloseTo(-185, -1)
     expect(FC.ts).toBe(SENSORS.imu.ts)
+  })
+})
+
+describe('FPV reference model: grid convergence', () => {
+  const dirs: string[] = []
+  afterAll(() => dirs.forEach(cleanupNativeDir))
+
+  /** Ideal sensors, hover at 30 m, nose 30° east of grid north; 5 s. */
+  function run(name: string, gammaDeg: number) {
+    const model = buildFpvModel({ sticks: centred, initialAltitude: ALT0, initialEuler: [0, 0, 30], sensors: 'ideal', conditions: { gridConvergenceDeg: gammaDeg } })
+    const n = Math.round(5 / FPV.dt)
+    const result = compileAndRunNative({
+      modelName: `fpvg_${name}`,
+      sheets: (model.data as any).sheets,
+      dt: FPV.dt,
+      smokeMainBody: `
+  fpvg_${name}_seed_from_inputs(&model);
+  for (int i = 0; i < ${n}; ++i) {
+    fpvg_${name}_step(&model);
+    const fpvg_${name}_outputs_t *o = &model.outputs;
+    for (int k = 0; k < 3; ++k) printf("%.17g ", o->mag[k]);
+    for (int k = 0; k < 4; ++k) printf("%.17g ", o->quat[k][0]);
+    printf("%.17g %.17g %.17g\\n", o->euler[2], o->euler_est[2], o->heading_deg);
+  }
+  return 0;
+`,
+    })
+    dirs.push(result.outDir)
+    return result.stdout.trim().split('\n').map(line => {
+      const v = line.trim().split(' ').map(Number)
+      return { mag: v.slice(0, 3), q: v.slice(3, 7), yaw: v[7]!, yawEst: v[8]!, heading: v[9]! }
+    })
+  }
+  const deg = (rad: number) => (rad * 180) / Math.PI
+  const wrap = (d: number) => ((d % 360) + 540) % 360 - 180
+
+  it('γ = 0: the magnetometer reads the true-NED field in the body, and heading is the estimate\'s yaw', () => {
+    const rows = run('zero', 0)
+    for (const r of rows.filter((_, i) => i % 20 === 0)) {
+      const expected = toBody(r.q, SENSORS.mag.field)
+      for (let k = 0; k < 3; k++) expect(Math.abs(r.mag[k]! - expected[k]!)).toBeLessThan(1e-9)
+      expect(Math.abs(wrap(r.heading - deg(r.yawEst)))).toBeLessThan(1e-9)
+    }
+  })
+
+  it('γ = 1.2425°: the field is rotated into the grid frame, the estimate stays on grid yaw, and heading is true', () => {
+    const gamma = LOCATION.gridConvergenceDeg
+    expect(gamma).toBe(1.2425)
+    const rows = run('site', gamma)
+    for (const r of rows.filter((_, i) => i % 20 === 0)) {
+      const expected = toBody(r.q, toGrid(SENSORS.mag.field, gamma))
+      for (let k = 0; k < 3; k++) expect(Math.abs(r.mag[k]! - expected[k]!)).toBeLessThan(1e-9)
+      // The estimator's reference is in the same frame, so its yaw matches the true (grid) yaw
+      expect(Math.abs(wrap(deg(r.yawEst) - deg(r.yaw)))).toBeLessThan(0.5)
+      // True heading = grid yaw + γ: about 31.24° for a nose 30° east of grid north
+      expect(Math.abs(wrap(r.heading - (deg(r.yaw) + gamma)))).toBeLessThan(0.5)
+      expect(r.heading).toBeGreaterThanOrEqual(0)
+      expect(r.heading).toBeLessThan(360)
+    }
+    // The sensor field and the estimator's reference are in the same frame:
+    // after 5 s the estimate sits on the true yaw (a reference γ off would
+    // pull it toward a 1.24° offset)
+    const last = rows[rows.length - 1]!
+    expect(Math.abs(wrap(deg(last.yawEst) - deg(last.yaw)))).toBeLessThan(0.2)
   })
 })
