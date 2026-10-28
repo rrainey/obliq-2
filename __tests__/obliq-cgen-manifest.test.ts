@@ -67,6 +67,7 @@ typedef struct {
       expect(manifest.generator.name).toBe('obliq-2')
       expect(manifest.generator.version).toBe(pkg.version)
       expect(manifest.generator.commit).toMatch(/^[0-9a-f]{40}$/)
+      expect(typeof manifest.generator.dirty).toBe('boolean')
       // Every listed file was written, including the segregated motor module
       expect(manifest.files).toEqual(expect.arrayContaining(['FPV_Vehicle.c', 'FPV_Vehicle.h', 'Motor_RR.c', 'Motor_RR.h', 'CMakeLists.txt', 'smoke_main.c']))
       for (const f of manifest.files) expect(fs.existsSync(path.join(out, f))).toBe(true)

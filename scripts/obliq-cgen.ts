@@ -13,7 +13,7 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { execSync } from 'child_process'
+import { execFileSync, execSync } from 'child_process'
 import { CodeGenerator } from '../src/lib/codegen/CodeGenerator'
 import { CCodeBuilder } from '../src/lib/codegen/CCodeBuilder'
 
@@ -443,8 +443,13 @@ export function portsFromHeader(header: string, modelName: string): { inputs: Po
   return { inputs: struct('inputs'), outputs: struct('outputs') }
 }
 
-/** obliq-2's version, and the git commit it was built from when available. */
-function generatorInfo(): { version: string; commit: string | null; dirty: boolean | null } {
+/**
+ * obliq-2's version, and the git commit it was built from when available.
+ * `dirty` is true when anything that shapes the generated C (the generator
+ * under src/ and scripts/, or the model when it is in the repo) differs from
+ * that commit.
+ */
+function generatorInfo(modelPath: string): { version: string; commit: string | null; dirty: boolean | null } {
   const root = path.resolve(__dirname, '..')
   let version = 'unknown'
   try {
@@ -452,7 +457,9 @@ function generatorInfo(): { version: string; commit: string | null; dirty: boole
   } catch {}
   try {
     const commit = execSync('git rev-parse HEAD', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
-    const dirty = execSync('git status --porcelain --untracked-files=no', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() !== ''
+    const model = path.relative(root, path.resolve(modelPath))
+    const paths = ['src', 'scripts', ...(model.startsWith('..') || path.isAbsolute(model) ? [] : [model])]
+    const dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=no', '--', ...paths], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() !== ''
     return { version, commit, dirty }
   } catch {
     return { version, commit: null, dirty: null }
@@ -479,7 +486,7 @@ function writeManifest(
     profile: meta.profile,
     sourceJson: meta.sourceJson,
     generatedAt: new Date().toISOString(),
-    generator: { name: 'obliq-2', ...generatorInfo() },
+    generator: { name: 'obliq-2', ...generatorInfo(meta.sourceJson) },
     warnings: meta.warnings,
     stats: meta.stats,
     inputs: ports.inputs,
