@@ -4,7 +4,7 @@
     "version": "2.2",
     "metadata": {
       "created": "2026-10-19T00:00:00.000Z",
-      "description": "5-inch FPV quadcopter vehicle, for embedding in test models with a Model Reference block. Frame and 6-DOF body, four motor/propeller subsystems, 4S battery, IMU/magnetometer/barometer models, ground contact and a Betaflight-style flight controller (acro and angle modes, arming, Mahony and altitude estimators) at Tri-County Aerodrome (48TX), Texas. Input: sticks = [roll, pitch, yaw, throttle, AUX1 angle mode, AUX2 arm] (double[6], sticks -1..1, throttle 0..1, switches above 0.5 on). Outputs (Telemetry sheet): the true state, sensor readings, motor commands and speeds, rate setpoints, estimates and battery. Test models such as \"FPV Demo Flight\" drive it and check it with Assert blocks. Built by scripts/build-fpv-reference-model.ts; see docs/fpv-reference-model-plan.md."
+      "description": "5-inch FPV quadcopter vehicle, for embedding in test models with a Model Reference block. Frame and 6-DOF body, four motor/propeller subsystems, 4S battery, IMU/magnetometer/barometer models, ground contact and a Betaflight-style flight controller (acro and angle modes, arming, Mahony and altitude estimators) at Prairie Creek Park, Texas. Input: sticks = [roll, pitch, yaw, throttle, AUX1 angle mode, AUX2 arm] (double[6], sticks -1..1, throttle 0..1, switches above 0.5 on). Outputs (Telemetry sheet): the true state, sensor readings, motor commands and speeds, rate setpoints, estimates and battery. Test models such as \"FPV Demo Flight\" drive it and check it with Assert blocks. Built by scripts/build-fpv-reference-model.ts; see docs/fpv-reference-model-plan.md."
     },
     "globalSettings": {
       "simulationTimeStep": 0.0005,
@@ -365,9 +365,9 @@
                                   "showName": true,
                                   "signalType": "constant",
                                   "value": [
-                                    0.47563496560593577,
-                                    0.018908209283185602,
-                                    0.8794395141877259
+                                    0.48214139744344253,
+                                    0.020923590515949275,
+                                    0.8758435226861045
                                   ],
                                   "dataType": "double[3]"
                                 }
@@ -1153,7 +1153,7 @@
                                 },
                                 "parameters": {
                                   "showName": true,
-                                  "initialValue": 240.792,
+                                  "initialValue": 178.133,
                                   "sampleInterval": 0.001
                                 }
                               },
@@ -5294,7 +5294,7 @@
                         "initialValue": [
                           0,
                           0,
-                          0.001
+                          -178.132
                         ]
                       }
                     },
@@ -5351,13 +5351,13 @@
                       "type": "evaluate",
                       "name": "GroundFrictionN",
                       "position": {
-                        "x": 1127,
+                        "x": 1112,
                         "y": 233
                       },
                       "parameters": {
                         "showName": true,
                         "numInputs": 2,
-                        "expression": "(in(0) > 0.0) ? -20 * in(1) : 0.0"
+                        "expression": "((in(0) - (-178.133)) > 0.0) ? -20 * in(1) : 0.0"
                       }
                     },
                     {
@@ -5365,13 +5365,13 @@
                       "type": "evaluate",
                       "name": "GroundFrictionE",
                       "position": {
-                        "x": 1127,
+                        "x": 1112,
                         "y": 377
                       },
                       "parameters": {
                         "showName": true,
                         "numInputs": 2,
-                        "expression": "(in(0) > 0.0) ? -20 * in(1) : 0.0"
+                        "expression": "((in(0) - (-178.133)) > 0.0) ? -20 * in(1) : 0.0"
                       }
                     },
                     {
@@ -5385,7 +5385,7 @@
                       "parameters": {
                         "showName": true,
                         "numInputs": 2,
-                        "expression": "(in(0) > 0.0) ? fmin(0.0, -(7354.9875 * in(0) + 150 * in(1))) : 0.0"
+                        "expression": "((in(0) - (-178.133)) > 0.0) ? fmin(0.0, -(7354.9875 * (in(0) - (-178.133)) + 150 * in(1))) : 0.0"
                       }
                     },
                     {
@@ -5405,13 +5405,13 @@
                       "type": "evaluate",
                       "name": "OnGround",
                       "position": {
-                        "x": 1155,
+                        "x": 1112,
                         "y": 665
                       },
                       "parameters": {
                         "showName": true,
                         "numInputs": 1,
-                        "expression": "(in(0) > 0.0) ? 1.0 : 0.0"
+                        "expression": "((in(0) - (-178.133)) > 0.0) ? 1.0 : 0.0"
                       }
                     },
                     {
@@ -6087,7 +6087,7 @@
                       "targetBlockId": "frame__GroundFrictionN",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 12.5
+                        "midpointOffset": 20
                       }
                     },
                     {
@@ -6097,7 +6097,7 @@
                       "targetBlockId": "frame__GroundFrictionN",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 77
+                        "midpointOffset": 84.5
                       }
                     },
                     {
@@ -6107,7 +6107,7 @@
                       "targetBlockId": "frame__GroundForceNED",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 3
+                        "midpointOffset": -4
                       }
                     },
                     {
@@ -6117,7 +6117,7 @@
                       "targetBlockId": "frame__GroundFrictionE",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 12.5
+                        "midpointOffset": 20
                       }
                     },
                     {
@@ -6127,7 +6127,7 @@
                       "targetBlockId": "frame__GroundFrictionE",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 61
+                        "midpointOffset": 68.5
                       }
                     },
                     {
@@ -6201,7 +6201,7 @@
                       "targetBlockId": "frame__OnGround",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -1.5
+                        "midpointOffset": 20
                       }
                     },
                     {
@@ -6371,7 +6371,7 @@
                       "targetBlockId": "frame__GroundMoment",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -220
+                        "midpointOffset": -241
                       }
                     },
                     {
@@ -7091,7 +7091,7 @@
                                 "type": "orientation_conversion",
                                 "name": "C_bn",
                                 "position": {
-                                  "x": 322,
+                                  "x": 326,
                                   "y": 260
                                 },
                                 "parameters": {
@@ -7111,9 +7111,9 @@
                                   "showName": true,
                                   "signalType": "constant",
                                   "value": [
-                                    22.891,
-                                    0.91,
-                                    42.325
+                                    23.066,
+                                    1.001,
+                                    41.901
                                   ],
                                   "dataType": "double[3]"
                                 }
@@ -7123,7 +7123,7 @@
                                 "type": "matrix_multiply",
                                 "name": "FieldInBody",
                                 "position": {
-                                  "x": 524,
+                                  "x": 532,
                                   "y": 332
                                 },
                                 "parameters": {
@@ -7135,7 +7135,7 @@
                                 "type": "source",
                                 "name": "MagBias",
                                 "position": {
-                                  "x": 529,
+                                  "x": 537,
                                   "y": 476
                                 },
                                 "parameters": {
@@ -7172,7 +7172,7 @@
                                 "type": "sum",
                                 "name": "MagSum",
                                 "position": {
-                                  "x": 694,
+                                  "x": 702,
                                   "y": 406
                                 },
                                 "parameters": {
@@ -7186,7 +7186,7 @@
                                 "type": "quantizer",
                                 "name": "MagQuantize",
                                 "position": {
-                                  "x": 854,
+                                  "x": 862,
                                   "y": 414
                                 },
                                 "parameters": {
@@ -7199,7 +7199,7 @@
                                 "type": "output_port",
                                 "name": "mag",
                                 "position": {
-                                  "x": 1014,
+                                  "x": 1022,
                                   "y": 424
                                 },
                                 "parameters": {
@@ -7224,7 +7224,7 @@
                                 "targetBlockId": "magn__FieldInBody",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 17
+                                  "midpointOffset": 19
                                 }
                               },
                               {
@@ -7280,7 +7280,7 @@
                               }
                             ],
                             "extents": {
-                              "width": 1314,
+                              "width": 1322,
                               "height": 676
                             }
                           }
@@ -7351,7 +7351,7 @@
                                 "parameters": {
                                   "showName": true,
                                   "numInputs": 1,
-                                  "expression": "240.792 - in(0)"
+                                  "expression": "0 - in(0)"
                                 }
                               },
                               {
@@ -7359,7 +7359,7 @@
                                 "type": "atmosphere",
                                 "name": "Atmosphere",
                                 "position": {
-                                  "x": 665,
+                                  "x": 623,
                                   "y": 330
                                 },
                                 "parameters": {
@@ -7391,7 +7391,7 @@
                                 "type": "sum",
                                 "name": "BaroSum",
                                 "position": {
-                                  "x": 825,
+                                  "x": 783,
                                   "y": 368
                                 },
                                 "parameters": {
@@ -7405,12 +7405,12 @@
                                 "type": "unit_delay",
                                 "name": "BaroPrev",
                                 "position": {
-                                  "x": 1365,
+                                  "x": 1323,
                                   "y": 379
                                 },
                                 "parameters": {
                                   "showName": true,
-                                  "initialValue": 98465.678,
+                                  "initialValue": 99203.341,
                                   "sampleInterval": 0.02
                                 }
                               },
@@ -7419,7 +7419,7 @@
                                 "type": "evaluate",
                                 "name": "BaroLag",
                                 "position": {
-                                  "x": 985,
+                                  "x": 943,
                                   "y": 379
                                 },
                                 "parameters": {
@@ -7433,7 +7433,7 @@
                                 "type": "output_port",
                                 "name": "pressure",
                                 "position": {
-                                  "x": 1525,
+                                  "x": 1483,
                                   "y": 388
                                 },
                                 "parameters": {
@@ -7482,7 +7482,7 @@
                                 "targetBlockId": "baro__BaroSum",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 277.5
+                                  "midpointOffset": 256.5
                                 }
                               },
                               {
@@ -7518,7 +7518,7 @@
                               }
                             ],
                             "extents": {
-                              "width": 1825,
+                              "width": 1783,
                               "height": 631
                             }
                           }

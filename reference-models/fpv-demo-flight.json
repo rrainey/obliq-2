@@ -1035,7 +1035,7 @@
             "type": "selector",
             "name": "RollPitch",
             "position": {
-              "x": 493,
+              "x": 496,
               "y": 608
             },
             "parameters": {
@@ -1066,13 +1066,13 @@
             "type": "evaluate",
             "name": "HeightAboveField",
             "position": {
-              "x": 483,
+              "x": 460,
               "y": 1088
             },
             "parameters": {
               "showName": true,
               "numInputs": 1,
-              "expression": "-in(0)"
+              "expression": "-178.133 - in(0)"
             }
           },
           {
@@ -1080,13 +1080,13 @@
             "type": "evaluate",
             "name": "TrueAltitude",
             "position": {
-              "x": 460,
+              "x": 485,
               "y": 464
             },
             "parameters": {
               "showName": true,
               "numInputs": 1,
-              "expression": "240.792 - in(0)"
+              "expression": "0 - in(0)"
             }
           },
           {
@@ -1094,7 +1094,7 @@
             "type": "assert",
             "name": "DisarmedMotorsOff",
             "position": {
-              "x": 685,
+              "x": 692,
               "y": -64
             },
             "parameters": {
@@ -1112,7 +1112,7 @@
             "type": "assert",
             "name": "ArmedMotorsAtIdle",
             "position": {
-              "x": 685,
+              "x": 692,
               "y": -208
             },
             "parameters": {
@@ -1130,7 +1130,7 @@
             "type": "assert",
             "name": "ClimbsAfterTakeoff",
             "position": {
-              "x": 685,
+              "x": 692,
               "y": 1088
             },
             "parameters": {
@@ -1148,7 +1148,7 @@
             "type": "assert",
             "name": "LevelClimb",
             "position": {
-              "x": 685,
+              "x": 692,
               "y": 512
             },
             "parameters": {
@@ -1166,7 +1166,7 @@
             "type": "selector",
             "name": "Roll",
             "position": {
-              "x": 493,
+              "x": 496,
               "y": 176
             },
             "parameters": {
@@ -1181,7 +1181,7 @@
             "type": "assert",
             "name": "BankFollowsStick",
             "position": {
-              "x": 685,
+              "x": 692,
               "y": 224
             },
             "parameters": {
@@ -1199,7 +1199,7 @@
             "type": "selector",
             "name": "Pitch",
             "position": {
-              "x": 493,
+              "x": 496,
               "y": 32
             },
             "parameters": {
@@ -1214,7 +1214,7 @@
             "type": "assert",
             "name": "PitchFollowsStick",
             "position": {
-              "x": 685,
+              "x": 692,
               "y": 80
             },
             "parameters": {
@@ -1232,7 +1232,7 @@
             "type": "selector",
             "name": "Yaw",
             "position": {
-              "x": 493,
+              "x": 496,
               "y": 800
             },
             "parameters": {
@@ -1247,7 +1247,7 @@
             "type": "assert",
             "name": "YawTurnCompletes",
             "position": {
-              "x": 685,
+              "x": 692,
               "y": 800
             },
             "parameters": {
@@ -1265,7 +1265,7 @@
             "type": "assert",
             "name": "AttitudeEstimateTracks",
             "position": {
-              "x": 685,
+              "x": 692,
               "y": 944
             },
             "parameters": {
@@ -1283,7 +1283,7 @@
             "type": "sheet_label_source",
             "name": "From_altitude_est",
             "position": {
-              "x": 473,
+              "x": 476,
               "y": 320
             },
             "parameters": {
@@ -1296,7 +1296,7 @@
             "type": "assert",
             "name": "AltitudeEstimateTracks",
             "position": {
-              "x": 685,
+              "x": 692,
               "y": 368
             },
             "parameters": {
@@ -1327,7 +1327,7 @@
             "type": "assert",
             "name": "BatteryAboveCutoff",
             "position": {
-              "x": 685,
+              "x": 692,
               "y": -352
             },
             "parameters": {
@@ -1345,7 +1345,7 @@
             "type": "assert",
             "name": "StaysUpright",
             "position": {
-              "x": 685,
+              "x": 692,
               "y": 656
             },
             "parameters": {
@@ -1381,7 +1381,7 @@
             "targetBlockId": "tests__RollPitch",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -8.5
+              "midpointOffset": -10
             }
           },
           {
@@ -1398,7 +1398,7 @@
             "targetBlockId": "tests__HeightAboveField",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -19.5
+              "midpointOffset": -8
             }
           },
           {
@@ -1408,7 +1408,7 @@
             "targetBlockId": "tests__TrueAltitude",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -8
+              "midpointOffset": -20.5
             }
           },
           {
@@ -1418,7 +1418,7 @@
             "targetBlockId": "tests__DisarmedMotorsOff",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -31.5
+              "midpointOffset": -35
             }
           },
           {
@@ -1428,7 +1428,7 @@
             "targetBlockId": "tests__ArmedMotorsAtIdle",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -31.5
+              "midpointOffset": -35
             }
           },
           {
@@ -1445,7 +1445,7 @@
             "targetBlockId": "tests__LevelClimb",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 32
+              "midpointOffset": 34
             }
           },
           {
@@ -1455,7 +1455,7 @@
             "targetBlockId": "tests__Roll",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -8.5
+              "midpointOffset": -10
             }
           },
           {
@@ -1465,7 +1465,7 @@
             "targetBlockId": "tests__BankFollowsStick",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 8
+              "midpointOffset": 10
             }
           },
           {
@@ -1475,7 +1475,7 @@
             "targetBlockId": "tests__Pitch",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -8.5
+              "midpointOffset": -10
             }
           },
           {
@@ -1485,7 +1485,7 @@
             "targetBlockId": "tests__PitchFollowsStick",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 0
+              "midpointOffset": 2
             }
           },
           {
@@ -1495,7 +1495,7 @@
             "targetBlockId": "tests__Yaw",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -8.5
+              "midpointOffset": -10
             }
           },
           {
@@ -1519,7 +1519,7 @@
             "targetBlockId": "tests__AttitudeEstimateTracks",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -104.5
+              "midpointOffset": -108
             }
           },
           {
@@ -1529,7 +1529,7 @@
             "targetBlockId": "tests__AltitudeEstimateTracks",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 6
+              "midpointOffset": 8
             }
           },
           {
@@ -1539,7 +1539,7 @@
             "targetBlockId": "tests__AltitudeEstimateTracks",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 8
+              "midpointOffset": 20
             }
           },
           {
@@ -1556,12 +1556,12 @@
             "targetBlockId": "tests__StaysUpright",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 32
+              "midpointOffset": 34
             }
           }
         ],
         "extents": {
-          "width": 985,
+          "width": 992,
           "height": 1288
         }
       }

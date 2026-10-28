@@ -18,6 +18,7 @@ import {
   type StickProfile,
 } from '../../scripts/build-fpv-reference-model'
 import { cleanupNativeDir, compileAndRunNative } from '../support/nativeCgen'
+import { loadWmm2025, wmmField } from '../../scripts/lib/wmm'
 
 jest.setTimeout(240000)
 
@@ -132,12 +133,16 @@ describe('FPV reference model: sensors and estimators', () => {
     }
   })
 
-  it('the site is 48TX with its WMM2025 field', () => {
-    expect(LOCATION.latitudeDeg).toBe(33.45192)
-    expect(LOCATION.longitudeDeg).toBe(-96.37729)
-    expect(LOCATION.elevationM).toBeCloseTo(240.8, 1)
-    expect(SITE_FIELD.declinationDeg).toBeCloseTo(2.28, 1)
-    expect(SITE_FIELD.inclinationDeg).toBeCloseTo(61.6, 1)
+  it('the site is Prairie Creek Park with its WMM2025 field', () => {
+    expect(LOCATION.name).toBe('Prairie Creek Park, Texas')
+    expect(LOCATION.latitudeDeg).toBe(32.98562480100526)
+    expect(LOCATION.longitudeDeg).toBe(-96.71872529973575)
+    expect(LOCATION.elevationM).toBe(178.133)
+    expect(SENSORS.baro.homeAltitude).toBe(0)
+    const field = wmmField(loadWmm2025(), LOCATION.latitudeDeg, LOCATION.longitudeDeg, LOCATION.elevationM, LOCATION.epoch)
+    expect(SITE_FIELD.declinationDeg).toBe(field.declinationDeg)
+    expect(SITE_FIELD.inclinationDeg).toBe(field.inclinationDeg)
+    expect(SITE_FIELD.ned).toEqual([field.x, field.y, field.z].map(v => Number((v / 1000).toFixed(3))))
     expect(SENSORS.mag.field).toEqual(SITE_FIELD.ned)
   })
 
@@ -196,7 +201,7 @@ describe('FPV reference model: sensors and estimators', () => {
   it('altitude estimate follows the true altitude within 0.5 m, including the sink during the demo', () => {
     for (const r of [...hover, ...demo]) expect(Math.abs(r.altEst - trueAltitude(r))).toBeLessThan(0.5)
     // The demo loses real altitude, so this is tracking, not a constant
-    expect(trueAltitude(demo[demo.length - 1]!)).toBeLessThan(SENSORS.baro.homeAltitude + ALT0 - 5)
+    expect(trueAltitude(demo[demo.length - 1]!)).toBeLessThan(LOCATION.elevationM + ALT0 - 5)
   })
 
   it('the controller flies on the noisy gyro and still tracks the demo rates', () => {

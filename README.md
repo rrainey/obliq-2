@@ -183,7 +183,7 @@ independent adjustments, each of which can be left alone:
 ### Reference Models
 - [`reference-models/`](reference-models/) holds example models that are imported once into a new installation's store; existing installations can add them with **My Models → Import Model**
 - **FPV quadcopter**, as a model and the test models that embed it:
-  - **FPV Vehicle**: a 5-inch quad at Tri-County Aerodrome (48TX), Texas, with motors, battery, ground contact, IMU/magnetometer/barometer models and a Betaflight-style flight controller (acro and angle modes, Mahony estimator). The pilot's sticks are its input; telemetry is its outputs.
+  - **FPV Vehicle**: a 5-inch quad at Prairie Creek Park, Texas, with motors, battery, ground contact, IMU/magnetometer/barometer models and a Betaflight-style flight controller (acro and angle modes, Mahony estimator). The pilot's sticks are its input; telemetry is its outputs.
   - **FPV Demo Flight** and **FPV Acro Rate Step**: test models that embed the vehicle with a Model Reference, fly it with a Pilot stick profile, plot it, and check it with Assert blocks.
 
   They are built by `scripts/build-fpv-reference-model.ts`; design and sources are in [docs/fpv-reference-model-plan.md](docs/fpv-reference-model-plan.md).

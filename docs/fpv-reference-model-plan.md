@@ -162,10 +162,10 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
    - **Sensors subsystem:**
      - IMU at 1 kHz: gyro 2.8 mdps/√Hz, accelerometer 70 µg/√Hz; turn-on biases; 16-bit quantisation; ±2000 dps and ±16 g ranges.
      - Magnetometer at 100 Hz: C_bn·m_NED plus hard iron, 0.4 µT noise, 0.3 µT LSB.
-     - Barometer at 50 Hz: ISA troposphere pressure at 500 m − z, 1.3 Pa noise, and a 30 ms lag that starts at the home pressure.
+     - Barometer at 50 Hz: ISA troposphere pressure at altitude MSL (−z, because z = 0 is 0 m MSL), 1.3 Pa noise, and a 30 ms lag that starts at the field pressure.
      - Each rate is its own nested sample scope; the noise sources are seeded Random Noise blocks.
-   - **Site:** Tri-County Aerodrome (48TX), Texas: 33.45192° N, 96.37729° W, field elevation 790 ft (240.8 m, FAA estimate). The NED origin is on the field.
-   - **Magnetic field:** WMM2025 at the site for 2026.80. North 22.891 µT, east 0.910 µT, down 42.325 µT (declination 2.28° E, inclination 61.6°).
+   - **Site:** Prairie Creek Park, Texas: 32.98562480100526° N, 96.71872529973575° W. The DEM cell at the origin is 178.133 m NAVD88. z = 0 is 0 m MSL, and the field plane is z = −178.133.
+   - **Magnetic field:** WMM2025 at the park center for 2026.80. North 23.066 µT, east 1.001 µT, down 41.901 µT (declination 2.48° E, inclination 61.15°).
      - It is computed by `scripts/lib/wmm.ts` from NOAA's public-domain coefficients in `scripts/data/`.
      - That evaluator matches all 100 of NOAA's WMM2025 test values.
    - **Barometer:** pressure comes from obliq's Atmosphere block, which now evaluates the U.S. Standard Atmosphere 1976 formulae. The estimator inverts the same formulae, so sensor and estimator agree exactly.

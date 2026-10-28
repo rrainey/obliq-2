@@ -97,15 +97,18 @@ export const FC = {
 }
 
 /**
- * Notional test site: Tri-County Aerodrome (48TX), near Trenton, Texas.
- * Field elevation 790 ft MSL (FAA, estimated). The NED origin is on the field.
+ * Prairie Creek Park, Texas. The 1 km terrain database is centered here.
+ * elevationM is the NAVD88 height of the DEM cell that contains the park
+ * center (environment/dem/prairie-creek-1km.json in obliq-fpv-unity), rounded
+ * to a millimeter. z = 0 is 0 m MSL in this vehicle and in that database, so
+ * the field plane is z = −elevationM and altitude MSL is −z.
  */
 export const LOCATION = {
-  name: 'Tri-County Aerodrome (48TX), Texas',
-  latitudeDeg: 33.45192,
-  longitudeDeg: -96.37729,
-  /** m above MSL (790 ft) */
-  elevationM: 790 * 0.3048,
+  name: 'Prairie Creek Park, Texas',
+  latitudeDeg: 32.98562480100526,
+  longitudeDeg: -96.71872529973575,
+  /** m NAVD88 of the origin DEM cell; the field plane is NED z = −elevationM */
+  elevationM: 178.133,
   /** Decimal year for the magnetic field (2026-10-20) */
   epoch: 2026.8,
 }
@@ -160,8 +163,11 @@ export const SENSORS = {
   },
   baro: {
     ts: 0.02,
-    /** m above MSL at the NED origin */
-    homeAltitude: LOCATION.elevationM,
+    /**
+     * m above MSL at the NED origin. The origin is 0 m MSL. The field is
+     * LOCATION.elevationM, at z = −elevationM, not at this altitude.
+     */
+    homeAltitude: 0,
     /** Pa RMS */
     noise: 1.3,
     /** s, first-order sensor/filter lag */
@@ -532,23 +538,25 @@ function buildFrameSheet(
   const pNed = s.add('integrator', 'p_ned', { initialValue: initialPos })
   s.wire(vNed, pNed)
 
-  // Ground contact (field plane at z = 0): pushes up, never pulls; friction
-  // on horizontal motion; enters F_body so the accelerometer feels it too
+  // Ground contact (field plane at z = −elevationM): pushes up, never pulls;
+  // friction on horizontal motion; enters F_body so the accelerometer feels it too.
+  // Penetration is how far z is below the plane (positive down).
   const gc = FPV.ground
+  const penetration = `(in(0) - (${-LOCATION.elevationM}))`
   const pos = s.add('demux', 'PosSplit', { outputCount: 3, inputDimensions: [3] })
   s.wire(pNed, pos)
   const vel = s.add('demux', 'VelSplit', { outputCount: 3, inputDimensions: [3] })
   s.wire(vNed, vel)
   const fGround = s.add('mux', 'GroundForceNED', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
   ;['GroundFrictionN', 'GroundFrictionE'].forEach((name, k) => {
-    const f = s.add('evaluate', name, { numInputs: 2, expression: `(in(0) > 0.0) ? ${-gc.friction} * in(1) : 0.0` })
+    const f = s.add('evaluate', name, { numInputs: 2, expression: `(${penetration} > 0.0) ? ${-gc.friction} * in(1) : 0.0` })
     s.wire(pos, f, 0, 2)
     s.wire(vel, f, 1, k)
     s.wire(f, fGround, k)
   })
   const fN = s.add('evaluate', 'GroundNormal', {
     numInputs: 2,
-    expression: `(in(0) > 0.0) ? fmin(0.0, -(${gc.stiffness} * in(0) + ${gc.damping} * in(1))) : 0.0`,
+    expression: `(${penetration} > 0.0) ? fmin(0.0, -(${gc.stiffness} * ${penetration} + ${gc.damping} * in(1))) : 0.0`,
   })
   s.wire(pos, fN, 0, 2)
   s.wire(vel, fN, 1, 2)
@@ -557,7 +565,7 @@ function buildFrameSheet(
   s.wire(Cbn, fGroundBody, 0)
   s.wire(fGround, fGroundBody, 1)
   s.wire(fGroundBody, fBody, 2)
-  const contact = s.add('evaluate', 'OnGround', { numInputs: 1, expression: '(in(0) > 0.0) ? 1.0 : 0.0' })
+  const contact = s.add('evaluate', 'OnGround', { numInputs: 1, expression: `(${penetration} > 0.0) ? 1.0 : 0.0` })
   s.wire(pos, contact, 0, 2)
   // Specific force in body axes (what an accelerometer measures)
   const fSpecific = s.add('scale', 'SpecificForce', { gain: 1 / mass })
@@ -724,7 +732,7 @@ function buildBaroSheet(ideal: boolean, altitude0: number): SheetBuilder {
   const b = SENSORS.baro
   const down = s.add('selector', 'Down', { indices: [2] })
   s.wire(pos, down)
-  // Standard atmosphere at the geometric altitude above MSL: elevation - down
+  // Geometric altitude above MSL. z = 0 is 0 m MSL, so this is −down.
   const alt = s.add('evaluate', 'AltitudeMSL', { numInputs: 1, expression: `${b.homeAltitude} - in(0)` })
   s.wire(down, alt)
   const atm = s.add('atmosphere', 'Atmosphere', { model: 'coesa1976', extrapolation: 'clamp' })
@@ -742,7 +750,7 @@ function buildBaroSheet(ideal: boolean, altitude0: number): SheetBuilder {
   // First-order lag y += a (u - y), starting at the home pressure so the
   // sensor does not power up reading vacuum
   const a = b.ts / (b.lag + b.ts)
-  const prev = s.add('unit_delay', 'BaroPrev', { initialValue: Number(standardPressure(b.homeAltitude + altitude0).toFixed(3)), sampleInterval: b.ts })
+  const prev = s.add('unit_delay', 'BaroPrev', { initialValue: Number(standardPressure(LOCATION.elevationM + altitude0).toFixed(3)), sampleInterval: b.ts })
   const lag = s.add('evaluate', 'BaroLag', { numInputs: 2, expression: `in(1) + ${a} * (in(0) - in(1))` })
   s.wire(sum, lag, 0)
   s.wire(prev, lag, 1)
@@ -908,7 +916,7 @@ function buildAltitudeEstimatorSheet(altitude0: number): SheetBuilder {
   const aUp = s.add('evaluate', 'AccelUp', { numInputs: 1, expression: `-(in(0) + ${FPV.gravity})` })
   s.wire(fDown, aUp)
 
-  const hPrev = s.add('unit_delay', 'hPrev', { initialValue: SENSORS.baro.homeAltitude + altitude0, sampleInterval: ts })
+  const hPrev = s.add('unit_delay', 'hPrev', { initialValue: LOCATION.elevationM + altitude0, sampleInterval: ts })
   const vPrev = s.add('unit_delay', 'vPrev', { initialValue: 0, sampleInterval: ts })
   const v = s.add('evaluate', 'ClimbRate', { numInputs: 4, expression: `in(0) + ${ts} * (in(1) + ${k2} * (in(2) - in(3)))` })
   s.wire(vPrev, v, 0)
@@ -1325,7 +1333,8 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   }
   motorIds.forEach(id => main.wire(supply, id, 1, 0))
 
-  const frame = main.add('subsystem', 'Frame', subsystem(['thrust', 'rotor_accel'], FRAME_OUTPUTS, buildFrameSheet(opts.initialOmega, initialQuat, [0, 0, altitude0 > 0 ? -altitude0 : GROUND_REST_Z]), FRAME_SIZE))
+  const z0 = altitude0 > 0 ? -LOCATION.elevationM - altitude0 : -LOCATION.elevationM + GROUND_REST_Z
+  const frame = main.add('subsystem', 'Frame', subsystem(['thrust', 'rotor_accel'], FRAME_OUTPUTS, buildFrameSheet(opts.initialOmega, initialQuat, [0, 0, z0]), FRAME_SIZE))
   main.wire(thrustVec, frame, 0)
   main.wire(accelVec, frame, 1)
   if (fc) {
@@ -1666,7 +1675,7 @@ function buildTestsSheet(): SheetBuilder {
   s.wire(from('euler_est'), eulerEstDeg)
   const rollPitch = pick('RollPitch', eulerDeg, [0, 1])
   const down = pick('Down', pos, [2])
-  const height = s.add('evaluate', 'HeightAboveField', { numInputs: 1, expression: '-in(0)' })
+  const height = s.add('evaluate', 'HeightAboveField', { numInputs: 1, expression: `-${LOCATION.elevationM} - in(0)` })
   s.wire(down, height)
   const trueAltitude = s.add('evaluate', 'TrueAltitude', { numInputs: 1, expression: `${SENSORS.baro.homeAltitude} - in(0)` })
   s.wire(down, trueAltitude)

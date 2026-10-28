@@ -3,7 +3,7 @@
  * default demo, and each one reads the signal it is meant to (in the units
  * DEMO_TESTS uses).
  */
-import { buildFpvModel, DEMO_STICKS, DEMO_TESTS, FC, SENSORS } from '../../scripts/build-fpv-reference-model'
+import { buildFpvModel, DEMO_STICKS, DEMO_TESTS, FC, LOCATION } from '../../scripts/build-fpv-reference-model'
 import { runModelTests } from '@/lib/testing/modelTestRunner'
 
 jest.setTimeout(240000)
@@ -52,7 +52,7 @@ describe('FPV reference model: Tests sheet', () => {
     // Estimates against the truth: roll estimate vs true roll (degrees), and
     // altitude estimate vs field elevation at rest (metres above MSL)
     expect(Math.abs(first('AttitudeEstimateTracks').firstFailValue!)).toBeLessThan(1)
-    expect(first('AltitudeEstimateTracks').firstFailValue).toBeCloseTo(SENSORS.baro.homeAltitude, 0)
+    expect(first('AltitudeEstimateTracks').firstFailValue).toBeCloseTo(LOCATION.elevationM, 0)
     // Worst estimate errors stay inside the real limits
     expect(first('AttitudeEstimateTracks').worstViolation).toBeLessThan(t.attitudeEstimateDeg)
     expect(first('AltitudeEstimateTracks').worstViolation).toBeLessThan(t.altitudeEstimateM)

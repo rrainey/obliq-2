@@ -1,5 +1,9 @@
 # obliq-2 Change Log
 
+## Unreleased
+
+- **The FPV vehicle is at Prairie Creek Park, Texas, and its NED origin is 0 m MSL.** It was at Tri-County Aerodrome (48TX). Altitude MSL is −z. The field plane is the terrain database's origin cell, z = −178.133 m, and the vehicle rests 1 mm into that plane. The barometer and the altitude estimate still start at the field elevation. The magnetic field is WMM2025 at the park.
+
 ## What's New in 3.4.0
 
 - **Signal Display plots are drawn with uPlot (canvas), about 6× faster.** The FPV Demo Flight's Telemetry sheet (9 scopes, 10,000 samples each) now draws in about 0.2 s instead of 1.2 s.

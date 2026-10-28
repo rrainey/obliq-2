@@ -8,6 +8,7 @@ import {
   FC,
   FPV,
   GROUND_REST_Z,
+  LOCATION,
   SENSORS,
   type StickProfile,
 } from '../../scripts/build-fpv-reference-model'
@@ -47,6 +48,10 @@ function fly(name: string, opts: { sticks?: StickProfile; initialAltitude?: numb
   return { rows, outDir: result.outDir }
 }
 
+/** Field plane, NED down. Rest is 1 mm below it. */
+const fieldZ = -LOCATION.elevationM
+const restZ = fieldZ + GROUND_REST_Z
+
 const at = (rows: Row[], t: number) => rows.reduce((b, r) => (Math.abs(r.t - t) < Math.abs(b.t - t) ? r : b))
 const between = (rows: Row[], t0: number, t1: number) => rows.filter(r => r.t >= t0 && r.t <= t1)
 const still: StickProfile = { roll: [[0, 0]], pitch: [[0, 0]], yaw: [[0, 0]], throttle: [[0, 0]] }
@@ -71,7 +76,7 @@ describe('FPV reference model: ground, arming and take-off', () => {
   it('disarmed on the field: motors stopped, resting on the legs, accelerometer reads 1 g up', () => {
     for (const r of runs['disarmed']!) {
       for (const m of r.m) expect(m).toBe(0)
-      expect(r.z).toBeCloseTo(GROUND_REST_Z, 6)
+      expect(r.z).toBeCloseTo(restZ, 6)
       expect(Math.abs(r.vz)).toBeLessThan(1e-9)
     }
     const r = at(runs['disarmed']!, 0.5)
@@ -85,7 +90,7 @@ describe('FPV reference model: ground, arming and take-off', () => {
         expect(m).toBeGreaterThanOrEqual(FC.motorIdle - 1e-12)
         expect(m).toBeLessThan(0.1)
       }
-      expect(r.z).toBeGreaterThan(0)
+      expect(r.z).toBeGreaterThan(fieldZ)
       expect(Math.hypot(r.e[0]!, r.e[1]!)).toBeLessThan(0.5)
     }
     // With the I-term running, the 0.3 deg/s gyro bias would wind it up over 3 s
@@ -95,7 +100,7 @@ describe('FPV reference model: ground, arming and take-off', () => {
 
   it('a 2 m drop lands with at most a small hop and comes to rest', () => {
     const rows = runs['drop']!
-    const contact = rows.findIndex(r => r.z > 0)
+    const contact = rows.findIndex(r => r.z > fieldZ)
     expect(contact).toBeGreaterThan(0)
     // Last sample before touching down: free fall slowed a little by drag
     const impact = rows[contact - 1]!.vz
@@ -104,10 +109,10 @@ describe('FPV reference model: ground, arming and take-off', () => {
     const after = rows.slice(contact)
     // Damped legs: a few cm of compression, then at most a small hop (the
     // legs push but cannot pull, so they let go while still extending)
-    expect(Math.max(...after.map(r => r.z))).toBeLessThan(0.05)
-    expect(Math.min(...after.map(r => r.z))).toBeGreaterThan(-0.03)
+    expect(Math.max(...after.map(r => r.z))).toBeLessThan(fieldZ + 0.05)
+    expect(Math.min(...after.map(r => r.z))).toBeGreaterThan(fieldZ - 0.03)
     const last = rows[rows.length - 1]!
-    expect(last.z).toBeCloseTo(GROUND_REST_Z, 4)
+    expect(last.z).toBeCloseTo(restZ, 4)
     expect(Math.abs(last.vz)).toBeLessThan(1e-3)
   })
 
@@ -115,9 +120,9 @@ describe('FPV reference model: ground, arming and take-off', () => {
     const rows = runs['takeoff']!
     // Disarmed until 0.25 s, then idle on the ground until the throttle comes up
     for (const r of between(rows, 0, 0.24)) for (const m of r.m) expect(m).toBe(0)
-    for (const r of between(rows, 0.3, 0.55)) expect(r.z).toBeGreaterThan(0)
-    // Airborne and climbing
-    expect(at(rows, 1.5).z).toBeLessThan(-1)
+    for (const r of between(rows, 0.3, 0.55)) expect(r.z).toBeGreaterThan(fieldZ)
+    // Airborne and climbing: more than 1 m above the field plane
+    expect(at(rows, 1.5).z).toBeLessThan(fieldZ - 1)
     for (const r of between(rows, 0.6, 2.0)) expect(Math.hypot(r.e[0]!, r.e[1]!)).toBeLessThan(2)
     // The altitude estimate follows the climb from the field elevation
     for (const r of rows) expect(Math.abs(r.altEst - (SENSORS.baro.homeAltitude - r.z))).toBeLessThan(0.5)
