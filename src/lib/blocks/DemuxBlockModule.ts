@@ -36,9 +36,11 @@ export class DemuxBlockModule implements IBlockModule {
     // Prefer the type string itself: parseType can miss some shapes, but "double[3]" always has '['.
     // Do NOT trust inputDimensions alone — expandMux may set [N] even when the live
     // signal is scalar (e.g. Airspeed), which would emit illegal Airspeed[i].
+    // "condition" must be a whole name segment (Enable_condition, condition_2):
+    // a subsystem named Conditions or Preconditions is not a relational output.
     const reallyVector =
       inType.includes('[') &&
-      !/Relational_Operator|Compare_To|condition/i.test(inputExpr)
+      !/Relational_Operator|Compare_To|(^|[._>])condition\d*(_|$)/i.test(inputExpr)
     if (!reallyVector) {
       // Type map may still say scalar while the signal is a vector in the
       // struct (Product double[3], aerolib SinCos). Index only when the
