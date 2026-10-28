@@ -1,0 +1,2099 @@
+{
+  "name": "FPV T23 OSD Outputs",
+  "data": {
+    "version": "2.2",
+    "metadata": {
+      "created": "2026-10-21T00:00:00.000Z",
+      "description": "Validation test for the flight controller OSD outputs (docs/fpv-hud-gnss-test-plan.md, T23): armed in acro, the throttle latches airmode, then angle mode, Alt Hold, Pos Hold, the rescue switch (which overrides both holds) and a link loss; fc_mode follows Betaflight's priority (!FS! > RESC > POSH > ALTH > ANGL > AIR > ACRO). Satellites drop to 2 in angle mode (no fix: RESCUE N/A), and mAh drawn matches the state of charge throughout."
+    },
+    "globalSettings": {
+      "simulationTimeStep": 0.0005,
+      "simulationDuration": 20,
+      "integrationAlgorithm": "rk4",
+      "debugMath": false
+    },
+    "parameters": [],
+    "dataStores": [],
+    "sheets": [
+      {
+        "id": "main",
+        "name": "Main",
+        "blocks": [
+          {
+            "id": "main__Pilot",
+            "type": "subsystem",
+            "name": "Pilot",
+            "position": {
+              "x": 125,
+              "y": 26
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [],
+              "outputPorts": [
+                "sticks"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "flatten",
+              "sheets": [
+                {
+                  "id": "pilot",
+                  "name": "Pilot",
+                  "blocks": [
+                    {
+                      "id": "pilot__Time",
+                      "type": "clock",
+                      "name": "Time",
+                      "position": {
+                        "x": 100,
+                        "y": 368
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "pilot__Sticks",
+                      "type": "mux",
+                      "name": "Sticks",
+                      "position": {
+                        "x": 424,
+                        "y": 310
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "rows": 8,
+                        "cols": 1,
+                        "baseType": "double",
+                        "outputType": "double[8]"
+                      }
+                    },
+                    {
+                      "id": "pilot__RollStick",
+                      "type": "lookup_1d",
+                      "name": "RollStick",
+                      "position": {
+                        "x": 260,
+                        "y": -136
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          0,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__PitchStick",
+                      "type": "lookup_1d",
+                      "name": "PitchStick",
+                      "position": {
+                        "x": 260,
+                        "y": 8
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          0,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__YawStick",
+                      "type": "lookup_1d",
+                      "name": "YawStick",
+                      "position": {
+                        "x": 260,
+                        "y": 152
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          1
+                        ],
+                        "outputValues": [
+                          0,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__ThrottleStick",
+                      "type": "lookup_1d",
+                      "name": "ThrottleStick",
+                      "position": {
+                        "x": 260,
+                        "y": 296
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          0.7,
+                          0.8,
+                          1.4,
+                          1.5
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          0.6,
+                          0.6,
+                          0.4383
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__AngleModeSwitch",
+                      "type": "lookup_1d",
+                      "name": "AngleModeSwitch",
+                      "position": {
+                        "x": 260,
+                        "y": 440
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          2.999,
+                          3
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          1
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__ArmSwitch",
+                      "type": "lookup_1d",
+                      "name": "ArmSwitch",
+                      "position": {
+                        "x": 260,
+                        "y": 584
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          0.25,
+                          0.251
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          1
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__RescueSwitch",
+                      "type": "lookup_1d",
+                      "name": "RescueSwitch",
+                      "position": {
+                        "x": 260,
+                        "y": 728
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          12.999,
+                          13,
+                          14.999,
+                          15
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          1,
+                          1,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__HoldSwitch",
+                      "type": "lookup_1d",
+                      "name": "HoldSwitch",
+                      "position": {
+                        "x": 260,
+                        "y": 872
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          8.999,
+                          9,
+                          10.999,
+                          11
+                        ],
+                        "outputValues": [
+                          0,
+                          0,
+                          0.5,
+                          0.5,
+                          1
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "pilot__sticks",
+                      "type": "output_port",
+                      "name": "sticks",
+                      "position": {
+                        "x": 594,
+                        "y": 378
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "sticks",
+                        "dataType": "double[8]"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_pilot__Time_pilot__RollStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__RollStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_2_pilot__RollStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__RollStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 20
+                      }
+                    },
+                    {
+                      "id": "w_3_pilot__Time_pilot__PitchStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__PitchStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_4_pilot__PitchStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__PitchStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_5_pilot__Time_pilot__YawStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__YawStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_6_pilot__YawStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__YawStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -12
+                      }
+                    },
+                    {
+                      "id": "w_7_pilot__Time_pilot__ThrottleStick",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__ThrottleStick",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_8_pilot__ThrottleStick_pilot__Sticks",
+                      "sourceBlockId": "pilot__ThrottleStick",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": -28
+                      }
+                    },
+                    {
+                      "id": "w_9_pilot__Time_pilot__AngleModeSwitch",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__AngleModeSwitch",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_10_pilot__AngleModeSwitch_pilot__Sticks",
+                      "sourceBlockId": "pilot__AngleModeSwitch",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 4,
+                      "routing": {
+                        "midpointOffset": -20
+                      }
+                    },
+                    {
+                      "id": "w_11_pilot__Time_pilot__ArmSwitch",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__ArmSwitch",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_12_pilot__ArmSwitch_pilot__Sticks",
+                      "sourceBlockId": "pilot__ArmSwitch",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 5,
+                      "routing": {
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_13_pilot__Time_pilot__RescueSwitch",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__RescueSwitch",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_14_pilot__RescueSwitch_pilot__Sticks",
+                      "sourceBlockId": "pilot__RescueSwitch",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 6,
+                      "routing": {
+                        "midpointOffset": 12
+                      }
+                    },
+                    {
+                      "id": "w_15_pilot__Time_pilot__HoldSwitch",
+                      "sourceBlockId": "pilot__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__HoldSwitch",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 0
+                      }
+                    },
+                    {
+                      "id": "w_16_pilot__HoldSwitch_pilot__Sticks",
+                      "sourceBlockId": "pilot__HoldSwitch",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__Sticks",
+                      "targetPortIndex": 7,
+                      "routing": {
+                        "midpointOffset": 28
+                      }
+                    },
+                    {
+                      "id": "w_17_pilot__Sticks_pilot__sticks",
+                      "sourceBlockId": "pilot__Sticks",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "pilot__sticks",
+                      "targetPortIndex": 0
+                    }
+                  ],
+                  "extents": {
+                    "width": 894,
+                    "height": 1072
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "main__Vehicle",
+            "type": "subsystem",
+            "name": "Vehicle",
+            "position": {
+              "x": 310,
+              "y": -58
+            },
+            "parameters": {
+              "showName": true,
+              "showPortNames": true,
+              "sheets": [],
+              "inputPorts": [
+                "sticks",
+                "gnss_env",
+                "grid_convergence_deg",
+                "rc_link_valid",
+                "failsafe_procedure",
+                "wind_ned"
+              ],
+              "outputPorts": [
+                "battery_voltage",
+                "battery_current",
+                "battery_soc",
+                "battery_mah_drawn",
+                "imu_gyro",
+                "imu_accel",
+                "mag",
+                "pressure",
+                "gnss_pos",
+                "gnss_vel_ned",
+                "gnss_fix",
+                "gnss_course",
+                "pos_ned",
+                "vel_ned",
+                "quat",
+                "euler",
+                "omega",
+                "accel",
+                "motor_omega",
+                "motor_cmd",
+                "rate_setpoint",
+                "gyro_dps",
+                "euler_est",
+                "quat_est",
+                "heading_deg",
+                "fc_armed",
+                "fc_angle_mode",
+                "fc_airmode",
+                "home_valid",
+                "home_distance_m",
+                "home_bearing_deg",
+                "fc_mode",
+                "fc_warnings",
+                "failsafe_stage",
+                "alt_est",
+                "vario_est",
+                "gps_heading_ok",
+                "alt_hold_active",
+                "pos_hold_active",
+                "rescue_active",
+                "rescue_phase"
+              ],
+              "modelRef": {
+                "modelId": "reference-model:fpv-vehicle",
+                "version": null,
+                "name": "FPV Vehicle"
+              },
+              "modelRefName": "FPV Vehicle"
+            }
+          },
+          {
+            "id": "main__Conditions",
+            "type": "subsystem",
+            "name": "Conditions",
+            "position": {
+              "x": 100,
+              "y": 362
+            },
+            "parameters": {
+              "showName": true,
+              "inputPorts": [],
+              "outputPorts": [
+                "gnss_env",
+                "grid_convergence_deg",
+                "rc_link_valid",
+                "failsafe_procedure",
+                "wind_ned"
+              ],
+              "showPortNames": true,
+              "codeGenStrategy": "flatten",
+              "sheets": [
+                {
+                  "id": "conditions",
+                  "name": "Conditions",
+                  "blocks": [
+                    {
+                      "id": "conditions__GnssEnv",
+                      "type": "mux",
+                      "name": "GnssEnv",
+                      "position": {
+                        "x": 430,
+                        "y": 639
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "rows": 4,
+                        "cols": 1,
+                        "baseType": "double",
+                        "outputType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "conditions__Satellites",
+                      "type": "lookup_1d",
+                      "name": "Satellites",
+                      "position": {
+                        "x": 265,
+                        "y": 471
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          3.999,
+                          4,
+                          7.499,
+                          7.5
+                        ],
+                        "outputValues": [
+                          14,
+                          14,
+                          2,
+                          2,
+                          14
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "conditions__Time",
+                      "type": "clock",
+                      "name": "Time",
+                      "position": {
+                        "x": 100,
+                        "y": 265
+                      },
+                      "parameters": {
+                        "showName": true
+                      }
+                    },
+                    {
+                      "id": "conditions__HDOP",
+                      "type": "source",
+                      "name": "HDOP",
+                      "position": {
+                        "x": 265,
+                        "y": 615
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 0.8,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__VDOP",
+                      "type": "source",
+                      "name": "VDOP",
+                      "position": {
+                        "x": 265,
+                        "y": 759
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1.3,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__UereScale",
+                      "type": "source",
+                      "name": "UereScale",
+                      "position": {
+                        "x": 265,
+                        "y": 903
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__gnss_env",
+                      "type": "output_port",
+                      "name": "gnss_env",
+                      "position": {
+                        "x": 648,
+                        "y": 667
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "gnss_env",
+                        "dataType": "double[4]"
+                      }
+                    },
+                    {
+                      "id": "conditions__GridConvergence",
+                      "type": "source",
+                      "name": "GridConvergence",
+                      "position": {
+                        "x": 100,
+                        "y": -23
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 1.2425,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__grid_convergence_deg",
+                      "type": "output_port",
+                      "name": "grid_convergence_deg",
+                      "position": {
+                        "x": 600,
+                        "y": 11
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "grid_convergence_deg",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__RcLinkValid",
+                      "type": "lookup_1d",
+                      "name": "RcLinkValid",
+                      "position": {
+                        "x": 265,
+                        "y": 141
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputValues": [
+                          0,
+                          16.999,
+                          17
+                        ],
+                        "outputValues": [
+                          1,
+                          1,
+                          0
+                        ],
+                        "extrapolation": "clamp"
+                      }
+                    },
+                    {
+                      "id": "conditions__rc_link_valid",
+                      "type": "output_port",
+                      "name": "rc_link_valid",
+                      "position": {
+                        "x": 628,
+                        "y": 150
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "rc_link_valid",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__FailsafeProcedure",
+                      "type": "source",
+                      "name": "FailsafeProcedure",
+                      "position": {
+                        "x": 100,
+                        "y": -167
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 2,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__failsafe_procedure",
+                      "type": "output_port",
+                      "name": "failsafe_procedure",
+                      "position": {
+                        "x": 608,
+                        "y": -133
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "failsafe_procedure",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__Wind",
+                      "type": "mux",
+                      "name": "Wind",
+                      "position": {
+                        "x": 260,
+                        "y": 311
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "rows": 3,
+                        "cols": 1,
+                        "baseType": "double",
+                        "outputType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "conditions__WindNorth",
+                      "type": "source",
+                      "name": "WindNorth",
+                      "position": {
+                        "x": 100,
+                        "y": 121
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 0,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__WindEast",
+                      "type": "source",
+                      "name": "WindEast",
+                      "position": {
+                        "x": 100,
+                        "y": 409
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 0,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__WindDown",
+                      "type": "source",
+                      "name": "WindDown",
+                      "position": {
+                        "x": 100,
+                        "y": 553
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 0,
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "conditions__wind_ned",
+                      "type": "output_port",
+                      "name": "wind_ned",
+                      "position": {
+                        "x": 648,
+                        "y": 446
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "wind_ned",
+                        "dataType": "double[3]"
+                      }
+                    }
+                  ],
+                  "connections": [
+                    {
+                      "id": "w_1_conditions__Time_conditions__Satellites",
+                      "sourceBlockId": "conditions__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__Satellites",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -6.5
+                      }
+                    },
+                    {
+                      "id": "w_2_conditions__Satellites_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__Satellites",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 14.5
+                      }
+                    },
+                    {
+                      "id": "w_3_conditions__HDOP_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__HDOP",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -17.5
+                      }
+                    },
+                    {
+                      "id": "w_4_conditions__VDOP_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__VDOP",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -9.5
+                      }
+                    },
+                    {
+                      "id": "w_5_conditions__UereScale_conditions__GnssEnv",
+                      "sourceBlockId": "conditions__UereScale",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__GnssEnv",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": 22.5
+                      }
+                    },
+                    {
+                      "id": "w_6_conditions__GnssEnv_conditions__gnss_env",
+                      "sourceBlockId": "conditions__GnssEnv",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__gnss_env",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_7_conditions__GridConvergence_conditions__grid_convergence_deg",
+                      "sourceBlockId": "conditions__GridConvergence",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__grid_convergence_deg",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_8_conditions__Time_conditions__RcLinkValid",
+                      "sourceBlockId": "conditions__Time",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__RcLinkValid",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -6.5
+                      }
+                    },
+                    {
+                      "id": "w_9_conditions__RcLinkValid_conditions__rc_link_valid",
+                      "sourceBlockId": "conditions__RcLinkValid",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__rc_link_valid",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_10_conditions__FailsafeProcedure_conditions__failsafe_procedure",
+                      "sourceBlockId": "conditions__FailsafeProcedure",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__failsafe_procedure",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -8
+                      }
+                    },
+                    {
+                      "id": "w_11_conditions__WindNorth_conditions__Wind",
+                      "sourceBlockId": "conditions__WindNorth",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__Wind",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 4
+                      }
+                    },
+                    {
+                      "id": "w_12_conditions__WindEast_conditions__Wind",
+                      "sourceBlockId": "conditions__WindEast",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__Wind",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -12
+                      }
+                    },
+                    {
+                      "id": "w_13_conditions__WindDown_conditions__Wind",
+                      "sourceBlockId": "conditions__WindDown",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__Wind",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": 12
+                      }
+                    },
+                    {
+                      "id": "w_14_conditions__Wind_conditions__wind_ned",
+                      "sourceBlockId": "conditions__Wind",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "conditions__wind_ned",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 61
+                      }
+                    }
+                  ],
+                  "extents": {
+                    "width": 948,
+                    "height": 1103
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "main__Tag_battery_soc",
+            "type": "sheet_label_sink",
+            "name": "Tag_battery_soc",
+            "position": {
+              "x": 496,
+              "y": -208
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "battery_soc"
+            }
+          },
+          {
+            "id": "main__Tag_battery_mah_drawn",
+            "type": "sheet_label_sink",
+            "name": "Tag_battery_mah_drawn",
+            "position": {
+              "x": 496,
+              "y": -64
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "battery_mah_drawn"
+            }
+          },
+          {
+            "id": "main__Tag_pos_ned",
+            "type": "sheet_label_sink",
+            "name": "Tag_pos_ned",
+            "position": {
+              "x": 502,
+              "y": 80
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_ned"
+            }
+          },
+          {
+            "id": "main__Tag_euler",
+            "type": "sheet_label_sink",
+            "name": "Tag_euler",
+            "position": {
+              "x": 516,
+              "y": 224
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "euler"
+            }
+          },
+          {
+            "id": "main__Tag_fc_airmode",
+            "type": "sheet_label_sink",
+            "name": "Tag_fc_airmode",
+            "position": {
+              "x": 496,
+              "y": 368
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_airmode"
+            }
+          },
+          {
+            "id": "main__Tag_fc_mode",
+            "type": "sheet_label_sink",
+            "name": "Tag_fc_mode",
+            "position": {
+              "x": 502,
+              "y": 512
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_mode"
+            }
+          },
+          {
+            "id": "main__Tag_fc_warnings",
+            "type": "sheet_label_sink",
+            "name": "Tag_fc_warnings",
+            "position": {
+              "x": 496,
+              "y": 656
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_warnings"
+            }
+          },
+          {
+            "id": "main__Tag_alt_hold_active",
+            "type": "sheet_label_sink",
+            "name": "Tag_alt_hold_active",
+            "position": {
+              "x": 496,
+              "y": 800
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "alt_hold_active"
+            }
+          },
+          {
+            "id": "main__Tag_pos_hold_active",
+            "type": "sheet_label_sink",
+            "name": "Tag_pos_hold_active",
+            "position": {
+              "x": 496,
+              "y": 944
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_hold_active"
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_main__Pilot_main__Vehicle",
+            "sourceBlockId": "main__Pilot",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_2_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -12
+            }
+          },
+          {
+            "id": "w_3_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": 4
+            }
+          },
+          {
+            "id": "w_4_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 3
+          },
+          {
+            "id": "w_5_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 4,
+            "routing": {
+              "midpointOffset": 12
+            }
+          },
+          {
+            "id": "w_6_main__Conditions_main__Vehicle",
+            "sourceBlockId": "main__Conditions",
+            "sourcePortIndex": 4,
+            "targetBlockId": "main__Vehicle",
+            "targetPortIndex": 5,
+            "routing": {
+              "midpointOffset": -4
+            }
+          },
+          {
+            "id": "w_7_main__Vehicle_main__Tag_battery_soc",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__Tag_battery_soc",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -32
+            }
+          },
+          {
+            "id": "w_8_main__Vehicle_main__Tag_battery_mah_drawn",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__Tag_battery_mah_drawn",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 24
+            }
+          },
+          {
+            "id": "w_9_main__Vehicle_main__Tag_pos_ned",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 12,
+            "targetBlockId": "main__Tag_pos_ned",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -19
+            }
+          },
+          {
+            "id": "w_10_main__Vehicle_main__Tag_euler",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 15,
+            "targetBlockId": "main__Tag_euler",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -18
+            }
+          },
+          {
+            "id": "w_11_main__Vehicle_main__Tag_fc_airmode",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 27,
+            "targetBlockId": "main__Tag_fc_airmode",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 0
+            }
+          },
+          {
+            "id": "w_12_main__Vehicle_main__Tag_fc_mode",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 31,
+            "targetBlockId": "main__Tag_fc_mode",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 5
+            }
+          },
+          {
+            "id": "w_13_main__Vehicle_main__Tag_fc_warnings",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 32,
+            "targetBlockId": "main__Tag_fc_warnings",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 16
+            }
+          },
+          {
+            "id": "w_14_main__Vehicle_main__Tag_alt_hold_active",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 37,
+            "targetBlockId": "main__Tag_alt_hold_active",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 32
+            }
+          },
+          {
+            "id": "w_15_main__Vehicle_main__Tag_pos_hold_active",
+            "sourceBlockId": "main__Vehicle",
+            "sourcePortIndex": 38,
+            "targetBlockId": "main__Tag_pos_hold_active",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -24
+            }
+          }
+        ],
+        "extents": {
+          "width": 816,
+          "height": 1144
+        }
+      },
+      {
+        "id": "telemetry",
+        "name": "Telemetry",
+        "blocks": [
+          {
+            "id": "telemetry__From_fc_mode",
+            "type": "sheet_label_source",
+            "name": "From_fc_mode",
+            "position": {
+              "x": 106,
+              "y": 296
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_mode"
+            }
+          },
+          {
+            "id": "telemetry__Mode",
+            "type": "signal_display",
+            "name": "Mode",
+            "position": {
+              "x": 300,
+              "y": 296
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "telemetry__From_fc_warnings",
+            "type": "sheet_label_source",
+            "name": "From_fc_warnings",
+            "position": {
+              "x": 100,
+              "y": 440
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_warnings"
+            }
+          },
+          {
+            "id": "telemetry__Warnings",
+            "type": "signal_display",
+            "name": "Warnings",
+            "position": {
+              "x": 300,
+              "y": 440
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "telemetry__From_fc_airmode",
+            "type": "sheet_label_source",
+            "name": "From_fc_airmode",
+            "position": {
+              "x": 100,
+              "y": 152
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_airmode"
+            }
+          },
+          {
+            "id": "telemetry__Airmode",
+            "type": "signal_display",
+            "name": "Airmode",
+            "position": {
+              "x": 300,
+              "y": 152
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          },
+          {
+            "id": "telemetry__From_pos_ned",
+            "type": "sheet_label_source",
+            "name": "From_pos_ned",
+            "position": {
+              "x": 106,
+              "y": 584
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_ned"
+            }
+          },
+          {
+            "id": "telemetry__Position",
+            "type": "signal_display",
+            "name": "Position",
+            "position": {
+              "x": 300,
+              "y": 584
+            },
+            "parameters": {
+              "showName": true,
+              "maxSamples": 10000
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_telemetry__From_fc_mode_telemetry__Mode",
+            "sourceBlockId": "telemetry__From_fc_mode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__Mode",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_2_telemetry__From_fc_warnings_telemetry__Warnings",
+            "sourceBlockId": "telemetry__From_fc_warnings",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__Warnings",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_3_telemetry__From_fc_airmode_telemetry__Airmode",
+            "sourceBlockId": "telemetry__From_fc_airmode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__Airmode",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_4_telemetry__From_pos_ned_telemetry__Position",
+            "sourceBlockId": "telemetry__From_pos_ned",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__Position",
+            "targetPortIndex": 0
+          }
+        ],
+        "extents": {
+          "width": 600,
+          "height": 784
+        }
+      },
+      {
+        "id": "tests",
+        "name": "Tests",
+        "blocks": [
+          {
+            "id": "tests__From_fc_mode",
+            "type": "sheet_label_source",
+            "name": "From_fc_mode",
+            "position": {
+              "x": 106,
+              "y": 80
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_mode"
+            }
+          },
+          {
+            "id": "tests__From_fc_airmode",
+            "type": "sheet_label_source",
+            "name": "From_fc_airmode",
+            "position": {
+              "x": 100,
+              "y": -640
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_airmode"
+            }
+          },
+          {
+            "id": "tests__ModeAcro",
+            "type": "assert",
+            "name": "ModeAcro",
+            "position": {
+              "x": 832,
+              "y": -424
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 0.3,
+              "checkUntil": 0.7,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__ModeAir",
+            "type": "assert",
+            "name": "ModeAir",
+            "position": {
+              "x": 832,
+              "y": -280
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 1,
+              "upper": 1,
+              "checkFrom": 0.8,
+              "checkUntil": 2.95,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__ModeAngle",
+            "type": "assert",
+            "name": "ModeAngle",
+            "position": {
+              "x": 832,
+              "y": 8
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 2,
+              "upper": 2,
+              "checkFrom": 3.05,
+              "checkUntil": 8.95,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__ModeAltHold",
+            "type": "assert",
+            "name": "ModeAltHold",
+            "position": {
+              "x": 832,
+              "y": -136
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 4,
+              "upper": 4,
+              "checkFrom": 9.05,
+              "checkUntil": 10.95,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__ModePosHold",
+            "type": "assert",
+            "name": "ModePosHold",
+            "position": {
+              "x": 832,
+              "y": 296
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 5,
+              "upper": 5,
+              "checkFrom": 11.05,
+              "checkUntil": 12.95,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__ModeRescue",
+            "type": "assert",
+            "name": "ModeRescue",
+            "position": {
+              "x": 832,
+              "y": 584
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 6,
+              "upper": 6,
+              "checkFrom": 13.05,
+              "checkUntil": 14.95,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__ModePosHoldAfterRescue",
+            "type": "assert",
+            "name": "ModePosHoldAfterRescue",
+            "position": {
+              "x": 832,
+              "y": 440
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 5,
+              "upper": 5,
+              "checkFrom": 15.05,
+              "checkUntil": 16.95,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__ModeFailsafe",
+            "type": "assert",
+            "name": "ModeFailsafe",
+            "position": {
+              "x": 832,
+              "y": 152
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 7,
+              "upper": 7,
+              "checkFrom": 17.05,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__AirmodeOffAtLowThrottle",
+            "type": "assert",
+            "name": "AirmodeOffAtLowThrottle",
+            "position": {
+              "x": 832,
+              "y": -568
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 0.3,
+              "checkUntil": 0.7,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__AirmodeLatched",
+            "type": "assert",
+            "name": "AirmodeLatched",
+            "position": {
+              "x": 832,
+              "y": -712
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 1,
+              "upper": 1,
+              "checkFrom": 0.8,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__From_alt_hold_active",
+            "type": "sheet_label_source",
+            "name": "From_alt_hold_active",
+            "position": {
+              "x": 100,
+              "y": -856
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "alt_hold_active"
+            }
+          },
+          {
+            "id": "tests__RescueOverridesAltHold",
+            "type": "assert",
+            "name": "RescueOverridesAltHold",
+            "position": {
+              "x": 832,
+              "y": -856
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 13.05,
+              "checkUntil": 14.95,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__From_pos_hold_active",
+            "type": "sheet_label_source",
+            "name": "From_pos_hold_active",
+            "position": {
+              "x": 100,
+              "y": 800
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "pos_hold_active"
+            }
+          },
+          {
+            "id": "tests__RescueOverridesPosHold",
+            "type": "assert",
+            "name": "RescueOverridesPosHold",
+            "position": {
+              "x": 832,
+              "y": 872
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 13.05,
+              "checkUntil": 14.95,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__HoldsResumeAfterRescue",
+            "type": "assert",
+            "name": "HoldsResumeAfterRescue",
+            "position": {
+              "x": 832,
+              "y": 728
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 1,
+              "upper": 1,
+              "checkFrom": 15.1,
+              "checkUntil": 16.95,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__From_fc_warnings",
+            "type": "sheet_label_source",
+            "name": "From_fc_warnings",
+            "position": {
+              "x": 100,
+              "y": 1304
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_warnings"
+            }
+          },
+          {
+            "id": "tests__WarnRescueNA",
+            "type": "evaluate",
+            "name": "WarnRescueNA",
+            "position": {
+              "x": 300,
+              "y": 1304
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "fmod(floor(in(0) / 1.0 + 1e-9), 2.0)"
+            }
+          },
+          {
+            "id": "tests__RescueAvailableBefore",
+            "type": "assert",
+            "name": "RescueAvailableBefore",
+            "position": {
+              "x": 832,
+              "y": 1304
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 0.3,
+              "checkUntil": 3.95,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__RescueNotAvailable",
+            "type": "assert",
+            "name": "RescueNotAvailable",
+            "position": {
+              "x": 832,
+              "y": 1448
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 1,
+              "upper": 1,
+              "checkFrom": 5.05,
+              "checkUntil": 7.45,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__RescueAvailableAgain",
+            "type": "assert",
+            "name": "RescueAvailableAgain",
+            "position": {
+              "x": 832,
+              "y": 1160
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 0,
+              "upper": 0,
+              "checkFrom": 9.6,
+              "checkUntil": 12.95,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__From_battery_mah_drawn",
+            "type": "sheet_label_source",
+            "name": "From_battery_mah_drawn",
+            "position": {
+              "x": 100,
+              "y": 944
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "battery_mah_drawn"
+            }
+          },
+          {
+            "id": "tests__From_battery_soc",
+            "type": "sheet_label_source",
+            "name": "From_battery_soc",
+            "position": {
+              "x": 100,
+              "y": 1088
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "battery_soc"
+            }
+          },
+          {
+            "id": "tests__MahDrawnError",
+            "type": "evaluate",
+            "name": "MahDrawnError",
+            "position": {
+              "x": 328,
+              "y": 1016
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 2,
+              "expression": "in(0) - (1.0 - in(1)) * 1300"
+            }
+          },
+          {
+            "id": "tests__MahDrawnMatchesSoc",
+            "type": "assert",
+            "name": "MahDrawnMatchesSoc",
+            "position": {
+              "x": 832,
+              "y": 1016
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -1e-9,
+              "upper": 1e-9,
+              "checkFrom": 0,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
+            "id": "tests__RollPitchDeg",
+            "type": "scale",
+            "name": "RollPitchDeg",
+            "position": {
+              "x": 672,
+              "y": 1592
+            },
+            "parameters": {
+              "showName": true,
+              "gain": 57.29577951308232
+            }
+          },
+          {
+            "id": "tests__From_euler",
+            "type": "sheet_label_source",
+            "name": "From_euler",
+            "position": {
+              "x": 120,
+              "y": 1592
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "euler"
+            }
+          },
+          {
+            "id": "tests__RollPitch",
+            "type": "selector",
+            "name": "RollPitch",
+            "position": {
+              "x": 406,
+              "y": 1592
+            },
+            "parameters": {
+              "showName": true,
+              "indices": [
+                0,
+                1
+              ]
+            }
+          },
+          {
+            "id": "tests__StaysUpright",
+            "type": "assert",
+            "name": "StaysUpright",
+            "position": {
+              "x": 832,
+              "y": 1592
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": -60,
+              "upper": 60,
+              "checkFrom": 0,
+              "checkUntil": null,
+              "onFailure": "stop"
+            }
+          }
+        ],
+        "connections": [
+          {
+            "id": "w_1_tests__From_fc_mode_tests__ModeAcro",
+            "sourceBlockId": "tests__From_fc_mode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ModeAcro",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 265
+            }
+          },
+          {
+            "id": "w_2_tests__From_fc_mode_tests__ModeAir",
+            "sourceBlockId": "tests__From_fc_mode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ModeAir",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 265
+            }
+          },
+          {
+            "id": "w_3_tests__From_fc_mode_tests__ModeAngle",
+            "sourceBlockId": "tests__From_fc_mode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ModeAngle",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 265
+            }
+          },
+          {
+            "id": "w_4_tests__From_fc_mode_tests__ModeAltHold",
+            "sourceBlockId": "tests__From_fc_mode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ModeAltHold",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 265
+            }
+          },
+          {
+            "id": "w_5_tests__From_fc_mode_tests__ModePosHold",
+            "sourceBlockId": "tests__From_fc_mode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ModePosHold",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 265
+            }
+          },
+          {
+            "id": "w_6_tests__From_fc_mode_tests__ModeRescue",
+            "sourceBlockId": "tests__From_fc_mode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ModeRescue",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 265
+            }
+          },
+          {
+            "id": "w_7_tests__From_fc_mode_tests__ModePosHoldAfterRescue",
+            "sourceBlockId": "tests__From_fc_mode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ModePosHoldAfterRescue",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 265
+            }
+          },
+          {
+            "id": "w_8_tests__From_fc_mode_tests__ModeFailsafe",
+            "sourceBlockId": "tests__From_fc_mode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ModeFailsafe",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 265
+            }
+          },
+          {
+            "id": "w_9_tests__From_fc_airmode_tests__AirmodeOffAtLowThrottle",
+            "sourceBlockId": "tests__From_fc_airmode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__AirmodeOffAtLowThrottle",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 254
+            }
+          },
+          {
+            "id": "w_10_tests__From_fc_airmode_tests__AirmodeLatched",
+            "sourceBlockId": "tests__From_fc_airmode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__AirmodeLatched",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 254
+            }
+          },
+          {
+            "id": "w_11_tests__From_alt_hold_active_tests__RescueOverridesAltHold",
+            "sourceBlockId": "tests__From_alt_hold_active",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RescueOverridesAltHold",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_12_tests__From_pos_hold_active_tests__RescueOverridesPosHold",
+            "sourceBlockId": "tests__From_pos_hold_active",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RescueOverridesPosHold",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 270
+            }
+          },
+          {
+            "id": "w_13_tests__From_pos_hold_active_tests__HoldsResumeAfterRescue",
+            "sourceBlockId": "tests__From_pos_hold_active",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__HoldsResumeAfterRescue",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 270
+            }
+          },
+          {
+            "id": "w_14_tests__From_fc_warnings_tests__WarnRescueNA",
+            "sourceBlockId": "tests__From_fc_warnings",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__WarnRescueNA",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_15_tests__WarnRescueNA_tests__RescueAvailableBefore",
+            "sourceBlockId": "tests__WarnRescueNA",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RescueAvailableBefore",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_16_tests__WarnRescueNA_tests__RescueNotAvailable",
+            "sourceBlockId": "tests__WarnRescueNA",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RescueNotAvailable",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 92
+            }
+          },
+          {
+            "id": "w_17_tests__WarnRescueNA_tests__RescueAvailableAgain",
+            "sourceBlockId": "tests__WarnRescueNA",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RescueAvailableAgain",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 92
+            }
+          },
+          {
+            "id": "w_18_tests__From_battery_mah_drawn_tests__MahDrawnError",
+            "sourceBlockId": "tests__From_battery_mah_drawn",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__MahDrawnError",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -18
+            }
+          },
+          {
+            "id": "w_19_tests__From_battery_soc_tests__MahDrawnError",
+            "sourceBlockId": "tests__From_battery_soc",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__MahDrawnError",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -10
+            }
+          },
+          {
+            "id": "w_20_tests__MahDrawnError_tests__MahDrawnMatchesSoc",
+            "sourceBlockId": "tests__MahDrawnError",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__MahDrawnMatchesSoc",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_21_tests__From_euler_tests__RollPitch",
+            "sourceBlockId": "tests__From_euler",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RollPitch",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_22_tests__RollPitch_tests__RollPitchDeg",
+            "sourceBlockId": "tests__RollPitch",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__RollPitchDeg",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_23_tests__RollPitchDeg_tests__StaysUpright",
+            "sourceBlockId": "tests__RollPitchDeg",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__StaysUpright",
+            "targetPortIndex": 0
+          }
+        ],
+        "extents": {
+          "width": 1132,
+          "height": 1792
+        }
+      }
+    ]
+  }
+}

@@ -97,7 +97,7 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | **T20 No-Mag Rescue** (vehicle without mag) | 62 s | As T11 on the vehicle without a magnetometer (its fly-out heads north-east, the vehicle facing 60°) | The T11 checks: mean altitude +0.1 m (swing 0.9 m), ground speed 8.8 m/s, DESCENT at 19.6 m, touchdown 1.9 m from home |
 | **T21 Altitude Estimator** | 30 s | Climb; pDOP 1.5, then 6 from 10 s, no fix from 20 s, the fix back at 25 s | `alt_est` = 0 until arming; then within 1.5 m of the height above the arming point in each phase (measured worst 0.96, 0.57 and 0.26 m); `vario_est` RMS error within 1.0 m/s with GPS and 0.3 m/s on baro alone (measured 0.42 and 0.15). The trust is 0 without a fix in `fpv-estimators`. |
 | **T22 Wind** | 15 s | Angle-mode hover after a climb (no position control); wind 3 m/s north from t = 3 | North velocity within ±0.5 m/s before the wind; from t = 13, within ±15% of the wind speed. Drag balances at the wind's speed; the margin covers the hover's drift of about 0.25 m/s from the estimator's tilt error. |
-| **T23 OSD Outputs** | 20 s | Arm, angle, acro with airmode, hold, rescue, failsafe, in sequence | `fc_mode` follows the priority order (!FS! > RESC > POSH > ALTH > ANGL > AIR > ACRO); `fc_airmode` latches at 25% throttle; `battery_mah_drawn` = (1 − SOC) × 1300; `RESCUE N/A` after 2 s with fewer than 4 satellites while armed with a home |
+| **T23 OSD Outputs** | 20 s | Armed in acro at 0.25 s with the throttle low; throttle to 60% at 0.7–0.8 s; angle mode at 3 s; satellites → 2 at 4–7.5 s; AUX4 mid at 9 s, high at 11 s; rescue switch 13–15 s; link lost at 17 s (GPS-RESCUE) | `fc_mode` in each window: ACRO, AIR (airmode latched), ANGL, ALTH, POSH, RESC, POSH again, !FS! through stages 1 and 2 (the priority !FS! > RESC > POSH > ALTH > ANGL > AIR > ACRO); `fc_airmode` 0 at low throttle, then latched; Alt Hold and Pos Hold inactive while the rescue runs, Pos Hold back after it; `RESCUE N/A` from the first 1 Hz check without a fix until the fix is back (the two-check rule for under 4 satellites needs a 3D fix with 3, which this receiver never gives); `battery_mah_drawn` = (1 − SOC) × 1300 throughout |
 
 ## 4. Traceability matrix
 
@@ -125,7 +125,7 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | F18 | Home only at arming with 8 or more satellites; cleared on disarm | T01, T07 | `fpv-osd`: 7 satellites at arming gives no home all flight; disarm clears; re-arm re-takes | check 4 |
 | F19 | Home distance and bearing at 10 Hz | T01, T11 | `fpv-osd`: changes only on fixes; within 4 m and 20° of true geometry beyond 10 m | — |
 | F20 | `fc_mode` priority | T23 | — | — |
-| F21 | `fc_warnings` (RESCUE N/A, RESCUE OFF, POSHOLD FAIL, arming reasons) | T07, T13, T17, T23 | — | — |
+| F21 | `fc_warnings` (RESCUE N/A, RESCUE OFF, POSHOLD FAIL, arming reasons) | T07, T13a, T13c, T17, T23 | — | — |
 | F22 | 8-channel sticks and mode switches | T07, T11, T16, T17 | — | — |
 | F23 | Arming latch and blocks | T07 | — | — |
 | F24 | Failsafe stage 1 and instant recovery | T08 | — | — |
@@ -181,7 +181,7 @@ Each implementation phase writes the tests for its features, and the phase is do
 | 10 | T16, T09, and `fpv-autopilot` (Level 2: the throttle formula, I-term, stick factor, AUTO-LAND factor and target, by hand at every sample) | T16, T09 (done) |
 | 11 | T17, T18, T19 (Pos Hold parts), T09 drift | T17–T19, T09 (done) |
 | 12 | T10–T14 (T12 and T13 as separate models a/b/c), T20, `fpv-rescue` (formerly T15), T07 `RESCUE OFF` | T10–T14, T20, `fpv-rescue` (done) |
-| 13 | T23, the full matrix review, L2 F56/F57 | All of Level 1 and Level 2 |
+| 13 | T23 | T23 (done). The full matrix review and L2 F56/F57 move to Phase 6, with the OSD outputs. |
 | 6 | The Level 3 list handed to obliq-fpv-unity | Full Jest and `tsc` at their baselines |
 
 ## 6. Reporting

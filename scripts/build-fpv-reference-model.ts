@@ -4916,6 +4916,75 @@ export function buildFpvRescueFlyawayTestModel() {
   })
 }
 
+/** T23 timeline (s): each mode in turn, a satellite loss in ANGL, and a link loss last. */
+export const OSD_TEST = {
+  arm: 0.25, airmodeAt: [0.7, 0.8] as [number, number], angle: 3, lowSats: [4, 7.5] as [number, number],
+  altHold: 9, posHold: 11, rescue: [13, 15] as [number, number], linkLost: 17, duration: 20,
+}
+
+/**
+ * T23: OSD outputs — fc_mode in Betaflight's priority order through ACRO, AIR,
+ * ANGL, ALTH, POSH, RESC (which overrides the holds) and !FS!; the airmode
+ * latch; RESCUE N/A; mAh drawn against the state of charge.
+ */
+export function buildFpvOsdTestModel() {
+  const t = OSD_TEST
+  const M = FC_MODE
+  const e = 0.05
+  const hov = Number(HOVER_THROTTLE.toFixed(4))
+  const tests = () => {
+    const { s, from, expr, check, bit, upright } = testsSheet()
+    const mode = from('fc_mode'), air = from('fc_airmode')
+    check('ModeAcro', mode, M.acro, M.acro, t.arm + e, t.airmodeAt[0])
+    check('ModeAir', mode, M.air, M.air, t.airmodeAt[1], t.angle - e)
+    check('ModeAngle', mode, M.angle, M.angle, t.angle + e, t.altHold - e)
+    check('ModeAltHold', mode, M.altHold, M.altHold, t.altHold + e, t.posHold - e)
+    check('ModePosHold', mode, M.posHold, M.posHold, t.posHold + e, t.rescue[0] - e)
+    check('ModeRescue', mode, M.rescue, M.rescue, t.rescue[0] + e, t.rescue[1] - e)
+    check('ModePosHoldAfterRescue', mode, M.posHold, M.posHold, t.rescue[1] + e, t.linkLost - e)
+    check('ModeFailsafe', mode, M.failsafe, M.failsafe, t.linkLost + e)
+    check('AirmodeOffAtLowThrottle', air, 0, 0, t.arm + e, t.airmodeAt[0])
+    check('AirmodeLatched', air, 1, 1, t.airmodeAt[1])
+    // The rescue suppresses both holds while their switch stays high
+    check('RescueOverridesAltHold', from('alt_hold_active'), 0, 0, t.rescue[0] + e, t.rescue[1] - e)
+    check('RescueOverridesPosHold', from('pos_hold_active'), 0, 0, t.rescue[0] + e, t.rescue[1] - e)
+    check('HoldsResumeAfterRescue', from('pos_hold_active'), 1, 1, t.rescue[1] + 0.1, t.linkLost - e)
+    // RESCUE N/A: armed with a home and no fix at a 1 Hz check (or under 4 satellites for two checks, which needs
+    // a 3D fix with 3 satellites: this receiver never gives one); clear once the fix is back
+    const na = bit('WarnRescueNA', from('fc_warnings'), FC_WARNING.rescueNA)
+    check('RescueAvailableBefore', na, 0, 0, t.arm + e, t.lowSats[0] - e)
+    check('RescueNotAvailable', na, 1, 1, t.lowSats[0] + 1.05, t.lowSats[1] - e)
+    check('RescueAvailableAgain', na, 0, 0, t.lowSats[1] + SENSORS.gnss.reacquireS + 1.1, t.rescue[0] - e)
+    check('MahDrawnMatchesSoc', expr('MahDrawnError', `in(0) - (1.0 - in(1)) * ${BATTERY.capacityAh * 1000}`,
+      [from('battery_mah_drawn'), from('battery_soc')]), -1e-9, 1e-9)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T23 OSD Outputs',
+    description:
+      'Validation test for the flight controller OSD outputs (docs/fpv-hud-gnss-test-plan.md, T23): armed in acro, the throttle ' +
+      'latches airmode, then angle mode, Alt Hold, Pos Hold, the rescue switch (which overrides both holds) and a link loss; ' +
+      'fc_mode follows Betaflight\'s priority (!FS! > RESC > POSH > ALTH > ANGL > AIR > ACRO). Satellites drop to 2 in angle ' +
+      'mode (no fix: RESCUE N/A), and mAh drawn matches the state of charge throughout.',
+    sticks: {
+      roll: [[0, 0]], pitch: [[0, 0]], yaw: [[0, 0]],
+      throttle: [[0, 0], [t.airmodeAt[0], 0], [t.airmodeAt[1], 0.6], [1.4, 0.6], [1.5, hov]],
+      aux: step([[0, 0], [t.angle, 1]]),
+      arm: [[0, 0], [t.arm, 0], [t.arm + 0.001, 1]],
+      hold: step([[0, 0], [t.altHold, 0.5], [t.posHold, 1]]),
+      rescue: windows(t.rescue),
+    },
+    duration: t.duration,
+    displays: [['Mode', 'fc_mode'], ['Warnings', 'fc_warnings'], ['Airmode', 'fc_airmode'], ['Position', 'pos_ned']],
+    tests,
+    conditions: {
+      gnssEnv: { satellites: step([[0, 14], [t.lowSats[0], 2], [t.lowSats[1], 14]]) },
+      rcLinkValid: step([[0, 1], [t.linkLost, 0]]),
+    },
+  })
+}
+
 /** A test model renamed for the validation suite ("FPV Tnn …"). */
 const renamed = (model: { name: string; data: Record<string, unknown> }, name: string) => ({ ...model, name })
 
@@ -4953,6 +5022,7 @@ export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<s
     ['t20-no-mag-rescue.json', buildFpvNoMagRescueTestModel()],
     ['t21-altitude-estimator.json', buildFpvAltitudeEstimatorTestModel()],
     ['t22-wind.json', buildFpvWindTestModel()],
+    ['t23-osd-outputs.json', buildFpvOsdTestModel()],
   ]
 }
 

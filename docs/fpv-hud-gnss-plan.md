@@ -418,6 +418,8 @@ Phases 8–12 used Betaflight's default gains. They are firmware defaults for an
 
 ### Phase 13: OSD outputs and test models
 
+**Status (2026-10-28):** T23 is done (`fc_mode` priority, the airmode latch, the rescue overriding the holds, RESCUE N/A, mAh drawn). The rest of this phase — the OSD output set, the integration tables and the matrix review — moves to Phase 6, after the obliq-fpv-unity handoff, for the second agent.
+
 1. **Outputs:**
    - `fc_mode` (code and text order as in the spec);
    - `fc_warnings` (bits: RESCUE N/A, RESCUE OFF, POSHOLD FAIL, arming-blocked reasons);
