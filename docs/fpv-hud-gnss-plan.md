@@ -141,7 +141,9 @@ seeds: { corr: 120, white: 121, vel: 122 }
 
 **Done when** `fpv-gnss.test.ts` passes, the other suites are unchanged, and the hover-run time is acceptable. If 600 s is slow natively, use 300 s with a wider tolerance.
 
-## Phase 4: Flight controller outputs and home
+## Phase 4: Flight controller outputs and home (done 2026-10-28)
+
+**As built:** `alt_from_home_est` and `climb_rate_est` were not built here. D9 replaces the altitude filter they would read with Betaflight's arming-relative estimator in Phase 9, whose outputs `alt_est` and `vario_est` take their place. The home latch's `ArmedPrev` sits inside the Home subsystem.
 
 FlightController gains inputs `gnss_pos` and `gnss_fix`; it got `grid_convergence_deg` in Phase 2. New outputs are appended to `FC_OUTPUTS`. Use the block names listed in [Embedded model integration](#embedded-model-integration-for-the-obliq-fpv-unity-agent).
 
@@ -392,8 +394,8 @@ These are appended to `FPV_Vehicle_outputs_t`. Existing fields keep their names,
 | `gnss_fix` | `double[3]` | [fix type 0/2/3 (UBX), satellites, pDOP] | 10 Hz | fix type 0 |
 | `gnss_course` | `double[4]` | [track true °, track magnetic °, ground speed m/s, track valid 0/1] | 10 Hz | track held, valid = 0 (below 0.5 m/s or no fix) |
 | `fc_armed`, `fc_angle_mode`, `fc_airmode` | `double` | 0 or 1 | 1 kHz | — |
-| `climb_rate_est` | `double` | m/s, positive up | 1 kHz | — |
-| `alt_from_home_est` | `double` | m, relative to the estimate at the last arming | 1 kHz | About 0 before the first arming |
+| `vario_est` (Phase 9) | `double` | m/s, positive up: the derivative of `alt_est` through a 1 Hz PT2 | 100 Hz | — |
+| `alt_est` (Phase 9) | `double` | m, relative to the arming point (Betaflight's estimate) | 100 Hz | 0 while disarmed |
 | `heading_deg` | `double` | true heading, 0–360 | 1 kHz | — |
 | `home_valid` | `double` | 0 or 1; set only on the arming sample | 1 kHz | 0 |
 | `home_distance_m`, `home_bearing_deg` | `double` | m; true bearing from the vehicle to home, 0–360 | 10 Hz (on each fix) | 0 while `home_valid` = 0 |
@@ -426,12 +428,11 @@ New model states are named in the generated C as `<subsystem path>_<block>_state
 | State (generated name) | Holds | Trim action |
 |---|---|---|
 | `Sensors_GNSS_GmPrev_state` [3] | Correlated GNSS error, unit variance | Leave. `_init` sets it to its seeded stationary draw. |
-| `Sensors_GNSS_FixCount_state` | Reacquisition counter (10 = fix) | Leave. It starts at 10, a fix from t = 0. |
+| `Sensors_GNSS_FixCountPrev_state` | Reacquisition counter: samples with the satellite condition met, capped at 11 (a fix needs more than 10) | Leave. It starts at 11, a fix from t = 0. |
 | `Sensors_GNSS_HoldPrev_state` [6] | Last fix [n, e, alt, vn, ve, vd] | **Write** [north, east, msl, 0, 0, 0]. Otherwise a start without a fix reports the compiled rest position at the origin. |
 | `Sensors_GNSS_TrackPrev_state` | Last valid track, true ° | Leave at 0. A hover has no valid track, and OSD consumers must check the valid flag. |
 | `Sensors_GNSS_*Noise_rng/_value/_drawn_tick` | Noise generators | Leave. A reset re-seeds them. |
-| `FlightController_ArmedPrev_state` | `armed` on the previous sample | **Leave at 0.** An armed hover then latches home and the arming altitude on its first step. |
-| `FlightController_HomeAltitude_state` | Altitude at arming | Leave. The latch overwrites it on the first armed step. |
+| `FlightController_Home_ArmedPrev_state` | `armed` on the previous controller sample | **Leave at 0.** An armed hover then latches home on its first step. (Phase 8's latched arming adds its own states; see section 7.) |
 | `FlightController_Home_HomePrev_state` [2], `FlightController_Home_HomeValidPrev_state` | Home position, valid flag | Leave at 0. Home latches at the hover point on the first armed step with 8 or more satellites. |
 
 - `FlightController_AttitudeEstimator_qPrev_state` stays identity for a nose-north hover. The estimator's reference is in the grid frame (D1), so the trim needs no γ.
@@ -458,7 +459,7 @@ New model states are named in the generated C as `<subsystem path>_<block>_state
   1. At rest, with the default inputs, `gnss_fix` = [3, 14, 1.526] from the first 10 Hz sample.
   2. `heading_deg` ≈ γ for a nose-north rest.
   3. `gnss_pos` is within 6 m of [0, 0, 178.132].
-  4. Arm with at least 8 satellites, and `home_valid` = 1 on the arming sample. `alt_from_home_est` ≈ 0.
+  4. Arm with at least 8 satellites, and `home_valid` = 1 on the arming sample. After Phase 9, `alt_est` ≈ 0.
   5. With `gnss_env` set to 2 satellites, `gnss_fix[0]` = 0 and `gnss_pos` holds. Back at 14 satellites, the fix returns 3D after 1.0 s.
   6. The latitude/longitude checks in item 3 pass.
 

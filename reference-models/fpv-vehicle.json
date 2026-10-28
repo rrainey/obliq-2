@@ -24,8 +24,8 @@
             "type": "demux",
             "name": "MotorCmdSplit",
             "position": {
-              "x": 780,
-              "y": 559
+              "x": 844,
+              "y": 116
             },
             "parameters": {
               "showName": true,
@@ -41,7 +41,7 @@
             "name": "sticks",
             "position": {
               "x": 150,
-              "y": 912
+              "y": 916
             },
             "parameters": {
               "showName": true,
@@ -55,7 +55,7 @@
             "name": "gnss_env",
             "position": {
               "x": 148,
-              "y": -167
+              "y": -610
             },
             "parameters": {
               "showName": true,
@@ -69,7 +69,7 @@
             "name": "grid_convergence_deg",
             "position": {
               "x": 100,
-              "y": 418
+              "y": 184
             },
             "parameters": {
               "showName": true,
@@ -82,8 +82,8 @@
             "type": "subsystem",
             "name": "FlightController",
             "position": {
-              "x": 400,
-              "y": 909
+              "x": 416,
+              "y": 918
             },
             "parameters": {
               "showName": true,
@@ -93,7 +93,9 @@
                 "accel",
                 "mag",
                 "pressure",
-                "grid_convergence_deg"
+                "grid_convergence_deg",
+                "gnss_pos",
+                "gnss_fix"
               ],
               "outputPorts": [
                 "motors",
@@ -102,7 +104,13 @@
                 "euler_est",
                 "altitude_est",
                 "quat_est",
-                "heading_deg"
+                "heading_deg",
+                "fc_armed",
+                "fc_angle_mode",
+                "fc_airmode",
+                "home_valid",
+                "home_distance_m",
+                "home_bearing_deg"
               ],
               "showPortNames": true,
               "codeGenStrategy": "flatten",
@@ -117,7 +125,7 @@
                       "name": "sticks",
                       "position": {
                         "x": 150,
-                        "y": 45
+                        "y": 827
                       },
                       "parameters": {
                         "showName": true,
@@ -131,7 +139,7 @@
                       "name": "gyro",
                       "position": {
                         "x": 150,
-                        "y": 266
+                        "y": 453
                       },
                       "parameters": {
                         "showName": true,
@@ -145,7 +153,7 @@
                       "name": "accel",
                       "position": {
                         "x": 150,
-                        "y": 391
+                        "y": 193
                       },
                       "parameters": {
                         "showName": true,
@@ -159,7 +167,7 @@
                       "name": "mag",
                       "position": {
                         "x": 150,
-                        "y": 641
+                        "y": 318
                       },
                       "parameters": {
                         "showName": true,
@@ -173,7 +181,7 @@
                       "name": "pressure",
                       "position": {
                         "x": 148,
-                        "y": 516
+                        "y": -57
                       },
                       "parameters": {
                         "showName": true,
@@ -187,7 +195,7 @@
                       "name": "grid_convergence_deg",
                       "position": {
                         "x": 100,
-                        "y": 766
+                        "y": 68
                       },
                       "parameters": {
                         "showName": true,
@@ -196,12 +204,40 @@
                       }
                     },
                     {
+                      "id": "fc__gnss_pos",
+                      "type": "input_port",
+                      "name": "gnss_pos",
+                      "position": {
+                        "x": 148,
+                        "y": -310
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "gnss_pos",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
+                      "id": "fc__gnss_fix",
+                      "type": "input_port",
+                      "name": "gnss_fix",
+                      "position": {
+                        "x": 148,
+                        "y": -185
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "gnss_fix",
+                        "dataType": "double[3]"
+                      }
+                    },
+                    {
                       "id": "fc__AttitudeEstimator",
                       "type": "subsystem",
                       "name": "AttitudeEstimator",
                       "position": {
-                        "x": 380,
-                        "y": 484
+                        "x": 384,
+                        "y": 279
                       },
                       "parameters": {
                         "showName": true,
@@ -1288,8 +1324,8 @@
                       "type": "subsystem",
                       "name": "AltitudeEstimator",
                       "position": {
-                        "x": 657,
-                        "y": 427
+                        "x": 661,
+                        "y": -27
                       },
                       "parameters": {
                         "showName": true,
@@ -1702,8 +1738,8 @@
                       "type": "subsystem",
                       "name": "Rates",
                       "position": {
-                        "x": 439,
-                        "y": 92
+                        "x": 443,
+                        "y": 921
                       },
                       "parameters": {
                         "showName": true,
@@ -1934,8 +1970,8 @@
                       "type": "subsystem",
                       "name": "AngleMode",
                       "position": {
-                        "x": 688,
-                        "y": 79
+                        "x": 692,
+                        "y": 767
                       },
                       "parameters": {
                         "showName": true,
@@ -1945,7 +1981,8 @@
                           "acro_setpoint"
                         ],
                         "outputPorts": [
-                          "setpoint"
+                          "setpoint",
+                          "angle_mode"
                         ],
                         "showPortNames": true,
                         "codeGenStrategy": "flatten",
@@ -1960,7 +1997,7 @@
                                 "name": "sticks",
                                 "position": {
                                   "x": 122,
-                                  "y": 218
+                                  "y": 217
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -1988,7 +2025,7 @@
                                 "name": "acro_setpoint",
                                 "position": {
                                   "x": 100,
-                                  "y": 354
+                                  "y": 355
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -2049,8 +2086,8 @@
                                 "type": "mux",
                                 "name": "LevelSetpoint",
                                 "position": {
-                                  "x": 864,
-                                  "y": 324
+                                  "x": 927,
+                                  "y": 325
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -2107,8 +2144,8 @@
                                 "type": "if",
                                 "name": "ModeSelect",
                                 "position": {
-                                  "x": 1034,
-                                  "y": 304
+                                  "x": 1159,
+                                  "y": 305
                                 },
                                 "parameters": {
                                   "showName": true
@@ -2119,13 +2156,41 @@
                                 "type": "output_port",
                                 "name": "setpoint",
                                 "position": {
-                                  "x": 1194,
-                                  "y": 321
+                                  "x": 1327,
+                                  "y": 322
                                 },
                                 "parameters": {
                                   "showName": true,
                                   "portName": "setpoint",
                                   "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "angle__AngleModeFlag",
+                                "type": "evaluate",
+                                "name": "AngleModeFlag",
+                                "position": {
+                                  "x": 864,
+                                  "y": 171
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 1,
+                                  "expression": "(in(0) > 0.5) ? 1.0 : 0.0"
+                                }
+                              },
+                              {
+                                "id": "angle__angle_mode",
+                                "type": "output_port",
+                                "name": "angle_mode",
+                                "position": {
+                                  "x": 1319,
+                                  "y": 181
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "angle_mode",
+                                  "dataType": "double"
                                 }
                               }
                             ],
@@ -2181,7 +2246,7 @@
                                 "targetBlockId": "angle__LevelSetpoint",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -8
+                                  "midpointOffset": -35.5
                                 }
                               },
                               {
@@ -2211,7 +2276,7 @@
                                 "targetBlockId": "angle__LevelSetpoint",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 8
+                                  "midpointOffset": -19.5
                                 }
                               },
                               {
@@ -2221,7 +2286,7 @@
                                 "targetBlockId": "angle__LevelSetpoint",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 190
+                                  "midpointOffset": 162.5
                                 }
                               },
                               {
@@ -2241,7 +2306,7 @@
                                 "targetBlockId": "angle__ModeSelect",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -355
+                                  "midpointOffset": -417.5
                                 }
                               },
                               {
@@ -2251,7 +2316,7 @@
                                 "targetBlockId": "angle__ModeSelect",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 130.5
+                                  "midpointOffset": 193
                                 }
                               },
                               {
@@ -2267,10 +2332,27 @@
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "angle__setpoint",
                                 "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_16_angle__AngleModeOn_angle__AngleModeFlag",
+                                "sourceBlockId": "angle__AngleModeOn",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "angle__AngleModeFlag",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 33.5
+                                }
+                              },
+                              {
+                                "id": "w_17_angle__AngleModeFlag_angle__angle_mode",
+                                "sourceBlockId": "angle__AngleModeFlag",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "angle__angle_mode",
+                                "targetPortIndex": 0
                               }
                             ],
                             "extents": {
-                              "width": 1494,
+                              "width": 1627,
                               "height": 768
                             }
                           }
@@ -2282,8 +2364,8 @@
                       "type": "subsystem",
                       "name": "GyroFilters",
                       "position": {
-                        "x": 412,
-                        "y": 244
+                        "x": 416,
+                        "y": 617
                       },
                       "parameters": {
                         "showName": true,
@@ -2427,8 +2509,8 @@
                       "type": "subsystem",
                       "name": "Arming",
                       "position": {
-                        "x": 432,
-                        "y": -60
+                        "x": 436,
+                        "y": 769
                       },
                       "parameters": {
                         "showName": true,
@@ -2639,8 +2721,8 @@
                       "type": "subsystem",
                       "name": "RatePID",
                       "position": {
-                        "x": 1033,
-                        "y": 16
+                        "x": 1037,
+                        "y": 962
                       },
                       "parameters": {
                         "showName": true,
@@ -3337,8 +3419,8 @@
                       "type": "subsystem",
                       "name": "Mixer",
                       "position": {
-                        "x": 1313,
-                        "y": 32
+                        "x": 1317,
+                        "y": 978
                       },
                       "parameters": {
                         "showName": true,
@@ -3895,8 +3977,8 @@
                       "type": "multiply",
                       "name": "MotorsArmed",
                       "position": {
-                        "x": 1473,
-                        "y": 46
+                        "x": 1477,
+                        "y": 993
                       },
                       "parameters": {
                         "showName": true,
@@ -3908,8 +3990,8 @@
                       "type": "output_port",
                       "name": "motors",
                       "position": {
-                        "x": 1651,
-                        "y": 56
+                        "x": 1671,
+                        "y": 1003
                       },
                       "parameters": {
                         "showName": true,
@@ -3922,8 +4004,8 @@
                       "type": "output_port",
                       "name": "setpoint",
                       "position": {
-                        "x": 1649,
-                        "y": 181
+                        "x": 1669,
+                        "y": 628
                       },
                       "parameters": {
                         "showName": true,
@@ -3936,8 +4018,8 @@
                       "type": "output_port",
                       "name": "gyro_dps",
                       "position": {
-                        "x": 1649,
-                        "y": 306
+                        "x": 1669,
+                        "y": 503
                       },
                       "parameters": {
                         "showName": true,
@@ -3950,8 +4032,8 @@
                       "type": "output_port",
                       "name": "euler_est",
                       "position": {
-                        "x": 1645,
-                        "y": 681
+                        "x": 1665,
+                        "y": 378
                       },
                       "parameters": {
                         "showName": true,
@@ -3964,8 +4046,8 @@
                       "type": "output_port",
                       "name": "altitude_est",
                       "position": {
-                        "x": 1633,
-                        "y": 431
+                        "x": 1653,
+                        "y": 3
                       },
                       "parameters": {
                         "showName": true,
@@ -3978,8 +4060,8 @@
                       "type": "output_port",
                       "name": "quat_est",
                       "position": {
-                        "x": 1649,
-                        "y": 556
+                        "x": 1669,
+                        "y": 253
                       },
                       "parameters": {
                         "showName": true,
@@ -3992,8 +4074,8 @@
                       "type": "selector",
                       "name": "YawEstimate",
                       "position": {
-                        "x": 715,
-                        "y": 786
+                        "x": 719,
+                        "y": 133
                       },
                       "parameters": {
                         "showName": true,
@@ -4007,8 +4089,8 @@
                       "type": "evaluate",
                       "name": "HeadingTrue",
                       "position": {
-                        "x": 933,
-                        "y": 796
+                        "x": 937,
+                        "y": 118
                       },
                       "parameters": {
                         "showName": true,
@@ -4021,12 +4103,1005 @@
                       "type": "output_port",
                       "name": "heading_deg",
                       "position": {
-                        "x": 1637,
-                        "y": 806
+                        "x": 1657,
+                        "y": 128
                       },
                       "parameters": {
                         "showName": true,
                         "portName": "heading_deg",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "fc__Home",
+                      "type": "subsystem",
+                      "name": "Home",
+                      "position": {
+                        "x": 719,
+                        "y": -275
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputPorts": [
+                          "armed",
+                          "gnss_pos",
+                          "gnss_fix",
+                          "grid_convergence_deg"
+                        ],
+                        "outputPorts": [
+                          "home_valid",
+                          "home_distance_m",
+                          "home_bearing_deg"
+                        ],
+                        "showPortNames": true,
+                        "codeGenStrategy": "flatten",
+                        "sheets": [
+                          {
+                            "id": "home",
+                            "name": "Home",
+                            "blocks": [
+                              {
+                                "id": "home__armed",
+                                "type": "input_port",
+                                "name": "armed",
+                                "position": {
+                                  "x": 150,
+                                  "y": 351
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "armed",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "home__gnss_pos",
+                                "type": "input_port",
+                                "name": "gnss_pos",
+                                "position": {
+                                  "x": 148,
+                                  "y": 226
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "gnss_pos",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "home__gnss_fix",
+                                "type": "input_port",
+                                "name": "gnss_fix",
+                                "position": {
+                                  "x": 148,
+                                  "y": 601
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "gnss_fix",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "home__grid_convergence_deg",
+                                "type": "input_port",
+                                "name": "grid_convergence_deg",
+                                "position": {
+                                  "x": 100,
+                                  "y": 476
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "grid_convergence_deg",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "home__FixSplit",
+                                "type": "demux",
+                                "name": "FixSplit",
+                                "position": {
+                                  "x": 380,
+                                  "y": 458
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "outputCount": 3,
+                                  "inputDimensions": [
+                                    3
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "home__PosSplit",
+                                "type": "demux",
+                                "name": "PosSplit",
+                                "position": {
+                                  "x": 380,
+                                  "y": 154
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "outputCount": 3,
+                                  "inputDimensions": [
+                                    3
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "home__ArmedPrev",
+                                "type": "unit_delay",
+                                "name": "ArmedPrev",
+                                "position": {
+                                  "x": 380,
+                                  "y": 314
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": 0,
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "home__LatchNow",
+                                "type": "evaluate",
+                                "name": "LatchNow",
+                                "position": {
+                                  "x": 540,
+                                  "y": 309
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 4,
+                                  "expression": "(in(0) > 0.5 && in(1) < 0.5 && in(2) > 2.5 && in(3) >= 8.0) ? 1.0 : 0.0"
+                                }
+                              },
+                              {
+                                "id": "home__HomeValidPrev",
+                                "type": "unit_delay",
+                                "name": "HomeValidPrev",
+                                "position": {
+                                  "x": 1305,
+                                  "y": 526
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": 0,
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "home__HomeValid",
+                                "type": "evaluate",
+                                "name": "HomeValid",
+                                "position": {
+                                  "x": 920,
+                                  "y": 492
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 3,
+                                  "expression": "(in(0) > 0.5) ? fmax(in(1), in(2)) : 0.0"
+                                }
+                              },
+                              {
+                                "id": "home__HomePrev",
+                                "type": "unit_delay",
+                                "name": "HomePrev",
+                                "position": {
+                                  "x": 1502,
+                                  "y": 216
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": [
+                                    0,
+                                    0
+                                  ],
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "home__HomePrevSplit",
+                                "type": "demux",
+                                "name": "HomePrevSplit",
+                                "position": {
+                                  "x": 1694,
+                                  "y": 228
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "outputCount": 2,
+                                  "inputDimensions": [
+                                    2
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "home__HomePosition",
+                                "type": "mux",
+                                "name": "HomePosition",
+                                "position": {
+                                  "x": 1300,
+                                  "y": 282
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "rows": 2,
+                                  "cols": 1,
+                                  "baseType": "double",
+                                  "outputType": "double[2]"
+                                }
+                              },
+                              {
+                                "id": "home__HomeNorth",
+                                "type": "evaluate",
+                                "name": "HomeNorth",
+                                "position": {
+                                  "x": 949,
+                                  "y": 172
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 3,
+                                  "expression": "(in(0) > 0.5) ? in(1) : in(2)"
+                                }
+                              },
+                              {
+                                "id": "home__HomeEast",
+                                "type": "evaluate",
+                                "name": "HomeEast",
+                                "position": {
+                                  "x": 949,
+                                  "y": 332
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 3,
+                                  "expression": "(in(0) > 0.5) ? in(1) : in(2)"
+                                }
+                              },
+                              {
+                                "id": "home__HomeVector",
+                                "type": "subsystem",
+                                "name": "HomeVector",
+                                "position": {
+                                  "x": 1470,
+                                  "y": 360
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "inputPorts": [
+                                    "home",
+                                    "valid",
+                                    "gnss_pos",
+                                    "grid_convergence_deg"
+                                  ],
+                                  "outputPorts": [
+                                    "distance",
+                                    "bearing"
+                                  ],
+                                  "showPortNames": true,
+                                  "codeGenStrategy": "flatten",
+                                  "sheets": [
+                                    {
+                                      "id": "homevec",
+                                      "name": "HomeVector",
+                                      "blocks": [
+                                        {
+                                          "id": "homevec__home",
+                                          "type": "input_port",
+                                          "name": "home",
+                                          "position": {
+                                            "x": 150,
+                                            "y": 190
+                                          },
+                                          "parameters": {
+                                            "showName": true,
+                                            "portName": "home",
+                                            "dataType": "double[2]"
+                                          }
+                                        },
+                                        {
+                                          "id": "homevec__valid",
+                                          "type": "input_port",
+                                          "name": "valid",
+                                          "position": {
+                                            "x": 150,
+                                            "y": 440
+                                          },
+                                          "parameters": {
+                                            "showName": true,
+                                            "portName": "valid",
+                                            "dataType": "double"
+                                          }
+                                        },
+                                        {
+                                          "id": "homevec__gnss_pos",
+                                          "type": "input_port",
+                                          "name": "gnss_pos",
+                                          "position": {
+                                            "x": 148,
+                                            "y": 565
+                                          },
+                                          "parameters": {
+                                            "showName": true,
+                                            "portName": "gnss_pos",
+                                            "dataType": "double[3]"
+                                          }
+                                        },
+                                        {
+                                          "id": "homevec__grid_convergence_deg",
+                                          "type": "input_port",
+                                          "name": "grid_convergence_deg",
+                                          "position": {
+                                            "x": 100,
+                                            "y": 315
+                                          },
+                                          "parameters": {
+                                            "showName": true,
+                                            "portName": "grid_convergence_deg",
+                                            "dataType": "double"
+                                          }
+                                        },
+                                        {
+                                          "id": "homevec__HomeSplit",
+                                          "type": "demux",
+                                          "name": "HomeSplit",
+                                          "position": {
+                                            "x": 380,
+                                            "y": 340
+                                          },
+                                          "parameters": {
+                                            "showName": true,
+                                            "outputCount": 2,
+                                            "inputDimensions": [
+                                              2
+                                            ]
+                                          }
+                                        },
+                                        {
+                                          "id": "homevec__PosSplit",
+                                          "type": "demux",
+                                          "name": "PosSplit",
+                                          "position": {
+                                            "x": 380,
+                                            "y": 484
+                                          },
+                                          "parameters": {
+                                            "showName": true,
+                                            "outputCount": 3,
+                                            "inputDimensions": [
+                                              3
+                                            ]
+                                          }
+                                        },
+                                        {
+                                          "id": "homevec__Distance",
+                                          "type": "evaluate",
+                                          "name": "Distance",
+                                          "position": {
+                                            "x": 540,
+                                            "y": 483
+                                          },
+                                          "parameters": {
+                                            "showName": true,
+                                            "numInputs": 5,
+                                            "expression": "(in(0) > 0.5) ? sqrt((in(1) - in(3)) * (in(1) - in(3)) + (in(2) - in(4)) * (in(2) - in(4))) : 0.0"
+                                          }
+                                        },
+                                        {
+                                          "id": "homevec__BearingTrue",
+                                          "type": "evaluate",
+                                          "name": "BearingTrue",
+                                          "position": {
+                                            "x": 540,
+                                            "y": 263
+                                          },
+                                          "parameters": {
+                                            "showName": true,
+                                            "numInputs": 6,
+                                            "expression": "(in(0) > 0.5) ? fmod(atan2(in(2) - in(4), in(1) - in(3)) * 57.29577951308232 + in(5) + 720.0, 360.0) : 0.0"
+                                          }
+                                        },
+                                        {
+                                          "id": "homevec__distance",
+                                          "type": "output_port",
+                                          "name": "distance",
+                                          "position": {
+                                            "x": 920,
+                                            "y": 520
+                                          },
+                                          "parameters": {
+                                            "showName": true,
+                                            "portName": "distance",
+                                            "dataType": "double"
+                                          }
+                                        },
+                                        {
+                                          "id": "homevec__bearing",
+                                          "type": "output_port",
+                                          "name": "bearing",
+                                          "position": {
+                                            "x": 922,
+                                            "y": 310
+                                          },
+                                          "parameters": {
+                                            "showName": true,
+                                            "portName": "bearing",
+                                            "dataType": "double"
+                                          }
+                                        }
+                                      ],
+                                      "connections": [
+                                        {
+                                          "id": "w_1_homevec__home_homevec__HomeSplit",
+                                          "sourceBlockId": "homevec__home",
+                                          "sourcePortIndex": 0,
+                                          "targetBlockId": "homevec__HomeSplit",
+                                          "targetPortIndex": 0,
+                                          "routing": {
+                                            "midpointOffset": 17
+                                          }
+                                        },
+                                        {
+                                          "id": "w_2_homevec__gnss_pos_homevec__PosSplit",
+                                          "sourceBlockId": "homevec__gnss_pos",
+                                          "sourcePortIndex": 0,
+                                          "targetBlockId": "homevec__PosSplit",
+                                          "targetPortIndex": 0,
+                                          "routing": {
+                                            "midpointOffset": 32
+                                          }
+                                        },
+                                        {
+                                          "id": "w_3_homevec__valid_homevec__Distance",
+                                          "sourceBlockId": "homevec__valid",
+                                          "sourcePortIndex": 0,
+                                          "targetBlockId": "homevec__Distance",
+                                          "targetPortIndex": 0,
+                                          "routing": {
+                                            "midpointOffset": 117
+                                          }
+                                        },
+                                        {
+                                          "id": "w_4_homevec__HomeSplit_homevec__Distance",
+                                          "sourceBlockId": "homevec__HomeSplit",
+                                          "sourcePortIndex": 0,
+                                          "targetBlockId": "homevec__Distance",
+                                          "targetPortIndex": 1,
+                                          "routing": {
+                                            "midpointOffset": -20
+                                          }
+                                        },
+                                        {
+                                          "id": "w_5_homevec__HomeSplit_homevec__Distance",
+                                          "sourceBlockId": "homevec__HomeSplit",
+                                          "sourcePortIndex": 1,
+                                          "targetBlockId": "homevec__Distance",
+                                          "targetPortIndex": 2,
+                                          "routing": {
+                                            "midpointOffset": -12
+                                          }
+                                        },
+                                        {
+                                          "id": "w_6_homevec__PosSplit_homevec__Distance",
+                                          "sourceBlockId": "homevec__PosSplit",
+                                          "sourcePortIndex": 0,
+                                          "targetBlockId": "homevec__Distance",
+                                          "targetPortIndex": 3,
+                                          "routing": {
+                                            "midpointOffset": -4
+                                          }
+                                        },
+                                        {
+                                          "id": "w_7_homevec__PosSplit_homevec__Distance",
+                                          "sourceBlockId": "homevec__PosSplit",
+                                          "sourcePortIndex": 1,
+                                          "targetBlockId": "homevec__Distance",
+                                          "targetPortIndex": 4,
+                                          "routing": {
+                                            "midpointOffset": 4
+                                          }
+                                        },
+                                        {
+                                          "id": "w_8_homevec__valid_homevec__BearingTrue",
+                                          "sourceBlockId": "homevec__valid",
+                                          "sourcePortIndex": 0,
+                                          "targetBlockId": "homevec__BearingTrue",
+                                          "targetPortIndex": 0,
+                                          "routing": {
+                                            "midpointOffset": -55
+                                          }
+                                        },
+                                        {
+                                          "id": "w_9_homevec__HomeSplit_homevec__BearingTrue",
+                                          "sourceBlockId": "homevec__HomeSplit",
+                                          "sourcePortIndex": 0,
+                                          "targetBlockId": "homevec__BearingTrue",
+                                          "targetPortIndex": 1,
+                                          "routing": {
+                                            "midpointOffset": -20
+                                          }
+                                        },
+                                        {
+                                          "id": "w_10_homevec__HomeSplit_homevec__BearingTrue",
+                                          "sourceBlockId": "homevec__HomeSplit",
+                                          "sourcePortIndex": 1,
+                                          "targetBlockId": "homevec__BearingTrue",
+                                          "targetPortIndex": 2,
+                                          "routing": {
+                                            "midpointOffset": -12
+                                          }
+                                        },
+                                        {
+                                          "id": "w_11_homevec__PosSplit_homevec__BearingTrue",
+                                          "sourceBlockId": "homevec__PosSplit",
+                                          "sourcePortIndex": 0,
+                                          "targetBlockId": "homevec__BearingTrue",
+                                          "targetPortIndex": 3,
+                                          "routing": {
+                                            "midpointOffset": -4
+                                          }
+                                        },
+                                        {
+                                          "id": "w_12_homevec__PosSplit_homevec__BearingTrue",
+                                          "sourceBlockId": "homevec__PosSplit",
+                                          "sourcePortIndex": 1,
+                                          "targetBlockId": "homevec__BearingTrue",
+                                          "targetPortIndex": 4,
+                                          "routing": {
+                                            "midpointOffset": 4
+                                          }
+                                        },
+                                        {
+                                          "id": "w_13_homevec__grid_convergence_deg_homevec__BearingTrue",
+                                          "sourceBlockId": "homevec__grid_convergence_deg",
+                                          "sourcePortIndex": 0,
+                                          "targetBlockId": "homevec__BearingTrue",
+                                          "targetPortIndex": 5,
+                                          "routing": {
+                                            "midpointOffset": 100
+                                          }
+                                        },
+                                        {
+                                          "id": "w_14_homevec__Distance_homevec__distance",
+                                          "sourceBlockId": "homevec__Distance",
+                                          "sourcePortIndex": 0,
+                                          "targetBlockId": "homevec__distance",
+                                          "targetPortIndex": 0
+                                        },
+                                        {
+                                          "id": "w_15_homevec__BearingTrue_homevec__bearing",
+                                          "sourceBlockId": "homevec__BearingTrue",
+                                          "sourcePortIndex": 0,
+                                          "targetBlockId": "homevec__bearing",
+                                          "targetPortIndex": 0
+                                        }
+                                      ],
+                                      "extents": {
+                                        "width": 1222,
+                                        "height": 765
+                                      }
+                                    }
+                                  ],
+                                  "sampleTimeSec": 0.1
+                                }
+                              },
+                              {
+                                "id": "home__home_valid",
+                                "type": "output_port",
+                                "name": "home_valid",
+                                "position": {
+                                  "x": 1878,
+                                  "y": 570
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "home_valid",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "home__home_distance_m",
+                                "type": "output_port",
+                                "name": "home_distance_m",
+                                "position": {
+                                  "x": 1858,
+                                  "y": 320
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "home_distance_m",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "home__home_bearing_deg",
+                                "type": "output_port",
+                                "name": "home_bearing_deg",
+                                "position": {
+                                  "x": 1854,
+                                  "y": 445
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "home_bearing_deg",
+                                  "dataType": "double"
+                                }
+                              }
+                            ],
+                            "connections": [
+                              {
+                                "id": "w_1_home__gnss_fix_home__FixSplit",
+                                "sourceBlockId": "home__gnss_fix",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__FixSplit",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 36
+                                }
+                              },
+                              {
+                                "id": "w_2_home__gnss_pos_home__PosSplit",
+                                "sourceBlockId": "home__gnss_pos",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__PosSplit",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 12
+                                }
+                              },
+                              {
+                                "id": "w_3_home__armed_home__ArmedPrev",
+                                "sourceBlockId": "home__armed",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__ArmedPrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 21
+                                }
+                              },
+                              {
+                                "id": "w_4_home__armed_home__LatchNow",
+                                "sourceBlockId": "home__armed",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__LatchNow",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -59
+                                }
+                              },
+                              {
+                                "id": "w_5_home__ArmedPrev_home__LatchNow",
+                                "sourceBlockId": "home__ArmedPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__LatchNow",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 8
+                                }
+                              },
+                              {
+                                "id": "w_6_home__FixSplit_home__LatchNow",
+                                "sourceBlockId": "home__FixSplit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__LatchNow",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -16
+                                }
+                              },
+                              {
+                                "id": "w_7_home__FixSplit_home__LatchNow",
+                                "sourceBlockId": "home__FixSplit",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "home__LatchNow",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": 16
+                                }
+                              },
+                              {
+                                "id": "w_8_home__armed_home__HomeValid",
+                                "sourceBlockId": "home__armed",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeValid",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -249
+                                }
+                              },
+                              {
+                                "id": "w_9_home__LatchNow_home__HomeValid",
+                                "sourceBlockId": "home__LatchNow",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeValid",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -16
+                                }
+                              },
+                              {
+                                "id": "w_10_home__HomeValidPrev_home__HomeValid",
+                                "sourceBlockId": "home__HomeValidPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeValid",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -272.5
+                                }
+                              },
+                              {
+                                "id": "w_11_home__HomeValid_home__HomeValidPrev",
+                                "sourceBlockId": "home__HomeValid",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeValidPrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 5.5
+                                }
+                              },
+                              {
+                                "id": "w_12_home__HomePrev_home__HomePrevSplit",
+                                "sourceBlockId": "home__HomePrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomePrevSplit",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 16
+                                }
+                              },
+                              {
+                                "id": "w_13_home__LatchNow_home__HomeNorth",
+                                "sourceBlockId": "home__LatchNow",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeNorth",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -30.5
+                                }
+                              },
+                              {
+                                "id": "w_14_home__PosSplit_home__HomeNorth",
+                                "sourceBlockId": "home__PosSplit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeNorth",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -212.5
+                                }
+                              },
+                              {
+                                "id": "w_15_home__HomePrevSplit_home__HomeNorth",
+                                "sourceBlockId": "home__HomePrevSplit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeNorth",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -465.5
+                                }
+                              },
+                              {
+                                "id": "w_16_home__HomeNorth_home__HomePosition",
+                                "sourceBlockId": "home__HomeNorth",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomePosition",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 6
+                                }
+                              },
+                              {
+                                "id": "w_17_home__LatchNow_home__HomeEast",
+                                "sourceBlockId": "home__LatchNow",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeEast",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -30.5
+                                }
+                              },
+                              {
+                                "id": "w_18_home__PosSplit_home__HomeEast",
+                                "sourceBlockId": "home__PosSplit",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "home__HomeEast",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 167.5
+                                }
+                              },
+                              {
+                                "id": "w_19_home__HomePrevSplit_home__HomeEast",
+                                "sourceBlockId": "home__HomePrevSplit",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "home__HomeEast",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -473.5
+                                }
+                              },
+                              {
+                                "id": "w_20_home__HomeEast_home__HomePosition",
+                                "sourceBlockId": "home__HomeEast",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomePosition",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 14
+                                }
+                              },
+                              {
+                                "id": "w_21_home__HomePosition_home__HomePrev",
+                                "sourceBlockId": "home__HomePosition",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomePrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -16
+                                }
+                              },
+                              {
+                                "id": "w_22_home__HomePosition_home__HomeVector",
+                                "sourceBlockId": "home__HomePosition",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeVector",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_23_home__HomeValid_home__HomeVector",
+                                "sourceBlockId": "home__HomeValid",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeVector",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -77
+                                }
+                              },
+                              {
+                                "id": "w_24_home__gnss_pos_home__HomeVector",
+                                "sourceBlockId": "home__gnss_pos",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeVector",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -361
+                                }
+                              },
+                              {
+                                "id": "w_25_home__grid_convergence_deg_home__HomeVector",
+                                "sourceBlockId": "home__grid_convergence_deg",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__HomeVector",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": -541
+                                }
+                              },
+                              {
+                                "id": "w_26_home__HomeValid_home__home_valid",
+                                "sourceBlockId": "home__HomeValid",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__home_valid",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -281
+                                }
+                              },
+                              {
+                                "id": "w_27_home__HomeVector_home__home_distance_m",
+                                "sourceBlockId": "home__HomeVector",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "home__home_distance_m",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 74
+                                }
+                              },
+                              {
+                                "id": "w_28_home__HomeVector_home__home_bearing_deg",
+                                "sourceBlockId": "home__HomeVector",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "home__home_bearing_deg",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 84
+                                }
+                              }
+                            ],
+                            "extents": {
+                              "width": 2178,
+                              "height": 801
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "id": "fc__fc_armed",
+                      "type": "output_port",
+                      "name": "fc_armed",
+                      "position": {
+                        "x": 1669,
+                        "y": 878
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "fc_armed",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "fc__fc_angle_mode",
+                      "type": "output_port",
+                      "name": "fc_angle_mode",
+                      "position": {
+                        "x": 1649,
+                        "y": 753
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "fc_angle_mode",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "fc__fc_airmode",
+                      "type": "output_port",
+                      "name": "fc_airmode",
+                      "position": {
+                        "x": 1661,
+                        "y": 1128
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "fc_airmode",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "fc__home_valid",
+                      "type": "output_port",
+                      "name": "home_valid",
+                      "position": {
+                        "x": 1661,
+                        "y": -372
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "home_valid",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "fc__home_distance_m",
+                      "type": "output_port",
+                      "name": "home_distance_m",
+                      "position": {
+                        "x": 1641,
+                        "y": -247
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "home_distance_m",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "fc__home_bearing_deg",
+                      "type": "output_port",
+                      "name": "home_bearing_deg",
+                      "position": {
+                        "x": 1637,
+                        "y": -122
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "home_bearing_deg",
                         "dataType": "double"
                       }
                     }
@@ -4039,7 +5114,7 @@
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 33
+                        "midpointOffset": 37
                       }
                     },
                     {
@@ -4049,7 +5124,7 @@
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 9
+                        "midpointOffset": 53
                       }
                     },
                     {
@@ -4059,7 +5134,7 @@
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": 17
+                        "midpointOffset": 29
                       }
                     },
                     {
@@ -4069,7 +5144,7 @@
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 3,
                       "routing": {
-                        "midpointOffset": 16
+                        "midpointOffset": -28
                       }
                     },
                     {
@@ -4079,7 +5154,7 @@
                       "targetBlockId": "fc__AltitudeEstimator",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 167.5
+                        "midpointOffset": -85.5
                       }
                     },
                     {
@@ -4089,7 +5164,7 @@
                       "targetBlockId": "fc__AltitudeEstimator",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -20
+                        "midpointOffset": 0
                       }
                     },
                     {
@@ -4099,7 +5174,7 @@
                       "targetBlockId": "fc__AltitudeEstimator",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": 182.5
+                        "midpointOffset": -118.5
                       }
                     },
                     {
@@ -4109,7 +5184,7 @@
                       "targetBlockId": "fc__Rates",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -4.5
+                        "midpointOffset": 15.5
                       }
                     },
                     {
@@ -4119,7 +5194,7 @@
                       "targetBlockId": "fc__AngleMode",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 136
+                        "midpointOffset": -109
                       }
                     },
                     {
@@ -4129,7 +5204,7 @@
                       "targetBlockId": "fc__AngleMode",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -3.5
+                        "midpointOffset": 8.5
                       }
                     },
                     {
@@ -4139,7 +5214,7 @@
                       "targetBlockId": "fc__AngleMode",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": 9.5
+                        "midpointOffset": 29.5
                       }
                     },
                     {
@@ -4149,7 +5224,7 @@
                       "targetBlockId": "fc__GyroFilters",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 17
+                        "midpointOffset": 21
                       }
                     },
                     {
@@ -4159,7 +5234,7 @@
                       "targetBlockId": "fc__Arming",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -1
+                        "midpointOffset": 19
                       }
                     },
                     {
@@ -4169,7 +5244,7 @@
                       "targetBlockId": "fc__RatePID",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -42.5
+                        "midpointOffset": -22.5
                       }
                     },
                     {
@@ -4179,7 +5254,7 @@
                       "targetBlockId": "fc__RatePID",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 112
+                        "midpointOffset": 92
                       }
                     },
                     {
@@ -4189,7 +5264,7 @@
                       "targetBlockId": "fc__RatePID",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": 113.5
+                        "midpointOffset": -170.5
                       }
                     },
                     {
@@ -4206,7 +5281,7 @@
                       "targetBlockId": "fc__Mixer",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 357
+                        "midpointOffset": -315
                       }
                     },
                     {
@@ -4223,7 +5298,7 @@
                       "targetBlockId": "fc__MotorsArmed",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 429.5
+                        "midpointOffset": 433.5
                       }
                     },
                     {
@@ -4240,7 +5315,7 @@
                       "targetBlockId": "fc__setpoint",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 201.5
+                        "midpointOffset": -338.5
                       }
                     },
                     {
@@ -4250,7 +5325,7 @@
                       "targetBlockId": "fc__gyro_dps",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 492
+                        "midpointOffset": 504
                       }
                     },
                     {
@@ -4260,7 +5335,7 @@
                       "targetBlockId": "fc__euler_est",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -482
+                        "midpointOffset": 482
                       }
                     },
                     {
@@ -4268,7 +5343,10 @@
                       "sourceBlockId": "fc__AltitudeEstimator",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__altitude_est",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 18
+                      }
                     },
                     {
                       "id": "w_26_fc__AttitudeEstimator_fc__quat_est",
@@ -4277,7 +5355,7 @@
                       "targetBlockId": "fc__quat_est",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 484
+                        "midpointOffset": 472
                       }
                     },
                     {
@@ -4287,7 +5365,7 @@
                       "targetBlockId": "fc__YawEstimate",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -17
+                        "midpointOffset": -5
                       }
                     },
                     {
@@ -4295,7 +5373,10 @@
                       "sourceBlockId": "fc__YawEstimate",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__HeadingTrue",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 33
+                      }
                     },
                     {
                       "id": "w_29_fc__grid_convergence_deg_fc__HeadingTrue",
@@ -4304,7 +5385,7 @@
                       "targetBlockId": "fc__HeadingTrue",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -260.5
+                        "midpointOffset": 274.5
                       }
                     },
                     {
@@ -4313,11 +5394,108 @@
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__heading_deg",
                       "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_31_fc__Arming_fc__Home",
+                      "sourceBlockId": "fc__Arming",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__Home",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 4.5
+                      }
+                    },
+                    {
+                      "id": "w_32_fc__gnss_pos_fc__Home",
+                      "sourceBlockId": "fc__gnss_pos",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__Home",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -163.5
+                      }
+                    },
+                    {
+                      "id": "w_33_fc__gnss_fix_fc__Home",
+                      "sourceBlockId": "fc__gnss_fix",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__Home",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -155.5
+                      }
+                    },
+                    {
+                      "id": "w_34_fc__grid_convergence_deg_fc__Home",
+                      "sourceBlockId": "fc__grid_convergence_deg",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__Home",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": 87.5
+                      }
+                    },
+                    {
+                      "id": "w_35_fc__Arming_fc__fc_armed",
+                      "sourceBlockId": "fc__Arming",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__fc_armed",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -470.5
+                      }
+                    },
+                    {
+                      "id": "w_36_fc__AngleMode_fc__fc_angle_mode",
+                      "sourceBlockId": "fc__AngleMode",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "fc__fc_angle_mode",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 43.5
+                      }
+                    },
+                    {
+                      "id": "w_37_fc__Arming_fc__fc_airmode",
+                      "sourceBlockId": "fc__Arming",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "fc__fc_airmode",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -482.5
+                      }
+                    },
+                    {
+                      "id": "w_38_fc__Home_fc__home_valid",
+                      "sourceBlockId": "fc__Home",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__home_valid",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 351
+                      }
+                    },
+                    {
+                      "id": "w_39_fc__Home_fc__home_distance_m",
+                      "sourceBlockId": "fc__Home",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "fc__home_distance_m",
+                      "targetPortIndex": 0
+                    },
+                    {
+                      "id": "w_40_fc__Home_fc__home_bearing_deg",
+                      "sourceBlockId": "fc__Home",
+                      "sourcePortIndex": 2,
+                      "targetBlockId": "fc__home_bearing_deg",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 371
+                      }
                     }
                   ],
                   "extents": {
-                    "width": 1951,
-                    "height": 1006
+                    "width": 1971,
+                    "height": 1328
                   }
                 }
               ],
@@ -4331,8 +5509,8 @@
             "type": "subsystem",
             "name": "Motor_RR",
             "position": {
-              "x": 960,
-              "y": 335
+              "x": 1024,
+              "y": -120
             },
             "parameters": {
               "showName": true,
@@ -4747,8 +5925,8 @@
             "type": "subsystem",
             "name": "Motor_FR",
             "position": {
-              "x": 960,
-              "y": 495
+              "x": 1024,
+              "y": 40
             },
             "parameters": {
               "showName": true,
@@ -4776,8 +5954,8 @@
             "type": "subsystem",
             "name": "Motor_RL",
             "position": {
-              "x": 960,
-              "y": 655
+              "x": 1024,
+              "y": 200
             },
             "parameters": {
               "showName": true,
@@ -4805,8 +5983,8 @@
             "type": "subsystem",
             "name": "Motor_FL",
             "position": {
-              "x": 960,
-              "y": 815
+              "x": 1024,
+              "y": 360
             },
             "parameters": {
               "showName": true,
@@ -4834,8 +6012,8 @@
             "type": "mux",
             "name": "Thrusts",
             "position": {
-              "x": 1248,
-              "y": 383
+              "x": 1312,
+              "y": -88
             },
             "parameters": {
               "showName": true,
@@ -4850,8 +6028,8 @@
             "type": "mux",
             "name": "RotorSpeeds",
             "position": {
-              "x": 1248,
-              "y": 203
+              "x": 1312,
+              "y": -268
             },
             "parameters": {
               "showName": true,
@@ -4866,8 +6044,8 @@
             "type": "mux",
             "name": "RotorAccelerations",
             "position": {
-              "x": 1248,
-              "y": 563
+              "x": 1312,
+              "y": 92
             },
             "parameters": {
               "showName": true,
@@ -4882,8 +6060,8 @@
             "type": "mux",
             "name": "MotorPower",
             "position": {
-              "x": 1248,
-              "y": 1108
+              "x": 1312,
+              "y": 702
             },
             "parameters": {
               "showName": true,
@@ -4898,8 +6076,8 @@
             "type": "subsystem",
             "name": "Battery",
             "position": {
-              "x": 1452,
-              "y": 1118
+              "x": 1516,
+              "y": 712
             },
             "parameters": {
               "showName": true,
@@ -5219,8 +6397,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_voltage",
             "position": {
-              "x": 1662,
-              "y": 982
+              "x": 1764,
+              "y": 509
             },
             "parameters": {
               "showName": true,
@@ -5232,8 +6410,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_current",
             "position": {
-              "x": 1662,
-              "y": 1126
+              "x": 1764,
+              "y": 653
             },
             "parameters": {
               "showName": true,
@@ -5245,8 +6423,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_soc",
             "position": {
-              "x": 1662,
-              "y": 1270
+              "x": 1764,
+              "y": 797
             },
             "parameters": {
               "showName": true,
@@ -5254,12 +6432,39 @@
             }
           },
           {
+            "id": "main__MahDrawn",
+            "type": "evaluate",
+            "name": "MahDrawn",
+            "position": {
+              "x": 1734,
+              "y": 941
+            },
+            "parameters": {
+              "showName": true,
+              "numInputs": 1,
+              "expression": "(1.0 - in(0)) * 1300"
+            }
+          },
+          {
+            "id": "main__Tag_battery_mah_drawn",
+            "type": "sheet_label_sink",
+            "name": "Tag_battery_mah_drawn",
+            "position": {
+              "x": 1994,
+              "y": 941
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "battery_mah_drawn"
+            }
+          },
+          {
             "id": "main__Frame",
             "type": "subsystem",
             "name": "Frame",
             "position": {
-              "x": 1418,
-              "y": 384
+              "x": 1482,
+              "y": -87
             },
             "parameters": {
               "showName": true,
@@ -6991,8 +8196,8 @@
             "type": "subsystem",
             "name": "Sensors",
             "position": {
-              "x": 425,
-              "y": -276
+              "x": 441,
+              "y": -719
             },
             "parameters": {
               "showName": true,
@@ -10515,8 +11720,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_imu_gyro",
             "position": {
-              "x": 764,
-              "y": -737
+              "x": 828,
+              "y": -1180
             },
             "parameters": {
               "showName": true,
@@ -10528,8 +11733,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_imu_accel",
             "position": {
-              "x": 762,
-              "y": -593
+              "x": 826,
+              "y": -1036
             },
             "parameters": {
               "showName": true,
@@ -10541,8 +11746,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_mag",
             "position": {
-              "x": 780,
-              "y": -449
+              "x": 844,
+              "y": -892
             },
             "parameters": {
               "showName": true,
@@ -10554,8 +11759,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_pressure",
             "position": {
-              "x": 764,
-              "y": -305
+              "x": 828,
+              "y": -748
             },
             "parameters": {
               "showName": true,
@@ -10567,8 +11772,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gnss_pos",
             "position": {
-              "x": 764,
-              "y": -161
+              "x": 828,
+              "y": -604
             },
             "parameters": {
               "showName": true,
@@ -10580,8 +11785,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gnss_vel_ned",
             "position": {
-              "x": 760,
-              "y": -17
+              "x": 824,
+              "y": -460
             },
             "parameters": {
               "showName": true,
@@ -10593,8 +11798,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gnss_fix",
             "position": {
-              "x": 764,
-              "y": 127
+              "x": 828,
+              "y": -316
             },
             "parameters": {
               "showName": true,
@@ -10606,8 +11811,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gnss_course",
             "position": {
-              "x": 760,
-              "y": 271
+              "x": 824,
+              "y": -172
             },
             "parameters": {
               "showName": true,
@@ -10619,8 +11824,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_pos_ned",
             "position": {
-              "x": 1668,
-              "y": 118
+              "x": 1770,
+              "y": -355
             },
             "parameters": {
               "showName": true,
@@ -10632,8 +11837,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_vel_ned",
             "position": {
-              "x": 1668,
-              "y": 262
+              "x": 1770,
+              "y": -211
             },
             "parameters": {
               "showName": true,
@@ -10645,8 +11850,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_quat",
             "position": {
-              "x": 1682,
-              "y": 406
+              "x": 1784,
+              "y": -67
             },
             "parameters": {
               "showName": true,
@@ -10658,8 +11863,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler",
             "position": {
-              "x": 1682,
-              "y": 550
+              "x": 1784,
+              "y": 77
             },
             "parameters": {
               "showName": true,
@@ -10671,8 +11876,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_omega",
             "position": {
-              "x": 1682,
-              "y": 694
+              "x": 1784,
+              "y": 221
             },
             "parameters": {
               "showName": true,
@@ -10684,8 +11889,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_accel",
             "position": {
-              "x": 1682,
-              "y": 838
+              "x": 1784,
+              "y": 365
             },
             "parameters": {
               "showName": true,
@@ -10697,8 +11902,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_motor_omega",
             "position": {
-              "x": 1438,
-              "y": 240
+              "x": 1502,
+              "y": -231
             },
             "parameters": {
               "showName": true,
@@ -10710,8 +11915,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_motor_cmd",
             "position": {
-              "x": 762,
-              "y": 415
+              "x": 826,
+              "y": -28
             },
             "parameters": {
               "showName": true,
@@ -10723,8 +11928,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_rate_setpoint",
             "position": {
-              "x": 760,
-              "y": 753
+              "x": 824,
+              "y": 332
             },
             "parameters": {
               "showName": true,
@@ -10736,8 +11941,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gyro_dps",
             "position": {
-              "x": 764,
-              "y": 897
+              "x": 828,
+              "y": 476
             },
             "parameters": {
               "showName": true,
@@ -10749,8 +11954,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler_est",
             "position": {
-              "x": 762,
-              "y": 1041
+              "x": 826,
+              "y": 620
             },
             "parameters": {
               "showName": true,
@@ -10762,8 +11967,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_altitude_est",
             "position": {
-              "x": 760,
-              "y": 1185
+              "x": 824,
+              "y": 764
             },
             "parameters": {
               "showName": true,
@@ -10775,8 +11980,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_quat_est",
             "position": {
-              "x": 764,
-              "y": 1329
+              "x": 828,
+              "y": 908
             },
             "parameters": {
               "showName": true,
@@ -10788,12 +11993,90 @@
             "type": "sheet_label_sink",
             "name": "Tag_heading_deg",
             "position": {
-              "x": 760,
-              "y": 1473
+              "x": 824,
+              "y": 1052
             },
             "parameters": {
               "showName": true,
               "signalName": "heading_deg"
+            }
+          },
+          {
+            "id": "main__Tag_fc_armed",
+            "type": "sheet_label_sink",
+            "name": "Tag_fc_armed",
+            "position": {
+              "x": 828,
+              "y": 1196
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_armed"
+            }
+          },
+          {
+            "id": "main__Tag_fc_angle_mode",
+            "type": "sheet_label_sink",
+            "name": "Tag_fc_angle_mode",
+            "position": {
+              "x": 824,
+              "y": 1340
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_angle_mode"
+            }
+          },
+          {
+            "id": "main__Tag_fc_airmode",
+            "type": "sheet_label_sink",
+            "name": "Tag_fc_airmode",
+            "position": {
+              "x": 824,
+              "y": 1484
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_airmode"
+            }
+          },
+          {
+            "id": "main__Tag_home_valid",
+            "type": "sheet_label_sink",
+            "name": "Tag_home_valid",
+            "position": {
+              "x": 824,
+              "y": 1628
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "home_valid"
+            }
+          },
+          {
+            "id": "main__Tag_home_distance_m",
+            "type": "sheet_label_sink",
+            "name": "Tag_home_distance_m",
+            "position": {
+              "x": 824,
+              "y": 1772
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "home_distance_m"
+            }
+          },
+          {
+            "id": "main__Tag_home_bearing_deg",
+            "type": "sheet_label_sink",
+            "name": "Tag_home_bearing_deg",
+            "position": {
+              "x": 824,
+              "y": 1916
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "home_bearing_deg"
             }
           }
         ],
@@ -10812,7 +12095,7 @@
             "targetBlockId": "main__MotorCmdSplit",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -42
+              "midpointOffset": -82
             }
           },
           {
@@ -10862,7 +12145,7 @@
             "targetBlockId": "main__Thrusts",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 44
+              "midpointOffset": 12
             }
           },
           {
@@ -10882,7 +12165,7 @@
             "targetBlockId": "main__RotorAccelerations",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 36
+              "midpointOffset": 44
             }
           },
           {
@@ -10892,7 +12175,7 @@
             "targetBlockId": "main__MotorPower",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 28
+              "midpointOffset": 36
             }
           },
           {
@@ -10962,7 +12245,7 @@
             "targetBlockId": "main__RotorAccelerations",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": 20
+              "midpointOffset": 28
             }
           },
           {
@@ -10992,7 +12275,7 @@
             "targetBlockId": "main__RotorSpeeds",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": 12
+              "midpointOffset": 20
             }
           },
           {
@@ -11029,7 +12312,7 @@
             "targetBlockId": "main__Tag_battery_voltage",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 20.5
+              "midpointOffset": -14.5
             }
           },
           {
@@ -11037,7 +12320,10 @@
             "sourceBlockId": "main__Battery",
             "sourcePortIndex": 1,
             "targetBlockId": "main__Tag_battery_current",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 33.5
+            }
           },
           {
             "id": "w_26_main__Battery_main__Tag_battery_soc",
@@ -11046,11 +12332,28 @@
             "targetBlockId": "main__Tag_battery_soc",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 28.5
+              "midpointOffset": 9.5
             }
           },
           {
-            "id": "w_27_main__Battery_main__Motor_RR",
+            "id": "w_27_main__Battery_main__MahDrawn",
+            "sourceBlockId": "main__Battery",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__MahDrawn",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 24.5
+            }
+          },
+          {
+            "id": "w_28_main__MahDrawn_main__Tag_battery_mah_drawn",
+            "sourceBlockId": "main__MahDrawn",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Tag_battery_mah_drawn",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_29_main__Battery_main__Motor_RR",
             "sourceBlockId": "main__Battery",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Motor_RR",
@@ -11060,7 +12363,7 @@
             }
           },
           {
-            "id": "w_28_main__Battery_main__Motor_FR",
+            "id": "w_30_main__Battery_main__Motor_FR",
             "sourceBlockId": "main__Battery",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Motor_FR",
@@ -11070,7 +12373,7 @@
             }
           },
           {
-            "id": "w_29_main__Battery_main__Motor_RL",
+            "id": "w_31_main__Battery_main__Motor_RL",
             "sourceBlockId": "main__Battery",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Motor_RL",
@@ -11080,7 +12383,7 @@
             }
           },
           {
-            "id": "w_30_main__Battery_main__Motor_FL",
+            "id": "w_32_main__Battery_main__Motor_FL",
             "sourceBlockId": "main__Battery",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Motor_FL",
@@ -11090,7 +12393,7 @@
             }
           },
           {
-            "id": "w_31_main__Thrusts_main__Frame",
+            "id": "w_33_main__Thrusts_main__Frame",
             "sourceBlockId": "main__Thrusts",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Frame",
@@ -11100,7 +12403,7 @@
             }
           },
           {
-            "id": "w_32_main__RotorAccelerations_main__Frame",
+            "id": "w_34_main__RotorAccelerations_main__Frame",
             "sourceBlockId": "main__RotorAccelerations",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Frame",
@@ -11110,124 +12413,144 @@
             }
           },
           {
-            "id": "w_33_main__Frame_main__Sensors",
+            "id": "w_35_main__Frame_main__Sensors",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Sensors",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -647.5
-            }
-          },
-          {
-            "id": "w_34_main__Frame_main__Sensors",
-            "sourceBlockId": "main__Frame",
-            "sourcePortIndex": 2,
-            "targetBlockId": "main__Sensors",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": -639.5
-            }
-          },
-          {
-            "id": "w_35_main__Frame_main__Sensors",
-            "sourceBlockId": "main__Frame",
-            "sourcePortIndex": 4,
-            "targetBlockId": "main__Sensors",
-            "targetPortIndex": 2,
-            "routing": {
-              "midpointOffset": -631.5
+              "midpointOffset": -671.5
             }
           },
           {
             "id": "w_36_main__Frame_main__Sensors",
             "sourceBlockId": "main__Frame",
-            "sourcePortIndex": 5,
+            "sourcePortIndex": 2,
             "targetBlockId": "main__Sensors",
-            "targetPortIndex": 3,
+            "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -623.5
+              "midpointOffset": -663.5
             }
           },
           {
-            "id": "w_37_main__grid_convergence_deg_main__Sensors",
-            "sourceBlockId": "main__grid_convergence_deg",
-            "sourcePortIndex": 0,
+            "id": "w_37_main__Frame_main__Sensors",
+            "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 4,
             "targetBlockId": "main__Sensors",
-            "targetPortIndex": 4,
+            "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -48.5
+              "midpointOffset": -655.5
             }
           },
           {
             "id": "w_38_main__Frame_main__Sensors",
             "sourceBlockId": "main__Frame",
+            "sourcePortIndex": 5,
+            "targetBlockId": "main__Sensors",
+            "targetPortIndex": 3,
+            "routing": {
+              "midpointOffset": -647.5
+            }
+          },
+          {
+            "id": "w_39_main__grid_convergence_deg_main__Sensors",
+            "sourceBlockId": "main__grid_convergence_deg",
+            "sourcePortIndex": 0,
+            "targetBlockId": "main__Sensors",
+            "targetPortIndex": 4,
+            "routing": {
+              "midpointOffset": -56.5
+            }
+          },
+          {
+            "id": "w_40_main__Frame_main__Sensors",
+            "sourceBlockId": "main__Frame",
             "sourcePortIndex": 1,
             "targetBlockId": "main__Sensors",
             "targetPortIndex": 5,
             "routing": {
-              "midpointOffset": -615.5
+              "midpointOffset": -639.5
             }
           },
           {
-            "id": "w_39_main__gnss_env_main__Sensors",
+            "id": "w_41_main__gnss_env_main__Sensors",
             "sourceBlockId": "main__gnss_env",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Sensors",
             "targetPortIndex": 6
           },
           {
-            "id": "w_40_main__Sensors_main__FlightController",
+            "id": "w_42_main__Sensors_main__FlightController",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 0,
             "targetBlockId": "main__FlightController",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -175.5
-            }
-          },
-          {
-            "id": "w_41_main__Sensors_main__FlightController",
-            "sourceBlockId": "main__Sensors",
-            "sourcePortIndex": 1,
-            "targetBlockId": "main__FlightController",
-            "targetPortIndex": 2,
-            "routing": {
-              "midpointOffset": -167.5
-            }
-          },
-          {
-            "id": "w_42_main__Sensors_main__FlightController",
-            "sourceBlockId": "main__Sensors",
-            "sourcePortIndex": 2,
-            "targetBlockId": "main__FlightController",
-            "targetPortIndex": 3,
-            "routing": {
-              "midpointOffset": -159.5
+              "midpointOffset": -191.5
             }
           },
           {
             "id": "w_43_main__Sensors_main__FlightController",
             "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 1,
+            "targetBlockId": "main__FlightController",
+            "targetPortIndex": 2,
+            "routing": {
+              "midpointOffset": -183.5
+            }
+          },
+          {
+            "id": "w_44_main__Sensors_main__FlightController",
+            "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 2,
+            "targetBlockId": "main__FlightController",
+            "targetPortIndex": 3,
+            "routing": {
+              "midpointOffset": -175.5
+            }
+          },
+          {
+            "id": "w_45_main__Sensors_main__FlightController",
+            "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 3,
             "targetBlockId": "main__FlightController",
             "targetPortIndex": 4,
             "routing": {
-              "midpointOffset": -151.5
+              "midpointOffset": -167.5
             }
           },
           {
-            "id": "w_44_main__grid_convergence_deg_main__FlightController",
+            "id": "w_46_main__grid_convergence_deg_main__FlightController",
             "sourceBlockId": "main__grid_convergence_deg",
             "sourcePortIndex": 0,
             "targetBlockId": "main__FlightController",
             "targetPortIndex": 5,
             "routing": {
-              "midpointOffset": -36
+              "midpointOffset": -44
             }
           },
           {
-            "id": "w_45_main__Sensors_main__Tag_imu_gyro",
+            "id": "w_47_main__Sensors_main__FlightController",
+            "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 4,
+            "targetBlockId": "main__FlightController",
+            "targetPortIndex": 6,
+            "routing": {
+              "midpointOffset": -159.5
+            }
+          },
+          {
+            "id": "w_48_main__Sensors_main__FlightController",
+            "sourceBlockId": "main__Sensors",
+            "sourcePortIndex": 6,
+            "targetBlockId": "main__FlightController",
+            "targetPortIndex": 7,
+            "routing": {
+              "midpointOffset": -151.5
+            }
+          },
+          {
+            "id": "w_49_main__Sensors_main__Tag_imu_gyro",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Tag_imu_gyro",
@@ -11237,7 +12560,7 @@
             }
           },
           {
-            "id": "w_46_main__Sensors_main__Tag_imu_accel",
+            "id": "w_50_main__Sensors_main__Tag_imu_accel",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 1,
             "targetBlockId": "main__Tag_imu_accel",
@@ -11247,7 +12570,7 @@
             }
           },
           {
-            "id": "w_47_main__Sensors_main__Tag_mag",
+            "id": "w_51_main__Sensors_main__Tag_mag",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 2,
             "targetBlockId": "main__Tag_mag",
@@ -11257,7 +12580,7 @@
             }
           },
           {
-            "id": "w_48_main__Sensors_main__Tag_pressure",
+            "id": "w_52_main__Sensors_main__Tag_pressure",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 3,
             "targetBlockId": "main__Tag_pressure",
@@ -11267,7 +12590,7 @@
             }
           },
           {
-            "id": "w_49_main__Sensors_main__Tag_gnss_pos",
+            "id": "w_53_main__Sensors_main__Tag_gnss_pos",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 4,
             "targetBlockId": "main__Tag_gnss_pos",
@@ -11277,7 +12600,7 @@
             }
           },
           {
-            "id": "w_50_main__Sensors_main__Tag_gnss_vel_ned",
+            "id": "w_54_main__Sensors_main__Tag_gnss_vel_ned",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 5,
             "targetBlockId": "main__Tag_gnss_vel_ned",
@@ -11287,7 +12610,7 @@
             }
           },
           {
-            "id": "w_51_main__Sensors_main__Tag_gnss_fix",
+            "id": "w_55_main__Sensors_main__Tag_gnss_fix",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 6,
             "targetBlockId": "main__Tag_gnss_fix",
@@ -11297,7 +12620,7 @@
             }
           },
           {
-            "id": "w_52_main__Sensors_main__Tag_gnss_course",
+            "id": "w_56_main__Sensors_main__Tag_gnss_course",
             "sourceBlockId": "main__Sensors",
             "sourcePortIndex": 7,
             "targetBlockId": "main__Tag_gnss_course",
@@ -11307,67 +12630,67 @@
             }
           },
           {
-            "id": "w_53_main__Frame_main__Tag_pos_ned",
+            "id": "w_57_main__Frame_main__Tag_pos_ned",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Tag_pos_ned",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -31
+              "midpointOffset": -50
             }
           },
           {
-            "id": "w_54_main__Frame_main__Tag_vel_ned",
+            "id": "w_58_main__Frame_main__Tag_vel_ned",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 1,
             "targetBlockId": "main__Tag_vel_ned",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -15
+              "midpointOffset": -26
             }
           },
           {
-            "id": "w_55_main__Frame_main__Tag_quat",
+            "id": "w_59_main__Frame_main__Tag_quat",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 2,
             "targetBlockId": "main__Tag_quat",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 10
+              "midpointOffset": -9
             }
           },
           {
-            "id": "w_56_main__Frame_main__Tag_euler",
+            "id": "w_60_main__Frame_main__Tag_euler",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 3,
             "targetBlockId": "main__Tag_euler",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 18
+              "midpointOffset": -1
             }
           },
           {
-            "id": "w_57_main__Frame_main__Tag_omega",
+            "id": "w_61_main__Frame_main__Tag_omega",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 4,
             "targetBlockId": "main__Tag_omega",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -14
+              "midpointOffset": -25
             }
           },
           {
-            "id": "w_58_main__Frame_main__Tag_accel",
+            "id": "w_62_main__Frame_main__Tag_accel",
             "sourceBlockId": "main__Frame",
             "sourcePortIndex": 5,
             "targetBlockId": "main__Tag_accel",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -30
+              "midpointOffset": -49
             }
           },
           {
-            "id": "w_59_main__RotorSpeeds_main__Tag_motor_omega",
+            "id": "w_63_main__RotorSpeeds_main__Tag_motor_omega",
             "sourceBlockId": "main__RotorSpeeds",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Tag_motor_omega",
@@ -11377,79 +12700,139 @@
             }
           },
           {
-            "id": "w_60_main__FlightController_main__Tag_motor_cmd",
+            "id": "w_64_main__FlightController_main__Tag_motor_cmd",
             "sourceBlockId": "main__FlightController",
             "sourcePortIndex": 0,
             "targetBlockId": "main__Tag_motor_cmd",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -33
+              "midpointOffset": -73
             }
           },
           {
-            "id": "w_61_main__FlightController_main__Tag_rate_setpoint",
+            "id": "w_65_main__FlightController_main__Tag_rate_setpoint",
             "sourceBlockId": "main__FlightController",
             "sourcePortIndex": 1,
             "targetBlockId": "main__Tag_rate_setpoint",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 0
+              "midpointOffset": -40
             }
           },
           {
-            "id": "w_62_main__FlightController_main__Tag_gyro_dps",
+            "id": "w_66_main__FlightController_main__Tag_gyro_dps",
             "sourceBlockId": "main__FlightController",
             "sourcePortIndex": 2,
             "targetBlockId": "main__Tag_gyro_dps",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 30
-            }
-          },
-          {
-            "id": "w_63_main__FlightController_main__Tag_euler_est",
-            "sourceBlockId": "main__FlightController",
-            "sourcePortIndex": 3,
-            "targetBlockId": "main__Tag_euler_est",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 55
-            }
-          },
-          {
-            "id": "w_64_main__FlightController_main__Tag_altitude_est",
-            "sourceBlockId": "main__FlightController",
-            "sourcePortIndex": 4,
-            "targetBlockId": "main__Tag_altitude_est",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 24
-            }
-          },
-          {
-            "id": "w_65_main__FlightController_main__Tag_quat_est",
-            "sourceBlockId": "main__FlightController",
-            "sourcePortIndex": 5,
-            "targetBlockId": "main__Tag_quat_est",
             "targetPortIndex": 0,
             "routing": {
               "midpointOffset": -10
             }
           },
           {
-            "id": "w_66_main__FlightController_main__Tag_heading_deg",
+            "id": "w_67_main__FlightController_main__Tag_euler_est",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 3,
+            "targetBlockId": "main__Tag_euler_est",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 23
+            }
+          },
+          {
+            "id": "w_68_main__FlightController_main__Tag_altitude_est",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 4,
+            "targetBlockId": "main__Tag_altitude_est",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 56
+            }
+          },
+          {
+            "id": "w_69_main__FlightController_main__Tag_quat_est",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 5,
+            "targetBlockId": "main__Tag_quat_est",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 62
+            }
+          },
+          {
+            "id": "w_70_main__FlightController_main__Tag_heading_deg",
             "sourceBlockId": "main__FlightController",
             "sourcePortIndex": 6,
             "targetBlockId": "main__Tag_heading_deg",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -40
+              "midpointOffset": 80
+            }
+          },
+          {
+            "id": "w_71_main__FlightController_main__Tag_fc_armed",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 7,
+            "targetBlockId": "main__Tag_fc_armed",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 70
+            }
+          },
+          {
+            "id": "w_72_main__FlightController_main__Tag_fc_angle_mode",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 8,
+            "targetBlockId": "main__Tag_fc_angle_mode",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 32
+            }
+          },
+          {
+            "id": "w_73_main__FlightController_main__Tag_fc_airmode",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 9,
+            "targetBlockId": "main__Tag_fc_airmode",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 0
+            }
+          },
+          {
+            "id": "w_74_main__FlightController_main__Tag_home_valid",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 10,
+            "targetBlockId": "main__Tag_home_valid",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -32
+            }
+          },
+          {
+            "id": "w_75_main__FlightController_main__Tag_home_distance_m",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 11,
+            "targetBlockId": "main__Tag_home_distance_m",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -64
+            }
+          },
+          {
+            "id": "w_76_main__FlightController_main__Tag_home_bearing_deg",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 12,
+            "targetBlockId": "main__Tag_home_bearing_deg",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -80
             }
           }
         ],
         "extents": {
-          "width": 1982,
-          "height": 1673
+          "width": 2294,
+          "height": 2116
         }
       },
       {
@@ -11462,7 +12845,7 @@
             "name": "From_battery_voltage",
             "position": {
               "x": 100,
-              "y": -784
+              "y": -1144
             },
             "parameters": {
               "showName": true,
@@ -11474,8 +12857,8 @@
             "type": "output_port",
             "name": "battery_voltage",
             "position": {
-              "x": 300,
-              "y": -774
+              "x": 308,
+              "y": -1134
             },
             "parameters": {
               "showName": true,
@@ -11489,7 +12872,7 @@
             "name": "From_battery_current",
             "position": {
               "x": 100,
-              "y": -1072
+              "y": -1576
             },
             "parameters": {
               "showName": true,
@@ -11501,8 +12884,8 @@
             "type": "output_port",
             "name": "battery_current",
             "position": {
-              "x": 300,
-              "y": -1062
+              "x": 308,
+              "y": -1566
             },
             "parameters": {
               "showName": true,
@@ -11516,7 +12899,7 @@
             "name": "From_battery_soc",
             "position": {
               "x": 100,
-              "y": -928
+              "y": -1288
             },
             "parameters": {
               "showName": true,
@@ -11528,12 +12911,39 @@
             "type": "output_port",
             "name": "battery_soc",
             "position": {
-              "x": 316,
-              "y": -918
+              "x": 324,
+              "y": -1278
             },
             "parameters": {
               "showName": true,
               "portName": "battery_soc",
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "telemetry__From_battery_mah_drawn",
+            "type": "sheet_label_source",
+            "name": "From_battery_mah_drawn",
+            "position": {
+              "x": 100,
+              "y": -1432
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "battery_mah_drawn"
+            }
+          },
+          {
+            "id": "telemetry__battery_mah_drawn",
+            "type": "output_port",
+            "name": "battery_mah_drawn",
+            "position": {
+              "x": 300,
+              "y": -1422
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "battery_mah_drawn",
               "dataType": "double"
             }
           },
@@ -11543,7 +12953,7 @@
             "name": "From_imu_gyro",
             "position": {
               "x": 104,
-              "y": 656
+              "y": 1160
             },
             "parameters": {
               "showName": true,
@@ -11555,8 +12965,8 @@
             "type": "output_port",
             "name": "imu_gyro",
             "position": {
-              "x": 328,
-              "y": 666
+              "x": 336,
+              "y": 1170
             },
             "parameters": {
               "showName": true,
@@ -11570,7 +12980,7 @@
             "name": "From_imu_accel",
             "position": {
               "x": 102,
-              "y": 512
+              "y": 1016
             },
             "parameters": {
               "showName": true,
@@ -11582,8 +12992,8 @@
             "type": "output_port",
             "name": "imu_accel",
             "position": {
-              "x": 324,
-              "y": 522
+              "x": 332,
+              "y": 1026
             },
             "parameters": {
               "showName": true,
@@ -11597,7 +13007,7 @@
             "name": "From_mag",
             "position": {
               "x": 120,
-              "y": 800
+              "y": 1304
             },
             "parameters": {
               "showName": true,
@@ -11609,8 +13019,8 @@
             "type": "output_port",
             "name": "mag",
             "position": {
-              "x": 330,
-              "y": 810
+              "x": 338,
+              "y": 1314
             },
             "parameters": {
               "showName": true,
@@ -11624,7 +13034,7 @@
             "name": "From_pressure",
             "position": {
               "x": 104,
-              "y": 1520
+              "y": 2024
             },
             "parameters": {
               "showName": true,
@@ -11636,8 +13046,8 @@
             "type": "output_port",
             "name": "pressure",
             "position": {
-              "x": 328,
-              "y": 1530
+              "x": 336,
+              "y": 2034
             },
             "parameters": {
               "showName": true,
@@ -11651,7 +13061,7 @@
             "name": "From_gnss_pos",
             "position": {
               "x": 104,
-              "y": -64
+              "y": 8
             },
             "parameters": {
               "showName": true,
@@ -11663,8 +13073,8 @@
             "type": "output_port",
             "name": "gnss_pos",
             "position": {
-              "x": 328,
-              "y": -54
+              "x": 336,
+              "y": 18
             },
             "parameters": {
               "showName": true,
@@ -11678,7 +13088,7 @@
             "name": "From_gnss_vel_ned",
             "position": {
               "x": 100,
-              "y": 80
+              "y": 152
             },
             "parameters": {
               "showName": true,
@@ -11690,8 +13100,8 @@
             "type": "output_port",
             "name": "gnss_vel_ned",
             "position": {
-              "x": 312,
-              "y": 90
+              "x": 320,
+              "y": 162
             },
             "parameters": {
               "showName": true,
@@ -11705,7 +13115,7 @@
             "name": "From_gnss_fix",
             "position": {
               "x": 104,
-              "y": -208
+              "y": -136
             },
             "parameters": {
               "showName": true,
@@ -11717,8 +13127,8 @@
             "type": "output_port",
             "name": "gnss_fix",
             "position": {
-              "x": 328,
-              "y": -198
+              "x": 336,
+              "y": -126
             },
             "parameters": {
               "showName": true,
@@ -11732,7 +13142,7 @@
             "name": "From_gnss_course",
             "position": {
               "x": 100,
-              "y": -352
+              "y": -280
             },
             "parameters": {
               "showName": true,
@@ -11744,8 +13154,8 @@
             "type": "output_port",
             "name": "gnss_course",
             "position": {
-              "x": 316,
-              "y": -342
+              "x": 324,
+              "y": -270
             },
             "parameters": {
               "showName": true,
@@ -11759,7 +13169,7 @@
             "name": "From_pos_ned",
             "position": {
               "x": 106,
-              "y": 1376
+              "y": 1880
             },
             "parameters": {
               "showName": true,
@@ -11771,8 +13181,8 @@
             "type": "output_port",
             "name": "pos_ned",
             "position": {
-              "x": 330,
-              "y": 1386
+              "x": 338,
+              "y": 1890
             },
             "parameters": {
               "showName": true,
@@ -11786,7 +13196,7 @@
             "name": "From_vel_ned",
             "position": {
               "x": 106,
-              "y": 2096
+              "y": 2600
             },
             "parameters": {
               "showName": true,
@@ -11798,8 +13208,8 @@
             "type": "output_port",
             "name": "vel_ned",
             "position": {
-              "x": 330,
-              "y": 2106
+              "x": 338,
+              "y": 2610
             },
             "parameters": {
               "showName": true,
@@ -11813,7 +13223,7 @@
             "name": "From_quat",
             "position": {
               "x": 120,
-              "y": 1664
+              "y": 2168
             },
             "parameters": {
               "showName": true,
@@ -11825,8 +13235,8 @@
             "type": "output_port",
             "name": "quat",
             "position": {
-              "x": 330,
-              "y": 1674
+              "x": 338,
+              "y": 2178
             },
             "parameters": {
               "showName": true,
@@ -11840,7 +13250,7 @@
             "name": "From_euler",
             "position": {
               "x": 120,
-              "y": -640
+              "y": -1000
             },
             "parameters": {
               "showName": true,
@@ -11852,8 +13262,8 @@
             "type": "output_port",
             "name": "euler",
             "position": {
-              "x": 330,
-              "y": -630
+              "x": 338,
+              "y": -990
             },
             "parameters": {
               "showName": true,
@@ -11867,7 +13277,7 @@
             "name": "From_omega",
             "position": {
               "x": 120,
-              "y": 1232
+              "y": 1736
             },
             "parameters": {
               "showName": true,
@@ -11879,8 +13289,8 @@
             "type": "output_port",
             "name": "omega",
             "position": {
-              "x": 330,
-              "y": 1242
+              "x": 338,
+              "y": 1746
             },
             "parameters": {
               "showName": true,
@@ -11894,7 +13304,7 @@
             "name": "From_accel",
             "position": {
               "x": 120,
-              "y": -1360
+              "y": -1864
             },
             "parameters": {
               "showName": true,
@@ -11906,8 +13316,8 @@
             "type": "output_port",
             "name": "accel",
             "position": {
-              "x": 330,
-              "y": -1350
+              "x": 338,
+              "y": -1854
             },
             "parameters": {
               "showName": true,
@@ -11921,7 +13331,7 @@
             "name": "From_motor_omega",
             "position": {
               "x": 100,
-              "y": 1088
+              "y": 1592
             },
             "parameters": {
               "showName": true,
@@ -11933,8 +13343,8 @@
             "type": "output_port",
             "name": "motor_omega",
             "position": {
-              "x": 316,
-              "y": 1098
+              "x": 324,
+              "y": 1602
             },
             "parameters": {
               "showName": true,
@@ -11948,7 +13358,7 @@
             "name": "From_motor_cmd",
             "position": {
               "x": 102,
-              "y": 944
+              "y": 1448
             },
             "parameters": {
               "showName": true,
@@ -11960,8 +13370,8 @@
             "type": "output_port",
             "name": "motor_cmd",
             "position": {
-              "x": 324,
-              "y": 954
+              "x": 332,
+              "y": 1458
             },
             "parameters": {
               "showName": true,
@@ -11975,7 +13385,7 @@
             "name": "From_rate_setpoint",
             "position": {
               "x": 100,
-              "y": 1952
+              "y": 2456
             },
             "parameters": {
               "showName": true,
@@ -11987,8 +13397,8 @@
             "type": "output_port",
             "name": "rate_setpoint",
             "position": {
-              "x": 308,
-              "y": 1962
+              "x": 316,
+              "y": 2466
             },
             "parameters": {
               "showName": true,
@@ -12002,7 +13412,7 @@
             "name": "From_gyro_dps",
             "position": {
               "x": 104,
-              "y": 224
+              "y": 296
             },
             "parameters": {
               "showName": true,
@@ -12014,8 +13424,8 @@
             "type": "output_port",
             "name": "gyro_dps",
             "position": {
-              "x": 328,
-              "y": 234
+              "x": 336,
+              "y": 306
             },
             "parameters": {
               "showName": true,
@@ -12029,7 +13439,7 @@
             "name": "From_euler_est",
             "position": {
               "x": 102,
-              "y": -496
+              "y": -856
             },
             "parameters": {
               "showName": true,
@@ -12041,8 +13451,8 @@
             "type": "output_port",
             "name": "euler_est",
             "position": {
-              "x": 324,
-              "y": -486
+              "x": 332,
+              "y": -846
             },
             "parameters": {
               "showName": true,
@@ -12056,7 +13466,7 @@
             "name": "From_altitude_est",
             "position": {
               "x": 100,
-              "y": -1216
+              "y": -1720
             },
             "parameters": {
               "showName": true,
@@ -12068,8 +13478,8 @@
             "type": "output_port",
             "name": "altitude_est",
             "position": {
-              "x": 312,
-              "y": -1206
+              "x": 320,
+              "y": -1710
             },
             "parameters": {
               "showName": true,
@@ -12083,7 +13493,7 @@
             "name": "From_quat_est",
             "position": {
               "x": 104,
-              "y": 1808
+              "y": 2312
             },
             "parameters": {
               "showName": true,
@@ -12095,8 +13505,8 @@
             "type": "output_port",
             "name": "quat_est",
             "position": {
-              "x": 328,
-              "y": 1818
+              "x": 336,
+              "y": 2322
             },
             "parameters": {
               "showName": true,
@@ -12110,7 +13520,7 @@
             "name": "From_heading_deg",
             "position": {
               "x": 100,
-              "y": 368
+              "y": 440
             },
             "parameters": {
               "showName": true,
@@ -12122,12 +13532,174 @@
             "type": "output_port",
             "name": "heading_deg",
             "position": {
-              "x": 316,
-              "y": 378
+              "x": 324,
+              "y": 450
             },
             "parameters": {
               "showName": true,
               "portName": "heading_deg",
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "telemetry__From_fc_armed",
+            "type": "sheet_label_source",
+            "name": "From_fc_armed",
+            "position": {
+              "x": 104,
+              "y": -424
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_armed"
+            }
+          },
+          {
+            "id": "telemetry__fc_armed",
+            "type": "output_port",
+            "name": "fc_armed",
+            "position": {
+              "x": 336,
+              "y": -414
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "fc_armed",
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "telemetry__From_fc_angle_mode",
+            "type": "sheet_label_source",
+            "name": "From_fc_angle_mode",
+            "position": {
+              "x": 100,
+              "y": -568
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_angle_mode"
+            }
+          },
+          {
+            "id": "telemetry__fc_angle_mode",
+            "type": "output_port",
+            "name": "fc_angle_mode",
+            "position": {
+              "x": 316,
+              "y": -558
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "fc_angle_mode",
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "telemetry__From_fc_airmode",
+            "type": "sheet_label_source",
+            "name": "From_fc_airmode",
+            "position": {
+              "x": 100,
+              "y": -712
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "fc_airmode"
+            }
+          },
+          {
+            "id": "telemetry__fc_airmode",
+            "type": "output_port",
+            "name": "fc_airmode",
+            "position": {
+              "x": 328,
+              "y": -702
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "fc_airmode",
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "telemetry__From_home_valid",
+            "type": "sheet_label_source",
+            "name": "From_home_valid",
+            "position": {
+              "x": 100,
+              "y": 872
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "home_valid"
+            }
+          },
+          {
+            "id": "telemetry__home_valid",
+            "type": "output_port",
+            "name": "home_valid",
+            "position": {
+              "x": 328,
+              "y": 882
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "home_valid",
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "telemetry__From_home_distance_m",
+            "type": "sheet_label_source",
+            "name": "From_home_distance_m",
+            "position": {
+              "x": 100,
+              "y": 728
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "home_distance_m"
+            }
+          },
+          {
+            "id": "telemetry__home_distance_m",
+            "type": "output_port",
+            "name": "home_distance_m",
+            "position": {
+              "x": 308,
+              "y": 738
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "home_distance_m",
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "telemetry__From_home_bearing_deg",
+            "type": "sheet_label_source",
+            "name": "From_home_bearing_deg",
+            "position": {
+              "x": 100,
+              "y": 584
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "home_bearing_deg"
+            }
+          },
+          {
+            "id": "telemetry__home_bearing_deg",
+            "type": "output_port",
+            "name": "home_bearing_deg",
+            "position": {
+              "x": 304,
+              "y": 594
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "home_bearing_deg",
               "dataType": "double"
             }
           }
@@ -12155,163 +13727,212 @@
             "targetPortIndex": 0
           },
           {
-            "id": "w_4_telemetry__From_imu_gyro_telemetry__imu_gyro",
+            "id": "w_4_telemetry__From_battery_mah_drawn_telemetry__battery_mah_drawn",
+            "sourceBlockId": "telemetry__From_battery_mah_drawn",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__battery_mah_drawn",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_5_telemetry__From_imu_gyro_telemetry__imu_gyro",
             "sourceBlockId": "telemetry__From_imu_gyro",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__imu_gyro",
             "targetPortIndex": 0
           },
           {
-            "id": "w_5_telemetry__From_imu_accel_telemetry__imu_accel",
+            "id": "w_6_telemetry__From_imu_accel_telemetry__imu_accel",
             "sourceBlockId": "telemetry__From_imu_accel",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__imu_accel",
             "targetPortIndex": 0
           },
           {
-            "id": "w_6_telemetry__From_mag_telemetry__mag",
+            "id": "w_7_telemetry__From_mag_telemetry__mag",
             "sourceBlockId": "telemetry__From_mag",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__mag",
             "targetPortIndex": 0
           },
           {
-            "id": "w_7_telemetry__From_pressure_telemetry__pressure",
+            "id": "w_8_telemetry__From_pressure_telemetry__pressure",
             "sourceBlockId": "telemetry__From_pressure",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__pressure",
             "targetPortIndex": 0
           },
           {
-            "id": "w_8_telemetry__From_gnss_pos_telemetry__gnss_pos",
+            "id": "w_9_telemetry__From_gnss_pos_telemetry__gnss_pos",
             "sourceBlockId": "telemetry__From_gnss_pos",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__gnss_pos",
             "targetPortIndex": 0
           },
           {
-            "id": "w_9_telemetry__From_gnss_vel_ned_telemetry__gnss_vel_ned",
+            "id": "w_10_telemetry__From_gnss_vel_ned_telemetry__gnss_vel_ned",
             "sourceBlockId": "telemetry__From_gnss_vel_ned",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__gnss_vel_ned",
             "targetPortIndex": 0
           },
           {
-            "id": "w_10_telemetry__From_gnss_fix_telemetry__gnss_fix",
+            "id": "w_11_telemetry__From_gnss_fix_telemetry__gnss_fix",
             "sourceBlockId": "telemetry__From_gnss_fix",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__gnss_fix",
             "targetPortIndex": 0
           },
           {
-            "id": "w_11_telemetry__From_gnss_course_telemetry__gnss_course",
+            "id": "w_12_telemetry__From_gnss_course_telemetry__gnss_course",
             "sourceBlockId": "telemetry__From_gnss_course",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__gnss_course",
             "targetPortIndex": 0
           },
           {
-            "id": "w_12_telemetry__From_pos_ned_telemetry__pos_ned",
+            "id": "w_13_telemetry__From_pos_ned_telemetry__pos_ned",
             "sourceBlockId": "telemetry__From_pos_ned",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__pos_ned",
             "targetPortIndex": 0
           },
           {
-            "id": "w_13_telemetry__From_vel_ned_telemetry__vel_ned",
+            "id": "w_14_telemetry__From_vel_ned_telemetry__vel_ned",
             "sourceBlockId": "telemetry__From_vel_ned",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__vel_ned",
             "targetPortIndex": 0
           },
           {
-            "id": "w_14_telemetry__From_quat_telemetry__quat",
+            "id": "w_15_telemetry__From_quat_telemetry__quat",
             "sourceBlockId": "telemetry__From_quat",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__quat",
             "targetPortIndex": 0
           },
           {
-            "id": "w_15_telemetry__From_euler_telemetry__euler",
+            "id": "w_16_telemetry__From_euler_telemetry__euler",
             "sourceBlockId": "telemetry__From_euler",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__euler",
             "targetPortIndex": 0
           },
           {
-            "id": "w_16_telemetry__From_omega_telemetry__omega",
+            "id": "w_17_telemetry__From_omega_telemetry__omega",
             "sourceBlockId": "telemetry__From_omega",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__omega",
             "targetPortIndex": 0
           },
           {
-            "id": "w_17_telemetry__From_accel_telemetry__accel",
+            "id": "w_18_telemetry__From_accel_telemetry__accel",
             "sourceBlockId": "telemetry__From_accel",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__accel",
             "targetPortIndex": 0
           },
           {
-            "id": "w_18_telemetry__From_motor_omega_telemetry__motor_omega",
+            "id": "w_19_telemetry__From_motor_omega_telemetry__motor_omega",
             "sourceBlockId": "telemetry__From_motor_omega",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__motor_omega",
             "targetPortIndex": 0
           },
           {
-            "id": "w_19_telemetry__From_motor_cmd_telemetry__motor_cmd",
+            "id": "w_20_telemetry__From_motor_cmd_telemetry__motor_cmd",
             "sourceBlockId": "telemetry__From_motor_cmd",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__motor_cmd",
             "targetPortIndex": 0
           },
           {
-            "id": "w_20_telemetry__From_rate_setpoint_telemetry__rate_setpoint",
+            "id": "w_21_telemetry__From_rate_setpoint_telemetry__rate_setpoint",
             "sourceBlockId": "telemetry__From_rate_setpoint",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__rate_setpoint",
             "targetPortIndex": 0
           },
           {
-            "id": "w_21_telemetry__From_gyro_dps_telemetry__gyro_dps",
+            "id": "w_22_telemetry__From_gyro_dps_telemetry__gyro_dps",
             "sourceBlockId": "telemetry__From_gyro_dps",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__gyro_dps",
             "targetPortIndex": 0
           },
           {
-            "id": "w_22_telemetry__From_euler_est_telemetry__euler_est",
+            "id": "w_23_telemetry__From_euler_est_telemetry__euler_est",
             "sourceBlockId": "telemetry__From_euler_est",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__euler_est",
             "targetPortIndex": 0
           },
           {
-            "id": "w_23_telemetry__From_altitude_est_telemetry__altitude_est",
+            "id": "w_24_telemetry__From_altitude_est_telemetry__altitude_est",
             "sourceBlockId": "telemetry__From_altitude_est",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__altitude_est",
             "targetPortIndex": 0
           },
           {
-            "id": "w_24_telemetry__From_quat_est_telemetry__quat_est",
+            "id": "w_25_telemetry__From_quat_est_telemetry__quat_est",
             "sourceBlockId": "telemetry__From_quat_est",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__quat_est",
             "targetPortIndex": 0
           },
           {
-            "id": "w_25_telemetry__From_heading_deg_telemetry__heading_deg",
+            "id": "w_26_telemetry__From_heading_deg_telemetry__heading_deg",
             "sourceBlockId": "telemetry__From_heading_deg",
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__heading_deg",
             "targetPortIndex": 0
+          },
+          {
+            "id": "w_27_telemetry__From_fc_armed_telemetry__fc_armed",
+            "sourceBlockId": "telemetry__From_fc_armed",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__fc_armed",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_28_telemetry__From_fc_angle_mode_telemetry__fc_angle_mode",
+            "sourceBlockId": "telemetry__From_fc_angle_mode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__fc_angle_mode",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_29_telemetry__From_fc_airmode_telemetry__fc_airmode",
+            "sourceBlockId": "telemetry__From_fc_airmode",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__fc_airmode",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_30_telemetry__From_home_valid_telemetry__home_valid",
+            "sourceBlockId": "telemetry__From_home_valid",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__home_valid",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_31_telemetry__From_home_distance_m_telemetry__home_distance_m",
+            "sourceBlockId": "telemetry__From_home_distance_m",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__home_distance_m",
+            "targetPortIndex": 0
+          },
+          {
+            "id": "w_32_telemetry__From_home_bearing_deg_telemetry__home_bearing_deg",
+            "sourceBlockId": "telemetry__From_home_bearing_deg",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__home_bearing_deg",
+            "targetPortIndex": 0
           }
         ],
         "extents": {
-          "width": 630,
-          "height": 2306
+          "width": 638,
+          "height": 2810
         }
       }
     ]

@@ -12,16 +12,16 @@ const testsSheet = (model: ReturnType<typeof buildFpvModel>) =>
   ((model.data as any).sheets as any[]).find(s => s.name === 'Tests')
 
 describe('FPV reference model: Tests sheet', () => {
-  test('the default demo carries 11 Asserts, and all pass', () => {
+  test('the default demo carries 19 Asserts, and all pass', () => {
     const model = buildFpvModel()
     const asserts = testsSheet(model).blocks.filter((b: any) => b.type === 'assert')
-    expect(asserts).toHaveLength(11)
+    expect(asserts).toHaveLength(19)
     expect(asserts.find((b: any) => b.name === 'StaysUpright').parameters.onFailure).toBe('stop')
 
     const r = runModelTests({ name: 'fpv_tests', data: model.data as any })
     expect(r.status).toBe('passed')
     expect(r.stepsRun).toBe(10000)
-    expect(r.asserts.map(a => a.status)).toEqual(Array(11).fill('passed'))
+    expect(r.asserts.map(a => a.status)).toEqual(Array(19).fill('passed'))
   })
 
   test('each Assert reads the intended signal: impossible limits report the value at the window start', () => {

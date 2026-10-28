@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 271
+              "y": 273
             },
             "parameters": {
               "showName": true,
@@ -352,7 +352,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 177
+              "y": 144
             },
             "parameters": {
               "showName": true,
@@ -367,6 +367,7 @@
                 "battery_voltage",
                 "battery_current",
                 "battery_soc",
+                "battery_mah_drawn",
                 "imu_gyro",
                 "imu_accel",
                 "mag",
@@ -388,7 +389,13 @@
                 "euler_est",
                 "altitude_est",
                 "quat_est",
-                "heading_deg"
+                "heading_deg",
+                "fc_armed",
+                "fc_angle_mode",
+                "fc_airmode",
+                "home_valid",
+                "home_distance_m",
+                "home_bearing_deg"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -404,7 +411,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 466
+              "y": 521
             },
             "parameters": {
               "showName": true,
@@ -610,7 +617,7 @@
             "name": "Tag_gnss_pos",
             "position": {
               "x": 488,
-              "y": 8
+              "y": -4
             },
             "parameters": {
               "showName": true,
@@ -623,7 +630,7 @@
             "name": "Tag_gnss_vel_ned",
             "position": {
               "x": 484,
-              "y": 152
+              "y": 140
             },
             "parameters": {
               "showName": true,
@@ -636,7 +643,7 @@
             "name": "Tag_gnss_fix",
             "position": {
               "x": 488,
-              "y": 296
+              "y": 284
             },
             "parameters": {
               "showName": true,
@@ -649,7 +656,7 @@
             "name": "Tag_pos_ned",
             "position": {
               "x": 490,
-              "y": 440
+              "y": 428
             },
             "parameters": {
               "showName": true,
@@ -662,7 +669,7 @@
             "name": "Tag_vel_ned",
             "position": {
               "x": 490,
-              "y": 584
+              "y": 572
             },
             "parameters": {
               "showName": true,
@@ -675,7 +682,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 728
+              "y": 716
             },
             "parameters": {
               "showName": true,
@@ -714,7 +721,7 @@
           {
             "id": "w_4_main__Vehicle_main__Tag_gnss_pos",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 7,
+            "sourcePortIndex": 8,
             "targetBlockId": "main__Tag_gnss_pos",
             "targetPortIndex": 0,
             "routing": {
@@ -724,7 +731,7 @@
           {
             "id": "w_5_main__Vehicle_main__Tag_gnss_vel_ned",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 8,
+            "sourcePortIndex": 9,
             "targetBlockId": "main__Tag_gnss_vel_ned",
             "targetPortIndex": 0,
             "routing": {
@@ -734,7 +741,7 @@
           {
             "id": "w_6_main__Vehicle_main__Tag_gnss_fix",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 9,
+            "sourcePortIndex": 10,
             "targetBlockId": "main__Tag_gnss_fix",
             "targetPortIndex": 0,
             "routing": {
@@ -744,7 +751,7 @@
           {
             "id": "w_7_main__Vehicle_main__Tag_pos_ned",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 11,
+            "sourcePortIndex": 12,
             "targetBlockId": "main__Tag_pos_ned",
             "targetPortIndex": 0,
             "routing": {
@@ -754,7 +761,7 @@
           {
             "id": "w_8_main__Vehicle_main__Tag_vel_ned",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 12,
+            "sourcePortIndex": 13,
             "targetBlockId": "main__Tag_vel_ned",
             "targetPortIndex": 0,
             "routing": {
@@ -764,7 +771,7 @@
           {
             "id": "w_9_main__Vehicle_main__Tag_euler",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 14,
+            "sourcePortIndex": 15,
             "targetBlockId": "main__Tag_euler",
             "targetPortIndex": 0,
             "routing": {
@@ -774,7 +781,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 928
+          "height": 916
         }
       },
       {

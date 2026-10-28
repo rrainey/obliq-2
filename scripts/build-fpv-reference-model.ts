@@ -94,6 +94,8 @@ export const FC = {
   angle: { limitDeg: 60, gain: 5 },
   /** Airmode (and the I-term) starts once throttle first exceeds this after arming (airmode_start_throttle_percent 25). */
   airmodeStartThrottle: 0.25,
+  /** Satellites needed to take home at arming (Betaflight gps_rescue_min_sats). */
+  homeMinSats: 8,
 }
 
 /**
@@ -391,6 +393,8 @@ export const DEMO_TESTS = {
   minBatteryV: 4 * 3.5,
   /** Roll or pitch beyond this ends the run (stop on failure) */
   uprightDeg: 60,
+  /** GNSS horizontal fix error, and home distance error (about 4σ at HDOP 0.8) */
+  gnssHorizontalM: 6,
 }
 
 /**
@@ -567,7 +571,7 @@ const MOTOR_SIZE = { width: 140, height: 80 }
 const FRAME_SIZE = { width: 160, height: 260 }
 const FC_SIZE = { width: 220, height: 180 }
 const SENSORS_SIZE = { width: 170, height: 150 }
-const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'altitude_est', 'quat_est', 'heading_deg']
+const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'altitude_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg']
 
 // ---------------------------------------------------------------------------
 // Motor / ESC / propeller (one definition, referenced by the other three)
@@ -1469,6 +1473,9 @@ function buildAngleModeSheet(): SheetBuilder {
   s.wire(on, select, 1)
   s.wire(level, select, 2)
   s.output('setpoint', select, 'double[3]')
+  const modeFlag = s.add('evaluate', 'AngleModeFlag', { numInputs: 1, expression: '(in(0) > 0.5) ? 1.0 : 0.0' })
+  s.wire(on, modeFlag)
+  s.output('angle_mode', modeFlag, 'double')
   return s
 }
 
@@ -1629,6 +1636,99 @@ function buildArmingSheet(): SheetBuilder {
   return s
 }
 
+/**
+ * Home, after Betaflight (docs/fpv-betaflight-gnss-spec.md §1.4): latched
+ * from the GNSS fix on the arming sample only, with a 3D fix and at least
+ * FC.homeMinSats satellites, and cleared on disarm. Distance and bearing
+ * update on each new fix (a 10 Hz child aligned with the receiver).
+ */
+function buildHomeSheet(): SheetBuilder {
+  const s = new SheetBuilder('home', 'Home')
+  const armed = s.input('armed', 'double')
+  const pos = s.input('gnss_pos', 'double[3]')
+  const fix = s.input('gnss_fix', 'double[3]')
+  const gamma = s.input('grid_convergence_deg', 'double')
+  const fixSplit = s.add('demux', 'FixSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(fix, fixSplit)
+  const posSplit = s.add('demux', 'PosSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(pos, posSplit)
+
+  const armedPrev = s.add('unit_delay', 'ArmedPrev', { initialValue: 0, sampleInterval: FC.ts })
+  s.wire(armed, armedPrev)
+  // in(0) armed, in(1) armed before, in(2) fix type, in(3) satellites
+  const latchNow = s.add('evaluate', 'LatchNow', {
+    numInputs: 4,
+    expression: `(in(0) > 0.5 && in(1) < 0.5 && in(2) > 2.5 && in(3) >= ${FC.homeMinSats}.0) ? 1.0 : 0.0`,
+  })
+  s.wire(armed, latchNow, 0)
+  s.wire(armedPrev, latchNow, 1)
+  s.wire(fixSplit, latchNow, 2, 0)
+  s.wire(fixSplit, latchNow, 3, 1)
+  const validPrev = s.add('unit_delay', 'HomeValidPrev', { initialValue: 0, sampleInterval: FC.ts })
+  const valid = s.add('evaluate', 'HomeValid', { numInputs: 3, expression: '(in(0) > 0.5) ? fmax(in(1), in(2)) : 0.0' })
+  s.wire(armed, valid, 0)
+  s.wire(latchNow, valid, 1)
+  s.wire(validPrev, valid, 2)
+  s.wire(valid, validPrev)
+  const homePrev = s.add('unit_delay', 'HomePrev', { initialValue: [0, 0], sampleInterval: FC.ts })
+  const homeSplit = s.add('demux', 'HomePrevSplit', { outputCount: 2, inputDimensions: [2] })
+  s.wire(homePrev, homeSplit)
+  const home = s.add('mux', 'HomePosition', { rows: 2, cols: 1, baseType: 'double', outputType: 'double[2]' })
+  ;['North', 'East'].forEach((axis, k) => {
+    const ev = s.add('evaluate', `Home${axis}`, { numInputs: 3, expression: '(in(0) > 0.5) ? in(1) : in(2)' })
+    s.wire(latchNow, ev, 0)
+    s.wire(posSplit, ev, 1, k)
+    s.wire(homeSplit, ev, 2, k)
+    s.wire(ev, home, k)
+  })
+  s.wire(home, homePrev)
+
+  const vector = s.add('subsystem', 'HomeVector', {
+    ...subsystem(['home', 'valid', 'gnss_pos', 'grid_convergence_deg'], ['distance', 'bearing'], buildHomeVectorSheet()),
+    sampleTimeSec: SENSORS.gnss.ts,
+  })
+  s.wire(home, vector, 0)
+  s.wire(valid, vector, 1)
+  s.wire(pos, vector, 2)
+  s.wire(gamma, vector, 3)
+  s.output('home_valid', valid, 'double')
+  s.output('home_distance_m', vector, 'double', 0)
+  s.output('home_bearing_deg', vector, 'double', 1)
+  return s
+}
+
+/** Distance and true bearing from the vehicle to home, on each fix; 0 without a home. */
+function buildHomeVectorSheet(): SheetBuilder {
+  const s = new SheetBuilder('homevec', 'HomeVector')
+  const home = s.input('home', 'double[2]')
+  const valid = s.input('valid', 'double')
+  const pos = s.input('gnss_pos', 'double[3]')
+  const gamma = s.input('grid_convergence_deg', 'double')
+  const homeSplit = s.add('demux', 'HomeSplit', { outputCount: 2, inputDimensions: [2] })
+  s.wire(home, homeSplit)
+  const posSplit = s.add('demux', 'PosSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(pos, posSplit)
+  // in(0) valid, in(1) home n, in(2) home e, in(3) n, in(4) e [, in(5) γ]
+  const wireAll = (ev: string) => {
+    s.wire(valid, ev, 0)
+    s.wire(homeSplit, ev, 1, 0)
+    s.wire(homeSplit, ev, 2, 1)
+    s.wire(posSplit, ev, 3, 0)
+    s.wire(posSplit, ev, 4, 1)
+  }
+  const distance = s.add('evaluate', 'Distance', { numInputs: 5, expression: '(in(0) > 0.5) ? sqrt((in(1) - in(3)) * (in(1) - in(3)) + (in(2) - in(4)) * (in(2) - in(4))) : 0.0' })
+  wireAll(distance)
+  const bearing = s.add('evaluate', 'BearingTrue', {
+    numInputs: 6,
+    expression: `(in(0) > 0.5) ? fmod(atan2(in(2) - in(4), in(1) - in(3)) * ${180 / Math.PI} + in(5) + 720.0, 360.0) : 0.0`,
+  })
+  wireAll(bearing)
+  s.wire(gamma, bearing, 5)
+  s.output('distance', distance, 'double')
+  s.output('bearing', bearing, 'double')
+  return s
+}
+
 function buildFlightControllerSheet(initialQuat: number[][], altitude0: number): SheetBuilder {
   const s = new SheetBuilder('fc', 'FlightController')
   const sticks = s.input('sticks', 'double[6]')
@@ -1637,6 +1737,8 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   const mag = s.input('mag', 'double[3]')
   const pressure = s.input('pressure', 'double')
   const gamma = s.input('grid_convergence_deg', 'double')
+  const gnssPos = s.input('gnss_pos', 'double[3]')
+  const gnssFix = s.input('gnss_fix', 'double[3]')
 
   // Estimators
   const att = s.add('subsystem', 'AttitudeEstimator', subsystem(['gyro', 'accel', 'mag', 'grid_convergence_deg'], ['quat', 'euler'], buildAttitudeEstimatorSheet(initialQuat)))
@@ -1652,7 +1754,7 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   // Setpoint: acro rates, or angle mode on the AUX switch
   const rates = s.add('subsystem', 'Rates', subsystem(['sticks'], ['setpoint', 'throttle'], buildRatesSheet()))
   s.wire(sticks, rates)
-  const angle = s.add('subsystem', 'AngleMode', subsystem(['sticks', 'euler_est', 'acro_setpoint'], ['setpoint'], buildAngleModeSheet()))
+  const angle = s.add('subsystem', 'AngleMode', subsystem(['sticks', 'euler_est', 'acro_setpoint'], ['setpoint', 'angle_mode'], buildAngleModeSheet()))
   s.wire(sticks, angle, 0)
   s.wire(att, angle, 1, 1)
   s.wire(rates, angle, 2, 0)
@@ -1687,6 +1789,19 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number):
   s.wire(yawEst, heading, 0)
   s.wire(gamma, heading, 1)
   s.output('heading_deg', heading, 'double')
+
+  // Home (from GNSS, as Betaflight) and the flight-mode flags
+  const home = s.add('subsystem', 'Home', subsystem(['armed', 'gnss_pos', 'gnss_fix', 'grid_convergence_deg'], ['home_valid', 'home_distance_m', 'home_bearing_deg'], buildHomeSheet()))
+  s.wire(arming, home, 0, 0)
+  s.wire(gnssPos, home, 1)
+  s.wire(gnssFix, home, 2)
+  s.wire(gamma, home, 3)
+  s.output('fc_armed', arming, 'double', 0)
+  s.output('fc_angle_mode', angle, 'double', 1)
+  s.output('fc_airmode', arming, 'double', 1)
+  s.output('home_valid', home, 'double', 0)
+  s.output('home_distance_m', home, 'double', 1)
+  s.output('home_bearing_deg', home, 'double', 2)
   return s
 }
 
@@ -1768,7 +1883,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
       names.forEach((n, k) => conditionSource.set(n, [cond, k]))
     }
     fc = main.add('subsystem', 'FlightController', {
-      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure', 'grid_convergence_deg'], FC_OUTPUTS, buildFlightControllerSheet(initialQuat, altitude0), FC_SIZE),
+      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure', 'grid_convergence_deg', 'gnss_pos', 'gnss_fix'], FC_OUTPUTS, buildFlightControllerSheet(initialQuat, altitude0), FC_SIZE),
       sampleTimeSec: FC.ts,
     })
     main.wire(pilot, fc, 0)
@@ -1817,6 +1932,10 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     publish('battery_voltage', supply, 'double', 0)
     publish('battery_current', supply, 'double', 1)
     publish('battery_soc', supply, 'double', 2)
+    // Charge drawn, as Betaflight's mAh counter: (1 − SOC) × capacity
+    const mah = main.add('evaluate', 'MahDrawn', { numInputs: 1, expression: `(1.0 - in(0)) * ${BATTERY.capacityAh * 1000}` })
+    main.wire(supply, mah, 0, 2)
+    publish('battery_mah_drawn', mah, 'double')
   }
   motorIds.forEach(id => main.wire(supply, id, 1, 0))
 
@@ -1837,6 +1956,8 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     wireCondition('gnss_env', sensors, 6)
     for (let i = 0; i < 4; i++) main.wire(sensors, fc, i + 1, i)
     wireCondition('grid_convergence_deg', fc, 5)
+    main.wire(sensors, fc, 6, 4)
+    main.wire(sensors, fc, 7, 6)
     publish('imu_gyro', sensors, 'double[3]', 0)
     publish('imu_accel', sensors, 'double[3]', 1)
     publish('mag', sensors, 'double[3]', 2)
@@ -1854,6 +1975,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     publish('altitude_est', fc, 'double', 4)
     publish('quat_est', fc, 'double[4][1]', 5)
     publish('heading_deg', fc, 'double', 6)
+    ;['fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg'].forEach((name, k) => publish(name, fc!, 'double', 7 + k))
   }
 
   // Scopes, on the Telemetry sheet
@@ -2565,6 +2687,37 @@ function buildTestsSheet(): SheetBuilder {
   check('AltitudeEstimateTracks', from('altitude_est'), { mode: 'near', absTol: t.altitudeEstimateM, relTol: 0 }, trueAltitude)
   check('BatteryAboveCutoff', from('battery_voltage'), { lower: t.minBatteryV, upper: null })
   check('StaysUpright', rollPitch, { lower: -t.uprightDeg, upper: t.uprightDeg, onFailure: 'stop' })
+
+  // OSD signals (docs/fpv-hud-gnss-test-plan.md, T01): flags, home, GNSS, mAh
+  const armed = from('fc_armed')
+  check('ArmedFlagOffBeforeArming', armed, { lower: 0, upper: 0, checkUntil: t.armTime - 0.01 })
+  check('ArmedFlagOnAfterArming', armed, { lower: 1, upper: 1, checkFrom: t.armTime + 0.01 })
+  check('ModeIsAngle', from('fc_angle_mode'), { lower: 1, upper: 1 })
+  const homeValid = from('home_valid')
+  check('HomeUnsetBeforeArming', homeValid, { lower: 0, upper: 0, checkUntil: t.armTime - 0.01 })
+  check('HomeSetOnArm', homeValid, { lower: 1, upper: 1, checkFrom: t.armTime + 0.01 })
+  const gnss = from('gnss_pos')
+  const horizontal = (name: string, a: string, b: string) => {
+    const id = s.add('evaluate', name, { numInputs: 4, expression: 'sqrt((in(0) - in(2)) * (in(0) - in(2)) + (in(1) - in(3)) * (in(1) - in(3)))' })
+    s.wire(pick(`${name}A0`, a, [0]), id, 0)
+    s.wire(pick(`${name}A1`, a, [1]), id, 1)
+    s.wire(pick(`${name}B0`, b, [0]), id, 2)
+    s.wire(pick(`${name}B1`, b, [1]), id, 3)
+    return id
+  }
+  check('GnssTracksTruth', horizontal('GnssHorizontalError', gnss, pos), { lower: 0, upper: t.gnssHorizontalM })
+  // The vehicle armed at rest at the origin, so the true distance home is |n, e|
+  const trueDistance = s.add('evaluate', 'TrueDistanceHome', { numInputs: 2, expression: 'sqrt(in(0) * in(0) + in(1) * in(1))' })
+  s.wire(pick('TruthNorth', pos, [0]), trueDistance, 0)
+  s.wire(pick('TruthEast', pos, [1]), trueDistance, 1)
+  const distanceError = s.add('evaluate', 'HomeDistanceError', { numInputs: 2, expression: 'in(0) - in(1)' })
+  s.wire(from('home_distance_m'), distanceError, 0)
+  s.wire(trueDistance, distanceError, 1)
+  check('HomeDistanceTracks', distanceError, { lower: -t.gnssHorizontalM, upper: t.gnssHorizontalM, checkFrom: t.armTime + SENSORS.gnss.ts + 0.01 })
+  const mahError = s.add('evaluate', 'MahDrawnError', { numInputs: 2, expression: `in(0) - (1.0 - in(1)) * ${BATTERY.capacityAh * 1000}` })
+  s.wire(from('battery_mah_drawn'), mahError, 0)
+  s.wire(from('battery_soc'), mahError, 1)
+  check('MahDrawnMatchesSoc', mahError, { lower: -1e-9, upper: 1e-9 })
   return s
 }
 

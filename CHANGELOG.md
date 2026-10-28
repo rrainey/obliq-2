@@ -10,6 +10,13 @@
   - `gnss_vel_ned`: true-north velocity, to 1 cm/s;
   - `gnss_fix`: fix type, satellites and pDOP. The fix is 3D with 4 or more satellites, 2D with 3 (altitude held), and none below that, with outputs held; a lost fix returns 1 s after its satellites do;
   - `gnss_course`: track made good (true and magnetic), ground speed, and whether the track is valid. Below 0.5 m/s the track is not valid and holds.
+- **The FPV flight controller publishes the values a Betaflight OSD shows:**
+  - `fc_armed`, `fc_angle_mode` and `fc_airmode`;
+  - home, taken from the GNSS fix only when the quad arms, and only with a 3D fix and at least 8 satellites, as Betaflight does. It is cleared on disarm;
+  - `home_distance_m` and `home_bearing_deg` (true), updated on each fix;
+  - `battery_mah_drawn`.
+
+  The Demo Flight's Tests sheet checks them, with 19 Asserts.
 - **Fixed: a Demux fed by a subsystem named "Conditions" (or anything containing "condition") split its vector wrongly.** It copied only the first element and set the rest to 0, with no warning. A guard for mislabelled relational outputs matched the name; it now matches "condition" only as a whole name segment. Generated code for every stored model is unchanged.
 - **Fixed: with ideal sensors the FPV attitude estimate became NaN** when the accelerometer read zero (free fall at the start of an airborne run). A zero vector now gives no correction instead of 0/0.
 - **FPV validation suite.** `test-models/fpv/` holds test models run with `npm run obliq:test -- test-models/fpv/t*.json`, with its own copy of the vehicle. T03–T05 check the GNSS receiver's error statistics, fix rules and course, and T06 checks grid convergence. T00 checks the Tests-sheet helpers that later test models use: event latches, first-event times, running extremes, and windowed mean square and correlation.

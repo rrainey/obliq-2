@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 183
+              "y": 199
             },
             "parameters": {
               "showName": true,
@@ -370,7 +370,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 89
+              "y": 70
             },
             "parameters": {
               "showName": true,
@@ -385,6 +385,7 @@
                 "battery_voltage",
                 "battery_current",
                 "battery_soc",
+                "battery_mah_drawn",
                 "imu_gyro",
                 "imu_accel",
                 "mag",
@@ -406,7 +407,13 @@
                 "euler_est",
                 "altitude_est",
                 "quat_est",
-                "heading_deg"
+                "heading_deg",
+                "fc_armed",
+                "fc_angle_mode",
+                "fc_airmode",
+                "home_valid",
+                "home_distance_m",
+                "home_bearing_deg"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -422,7 +429,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 378
+              "y": 447
             },
             "parameters": {
               "showName": true,
@@ -628,7 +635,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 215
+              "y": 217
             },
             "parameters": {
               "showName": true,
@@ -641,7 +648,7 @@
             "name": "Tag_motor_cmd",
             "position": {
               "x": 486,
-              "y": 360
+              "y": 361
             },
             "parameters": {
               "showName": true,
@@ -654,7 +661,7 @@
             "name": "Tag_rate_setpoint",
             "position": {
               "x": 484,
-              "y": 504
+              "y": 505
             },
             "parameters": {
               "showName": true,
@@ -667,7 +674,7 @@
             "name": "Tag_gyro_dps",
             "position": {
               "x": 488,
-              "y": 648
+              "y": 649
             },
             "parameters": {
               "showName": true,
@@ -706,7 +713,7 @@
           {
             "id": "w_4_main__Vehicle_main__Tag_euler",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 14,
+            "sourcePortIndex": 15,
             "targetBlockId": "main__Tag_euler",
             "targetPortIndex": 0,
             "routing": {
@@ -716,7 +723,7 @@
           {
             "id": "w_5_main__Vehicle_main__Tag_motor_cmd",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 18,
+            "sourcePortIndex": 19,
             "targetBlockId": "main__Tag_motor_cmd",
             "targetPortIndex": 0,
             "routing": {
@@ -726,7 +733,7 @@
           {
             "id": "w_6_main__Vehicle_main__Tag_rate_setpoint",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 19,
+            "sourcePortIndex": 20,
             "targetBlockId": "main__Tag_rate_setpoint",
             "targetPortIndex": 0,
             "routing": {
@@ -736,7 +743,7 @@
           {
             "id": "w_7_main__Vehicle_main__Tag_gyro_dps",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 20,
+            "sourcePortIndex": 21,
             "targetBlockId": "main__Tag_gyro_dps",
             "targetPortIndex": 0,
             "routing": {
@@ -746,7 +753,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 848
+          "height": 849
         }
       },
       {

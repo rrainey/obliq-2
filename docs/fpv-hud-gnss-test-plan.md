@@ -69,7 +69,7 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | Model | Duration | Scenario | Asserts (summary) |
 |---|---|---|---|
 | **T00 Test Helpers** | 6 s | No vehicle: a ramp, a 0.5 Hz sine and unit Gaussian noise | Each helper in section 2.2 against its known answer (latch, first time 2.0 s, max 1 and min −1, value held at 3 s, mean square 0.5 and 1 ± 0.05, correlation −1 at half a period and 0 at a quarter, phase visited). The Jest runner also sets impossible limits on every Assert, to show none passes vacuously. |
-| **T01 Demo Flight** (Shipped; existing, extended) | 5 s | The current demo flight | Existing 11. Added: `GnssTracksTruth` (horizontal < 6 m), `HomeSetOnArm`, `HomeDistanceTracks` (< 6 m), `AltEstTracks` (< 0.5 m of height above the arming point), `ModeIsAngleAfterSwitch`, `ArmedFlagMatches`, `MahDrawnMatchesSoc` |
+| **T01 Demo Flight** (Shipped; existing, extended) | 5 s | The current demo flight | Existing 11. Added in Phase 4 (19 in all): `ArmedFlagOffBeforeArming`, `ArmedFlagOnAfterArming`, `ModeIsAngle`, `HomeUnsetBeforeArming`, `HomeSetOnArm`, `GnssTracksTruth` (horizontal < 6 m), `HomeDistanceTracks` (< 6 m), `MahDrawnMatchesSoc`. Phase 9 adds `AltEstTracks` (< 0.5 m of height above the arming point). |
 | **T02 Acro Rate Step** (Shipped; existing) | 3 s | Unchanged | Existing 6, with the 8-channel sticks |
 | **T03 GNSS Statistics** | 3000 s | Disarmed at rest in open sky, so the fix is all error. One window, 10–2990 s | North, east and altitude RMS within ±30% of the specified σ: with τ = 60 s the window holds about 25 independent samples, so RMS varies by about ±10% (1σ). Velocity RMS within ±10% (white noise, 30 000 samples); 1 s correlation of the north error > 0.9; position on the 1 cm grid; fix 3D throughout. Scaling with UERE scale, HDOP and VDOP is checked exactly in Jest (F08), because windows short enough for one run cannot measure a ratio to ±25%. |
 | **T04 GNSS Conditions** (Shipped) | 30 s | Hover; satellites 14 → 3 (t = 8) → 2 (t = 14) → 14 (t = 20) | Fix 3 / 2 / 0 / 3 in their windows; altitude held and vd = 0 while 2D; all outputs held while 0; `firstTime(fix == 3 after t = 20)` ∈ [20.95, 21.05]; pDOP = √(HDOP² + VDOP²); `home_valid` stays 1 throughout |
@@ -114,10 +114,10 @@ Durations are simulated seconds. The default conditions are `gnss_env` [14, 0.8,
 | F13 | Course, ground speed, track validity and magnetic track | T05 | — | — |
 | F14 | Quantization | T03 (values on the 1 cm grid) | — | — |
 | F15 | Determinism | — | `fpv-gnss` two identical runs | — |
-| F16 | Flight controller flags | T01, T23 | — | — |
+| F16 | Flight controller flags | T01, T23 | `fpv-osd`: armed and angle follow the sticks at every controller sample; airmode latches at 25% throttle | — |
 | F17 | mAh drawn | T01, T23 | — | — |
-| F18 | Home only at arming with 8 or more satellites; cleared on disarm | T01, T07 | — | check 4 |
-| F19 | Home distance and bearing at 10 Hz | T01, T11 | — | — |
+| F18 | Home only at arming with 8 or more satellites; cleared on disarm | T01, T07 | `fpv-osd`: 7 satellites at arming gives no home all flight; disarm clears; re-arm re-takes | check 4 |
+| F19 | Home distance and bearing at 10 Hz | T01, T11 | `fpv-osd`: changes only on fixes; within 4 m and 20° of true geometry beyond 10 m | — |
 | F20 | `fc_mode` priority | T23 | — | — |
 | F21 | `fc_warnings` (RESCUE N/A, RESCUE OFF, POSHOLD FAIL, arming reasons) | T07, T13, T17, T23 | — | — |
 | F22 | 8-channel sticks and mode switches | T07, T11, T16, T17 | — | — |
@@ -168,7 +168,7 @@ Each implementation phase writes the tests for its features, and the phase is do
 | 1 | `test-models/fpv/` folder, `fpv-test-models` Jest runner, the Conditions schedules, the helpers in section 2.2 and T00 | T00, T01, T02, F01 (done) |
 | 2 | T06, L2 for F02 and F04 | T06 (done) |
 | 3 | T03, T04, T05, L2 for F05, F08 and F15 | T03–T05 (done) |
-| 4 | T01 additions, F16–F19 | T01 |
+| 4 | T01 additions, F16–F19, and `fpv-osd` (Level 2: flags against the sticks, home only at arming with 8+ satellites, cleared and re-taken, distance and bearing on each fix and against true geometry) | T01 (done) |
 | 8 | T07, T08, T22, and the inputs used by T09/T10 | T07, T08, T22 |
 | 9 | T21, T19 (heading parts), the no-mag vehicle, L2 for F29 and F35 | T21, T19 (first part) |
 | 10 | T16, T09 | T16, T09 |

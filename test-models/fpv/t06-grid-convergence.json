@@ -366,7 +366,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 105
+              "y": 70
             },
             "parameters": {
               "showName": true,
@@ -381,6 +381,7 @@
                 "battery_voltage",
                 "battery_current",
                 "battery_soc",
+                "battery_mah_drawn",
                 "imu_gyro",
                 "imu_accel",
                 "mag",
@@ -402,7 +403,13 @@
                 "euler_est",
                 "altitude_est",
                 "quat_est",
-                "heading_deg"
+                "heading_deg",
+                "fc_armed",
+                "fc_angle_mode",
+                "fc_airmode",
+                "home_valid",
+                "home_distance_m",
+                "home_bearing_deg"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -418,7 +425,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 394
+              "y": 447
             },
             "parameters": {
               "showName": true,
@@ -651,7 +658,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 343
+              "y": 327
             },
             "parameters": {
               "showName": true,
@@ -664,7 +671,7 @@
             "name": "Tag_euler_est",
             "position": {
               "x": 486,
-              "y": 487
+              "y": 471
             },
             "parameters": {
               "showName": true,
@@ -677,7 +684,7 @@
             "name": "Tag_heading_deg",
             "position": {
               "x": 484,
-              "y": 631
+              "y": 615
             },
             "parameters": {
               "showName": true,
@@ -716,7 +723,7 @@
           {
             "id": "w_4_main__Vehicle_main__Tag_euler",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 14,
+            "sourcePortIndex": 15,
             "targetBlockId": "main__Tag_euler",
             "targetPortIndex": 0,
             "routing": {
@@ -726,7 +733,7 @@
           {
             "id": "w_5_main__Vehicle_main__Tag_euler_est",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 21,
+            "sourcePortIndex": 22,
             "targetBlockId": "main__Tag_euler_est",
             "targetPortIndex": 0,
             "routing": {
@@ -736,7 +743,7 @@
           {
             "id": "w_6_main__Vehicle_main__Tag_heading_deg",
             "sourceBlockId": "main__Vehicle",
-            "sourcePortIndex": 24,
+            "sourcePortIndex": 25,
             "targetBlockId": "main__Tag_heading_deg",
             "targetPortIndex": 0,
             "routing": {
@@ -746,7 +753,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 831
+          "height": 815
         }
       },
       {

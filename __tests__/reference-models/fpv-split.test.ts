@@ -43,10 +43,10 @@ describe('FPV vehicle model', () => {
 })
 
 describe('FPV test models', () => {
-  test('the demo flight passes all 11 Asserts with no warnings', () => {
+  test('the demo flight passes all 19 Asserts with no warnings', () => {
     const r = runModelTests({ name: 'demo', data: expandAgainstVehicle(buildFpvDemoFlightModel().data) })
     expect(r.status).toBe('passed')
-    expect(r.asserts).toHaveLength(11)
+    expect(r.asserts).toHaveLength(19)
     expect(r.warnings).toEqual([])
   })
 
