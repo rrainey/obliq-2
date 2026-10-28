@@ -330,7 +330,16 @@ This is listed for interface agreement. It is implemented in that repo. The host
    - Without a mag, the yaw estimate snaps to the course at 1 m/s and then converges.
    - With a mag, the course has no effect outside FLY_HOME.
 
-### Phase 10: Altitude controller and Alt Hold
+### Phase 10: Altitude controller and Alt Hold (done 2026-10-28)
+
+**As built:**
+- **AltHold subsystem (100 Hz):** throttle-raised latch, activation, target, and the controller (`FC.autopilot`). Its throttle (µs) is converted to stick units, (µs − 1000) / 1000, and replaces the throttle that Rates and AngleMode see. It also forces angle mode. Arming keeps the pilot's own sticks.
+- **`ap_hover_throttle`** is this quad's hover, about 1440 µs. Betaflight's default 1275 is a per-quad setting.
+- **AUTO-LAND** now runs Altitude Hold in stage 2 and disarms after the 60 s landing time. GPS-RESCUE still drops until Phase 12.
+- **New outputs:** `alt_hold_active`; `fc_mode` shows ALTH.
+- **With Betaflight's default gains (P, I, D, F = 15) the hold is underdamped on this quad.** It overshoots about 2 m on entry and swings ±1.7 m with an 8 s period. P works out to about 0.6 m/s² per metre and damping to about 0.4, reduced further by the vario's lag. T16 checks ±3 m.
+- **The AUTO-LAND descent factor** follows Betaflight's code: × the 5 m/s climb rate, so 5 m/s near the ground. A comment in Betaflight's own source still assumes 1 m/s. In practice the descent runs below target (measured about 3.8 m/s), because the target only moves within 5 m of the altitude.
+- **The 1100 and 1700 µs throttle limits** were never reached in testing (measured 1255–1638 µs). That includes a 36° banked full-stick climb and an AUTO-LAND arresting a 10 m/s sink.
 
 1. **Shared altitude controller,** at 100 Hz: P, I (with the 200 cm rule), D with boost, feed-forward, the tilt compensation, and limits.
 2. **Alt Hold:** the throttle-stick deadband, the target-climb integration, entry at the current altitude, and engaging only after the throttle has been raised.
@@ -499,7 +508,7 @@ New model states are named in the generated C as `<subsystem path>_<block>_state
   - New `wind_ned` (`double[3]`, m/s, grid frame), from the IOS.
 - **Arming is latched** (D11). It no longer follows `sticks[5]` level by level. It arms on the switch's rising edge when nothing blocks it, and needs the switch cycled after a forced disarm.
   - The hover trim holds the vehicle armed at hover throttle, which arming would refuse. It must write `FlightController_Arming_ArmedPrev_state` = 1, `FlightController_Arming_ArmSwitchPrev_state` = 1 and `FlightController_Arming_EverArmedPrev_state` = 1, and leave `FlightController_Home_ArmedPrev_state` at 0, so home still latches on the first step.
-  - The Phase 10 throttle-raised flag joins this list.
+  - Also write `FlightController_AltHold_ThrottleRaisedPrev_state` = 1 (Betaflight's `wasThrottleRaised`), so Alt Hold can engage from a trimmed hover.
   - Leave the failsafe states (`FlightController_Failsafe_*`) at their initial values; a reset restores them.
 - **The radio map's arm switch** is still AUX2 (CH5). With latched arming, a radio powered up with the switch already on will not arm until the switch is cycled, as on Betaflight.
 - **Altitude estimate** (D9).

@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 93
+              "y": 85
             },
             "parameters": {
               "showName": true,
@@ -452,7 +452,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 20
+              "y": 10
             },
             "parameters": {
               "showName": true,
@@ -503,7 +503,8 @@
                 "failsafe_stage",
                 "alt_est",
                 "vario_est",
-                "gps_heading_ok"
+                "gps_heading_ok",
+                "alt_hold_active"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -519,7 +520,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 394
+              "y": 396
             },
             "parameters": {
               "showName": true,
@@ -909,7 +910,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 167
+              "y": 157
             },
             "parameters": {
               "showName": true,
@@ -922,7 +923,7 @@
             "name": "Tag_motor_cmd",
             "position": {
               "x": 486,
-              "y": 311
+              "y": 301
             },
             "parameters": {
               "showName": true,
@@ -935,7 +936,7 @@
             "name": "Tag_rate_setpoint",
             "position": {
               "x": 484,
-              "y": 455
+              "y": 445
             },
             "parameters": {
               "showName": true,
@@ -948,7 +949,7 @@
             "name": "Tag_gyro_dps",
             "position": {
               "x": 488,
-              "y": 599
+              "y": 589
             },
             "parameters": {
               "showName": true,
@@ -1054,7 +1055,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 799
+          "height": 789
         }
       },
       {

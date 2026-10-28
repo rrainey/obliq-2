@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 102
+              "y": 94
             },
             "parameters": {
               "showName": true,
@@ -442,7 +442,7 @@
             "name": "Vehicle",
             "position": {
               "x": 310,
-              "y": 29
+              "y": 19
             },
             "parameters": {
               "showName": true,
@@ -493,7 +493,8 @@
                 "failsafe_stage",
                 "alt_est",
                 "vario_est",
-                "gps_heading_ok"
+                "gps_heading_ok",
+                "alt_hold_active"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -509,7 +510,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 403
+              "y": 405
             },
             "parameters": {
               "showName": true,
@@ -949,7 +950,7 @@
             "name": "Tag_gnss_pos",
             "position": {
               "x": 488,
-              "y": 11
+              "y": 1
             },
             "parameters": {
               "showName": true,
@@ -962,7 +963,7 @@
             "name": "Tag_gnss_vel_ned",
             "position": {
               "x": 484,
-              "y": 155
+              "y": 145
             },
             "parameters": {
               "showName": true,
@@ -975,7 +976,7 @@
             "name": "Tag_gnss_fix",
             "position": {
               "x": 488,
-              "y": 299
+              "y": 289
             },
             "parameters": {
               "showName": true,
@@ -988,7 +989,7 @@
             "name": "Tag_euler",
             "position": {
               "x": 504,
-              "y": 443
+              "y": 433
             },
             "parameters": {
               "showName": true,
@@ -1094,7 +1095,7 @@
         ],
         "extents": {
           "width": 804,
-          "height": 643
+          "height": 633
         }
       },
       {

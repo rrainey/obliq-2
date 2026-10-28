@@ -25,7 +25,7 @@
             "name": "Pilot",
             "position": {
               "x": 125,
-              "y": 44
+              "y": 46
             },
             "parameters": {
               "showName": true,
@@ -557,7 +557,8 @@
                 "failsafe_stage",
                 "alt_est",
                 "vario_est",
-                "gps_heading_ok"
+                "gps_heading_ok",
+                "alt_hold_active"
               ],
               "modelRef": {
                 "modelId": "reference-model:fpv-vehicle",
@@ -573,7 +574,7 @@
             "name": "Conditions",
             "position": {
               "x": 100,
-              "y": 345
+              "y": 357
             },
             "parameters": {
               "showName": true,

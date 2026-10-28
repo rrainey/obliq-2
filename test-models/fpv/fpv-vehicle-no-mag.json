@@ -24,8 +24,8 @@
             "type": "demux",
             "name": "MotorCmdSplit",
             "position": {
-              "x": 901,
-              "y": -1293
+              "x": 909,
+              "y": -1365
             },
             "parameters": {
               "showName": true,
@@ -55,7 +55,7 @@
             "name": "gnss_env",
             "position": {
               "x": 148,
-              "y": 1444
+              "y": 1516
             },
             "parameters": {
               "showName": true,
@@ -69,7 +69,7 @@
             "name": "grid_convergence_deg",
             "position": {
               "x": 100,
-              "y": 656
+              "y": 692
             },
             "parameters": {
               "showName": true,
@@ -111,7 +111,7 @@
             "name": "wind_ned",
             "position": {
               "x": 148,
-              "y": 1746
+              "y": 1818
             },
             "parameters": {
               "showName": true,
@@ -160,7 +160,8 @@
                 "failsafe_stage",
                 "alt_est",
                 "vario_est",
-                "gps_heading_ok"
+                "gps_heading_ok",
+                "alt_hold_active"
               ],
               "showPortNames": true,
               "codeGenStrategy": "flatten",
@@ -175,7 +176,7 @@
                       "name": "sticks",
                       "position": {
                         "x": 150,
-                        "y": 856
+                        "y": 984
                       },
                       "parameters": {
                         "showName": true,
@@ -189,7 +190,7 @@
                       "name": "gyro",
                       "position": {
                         "x": 150,
-                        "y": 525
+                        "y": 734
                       },
                       "parameters": {
                         "showName": true,
@@ -203,7 +204,7 @@
                       "name": "accel",
                       "position": {
                         "x": 150,
-                        "y": 150
+                        "y": 359
                       },
                       "parameters": {
                         "showName": true,
@@ -217,7 +218,7 @@
                       "name": "mag",
                       "position": {
                         "x": 150,
-                        "y": 275
+                        "y": 484
                       },
                       "parameters": {
                         "showName": true,
@@ -231,7 +232,7 @@
                       "name": "pressure",
                       "position": {
                         "x": 148,
-                        "y": -277
+                        "y": 234
                       },
                       "parameters": {
                         "showName": true,
@@ -245,7 +246,7 @@
                       "name": "grid_convergence_deg",
                       "position": {
                         "x": 100,
-                        "y": -100
+                        "y": -68
                       },
                       "parameters": {
                         "showName": true,
@@ -259,7 +260,7 @@
                       "name": "gnss_pos",
                       "position": {
                         "x": 148,
-                        "y": -414
+                        "y": -193
                       },
                       "parameters": {
                         "showName": true,
@@ -273,7 +274,7 @@
                       "name": "gnss_fix",
                       "position": {
                         "x": 148,
-                        "y": 25
+                        "y": 109
                       },
                       "parameters": {
                         "showName": true,
@@ -287,7 +288,7 @@
                       "name": "rc_link_valid",
                       "position": {
                         "x": 128,
-                        "y": 731
+                        "y": 859
                       },
                       "parameters": {
                         "showName": true,
@@ -301,7 +302,7 @@
                       "name": "failsafe_procedure",
                       "position": {
                         "x": 108,
-                        "y": 981
+                        "y": 1109
                       },
                       "parameters": {
                         "showName": true,
@@ -315,7 +316,7 @@
                       "name": "gnss_course",
                       "position": {
                         "x": 136,
-                        "y": 400
+                        "y": 609
                       },
                       "parameters": {
                         "showName": true,
@@ -328,8 +329,8 @@
                       "type": "subsystem",
                       "name": "Failsafe",
                       "position": {
-                        "x": 401,
-                        "y": 878
+                        "x": 409,
+                        "y": 964
                       },
                       "parameters": {
                         "showName": true,
@@ -357,7 +358,7 @@
                                 "name": "sticks",
                                 "position": {
                                   "x": 142,
-                                  "y": 461
+                                  "y": 628
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -371,7 +372,7 @@
                                 "name": "rc_link_valid",
                                 "position": {
                                   "x": 120,
-                                  "y": 336
+                                  "y": 503
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -385,7 +386,7 @@
                                 "name": "failsafe_procedure",
                                 "position": {
                                   "x": 100,
-                                  "y": 208
+                                  "y": 753
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -399,7 +400,7 @@
                                 "name": "StickSplit",
                                 "position": {
                                   "x": 474,
-                                  "y": 125
+                                  "y": 880
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -415,7 +416,7 @@
                                 "name": "LinkOk",
                                 "position": {
                                   "x": 407,
-                                  "y": 385
+                                  "y": 556
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -429,7 +430,7 @@
                                 "name": "LostTimePrev",
                                 "position": {
                                   "x": 1258,
-                                  "y": -88
+                                  "y": -65
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -443,7 +444,7 @@
                                 "name": "LostTime",
                                 "position": {
                                   "x": 772,
-                                  "y": 261
+                                  "y": 491
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -457,7 +458,7 @@
                                 "name": "ValidTimePrev",
                                 "position": {
                                   "x": 1258,
-                                  "y": -232
+                                  "y": -260
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -471,7 +472,7 @@
                                 "name": "ValidTime",
                                 "position": {
                                   "x": 764,
-                                  "y": -187
+                                  "y": 187
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -485,7 +486,7 @@
                                 "name": "SticksMoved",
                                 "position": {
                                   "x": 764,
-                                  "y": 101
+                                  "y": 796
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -498,8 +499,8 @@
                                 "type": "unit_delay",
                                 "name": "Stage2Prev",
                                 "position": {
-                                  "x": 1638,
-                                  "y": 87
+                                  "x": 1642,
+                                  "y": 742
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -513,7 +514,7 @@
                                 "name": "ProcedurePrev",
                                 "position": {
                                   "x": 874,
-                                  "y": -43
+                                  "y": 652
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -527,7 +528,7 @@
                                 "name": "Stage2",
                                 "position": {
                                   "x": 1148,
-                                  "y": 56
+                                  "y": 771
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -541,7 +542,7 @@
                                 "name": "Procedure",
                                 "position": {
                                   "x": 364,
-                                  "y": -55
+                                  "y": 700
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -554,8 +555,8 @@
                                 "type": "evaluate",
                                 "name": "Stage",
                                 "position": {
-                                  "x": 1528,
-                                  "y": 231
+                                  "x": 1532,
+                                  "y": 598
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -569,7 +570,7 @@
                                 "name": "ThrottleLowTimePrev",
                                 "position": {
                                   "x": 1258,
-                                  "y": 968
+                                  "y": 991
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -583,7 +584,7 @@
                                 "name": "ThrottleLowTime",
                                 "position": {
                                   "x": 764,
-                                  "y": 680
+                                  "y": 956
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -592,17 +593,45 @@
                                 }
                               },
                               {
+                                "id": "failsafe__Stage2TimePrev",
+                                "type": "unit_delay",
+                                "name": "Stage2TimePrev",
+                                "position": {
+                                  "x": 2022,
+                                  "y": 928
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": 0,
+                                  "sampleInterval": 0.001
+                                }
+                              },
+                              {
+                                "id": "failsafe__Stage2Time",
+                                "type": "evaluate",
+                                "name": "Stage2Time",
+                                "position": {
+                                  "x": 1532,
+                                  "y": 886
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 2,
+                                  "expression": "(in(0) > 0.5) ? fmin(in(1) + 0.001, 1000.0) : 0.0"
+                                }
+                              },
+                              {
                                 "id": "failsafe__DisarmRequest",
                                 "type": "evaluate",
                                 "name": "DisarmRequest",
                                 "position": {
-                                  "x": 1528,
-                                  "y": 375
+                                  "x": 1912,
+                                  "y": 708
                                 },
                                 "parameters": {
                                   "showName": true,
-                                  "numInputs": 4,
-                                  "expression": "(in(0) > 0.5 || (in(1) < 0.5 && in(2) > 10 && fabs(in(3) - 2) > 0.5)) ? 1.0 : 0.0"
+                                  "numInputs": 6,
+                                  "expression": "((in(0) > 0.5 && (fabs(in(4) - 0) < 0.5 || fabs(in(4) - 2) < 0.5)) || (in(0) > 0.5 && fabs(in(4) - 1) < 0.5 && in(5) >= 59.999999999) || (in(1) < 0.5 && in(2) > 10 && fabs(in(3) - 2) > 0.5)) ? 1.0 : 0.0"
                                 }
                               },
                               {
@@ -611,7 +640,7 @@
                                 "name": "LastValidPrev",
                                 "position": {
                                   "x": 1258,
-                                  "y": 276
+                                  "y": 79
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -634,7 +663,7 @@
                                 "name": "LastValid",
                                 "position": {
                                   "x": 874,
-                                  "y": 520
+                                  "y": 331
                                 },
                                 "parameters": {
                                   "showName": true
@@ -646,7 +675,7 @@
                                 "name": "LastSplit",
                                 "position": {
                                   "x": 1258,
-                                  "y": 708
+                                  "y": 367
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -661,8 +690,8 @@
                                 "type": "mux",
                                 "name": "FailsafeSticks",
                                 "position": {
-                                  "x": 1633,
-                                  "y": 555
+                                  "x": 1637,
+                                  "y": 338
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -678,7 +707,7 @@
                                 "name": "Centre",
                                 "position": {
                                   "x": 1258,
-                                  "y": 564
+                                  "y": 223
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -693,7 +722,7 @@
                                 "name": "Holding",
                                 "position": {
                                   "x": 1191,
-                                  "y": 420
+                                  "y": 627
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -706,8 +735,8 @@
                                 "type": "if",
                                 "name": "LossSticks",
                                 "position": {
-                                  "x": 1908,
-                                  "y": 518
+                                  "x": 2022,
+                                  "y": 452
                                 },
                                 "parameters": {
                                   "showName": true
@@ -718,8 +747,8 @@
                                 "type": "if",
                                 "name": "SticksOut",
                                 "position": {
-                                  "x": 2068,
-                                  "y": 538
+                                  "x": 2292,
+                                  "y": 472
                                 },
                                 "parameters": {
                                   "showName": true
@@ -730,8 +759,8 @@
                                 "type": "output_port",
                                 "name": "sticks_fs",
                                 "position": {
-                                  "x": 2248,
-                                  "y": 555
+                                  "x": 2472,
+                                  "y": 489
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -744,8 +773,8 @@
                                 "type": "output_port",
                                 "name": "stage",
                                 "position": {
-                                  "x": 2254,
-                                  "y": 305
+                                  "x": 2478,
+                                  "y": 614
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -758,8 +787,8 @@
                                 "type": "output_port",
                                 "name": "disarm_request",
                                 "position": {
-                                  "x": 2228,
-                                  "y": 430
+                                  "x": 2452,
+                                  "y": 755
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -772,8 +801,8 @@
                                 "type": "output_port",
                                 "name": "procedure",
                                 "position": {
-                                  "x": 2248,
-                                  "y": 180
+                                  "x": 2472,
+                                  "y": 925
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -790,7 +819,7 @@
                                 "targetBlockId": "failsafe__StickSplit",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -22
+                                  "midpointOffset": -54
                                 }
                               },
                               {
@@ -800,7 +829,7 @@
                                 "targetBlockId": "failsafe__LinkOk",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -7.5
+                                  "midpointOffset": -15.5
                                 }
                               },
                               {
@@ -810,7 +839,7 @@
                                 "targetBlockId": "failsafe__LostTime",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 21
+                                  "midpointOffset": 45
                                 }
                               },
                               {
@@ -820,7 +849,7 @@
                                 "targetBlockId": "failsafe__LostTime",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -321
+                                  "midpointOffset": -377
                                 }
                               },
                               {
@@ -830,7 +859,7 @@
                                 "targetBlockId": "failsafe__LostTimePrev",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -63.5
+                                  "midpointOffset": -31.5
                                 }
                               },
                               {
@@ -840,7 +869,7 @@
                                 "targetBlockId": "failsafe__ValidTime",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 25
+                                  "midpointOffset": 49
                                 }
                               },
                               {
@@ -850,7 +879,7 @@
                                 "targetBlockId": "failsafe__ValidTime",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -357
+                                  "midpointOffset": -349
                                 }
                               },
                               {
@@ -860,7 +889,7 @@
                                 "targetBlockId": "failsafe__ValidTimePrev",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -35
+                                  "midpointOffset": -75
                                 }
                               },
                               {
@@ -880,7 +909,7 @@
                                 "targetBlockId": "failsafe__SticksMoved",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 51
+                                  "midpointOffset": 59
                                 }
                               },
                               {
@@ -890,7 +919,7 @@
                                 "targetBlockId": "failsafe__SticksMoved",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 83
+                                  "midpointOffset": 91
                                 }
                               },
                               {
@@ -900,7 +929,7 @@
                                 "targetBlockId": "failsafe__Stage2",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -167
+                                  "midpointOffset": -143
                                 }
                               },
                               {
@@ -910,7 +939,7 @@
                                 "targetBlockId": "failsafe__Stage2",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -8.5
+                                  "midpointOffset": 23.5
                                 }
                               },
                               {
@@ -920,7 +949,7 @@
                                 "targetBlockId": "failsafe__Stage2",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 20
+                                  "midpointOffset": -20
                                 }
                               },
                               {
@@ -940,7 +969,7 @@
                                 "targetBlockId": "failsafe__Stage2",
                                 "targetPortIndex": 4,
                                 "routing": {
-                                  "midpointOffset": -20
+                                  "midpointOffset": -12
                                 }
                               },
                               {
@@ -950,7 +979,7 @@
                                 "targetBlockId": "failsafe__Stage2",
                                 "targetPortIndex": 5,
                                 "routing": {
-                                  "midpointOffset": -299
+                                  "midpointOffset": -325
                                 }
                               },
                               {
@@ -960,7 +989,7 @@
                                 "targetBlockId": "failsafe__Stage2Prev",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -47
+                                  "midpointOffset": -43
                                 }
                               },
                               {
@@ -970,7 +999,7 @@
                                 "targetBlockId": "failsafe__Procedure",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -602
+                                  "midpointOffset": -594
                                 }
                               },
                               {
@@ -980,7 +1009,7 @@
                                 "targetBlockId": "failsafe__Procedure",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -721
+                                  "midpointOffset": -699
                                 }
                               },
                               {
@@ -990,7 +1019,7 @@
                                 "targetBlockId": "failsafe__Procedure",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -12
+                                  "midpointOffset": 4
                                 }
                               },
                               {
@@ -1000,7 +1029,7 @@
                                 "targetBlockId": "failsafe__Procedure",
                                 "targetPortIndex": 3,
                                 "routing": {
-                                  "midpointOffset": -315
+                                  "midpointOffset": -323
                                 }
                               },
                               {
@@ -1010,7 +1039,7 @@
                                 "targetBlockId": "failsafe__ProcedurePrev",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -67
+                                  "midpointOffset": -59
                                 }
                               },
                               {
@@ -1020,7 +1049,7 @@
                                 "targetBlockId": "failsafe__Stage",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 405
+                                  "midpointOffset": 417
                                 }
                               },
                               {
@@ -1030,7 +1059,7 @@
                                 "targetBlockId": "failsafe__Stage",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 8
+                                  "midpointOffset": 12
                                 }
                               },
                               {
@@ -1040,7 +1069,7 @@
                                 "targetBlockId": "failsafe__ThrottleLowTime",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 25
+                                  "midpointOffset": 49
                                 }
                               },
                               {
@@ -1050,7 +1079,7 @@
                                 "targetBlockId": "failsafe__ThrottleLowTime",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 19
+                                  "midpointOffset": 35
                                 }
                               },
                               {
@@ -1074,286 +1103,393 @@
                                 }
                               },
                               {
-                                "id": "w_30_failsafe__Stage2_failsafe__DisarmRequest",
+                                "id": "w_30_failsafe__Stage2_failsafe__Stage2Time",
+                                "sourceBlockId": "failsafe__Stage2",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "failsafe__Stage2Time",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 12
+                                }
+                              },
+                              {
+                                "id": "w_31_failsafe__Stage2TimePrev_failsafe__Stage2Time",
+                                "sourceBlockId": "failsafe__Stage2TimePrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "failsafe__Stage2Time",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -307
+                                }
+                              },
+                              {
+                                "id": "w_32_failsafe__Stage2Time_failsafe__Stage2TimePrev",
+                                "sourceBlockId": "failsafe__Stage2Time",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "failsafe__Stage2TimePrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -35
+                                }
+                              },
+                              {
+                                "id": "w_33_failsafe__Stage2_failsafe__DisarmRequest",
                                 "sourceBlockId": "failsafe__Stage2",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__DisarmRequest",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 8
+                                  "midpointOffset": -178
                                 }
                               },
                               {
-                                "id": "w_31_failsafe__LinkOk_failsafe__DisarmRequest",
+                                "id": "w_34_failsafe__LinkOk_failsafe__DisarmRequest",
                                 "sourceBlockId": "failsafe__LinkOk",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__DisarmRequest",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 27
+                                  "midpointOffset": 609
                                 }
                               },
                               {
-                                "id": "w_32_failsafe__ThrottleLowTime_failsafe__DisarmRequest",
+                                "id": "w_35_failsafe__ThrottleLowTime_failsafe__DisarmRequest",
                                 "sourceBlockId": "failsafe__ThrottleLowTime",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__DisarmRequest",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -178
+                                  "midpointOffset": 364
                                 }
                               },
                               {
-                                "id": "w_33_failsafe__failsafe_procedure_failsafe__DisarmRequest",
+                                "id": "w_36_failsafe__failsafe_procedure_failsafe__DisarmRequest",
                                 "sourceBlockId": "failsafe__failsafe_procedure",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__DisarmRequest",
                                 "targetPortIndex": 3,
                                 "routing": {
-                                  "midpointOffset": -594
+                                  "midpointOffset": -770
                                 }
                               },
                               {
-                                "id": "w_34_failsafe__LastValidPrev_failsafe__LastValid",
+                                "id": "w_37_failsafe__Procedure_failsafe__DisarmRequest",
+                                "sourceBlockId": "failsafe__Procedure",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "failsafe__DisarmRequest",
+                                "targetPortIndex": 4,
+                                "routing": {
+                                  "midpointOffset": 596
+                                }
+                              },
+                              {
+                                "id": "w_38_failsafe__Stage2Time_failsafe__DisarmRequest",
+                                "sourceBlockId": "failsafe__Stage2Time",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "failsafe__DisarmRequest",
+                                "targetPortIndex": 5,
+                                "routing": {
+                                  "midpointOffset": 20
+                                }
+                              },
+                              {
+                                "id": "w_39_failsafe__LastValidPrev_failsafe__LastValid",
                                 "sourceBlockId": "failsafe__LastValidPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__LastValid",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -356
+                                  "midpointOffset": -372
                                 }
                               },
                               {
-                                "id": "w_35_failsafe__LinkOk_failsafe__LastValid",
+                                "id": "w_40_failsafe__LinkOk_failsafe__LastValid",
                                 "sourceBlockId": "failsafe__LinkOk",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__LastValid",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -30
+                                  "midpointOffset": -6
                                 }
                               },
                               {
-                                "id": "w_36_failsafe__sticks_failsafe__LastValid",
+                                "id": "w_41_failsafe__sticks_failsafe__LastValid",
                                 "sourceBlockId": "failsafe__sticks",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__LastValid",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -222
+                                  "midpointOffset": -254
                                 }
                               },
                               {
-                                "id": "w_37_failsafe__LastValid_failsafe__LastValidPrev",
+                                "id": "w_42_failsafe__LastValid_failsafe__LastValidPrev",
                                 "sourceBlockId": "failsafe__LastValid",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__LastValidPrev",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 4
+                                  "midpointOffset": 28
                                 }
                               },
                               {
-                                "id": "w_38_failsafe__LastValid_failsafe__LastSplit",
+                                "id": "w_43_failsafe__LastValid_failsafe__LastSplit",
                                 "sourceBlockId": "failsafe__LastValid",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__LastSplit",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 4
+                                  "midpointOffset": 28
                                 }
                               },
                               {
-                                "id": "w_39_failsafe__Centre_failsafe__FailsafeSticks",
+                                "id": "w_44_failsafe__Centre_failsafe__FailsafeSticks",
                                 "sourceBlockId": "failsafe__Centre",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__FailsafeSticks",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 2.5
+                                  "midpointOffset": -17.5
                                 }
                               },
                               {
-                                "id": "w_40_failsafe__Centre_failsafe__FailsafeSticks",
+                                "id": "w_45_failsafe__Centre_failsafe__FailsafeSticks",
                                 "sourceBlockId": "failsafe__Centre",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__FailsafeSticks",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 2.5
+                                  "midpointOffset": -17.5
                                 }
                               },
                               {
-                                "id": "w_41_failsafe__Centre_failsafe__FailsafeSticks",
+                                "id": "w_46_failsafe__Centre_failsafe__FailsafeSticks",
                                 "sourceBlockId": "failsafe__Centre",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__FailsafeSticks",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 2.5
+                                  "midpointOffset": -17.5
                                 }
                               },
                               {
-                                "id": "w_42_failsafe__Centre_failsafe__FailsafeSticks",
+                                "id": "w_47_failsafe__Centre_failsafe__FailsafeSticks",
                                 "sourceBlockId": "failsafe__Centre",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__FailsafeSticks",
                                 "targetPortIndex": 3,
                                 "routing": {
-                                  "midpointOffset": 2.5
+                                  "midpointOffset": -17.5
                                 }
                               },
                               {
-                                "id": "w_43_failsafe__LastSplit_failsafe__FailsafeSticks",
+                                "id": "w_48_failsafe__LastSplit_failsafe__FailsafeSticks",
                                 "sourceBlockId": "failsafe__LastSplit",
                                 "sourcePortIndex": 4,
                                 "targetBlockId": "failsafe__FailsafeSticks",
                                 "targetPortIndex": 4,
                                 "routing": {
-                                  "midpointOffset": -21.5
+                                  "midpointOffset": -25.5
                                 }
                               },
                               {
-                                "id": "w_44_failsafe__LastSplit_failsafe__FailsafeSticks",
+                                "id": "w_49_failsafe__LastSplit_failsafe__FailsafeSticks",
                                 "sourceBlockId": "failsafe__LastSplit",
                                 "sourcePortIndex": 5,
                                 "targetBlockId": "failsafe__FailsafeSticks",
                                 "targetPortIndex": 5,
                                 "routing": {
-                                  "midpointOffset": -13.5
+                                  "midpointOffset": -9.5
                                 }
                               },
                               {
-                                "id": "w_45_failsafe__LastSplit_failsafe__FailsafeSticks",
+                                "id": "w_50_failsafe__LastSplit_failsafe__FailsafeSticks",
                                 "sourceBlockId": "failsafe__LastSplit",
                                 "sourcePortIndex": 6,
                                 "targetBlockId": "failsafe__FailsafeSticks",
                                 "targetPortIndex": 6,
                                 "routing": {
-                                  "midpointOffset": 18.5
+                                  "midpointOffset": -1.5
                                 }
                               },
                               {
-                                "id": "w_46_failsafe__LastSplit_failsafe__FailsafeSticks",
+                                "id": "w_51_failsafe__LastSplit_failsafe__FailsafeSticks",
                                 "sourceBlockId": "failsafe__LastSplit",
                                 "sourcePortIndex": 7,
                                 "targetBlockId": "failsafe__FailsafeSticks",
                                 "targetPortIndex": 7,
                                 "routing": {
-                                  "midpointOffset": 26.5
+                                  "midpointOffset": 30.5
                                 }
                               },
                               {
-                                "id": "w_47_failsafe__LostTime_failsafe__Holding",
+                                "id": "w_52_failsafe__LostTime_failsafe__Holding",
                                 "sourceBlockId": "failsafe__LostTime",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__Holding",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -30
+                                  "midpointOffset": 2
                                 }
                               },
                               {
-                                "id": "w_48_failsafe__FailsafeSticks_failsafe__LossSticks",
+                                "id": "w_53_failsafe__FailsafeSticks_failsafe__LossSticks",
                                 "sourceBlockId": "failsafe__FailsafeSticks",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__LossSticks",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 68.5
+                                  "midpointOffset": -14.5
                                 }
                               },
                               {
-                                "id": "w_49_failsafe__Holding_failsafe__LossSticks",
+                                "id": "w_54_failsafe__Holding_failsafe__LossSticks",
                                 "sourceBlockId": "failsafe__Holding",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__LossSticks",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 211
+                                  "midpointOffset": 154
                                 }
                               },
                               {
-                                "id": "w_50_failsafe__LastValid_failsafe__LossSticks",
+                                "id": "w_55_failsafe__LastValid_failsafe__LossSticks",
                                 "sourceBlockId": "failsafe__LastValid",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__LossSticks",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 445
+                                  "midpointOffset": -354
                                 }
                               },
                               {
-                                "id": "w_51_failsafe__LossSticks_failsafe__SticksOut",
+                                "id": "w_56_failsafe__LossSticks_failsafe__SticksOut",
                                 "sourceBlockId": "failsafe__LossSticks",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__SticksOut",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_52_failsafe__LinkOk_failsafe__SticksOut",
+                                "id": "w_57_failsafe__LinkOk_failsafe__SticksOut",
                                 "sourceBlockId": "failsafe__LinkOk",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__SticksOut",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 691
+                                  "midpointOffset": 795
                                 }
                               },
                               {
-                                "id": "w_53_failsafe__sticks_failsafe__SticksOut",
+                                "id": "w_58_failsafe__sticks_failsafe__SticksOut",
                                 "sourceBlockId": "failsafe__sticks",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__SticksOut",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 865
+                                  "midpointOffset": -165
                                 }
                               },
                               {
-                                "id": "w_54_failsafe__SticksOut_failsafe__sticks_fs",
+                                "id": "w_59_failsafe__SticksOut_failsafe__sticks_fs",
                                 "sourceBlockId": "failsafe__SticksOut",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__sticks_fs",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_55_failsafe__Stage_failsafe__stage",
+                                "id": "w_60_failsafe__Stage_failsafe__stage",
                                 "sourceBlockId": "failsafe__Stage",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__stage",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -13
+                                  "midpointOffset": 253
                                 }
                               },
                               {
-                                "id": "w_56_failsafe__DisarmRequest_failsafe__disarm_request",
+                                "id": "w_61_failsafe__DisarmRequest_failsafe__disarm_request",
                                 "sourceBlockId": "failsafe__DisarmRequest",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__disarm_request",
-                                "targetPortIndex": 0,
-                                "routing": {
-                                  "midpointOffset": -168
-                                }
+                                "targetPortIndex": 0
                               },
                               {
-                                "id": "w_57_failsafe__Procedure_failsafe__procedure",
+                                "id": "w_62_failsafe__Procedure_failsafe__procedure",
                                 "sourceBlockId": "failsafe__Procedure",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "failsafe__procedure",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 396
+                                  "midpointOffset": 848
                                 }
                               }
                             ],
                             "extents": {
-                              "width": 2554,
-                              "height": 1168
+                              "width": 2778,
+                              "height": 1191
                             }
                           }
                         ]
+                      }
+                    },
+                    {
+                      "id": "fc__FailsafeStickSplit",
+                      "type": "demux",
+                      "name": "FailsafeStickSplit",
+                      "position": {
+                        "x": 624,
+                        "y": 1065
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "outputCount": 8,
+                        "inputDimensions": [
+                          8
+                        ]
+                      }
+                    },
+                    {
+                      "id": "fc__AutopilotSticks",
+                      "type": "mux",
+                      "name": "AutopilotSticks",
+                      "position": {
+                        "x": 1675,
+                        "y": 1061
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "rows": 8,
+                        "cols": 1,
+                        "baseType": "double",
+                        "outputType": "double[8]"
+                      }
+                    },
+                    {
+                      "id": "fc__ThrottleCommand",
+                      "type": "evaluate",
+                      "name": "ThrottleCommand",
+                      "position": {
+                        "x": 1324,
+                        "y": 1035
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "numInputs": 3,
+                        "expression": "(in(0) > 0.5) ? in(1) : in(2)"
+                      }
+                    },
+                    {
+                      "id": "fc__AngleModeCommand",
+                      "type": "evaluate",
+                      "name": "AngleModeCommand",
+                      "position": {
+                        "x": 1331,
+                        "y": 1195
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "numInputs": 2,
+                        "expression": "(in(0) > 0.5) ? 1.0 : in(1)"
                       }
                     },
                     {
@@ -1361,8 +1497,8 @@
                       "type": "subsystem",
                       "name": "AttitudeEstimator",
                       "position": {
-                        "x": 771,
-                        "y": 246
+                        "x": 843,
+                        "y": 426
                       },
                       "parameters": {
                         "showName": true,
@@ -3429,8 +3565,8 @@
                       "type": "selector",
                       "name": "YawStick",
                       "position": {
-                        "x": 604,
-                        "y": 237
+                        "x": 624,
+                        "y": 340
                       },
                       "parameters": {
                         "showName": true,
@@ -3444,8 +3580,8 @@
                       "type": "source",
                       "name": "RescueMagDisable",
                       "position": {
-                        "x": 604,
-                        "y": 381
+                        "x": 624,
+                        "y": 484
                       },
                       "parameters": {
                         "showName": true,
@@ -3459,8 +3595,8 @@
                       "type": "subsystem",
                       "name": "Rates",
                       "position": {
-                        "x": 604,
-                        "y": 1026
+                        "x": 1845,
+                        "y": 1087
                       },
                       "parameters": {
                         "showName": true,
@@ -3691,8 +3827,8 @@
                       "type": "subsystem",
                       "name": "AngleMode",
                       "position": {
-                        "x": 1048,
-                        "y": 1099
+                        "x": 2005,
+                        "y": 1159
                       },
                       "parameters": {
                         "showName": true,
@@ -4091,8 +4227,8 @@
                       "type": "subsystem",
                       "name": "GyroFilters",
                       "position": {
-                        "x": 384,
-                        "y": 726
+                        "x": 392,
+                        "y": 812
                       },
                       "parameters": {
                         "showName": true,
@@ -4236,8 +4372,8 @@
                       "type": "subsystem",
                       "name": "Arming",
                       "position": {
-                        "x": 597,
-                        "y": 525
+                        "x": 617,
+                        "y": 628
                       },
                       "parameters": {
                         "showName": true,
@@ -4815,8 +4951,8 @@
                       "type": "subsystem",
                       "name": "AltitudeEstimator",
                       "position": {
-                        "x": 772,
-                        "y": -275
+                        "x": 844,
+                        "y": 246
                       },
                       "parameters": {
                         "showName": true,
@@ -5735,12 +5871,833 @@
                       }
                     },
                     {
+                      "id": "fc__AltHold",
+                      "type": "subsystem",
+                      "name": "AltHold",
+                      "position": {
+                        "x": 1120,
+                        "y": 1006
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "inputPorts": [
+                          "sticks",
+                          "armed",
+                          "failsafe_stage",
+                          "failsafe_procedure",
+                          "alt_est",
+                          "vario_est",
+                          "euler_est",
+                          "rescue_active"
+                        ],
+                        "outputPorts": [
+                          "active",
+                          "throttle",
+                          "throttle_raised"
+                        ],
+                        "showPortNames": true,
+                        "codeGenStrategy": "flatten",
+                        "sheets": [
+                          {
+                            "id": "althold",
+                            "name": "AltHold",
+                            "blocks": [
+                              {
+                                "id": "althold__sticks",
+                                "type": "input_port",
+                                "name": "sticks",
+                                "position": {
+                                  "x": 142,
+                                  "y": 65
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "sticks",
+                                  "dataType": "double[8]"
+                                }
+                              },
+                              {
+                                "id": "althold__armed",
+                                "type": "input_port",
+                                "name": "armed",
+                                "position": {
+                                  "x": 142,
+                                  "y": -60
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "armed",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "althold__failsafe_stage",
+                                "type": "input_port",
+                                "name": "failsafe_stage",
+                                "position": {
+                                  "x": 116,
+                                  "y": 440
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "failsafe_stage",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "althold__failsafe_procedure",
+                                "type": "input_port",
+                                "name": "failsafe_procedure",
+                                "position": {
+                                  "x": 100,
+                                  "y": 315
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "failsafe_procedure",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "althold__alt_est",
+                                "type": "input_port",
+                                "name": "alt_est",
+                                "position": {
+                                  "x": 142,
+                                  "y": 565
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "alt_est",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "althold__vario_est",
+                                "type": "input_port",
+                                "name": "vario_est",
+                                "position": {
+                                  "x": 136,
+                                  "y": 690
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "vario_est",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "althold__euler_est",
+                                "type": "input_port",
+                                "name": "euler_est",
+                                "position": {
+                                  "x": 136,
+                                  "y": 815
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "euler_est",
+                                  "dataType": "double[3]"
+                                }
+                              },
+                              {
+                                "id": "althold__rescue_active",
+                                "type": "input_port",
+                                "name": "rescue_active",
+                                "position": {
+                                  "x": 120,
+                                  "y": 190
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "rescue_active",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "althold__StickSplit",
+                                "type": "demux",
+                                "name": "StickSplit",
+                                "position": {
+                                  "x": 390,
+                                  "y": 163
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "outputCount": 8,
+                                  "inputDimensions": [
+                                    8
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "althold__AttitudeSplit",
+                                "type": "demux",
+                                "name": "AttitudeSplit",
+                                "position": {
+                                  "x": 390,
+                                  "y": 567
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "outputCount": 3,
+                                  "inputDimensions": [
+                                    3
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "althold__ThrottleRaisedPrev",
+                                "type": "unit_delay",
+                                "name": "ThrottleRaisedPrev",
+                                "position": {
+                                  "x": 1065,
+                                  "y": -53
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": 0,
+                                  "sampleInterval": 0.01
+                                }
+                              },
+                              {
+                                "id": "althold__ThrottleRaised",
+                                "type": "evaluate",
+                                "name": "ThrottleRaised",
+                                "position": {
+                                  "x": 575,
+                                  "y": 71
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 3,
+                                  "expression": "(in(0) > 0.5) ? fmax(in(2), (in(1) >= 0.05) ? 1.0 : 0.0) : 0.0"
+                                }
+                              },
+                              {
+                                "id": "althold__Active",
+                                "type": "evaluate",
+                                "name": "Active",
+                                "position": {
+                                  "x": 955,
+                                  "y": 232
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 6,
+                                  "expression": "(in(0) > 0.5 && in(1) < 0.5 && in(2) > 0.5 && (in(3) > 0.25 || (in(4) > 1.5 && fabs(in(5) - 1) < 0.5))) ? 1.0 : 0.0"
+                                }
+                              },
+                              {
+                                "id": "althold__ActivePrev",
+                                "type": "unit_delay",
+                                "name": "ActivePrev",
+                                "position": {
+                                  "x": 1335,
+                                  "y": 334
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": 0,
+                                  "sampleInterval": 0.01
+                                }
+                              },
+                              {
+                                "id": "althold__AltitudeCm",
+                                "type": "evaluate",
+                                "name": "AltitudeCm",
+                                "position": {
+                                  "x": 364,
+                                  "y": 423
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 1,
+                                  "expression": "in(0) * 100.0"
+                                }
+                              },
+                              {
+                                "id": "althold__StickFactor",
+                                "type": "evaluate",
+                                "name": "StickFactor",
+                                "position": {
+                                  "x": 575,
+                                  "y": 444
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 3,
+                                  "expression": "(in(1) > 1.5) ? -(0.9 + fmin(fmax(in(2) / 2000.0, 0.1), 9.0)) : ((in(0) < 0.05) ? 0.0 : (((1000.0 + 1000.0 * in(0)) < 1350.4) ? ((1000.0 + 1000.0 * in(0)) - 1000.0) / 350.4000000000001 - 1.0 : (((1000.0 + 1000.0 * in(0)) > 1550.4) ? ((1000.0 + 1000.0 * in(0)) - 1550.4) / 449.5999999999999 : 0.0)))"
+                                }
+                              },
+                              {
+                                "id": "althold__TargetVelocity",
+                                "type": "evaluate",
+                                "name": "TargetVelocity",
+                                "position": {
+                                  "x": 1047,
+                                  "y": 452
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 1,
+                                  "expression": "in(0) * 500"
+                                }
+                              },
+                              {
+                                "id": "althold__TargetCmPrev",
+                                "type": "unit_delay",
+                                "name": "TargetCmPrev",
+                                "position": {
+                                  "x": 1901,
+                                  "y": 272
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": 0,
+                                  "sampleInterval": 0.01
+                                }
+                              },
+                              {
+                                "id": "althold__TargetCm",
+                                "type": "evaluate",
+                                "name": "TargetCm",
+                                "position": {
+                                  "x": 1495,
+                                  "y": 311
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 5,
+                                  "expression": "(in(0) > 0.5 && in(1) < 0.5) ? in(2) : ((fabs(in(2) - in(4)) < 500) ? in(4) + in(3) * 0.01 : in(4))"
+                                }
+                              },
+                              {
+                                "id": "althold__AltitudeErrorCm",
+                                "type": "evaluate",
+                                "name": "AltitudeErrorCm",
+                                "position": {
+                                  "x": 1875,
+                                  "y": 416
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 2,
+                                  "expression": "in(0) - in(1)"
+                                }
+                              },
+                              {
+                                "id": "althold__ITermPrev",
+                                "type": "unit_delay",
+                                "name": "ITermPrev",
+                                "position": {
+                                  "x": 2576,
+                                  "y": 248
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": 0,
+                                  "sampleInterval": 0.01
+                                }
+                              },
+                              {
+                                "id": "althold__ITerm",
+                                "type": "evaluate",
+                                "name": "ITerm",
+                                "position": {
+                                  "x": 2086,
+                                  "y": 342
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 4,
+                                  "expression": "(in(0) > 0.5 && in(1) > 0.5) ? fmin(fmax(in(3) + in(2) * 0.045 * ((fabs(in(2)) < 200) ? 1.0 : 0.1) * 0.01, -200), 200) : 0.0"
+                                }
+                              },
+                              {
+                                "id": "althold__Throttle",
+                                "type": "evaluate",
+                                "name": "Throttle",
+                                "position": {
+                                  "x": 2466,
+                                  "y": 464
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "numInputs": 6,
+                                  "expression": "(fmin(fmax(1000.0 + (in(0) * 0.15 + in(1) - (in(2) * 100.0) * ((fabs((in(2) * 100.0)) > 500) ? (3.0 * fabs((in(2) * 100.0)) / 500 - 2.0) / (fabs((in(2) * 100.0)) / 500) : 1.0) * 0.15 + in(3) * 0.15 + 438) / fmax(cos(in(4)) * cos(in(5)), 0.5), 1100), 1700) - 1000.0) / 1000.0"
+                                }
+                              },
+                              {
+                                "id": "althold__active",
+                                "type": "output_port",
+                                "name": "active",
+                                "position": {
+                                  "x": 2876,
+                                  "y": 163
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "active",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "althold__throttle",
+                                "type": "output_port",
+                                "name": "throttle",
+                                "position": {
+                                  "x": 2874,
+                                  "y": 512
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "throttle",
+                                  "dataType": "double"
+                                }
+                              },
+                              {
+                                "id": "althold__throttle_raised",
+                                "type": "output_port",
+                                "name": "throttle_raised",
+                                "position": {
+                                  "x": 2846,
+                                  "y": 38
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "portName": "throttle_raised",
+                                  "dataType": "double"
+                                }
+                              }
+                            ],
+                            "connections": [
+                              {
+                                "id": "w_1_althold__sticks_althold__StickSplit",
+                                "sourceBlockId": "althold__sticks",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__StickSplit",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 20
+                                }
+                              },
+                              {
+                                "id": "w_2_althold__euler_est_althold__AttitudeSplit",
+                                "sourceBlockId": "althold__euler_est",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__AttitudeSplit",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 9
+                                }
+                              },
+                              {
+                                "id": "w_3_althold__armed_althold__ThrottleRaised",
+                                "sourceBlockId": "althold__armed",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__ThrottleRaised",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 122.5
+                                }
+                              },
+                              {
+                                "id": "w_4_althold__StickSplit_althold__ThrottleRaised",
+                                "sourceBlockId": "althold__StickSplit",
+                                "sourcePortIndex": 3,
+                                "targetBlockId": "althold__ThrottleRaised",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 32.5
+                                }
+                              },
+                              {
+                                "id": "w_5_althold__ThrottleRaisedPrev_althold__ThrottleRaised",
+                                "sourceBlockId": "althold__ThrottleRaisedPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__ThrottleRaised",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -321
+                                }
+                              },
+                              {
+                                "id": "w_6_althold__ThrottleRaised_althold__ThrottleRaisedPrev",
+                                "sourceBlockId": "althold__ThrottleRaised",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__ThrottleRaisedPrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -63
+                                }
+                              },
+                              {
+                                "id": "w_7_althold__armed_althold__Active",
+                                "sourceBlockId": "althold__armed",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__Active",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 324.5
+                                }
+                              },
+                              {
+                                "id": "w_8_althold__rescue_active_althold__Active",
+                                "sourceBlockId": "althold__rescue_active",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__Active",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -305.5
+                                }
+                              },
+                              {
+                                "id": "w_9_althold__ThrottleRaised_althold__Active",
+                                "sourceBlockId": "althold__ThrottleRaised",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__Active",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -8
+                                }
+                              },
+                              {
+                                "id": "w_10_althold__StickSplit_althold__Active",
+                                "sourceBlockId": "althold__StickSplit",
+                                "sourcePortIndex": 7,
+                                "targetBlockId": "althold__Active",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": 202.5
+                                }
+                              },
+                              {
+                                "id": "w_11_althold__failsafe_stage_althold__Active",
+                                "sourceBlockId": "althold__failsafe_stage",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__Active",
+                                "targetPortIndex": 4,
+                                "routing": {
+                                  "midpointOffset": -299.5
+                                }
+                              },
+                              {
+                                "id": "w_12_althold__failsafe_procedure_althold__Active",
+                                "sourceBlockId": "althold__failsafe_procedure",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__Active",
+                                "targetPortIndex": 5,
+                                "routing": {
+                                  "midpointOffset": -299.5
+                                }
+                              },
+                              {
+                                "id": "w_13_althold__Active_althold__ActivePrev",
+                                "sourceBlockId": "althold__Active",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__ActivePrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_14_althold__alt_est_althold__AltitudeCm",
+                                "sourceBlockId": "althold__alt_est",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__AltitudeCm",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 41
+                                }
+                              },
+                              {
+                                "id": "w_15_althold__StickSplit_althold__StickFactor",
+                                "sourceBlockId": "althold__StickSplit",
+                                "sourcePortIndex": 3,
+                                "targetBlockId": "althold__StickFactor",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 32.5
+                                }
+                              },
+                              {
+                                "id": "w_16_althold__failsafe_stage_althold__StickFactor",
+                                "sourceBlockId": "althold__failsafe_stage",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__StickFactor",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 93.5
+                                }
+                              },
+                              {
+                                "id": "w_17_althold__AltitudeCm_althold__StickFactor",
+                                "sourceBlockId": "althold__AltitudeCm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__StickFactor",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -12
+                                }
+                              },
+                              {
+                                "id": "w_18_althold__StickFactor_althold__TargetVelocity",
+                                "sourceBlockId": "althold__StickFactor",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__TargetVelocity",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_19_althold__Active_althold__TargetCm",
+                                "sourceBlockId": "althold__Active",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__TargetCm",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -80
+                                }
+                              },
+                              {
+                                "id": "w_20_althold__ActivePrev_althold__TargetCm",
+                                "sourceBlockId": "althold__ActivePrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__TargetCm",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -4
+                                }
+                              },
+                              {
+                                "id": "w_21_althold__AltitudeCm_althold__TargetCm",
+                                "sourceBlockId": "althold__AltitudeCm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__TargetCm",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -472
+                                }
+                              },
+                              {
+                                "id": "w_22_althold__TargetVelocity_althold__TargetCm",
+                                "sourceBlockId": "althold__TargetVelocity",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__TargetCm",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": 129.5
+                                }
+                              },
+                              {
+                                "id": "w_23_althold__TargetCmPrev_althold__TargetCm",
+                                "sourceBlockId": "althold__TargetCmPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__TargetCm",
+                                "targetPortIndex": 4,
+                                "routing": {
+                                  "midpointOffset": -295
+                                }
+                              },
+                              {
+                                "id": "w_24_althold__TargetCm_althold__TargetCmPrev",
+                                "sourceBlockId": "althold__TargetCm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__TargetCmPrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -13
+                                }
+                              },
+                              {
+                                "id": "w_25_althold__TargetCm_althold__AltitudeErrorCm",
+                                "sourceBlockId": "althold__TargetCm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__AltitudeErrorCm",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_26_althold__AltitudeCm_althold__AltitudeErrorCm",
+                                "sourceBlockId": "althold__AltitudeCm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__AltitudeErrorCm",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 658
+                                }
+                              },
+                              {
+                                "id": "w_27_althold__Active_althold__ITerm",
+                                "sourceBlockId": "althold__Active",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__ITerm",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 156.5
+                                }
+                              },
+                              {
+                                "id": "w_28_althold__ActivePrev_althold__ITerm",
+                                "sourceBlockId": "althold__ActivePrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__ITerm",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 295.5
+                                }
+                              },
+                              {
+                                "id": "w_29_althold__AltitudeErrorCm_althold__ITerm",
+                                "sourceBlockId": "althold__AltitudeErrorCm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__ITerm",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 8
+                                }
+                              },
+                              {
+                                "id": "w_30_althold__ITermPrev_althold__ITerm",
+                                "sourceBlockId": "althold__ITermPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__ITerm",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": -333
+                                }
+                              },
+                              {
+                                "id": "w_31_althold__ITerm_althold__ITermPrev",
+                                "sourceBlockId": "althold__ITerm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__ITermPrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -59
+                                }
+                              },
+                              {
+                                "id": "w_32_althold__AltitudeErrorCm_althold__Throttle",
+                                "sourceBlockId": "althold__AltitudeErrorCm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__Throttle",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -182
+                                }
+                              },
+                              {
+                                "id": "w_33_althold__ITerm_althold__Throttle",
+                                "sourceBlockId": "althold__ITerm",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__Throttle",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -4
+                                }
+                              },
+                              {
+                                "id": "w_34_althold__vario_est_althold__Throttle",
+                                "sourceBlockId": "althold__vario_est",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__Throttle",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 1073
+                                }
+                              },
+                              {
+                                "id": "w_35_althold__TargetVelocity_althold__Throttle",
+                                "sourceBlockId": "althold__TargetVelocity",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__Throttle",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": 36
+                                }
+                              },
+                              {
+                                "id": "w_36_althold__AttitudeSplit_althold__Throttle",
+                                "sourceBlockId": "althold__AttitudeSplit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__Throttle",
+                                "targetPortIndex": 4,
+                                "routing": {
+                                  "midpointOffset": -921
+                                }
+                              },
+                              {
+                                "id": "w_37_althold__AttitudeSplit_althold__Throttle",
+                                "sourceBlockId": "althold__AttitudeSplit",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "althold__Throttle",
+                                "targetPortIndex": 5,
+                                "routing": {
+                                  "midpointOffset": -1
+                                }
+                              },
+                              {
+                                "id": "w_38_althold__Active_althold__active",
+                                "sourceBlockId": "althold__Active",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__active",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -770.5
+                                }
+                              },
+                              {
+                                "id": "w_39_althold__Throttle_althold__throttle",
+                                "sourceBlockId": "althold__Throttle",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__throttle",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_40_althold__ThrottleRaised_althold__throttle_raised",
+                                "sourceBlockId": "althold__ThrottleRaised",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "althold__throttle_raised",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -41.5
+                                }
+                              }
+                            ],
+                            "extents": {
+                              "width": 3176,
+                              "height": 1015
+                            }
+                          }
+                        ],
+                        "sampleTimeSec": 0.01
+                      }
+                    },
+                    {
+                      "id": "fc__RescueActive",
+                      "type": "source",
+                      "name": "RescueActive",
+                      "position": {
+                        "x": 902,
+                        "y": 1134
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "signalType": "constant",
+                        "value": 0,
+                        "dataType": "double"
+                      }
+                    },
+                    {
                       "id": "fc__RatePID",
                       "type": "subsystem",
                       "name": "RatePID",
                       "position": {
-                        "x": 1362,
-                        "y": 900
+                        "x": 2319,
+                        "y": 962
                       },
                       "parameters": {
                         "showName": true,
@@ -6437,8 +7394,8 @@
                       "type": "subsystem",
                       "name": "Mixer",
                       "position": {
-                        "x": 1642,
-                        "y": 916
+                        "x": 2599,
+                        "y": 978
                       },
                       "parameters": {
                         "showName": true,
@@ -6995,8 +7952,8 @@
                       "type": "multiply",
                       "name": "MotorsArmed",
                       "position": {
-                        "x": 1802,
-                        "y": 931
+                        "x": 2759,
+                        "y": 993
                       },
                       "parameters": {
                         "showName": true,
@@ -7008,8 +7965,8 @@
                       "type": "output_port",
                       "name": "motors",
                       "position": {
-                        "x": 2000,
-                        "y": 940
+                        "x": 2953,
+                        "y": 1003
                       },
                       "parameters": {
                         "showName": true,
@@ -7022,8 +7979,8 @@
                       "type": "output_port",
                       "name": "setpoint",
                       "position": {
-                        "x": 1998,
-                        "y": 1065
+                        "x": 2951,
+                        "y": 1128
                       },
                       "parameters": {
                         "showName": true,
@@ -7036,8 +7993,8 @@
                       "type": "output_port",
                       "name": "gyro_dps",
                       "position": {
-                        "x": 1998,
-                        "y": 565
+                        "x": 2951,
+                        "y": 878
                       },
                       "parameters": {
                         "showName": true,
@@ -7050,8 +8007,8 @@
                       "type": "output_port",
                       "name": "euler_est",
                       "position": {
-                        "x": 1994,
-                        "y": 190
+                        "x": 2947,
+                        "y": 128
                       },
                       "parameters": {
                         "showName": true,
@@ -7064,8 +8021,8 @@
                       "type": "output_port",
                       "name": "quat_est",
                       "position": {
-                        "x": 1998,
-                        "y": 65
+                        "x": 2951,
+                        "y": 3
                       },
                       "parameters": {
                         "showName": true,
@@ -7078,8 +8035,8 @@
                       "type": "selector",
                       "name": "YawEstimate",
                       "position": {
-                        "x": 1075,
-                        "y": -80
+                        "x": 1128,
+                        "y": -143
                       },
                       "parameters": {
                         "showName": true,
@@ -7093,8 +8050,8 @@
                       "type": "evaluate",
                       "name": "HeadingTrue",
                       "position": {
-                        "x": 1262,
-                        "y": -69
+                        "x": 1295,
+                        "y": -132
                       },
                       "parameters": {
                         "showName": true,
@@ -7107,8 +8064,8 @@
                       "type": "output_port",
                       "name": "heading_deg",
                       "position": {
-                        "x": 1986,
-                        "y": -60
+                        "x": 2939,
+                        "y": -122
                       },
                       "parameters": {
                         "showName": true,
@@ -7121,8 +8078,8 @@
                       "type": "subsystem",
                       "name": "Home",
                       "position": {
-                        "x": 830,
-                        "y": -588
+                        "x": 902,
+                        "y": -650
                       },
                       "parameters": {
                         "showName": true,
@@ -8030,8 +8987,8 @@
                       "type": "output_port",
                       "name": "fc_armed",
                       "position": {
-                        "x": 1998,
-                        "y": 440
+                        "x": 2951,
+                        "y": 378
                       },
                       "parameters": {
                         "showName": true,
@@ -8044,8 +9001,8 @@
                       "type": "output_port",
                       "name": "fc_angle_mode",
                       "position": {
-                        "x": 1978,
-                        "y": 1190
+                        "x": 2931,
+                        "y": 1378
                       },
                       "parameters": {
                         "showName": true,
@@ -8058,8 +9015,8 @@
                       "type": "output_port",
                       "name": "fc_airmode",
                       "position": {
-                        "x": 1990,
-                        "y": 690
+                        "x": 2943,
+                        "y": 503
                       },
                       "parameters": {
                         "showName": true,
@@ -8072,8 +9029,8 @@
                       "type": "output_port",
                       "name": "home_valid",
                       "position": {
-                        "x": 1990,
-                        "y": -685
+                        "x": 2943,
+                        "y": -747
                       },
                       "parameters": {
                         "showName": true,
@@ -8086,8 +9043,8 @@
                       "type": "output_port",
                       "name": "home_distance_m",
                       "position": {
-                        "x": 1970,
-                        "y": -560
+                        "x": 2923,
+                        "y": -622
                       },
                       "parameters": {
                         "showName": true,
@@ -8100,8 +9057,8 @@
                       "type": "output_port",
                       "name": "home_bearing_deg",
                       "position": {
-                        "x": 1966,
-                        "y": -435
+                        "x": 2919,
+                        "y": -497
                       },
                       "parameters": {
                         "showName": true,
@@ -8114,13 +9071,13 @@
                       "type": "evaluate",
                       "name": "FlightMode",
                       "position": {
-                        "x": 1262,
-                        "y": 1298
+                        "x": 2219,
+                        "y": 1225
                       },
                       "parameters": {
                         "showName": true,
-                        "numInputs": 3,
-                        "expression": "(in(0) > 0.5) ? 7.0 : ((in(1) > 0.5) ? 2.0 : ((in(2) > 0.5) ? 1.0 : 0.0))"
+                        "numInputs": 4,
+                        "expression": "(in(0) > 0.5) ? 7.0 : ((in(3) > 0.5) ? 4.0 : ((in(1) > 0.5) ? 2.0 : ((in(2) > 0.5) ? 1.0 : 0.0)))"
                       }
                     },
                     {
@@ -8128,8 +9085,8 @@
                       "type": "output_port",
                       "name": "fc_mode",
                       "position": {
-                        "x": 2000,
-                        "y": 1315
+                        "x": 2953,
+                        "y": 1253
                       },
                       "parameters": {
                         "showName": true,
@@ -8142,8 +9099,8 @@
                       "type": "output_port",
                       "name": "fc_warnings",
                       "position": {
-                        "x": 1986,
-                        "y": 815
+                        "x": 2939,
+                        "y": 753
                       },
                       "parameters": {
                         "showName": true,
@@ -8156,8 +9113,8 @@
                       "type": "output_port",
                       "name": "failsafe_stage",
                       "position": {
-                        "x": 1974,
-                        "y": 1440
+                        "x": 2927,
+                        "y": 1503
                       },
                       "parameters": {
                         "showName": true,
@@ -8170,8 +9127,8 @@
                       "type": "output_port",
                       "name": "alt_est",
                       "position": {
-                        "x": 2000,
-                        "y": -310
+                        "x": 2953,
+                        "y": -372
                       },
                       "parameters": {
                         "showName": true,
@@ -8184,8 +9141,8 @@
                       "type": "output_port",
                       "name": "vario_est",
                       "position": {
-                        "x": 1994,
-                        "y": -185
+                        "x": 2947,
+                        "y": -247
                       },
                       "parameters": {
                         "showName": true,
@@ -8198,12 +9155,26 @@
                       "type": "output_port",
                       "name": "gps_heading_ok",
                       "position": {
-                        "x": 1974,
-                        "y": 315
+                        "x": 2927,
+                        "y": 253
                       },
                       "parameters": {
                         "showName": true,
                         "portName": "gps_heading_ok",
+                        "dataType": "double"
+                      }
+                    },
+                    {
+                      "id": "fc__alt_hold_active",
+                      "type": "output_port",
+                      "name": "alt_hold_active",
+                      "position": {
+                        "x": 2923,
+                        "y": 628
+                      },
+                      "parameters": {
+                        "showName": true,
+                        "portName": "alt_hold_active",
                         "dataType": "double"
                       }
                     }
@@ -8216,7 +9187,7 @@
                       "targetBlockId": "fc__Failsafe",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 28.5
+                        "midpointOffset": 12.5
                       }
                     },
                     {
@@ -8226,7 +9197,7 @@
                       "targetBlockId": "fc__Failsafe",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -22.5
+                        "midpointOffset": 25.5
                       }
                     },
                     {
@@ -8236,569 +9207,809 @@
                       "targetBlockId": "fc__Failsafe",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": 15.5
+                        "midpointOffset": -0.5
                       }
                     },
                     {
-                      "id": "w_4_fc__gyro_fc__AttitudeEstimator",
+                      "id": "w_4_fc__Failsafe_fc__FailsafeStickSplit",
+                      "sourceBlockId": "fc__Failsafe",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__FailsafeStickSplit",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 29
+                      }
+                    },
+                    {
+                      "id": "w_5_fc__FailsafeStickSplit_fc__AutopilotSticks",
+                      "sourceBlockId": "fc__FailsafeStickSplit",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AutopilotSticks",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -408.5
+                      }
+                    },
+                    {
+                      "id": "w_6_fc__FailsafeStickSplit_fc__AutopilotSticks",
+                      "sourceBlockId": "fc__FailsafeStickSplit",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "fc__AutopilotSticks",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -400.5
+                      }
+                    },
+                    {
+                      "id": "w_7_fc__FailsafeStickSplit_fc__AutopilotSticks",
+                      "sourceBlockId": "fc__FailsafeStickSplit",
+                      "sourcePortIndex": 2,
+                      "targetBlockId": "fc__AutopilotSticks",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -392.5
+                      }
+                    },
+                    {
+                      "id": "w_8_fc__AltHold_fc__ThrottleCommand",
+                      "sourceBlockId": "fc__AltHold",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__ThrottleCommand",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -6.5
+                      }
+                    },
+                    {
+                      "id": "w_9_fc__AltHold_fc__ThrottleCommand",
+                      "sourceBlockId": "fc__AltHold",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "fc__ThrottleCommand",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -30.5
+                      }
+                    },
+                    {
+                      "id": "w_10_fc__FailsafeStickSplit_fc__ThrottleCommand",
+                      "sourceBlockId": "fc__FailsafeStickSplit",
+                      "sourcePortIndex": 3,
+                      "targetBlockId": "fc__ThrottleCommand",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": 265
+                      }
+                    },
+                    {
+                      "id": "w_11_fc__ThrottleCommand_fc__AutopilotSticks",
+                      "sourceBlockId": "fc__ThrottleCommand",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AutopilotSticks",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": 14
+                      }
+                    },
+                    {
+                      "id": "w_12_fc__AltHold_fc__AngleModeCommand",
+                      "sourceBlockId": "fc__AltHold",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AngleModeCommand",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -10
+                      }
+                    },
+                    {
+                      "id": "w_13_fc__FailsafeStickSplit_fc__AngleModeCommand",
+                      "sourceBlockId": "fc__FailsafeStickSplit",
+                      "sourcePortIndex": 4,
+                      "targetBlockId": "fc__AngleModeCommand",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": -212.5
+                      }
+                    },
+                    {
+                      "id": "w_14_fc__AngleModeCommand_fc__AutopilotSticks",
+                      "sourceBlockId": "fc__AngleModeCommand",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AutopilotSticks",
+                      "targetPortIndex": 4,
+                      "routing": {
+                        "midpointOffset": 33.5
+                      }
+                    },
+                    {
+                      "id": "w_15_fc__FailsafeStickSplit_fc__AutopilotSticks",
+                      "sourceBlockId": "fc__FailsafeStickSplit",
+                      "sourcePortIndex": 5,
+                      "targetBlockId": "fc__AutopilotSticks",
+                      "targetPortIndex": 5,
+                      "routing": {
+                        "midpointOffset": 453.5
+                      }
+                    },
+                    {
+                      "id": "w_16_fc__FailsafeStickSplit_fc__AutopilotSticks",
+                      "sourceBlockId": "fc__FailsafeStickSplit",
+                      "sourcePortIndex": 6,
+                      "targetBlockId": "fc__AutopilotSticks",
+                      "targetPortIndex": 6,
+                      "routing": {
+                        "midpointOffset": -97.5
+                      }
+                    },
+                    {
+                      "id": "w_17_fc__FailsafeStickSplit_fc__AutopilotSticks",
+                      "sourceBlockId": "fc__FailsafeStickSplit",
+                      "sourcePortIndex": 7,
+                      "targetBlockId": "fc__AutopilotSticks",
+                      "targetPortIndex": 7,
+                      "routing": {
+                        "midpointOffset": -89.5
+                      }
+                    },
+                    {
+                      "id": "w_18_fc__gyro_fc__AttitudeEstimator",
                       "sourceBlockId": "fc__gyro",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -140.5
+                        "midpointOffset": -220.5
                       }
                     },
                     {
-                      "id": "w_5_fc__accel_fc__AttitudeEstimator",
+                      "id": "w_19_fc__accel_fc__AttitudeEstimator",
                       "sourceBlockId": "fc__accel",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 236.5
+                        "midpointOffset": 24.5
                       }
                     },
                     {
-                      "id": "w_6_fc__mag_fc__AttitudeEstimator",
+                      "id": "w_20_fc__mag_fc__AttitudeEstimator",
                       "sourceBlockId": "fc__mag",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": -172.5
+                        "midpointOffset": 32.5
                       }
                     },
                     {
-                      "id": "w_7_fc__grid_convergence_deg_fc__AttitudeEstimator",
+                      "id": "w_21_fc__grid_convergence_deg_fc__AttitudeEstimator",
                       "sourceBlockId": "fc__grid_convergence_deg",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 3,
                       "routing": {
-                        "midpointOffset": 203.5
+                        "midpointOffset": 177.5
                       }
                     },
                     {
-                      "id": "w_8_fc__gnss_course_fc__AttitudeEstimator",
+                      "id": "w_22_fc__gnss_course_fc__AttitudeEstimator",
                       "sourceBlockId": "fc__gnss_course",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 4,
                       "routing": {
-                        "midpointOffset": -171.5
+                        "midpointOffset": 33.5
                       }
                     },
                     {
-                      "id": "w_9_fc__gnss_fix_fc__AttitudeEstimator",
+                      "id": "w_23_fc__gnss_fix_fc__AttitudeEstimator",
                       "sourceBlockId": "fc__gnss_fix",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 5,
                       "routing": {
-                        "midpointOffset": 45.5
+                        "midpointOffset": -189.5
                       }
                     },
                     {
-                      "id": "w_10_fc__YawStick_fc__AttitudeEstimator",
+                      "id": "w_24_fc__YawStick_fc__AttitudeEstimator",
                       "sourceBlockId": "fc__YawStick",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 6,
                       "routing": {
-                        "midpointOffset": -20.5
+                        "midpointOffset": -32.5
                       }
                     },
                     {
-                      "id": "w_11_fc__RescueMagDisable_fc__AttitudeEstimator",
+                      "id": "w_25_fc__RescueMagDisable_fc__AttitudeEstimator",
                       "sourceBlockId": "fc__RescueMagDisable",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 8,
                       "routing": {
-                        "midpointOffset": 3.5
+                        "midpointOffset": -48.5
                       }
                     },
                     {
-                      "id": "w_12_fc__Failsafe_fc__Rates",
-                      "sourceBlockId": "fc__Failsafe",
+                      "id": "w_26_fc__AutopilotSticks_fc__Rates",
+                      "sourceBlockId": "fc__AutopilotSticks",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__Rates",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 13
+                        "midpointOffset": 12
                       }
                     },
                     {
-                      "id": "w_13_fc__Failsafe_fc__AngleMode",
-                      "sourceBlockId": "fc__Failsafe",
+                      "id": "w_27_fc__AutopilotSticks_fc__AngleMode",
+                      "sourceBlockId": "fc__AutopilotSticks",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AngleMode",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -19
+                        "midpointOffset": -68
                       }
                     },
                     {
-                      "id": "w_14_fc__AttitudeEstimator_fc__AngleMode",
+                      "id": "w_28_fc__AttitudeEstimator_fc__AngleMode",
                       "sourceBlockId": "fc__AttitudeEstimator",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__AngleMode",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 4
+                        "midpointOffset": 454.5
                       }
                     },
                     {
-                      "id": "w_15_fc__Rates_fc__AngleMode",
+                      "id": "w_29_fc__Rates_fc__AngleMode",
                       "sourceBlockId": "fc__Rates",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AngleMode",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": -151
+                        "midpointOffset": -12
                       }
                     },
                     {
-                      "id": "w_16_fc__gyro_fc__GyroFilters",
+                      "id": "w_30_fc__gyro_fc__GyroFilters",
                       "sourceBlockId": "fc__gyro",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__GyroFilters",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 53
+                        "midpointOffset": 5
                       }
                     },
                     {
-                      "id": "w_17_fc__Failsafe_fc__Arming",
+                      "id": "w_31_fc__Failsafe_fc__Arming",
                       "sourceBlockId": "fc__Failsafe",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__Arming",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 16.5
+                        "midpointOffset": 32.5
                       }
                     },
                     {
-                      "id": "w_18_fc__gnss_fix_fc__Arming",
+                      "id": "w_32_fc__gnss_fix_fc__Arming",
                       "sourceBlockId": "fc__gnss_fix",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__Arming",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 132.5
+                        "midpointOffset": -76.5
                       }
                     },
                     {
-                      "id": "w_19_fc__Failsafe_fc__Arming",
+                      "id": "w_33_fc__Failsafe_fc__Arming",
                       "sourceBlockId": "fc__Failsafe",
                       "sourcePortIndex": 2,
                       "targetBlockId": "fc__Arming",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": 24.5
+                        "midpointOffset": 40.5
                       }
                     },
                     {
-                      "id": "w_20_fc__rc_link_valid_fc__Arming",
+                      "id": "w_34_fc__rc_link_valid_fc__Arming",
                       "sourceBlockId": "fc__rc_link_valid",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__Arming",
                       "targetPortIndex": 3,
                       "routing": {
-                        "midpointOffset": -120.5
+                        "midpointOffset": -78.5
                       }
                     },
                     {
-                      "id": "w_21_fc__Arming_fc__AttitudeEstimator",
+                      "id": "w_35_fc__Arming_fc__AttitudeEstimator",
                       "sourceBlockId": "fc__Arming",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AttitudeEstimator",
                       "targetPortIndex": 7,
                       "routing": {
-                        "midpointOffset": -8
+                        "midpointOffset": 36
                       }
                     },
                     {
-                      "id": "w_22_fc__Failsafe_fc__YawStick",
+                      "id": "w_36_fc__Failsafe_fc__YawStick",
                       "sourceBlockId": "fc__Failsafe",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__YawStick",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 13
+                        "midpointOffset": 29
                       }
                     },
                     {
-                      "id": "w_23_fc__pressure_fc__AltitudeEstimator",
+                      "id": "w_37_fc__pressure_fc__AltitudeEstimator",
                       "sourceBlockId": "fc__pressure",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AltitudeEstimator",
-                      "targetPortIndex": 0
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 15
+                      }
                     },
                     {
-                      "id": "w_24_fc__gnss_pos_fc__AltitudeEstimator",
+                      "id": "w_38_fc__gnss_pos_fc__AltitudeEstimator",
                       "sourceBlockId": "fc__gnss_pos",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AltitudeEstimator",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -190
+                        "midpointOffset": 273
                       }
                     },
                     {
-                      "id": "w_25_fc__gnss_fix_fc__AltitudeEstimator",
+                      "id": "w_39_fc__gnss_fix_fc__AltitudeEstimator",
                       "sourceBlockId": "fc__gnss_fix",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AltitudeEstimator",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": -182
+                        "midpointOffset": -190
                       }
                     },
                     {
-                      "id": "w_26_fc__Arming_fc__AltitudeEstimator",
+                      "id": "w_40_fc__Arming_fc__AltitudeEstimator",
                       "sourceBlockId": "fc__Arming",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__AltitudeEstimator",
                       "targetPortIndex": 3,
                       "routing": {
-                        "midpointOffset": -8.5
+                        "midpointOffset": 35.5
                       }
                     },
                     {
-                      "id": "w_27_fc__AngleMode_fc__RatePID",
+                      "id": "w_41_fc__Failsafe_fc__AltHold",
+                      "sourceBlockId": "fc__Failsafe",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AltHold",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": 15
+                      }
+                    },
+                    {
+                      "id": "w_42_fc__Arming_fc__AltHold",
+                      "sourceBlockId": "fc__Arming",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AltHold",
+                      "targetPortIndex": 1,
+                      "routing": {
+                        "midpointOffset": 168.5
+                      }
+                    },
+                    {
+                      "id": "w_43_fc__Failsafe_fc__AltHold",
+                      "sourceBlockId": "fc__Failsafe",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "fc__AltHold",
+                      "targetPortIndex": 2,
+                      "routing": {
+                        "midpointOffset": -41
+                      }
+                    },
+                    {
+                      "id": "w_44_fc__Failsafe_fc__AltHold",
+                      "sourceBlockId": "fc__Failsafe",
+                      "sourcePortIndex": 3,
+                      "targetBlockId": "fc__AltHold",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": -81
+                      }
+                    },
+                    {
+                      "id": "w_45_fc__AltitudeEstimator_fc__AltHold",
+                      "sourceBlockId": "fc__AltitudeEstimator",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AltHold",
+                      "targetPortIndex": 4,
+                      "routing": {
+                        "midpointOffset": -20
+                      }
+                    },
+                    {
+                      "id": "w_46_fc__AltitudeEstimator_fc__AltHold",
+                      "sourceBlockId": "fc__AltitudeEstimator",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "fc__AltHold",
+                      "targetPortIndex": 5,
+                      "routing": {
+                        "midpointOffset": -12
+                      }
+                    },
+                    {
+                      "id": "w_47_fc__AttitudeEstimator_fc__AltHold",
+                      "sourceBlockId": "fc__AttitudeEstimator",
+                      "sourcePortIndex": 1,
+                      "targetBlockId": "fc__AltHold",
+                      "targetPortIndex": 6,
+                      "routing": {
+                        "midpointOffset": -4
+                      }
+                    },
+                    {
+                      "id": "w_48_fc__RescueActive_fc__AltHold",
+                      "sourceBlockId": "fc__RescueActive",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__AltHold",
+                      "targetPortIndex": 7
+                    },
+                    {
+                      "id": "w_49_fc__AngleMode_fc__RatePID",
                       "sourceBlockId": "fc__AngleMode",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__RatePID",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -46
+                        "midpointOffset": -50
                       }
                     },
                     {
-                      "id": "w_28_fc__GyroFilters_fc__RatePID",
+                      "id": "w_50_fc__GyroFilters_fc__RatePID",
                       "sourceBlockId": "fc__GyroFilters",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__RatePID",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 278.5
+                        "midpointOffset": -167
                       }
                     },
                     {
-                      "id": "w_29_fc__Arming_fc__RatePID",
+                      "id": "w_51_fc__Arming_fc__RatePID",
                       "sourceBlockId": "fc__Arming",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__RatePID",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": -22.5
+                        "midpointOffset": 112
                       }
                     },
                     {
-                      "id": "w_30_fc__RatePID_fc__Mixer",
+                      "id": "w_52_fc__RatePID_fc__Mixer",
                       "sourceBlockId": "fc__RatePID",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__Mixer",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_31_fc__Rates_fc__Mixer",
+                      "id": "w_53_fc__Rates_fc__Mixer",
                       "sourceBlockId": "fc__Rates",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__Mixer",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 435
+                        "midpointOffset": 289
                       }
                     },
                     {
-                      "id": "w_32_fc__Mixer_fc__MotorsArmed",
+                      "id": "w_54_fc__Mixer_fc__MotorsArmed",
                       "sourceBlockId": "fc__Mixer",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__MotorsArmed",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_33_fc__Arming_fc__MotorsArmed",
+                      "id": "w_55_fc__Arming_fc__MotorsArmed",
                       "sourceBlockId": "fc__Arming",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__MotorsArmed",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 515.5
+                        "midpointOffset": 984
                       }
                     },
                     {
-                      "id": "w_34_fc__MotorsArmed_fc__motors",
+                      "id": "w_56_fc__MotorsArmed_fc__motors",
                       "sourceBlockId": "fc__MotorsArmed",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__motors",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_35_fc__AngleMode_fc__setpoint",
+                      "id": "w_57_fc__AngleMode_fc__setpoint",
                       "sourceBlockId": "fc__AngleMode",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__setpoint",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 16
+                        "midpointOffset": 14
                       }
                     },
                     {
-                      "id": "w_36_fc__GyroFilters_fc__gyro_dps",
+                      "id": "w_58_fc__GyroFilters_fc__gyro_dps",
                       "sourceBlockId": "fc__GyroFilters",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__gyro_dps",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -39.5
+                        "midpointOffset": -973
                       }
                     },
                     {
-                      "id": "w_37_fc__AttitudeEstimator_fc__euler_est",
+                      "id": "w_59_fc__AttitudeEstimator_fc__euler_est",
                       "sourceBlockId": "fc__AttitudeEstimator",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__euler_est",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -469
+                        "midpointOffset": -722.5
                       }
                     },
                     {
-                      "id": "w_38_fc__AttitudeEstimator_fc__quat_est",
+                      "id": "w_60_fc__AttitudeEstimator_fc__quat_est",
                       "sourceBlockId": "fc__AttitudeEstimator",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__quat_est",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 445
+                        "midpointOffset": -764.5
                       }
                     },
                     {
-                      "id": "w_39_fc__AttitudeEstimator_fc__YawEstimate",
+                      "id": "w_61_fc__AttitudeEstimator_fc__YawEstimate",
                       "sourceBlockId": "fc__AttitudeEstimator",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__YawEstimate",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -9.5
+                        "midpointOffset": -8
                       }
                     },
                     {
-                      "id": "w_40_fc__YawEstimate_fc__HeadingTrue",
+                      "id": "w_62_fc__YawEstimate_fc__HeadingTrue",
                       "sourceBlockId": "fc__YawEstimate",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__HeadingTrue",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_41_fc__grid_convergence_deg_fc__HeadingTrue",
+                      "id": "w_63_fc__grid_convergence_deg_fc__HeadingTrue",
                       "sourceBlockId": "fc__grid_convergence_deg",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__HeadingTrue",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 429
+                        "midpointOffset": 449.5
                       }
                     },
                     {
-                      "id": "w_42_fc__HeadingTrue_fc__heading_deg",
+                      "id": "w_64_fc__HeadingTrue_fc__heading_deg",
                       "sourceBlockId": "fc__HeadingTrue",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__heading_deg",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_43_fc__Arming_fc__Home",
+                      "id": "w_65_fc__Arming_fc__Home",
                       "sourceBlockId": "fc__Arming",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__Home",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -37.5
+                        "midpointOffset": 6.5
                       }
                     },
                     {
-                      "id": "w_44_fc__gnss_pos_fc__Home",
+                      "id": "w_66_fc__gnss_pos_fc__Home",
                       "sourceBlockId": "fc__gnss_pos",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__Home",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": -219
+                        "midpointOffset": -243
                       }
                     },
                     {
-                      "id": "w_45_fc__gnss_fix_fc__Home",
+                      "id": "w_67_fc__gnss_fix_fc__Home",
                       "sourceBlockId": "fc__gnss_fix",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__Home",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": 16
+                        "midpointOffset": -22
                       }
                     },
                     {
-                      "id": "w_46_fc__grid_convergence_deg_fc__Home",
+                      "id": "w_68_fc__grid_convergence_deg_fc__Home",
                       "sourceBlockId": "fc__grid_convergence_deg",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__Home",
                       "targetPortIndex": 3,
                       "routing": {
-                        "midpointOffset": -16
+                        "midpointOffset": -54
                       }
                     },
                     {
-                      "id": "w_47_fc__Arming_fc__fc_armed",
+                      "id": "w_69_fc__Arming_fc__fc_armed",
                       "sourceBlockId": "fc__Arming",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__fc_armed",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 599.5
+                        "midpointOffset": -30
                       }
                     },
                     {
-                      "id": "w_48_fc__AngleMode_fc__fc_angle_mode",
+                      "id": "w_70_fc__AngleMode_fc__fc_angle_mode",
                       "sourceBlockId": "fc__AngleMode",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__fc_angle_mode",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 34
+                        "midpointOffset": 32
                       }
                     },
                     {
-                      "id": "w_49_fc__Arming_fc__fc_airmode",
+                      "id": "w_71_fc__Arming_fc__fc_airmode",
                       "sourceBlockId": "fc__Arming",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__fc_airmode",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 611.5
+                        "midpointOffset": 344
                       }
                     },
                     {
-                      "id": "w_50_fc__Home_fc__home_valid",
+                      "id": "w_72_fc__Home_fc__home_valid",
                       "sourceBlockId": "fc__Home",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__home_valid",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 446
+                        "midpointOffset": -1.5
                       }
                     },
                     {
-                      "id": "w_51_fc__Home_fc__home_distance_m",
+                      "id": "w_73_fc__Home_fc__home_distance_m",
                       "sourceBlockId": "fc__Home",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__home_distance_m",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_52_fc__Home_fc__home_bearing_deg",
+                      "id": "w_74_fc__Home_fc__home_bearing_deg",
                       "sourceBlockId": "fc__Home",
                       "sourcePortIndex": 2,
                       "targetBlockId": "fc__home_bearing_deg",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 466
+                        "midpointOffset": 18.5
                       }
                     },
                     {
-                      "id": "w_53_fc__Failsafe_fc__FlightMode",
+                      "id": "w_75_fc__Failsafe_fc__FlightMode",
                       "sourceBlockId": "fc__Failsafe",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__FlightMode",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -340
+                        "midpointOffset": -824.5
                       }
                     },
                     {
-                      "id": "w_54_fc__AngleMode_fc__FlightMode",
+                      "id": "w_76_fc__AngleMode_fc__FlightMode",
                       "sourceBlockId": "fc__AngleMode",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__FlightMode",
                       "targetPortIndex": 1,
                       "routing": {
-                        "midpointOffset": 12
+                        "midpointOffset": 8
                       }
                     },
                     {
-                      "id": "w_55_fc__Arming_fc__FlightMode",
+                      "id": "w_77_fc__Arming_fc__FlightMode",
                       "sourceBlockId": "fc__Arming",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__FlightMode",
                       "targetPortIndex": 2,
                       "routing": {
-                        "midpointOffset": 27.5
+                        "midpointOffset": 344
                       }
                     },
                     {
-                      "id": "w_56_fc__FlightMode_fc__fc_mode",
+                      "id": "w_78_fc__AltHold_fc__FlightMode",
+                      "sourceBlockId": "fc__AltHold",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__FlightMode",
+                      "targetPortIndex": 3,
+                      "routing": {
+                        "midpointOffset": 76
+                      }
+                    },
+                    {
+                      "id": "w_79_fc__FlightMode_fc__fc_mode",
                       "sourceBlockId": "fc__FlightMode",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__fc_mode",
                       "targetPortIndex": 0
                     },
                     {
-                      "id": "w_57_fc__Arming_fc__fc_warnings",
+                      "id": "w_80_fc__Arming_fc__fc_warnings",
                       "sourceBlockId": "fc__Arming",
                       "sourcePortIndex": 2,
                       "targetBlockId": "fc__fc_warnings",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 251.5
+                        "midpointOffset": -1068
                       }
                     },
                     {
-                      "id": "w_58_fc__Failsafe_fc__failsafe_stage",
+                      "id": "w_81_fc__Failsafe_fc__failsafe_stage",
                       "sourceBlockId": "fc__Failsafe",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__failsafe_stage",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": -696
+                        "midpointOffset": -1178.5
                       }
                     },
                     {
-                      "id": "w_59_fc__AltitudeEstimator_fc__alt_est",
+                      "id": "w_82_fc__AltitudeEstimator_fc__alt_est",
                       "sourceBlockId": "fc__AltitudeEstimator",
                       "sourcePortIndex": 0,
                       "targetBlockId": "fc__alt_est",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 428
+                        "midpointOffset": -936.5
                       }
                     },
                     {
-                      "id": "w_60_fc__AltitudeEstimator_fc__vario_est",
+                      "id": "w_83_fc__AltitudeEstimator_fc__vario_est",
                       "sourceBlockId": "fc__AltitudeEstimator",
                       "sourcePortIndex": 1,
                       "targetBlockId": "fc__vario_est",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 439
+                        "midpointOffset": -925.5
                       }
                     },
                     {
-                      "id": "w_61_fc__AttitudeEstimator_fc__gps_heading_ok",
+                      "id": "w_84_fc__AttitudeEstimator_fc__gps_heading_ok",
                       "sourceBlockId": "fc__AttitudeEstimator",
                       "sourcePortIndex": 2,
                       "targetBlockId": "fc__gps_heading_ok",
                       "targetPortIndex": 0,
                       "routing": {
-                        "midpointOffset": 465
+                        "midpointOffset": -364.5
+                      }
+                    },
+                    {
+                      "id": "w_85_fc__AltHold_fc__alt_hold_active",
+                      "sourceBlockId": "fc__AltHold",
+                      "sourcePortIndex": 0,
+                      "targetBlockId": "fc__alt_hold_active",
+                      "targetPortIndex": 0,
+                      "routing": {
+                        "midpointOffset": -806
                       }
                     }
                   ],
                   "extents": {
-                    "width": 2300,
-                    "height": 1640
+                    "width": 3253,
+                    "height": 1703
                   }
                 }
               ],
@@ -8812,8 +10023,8 @@
             "type": "subsystem",
             "name": "Motor_RR",
             "position": {
-              "x": 1150,
-              "y": -1509
+              "x": 1158,
+              "y": -1581
             },
             "parameters": {
               "showName": true,
@@ -9228,8 +10439,8 @@
             "type": "subsystem",
             "name": "Motor_FR",
             "position": {
-              "x": 1150,
-              "y": -1349
+              "x": 1158,
+              "y": -1421
             },
             "parameters": {
               "showName": true,
@@ -9257,8 +10468,8 @@
             "type": "subsystem",
             "name": "Motor_RL",
             "position": {
-              "x": 1150,
-              "y": -1189
+              "x": 1158,
+              "y": -1261
             },
             "parameters": {
               "showName": true,
@@ -9286,8 +10497,8 @@
             "type": "subsystem",
             "name": "Motor_FL",
             "position": {
-              "x": 1150,
-              "y": -1029
+              "x": 1158,
+              "y": -1101
             },
             "parameters": {
               "showName": true,
@@ -9315,8 +10526,8 @@
             "type": "mux",
             "name": "Thrusts",
             "position": {
-              "x": 1438,
-              "y": -1369
+              "x": 1446,
+              "y": -1441
             },
             "parameters": {
               "showName": true,
@@ -9331,8 +10542,8 @@
             "type": "mux",
             "name": "RotorSpeeds",
             "position": {
-              "x": 1438,
-              "y": -1549
+              "x": 1446,
+              "y": -1621
             },
             "parameters": {
               "showName": true,
@@ -9347,8 +10558,8 @@
             "type": "mux",
             "name": "RotorAccelerations",
             "position": {
-              "x": 1438,
-              "y": -1189
+              "x": 1446,
+              "y": -1261
             },
             "parameters": {
               "showName": true,
@@ -9363,8 +10574,8 @@
             "type": "mux",
             "name": "MotorPower",
             "position": {
-              "x": 1438,
-              "y": -1009
+              "x": 1446,
+              "y": -1081
             },
             "parameters": {
               "showName": true,
@@ -9379,8 +10590,8 @@
             "type": "subsystem",
             "name": "Battery",
             "position": {
-              "x": 1622,
-              "y": -999
+              "x": 1630,
+              "y": -1071
             },
             "parameters": {
               "showName": true,
@@ -9700,8 +10911,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_voltage",
             "position": {
-              "x": 1838,
-              "y": -1202
+              "x": 1846,
+              "y": -1274
             },
             "parameters": {
               "showName": true,
@@ -9713,8 +10924,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_current",
             "position": {
-              "x": 1838,
-              "y": -1058
+              "x": 1846,
+              "y": -1130
             },
             "parameters": {
               "showName": true,
@@ -9726,8 +10937,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_soc",
             "position": {
-              "x": 1838,
-              "y": -914
+              "x": 1846,
+              "y": -986
             },
             "parameters": {
               "showName": true,
@@ -9739,8 +10950,8 @@
             "type": "evaluate",
             "name": "MahDrawn",
             "position": {
-              "x": 1808,
-              "y": -770
+              "x": 1816,
+              "y": -842
             },
             "parameters": {
               "showName": true,
@@ -9753,8 +10964,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_battery_mah_drawn",
             "position": {
-              "x": 2068,
-              "y": -770
+              "x": 2076,
+              "y": -842
             },
             "parameters": {
               "showName": true,
@@ -9767,7 +10978,7 @@
             "name": "Frame",
             "position": {
               "x": 454,
-              "y": 1574
+              "y": 1646
             },
             "parameters": {
               "showName": true,
@@ -11533,8 +12744,8 @@
             "type": "subsystem",
             "name": "Sensors",
             "position": {
-              "x": 856,
-              "y": 1335
+              "x": 864,
+              "y": 1407
             },
             "parameters": {
               "showName": true,
@@ -14633,8 +15844,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_imu_gyro",
             "position": {
-              "x": 1164,
-              "y": 874
+              "x": 1172,
+              "y": 946
             },
             "parameters": {
               "showName": true,
@@ -14646,8 +15857,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_imu_accel",
             "position": {
-              "x": 1162,
-              "y": 1018
+              "x": 1170,
+              "y": 1090
             },
             "parameters": {
               "showName": true,
@@ -14659,8 +15870,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_mag",
             "position": {
-              "x": 1180,
-              "y": 1162
+              "x": 1188,
+              "y": 1234
             },
             "parameters": {
               "showName": true,
@@ -14672,8 +15883,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_pressure",
             "position": {
-              "x": 1164,
-              "y": 1306
+              "x": 1172,
+              "y": 1378
             },
             "parameters": {
               "showName": true,
@@ -14685,8 +15896,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gnss_pos",
             "position": {
-              "x": 1164,
-              "y": 1450
+              "x": 1172,
+              "y": 1522
             },
             "parameters": {
               "showName": true,
@@ -14698,8 +15909,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gnss_vel_ned",
             "position": {
-              "x": 1160,
-              "y": 1594
+              "x": 1168,
+              "y": 1666
             },
             "parameters": {
               "showName": true,
@@ -14711,8 +15922,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gnss_fix",
             "position": {
-              "x": 1164,
-              "y": 1738
+              "x": 1172,
+              "y": 1810
             },
             "parameters": {
               "showName": true,
@@ -14724,8 +15935,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gnss_course",
             "position": {
-              "x": 1160,
-              "y": 1882
+              "x": 1168,
+              "y": 1954
             },
             "parameters": {
               "showName": true,
@@ -14737,8 +15948,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_pos_ned",
             "position": {
-              "x": 887,
-              "y": 1565
+              "x": 895,
+              "y": 1637
             },
             "parameters": {
               "showName": true,
@@ -14750,8 +15961,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_vel_ned",
             "position": {
-              "x": 887,
-              "y": 1709
+              "x": 895,
+              "y": 1781
             },
             "parameters": {
               "showName": true,
@@ -14763,8 +15974,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_quat",
             "position": {
-              "x": 901,
-              "y": 1853
+              "x": 909,
+              "y": 1925
             },
             "parameters": {
               "showName": true,
@@ -14776,8 +15987,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler",
             "position": {
-              "x": 901,
-              "y": 1997
+              "x": 909,
+              "y": 2069
             },
             "parameters": {
               "showName": true,
@@ -14789,8 +16000,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_omega",
             "position": {
-              "x": 901,
-              "y": 2141
+              "x": 909,
+              "y": 2213
             },
             "parameters": {
               "showName": true,
@@ -14802,8 +16013,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_accel",
             "position": {
-              "x": 901,
-              "y": 2285
+              "x": 909,
+              "y": 2357
             },
             "parameters": {
               "showName": true,
@@ -14815,8 +16026,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_motor_omega",
             "position": {
-              "x": 1608,
-              "y": -1531
+              "x": 1616,
+              "y": -1603
             },
             "parameters": {
               "showName": true,
@@ -14828,8 +16039,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_motor_cmd",
             "position": {
-              "x": 883,
-              "y": -1437
+              "x": 891,
+              "y": -1509
             },
             "parameters": {
               "showName": true,
@@ -14841,8 +16052,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_rate_setpoint",
             "position": {
-              "x": 881,
-              "y": -1113
+              "x": 889,
+              "y": -1185
             },
             "parameters": {
               "showName": true,
@@ -14854,8 +16065,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_gyro_dps",
             "position": {
-              "x": 885,
-              "y": -969
+              "x": 893,
+              "y": -1041
             },
             "parameters": {
               "showName": true,
@@ -14867,8 +16078,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler_est",
             "position": {
-              "x": 883,
-              "y": -825
+              "x": 891,
+              "y": -897
             },
             "parameters": {
               "showName": true,
@@ -14880,8 +16091,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_quat_est",
             "position": {
-              "x": 885,
-              "y": -681
+              "x": 893,
+              "y": -753
             },
             "parameters": {
               "showName": true,
@@ -14893,8 +16104,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_heading_deg",
             "position": {
-              "x": 881,
-              "y": -537
+              "x": 889,
+              "y": -609
             },
             "parameters": {
               "showName": true,
@@ -14906,8 +16117,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_armed",
             "position": {
-              "x": 885,
-              "y": -393
+              "x": 893,
+              "y": -465
             },
             "parameters": {
               "showName": true,
@@ -14919,8 +16130,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_angle_mode",
             "position": {
-              "x": 881,
-              "y": -249
+              "x": 889,
+              "y": -321
             },
             "parameters": {
               "showName": true,
@@ -14932,8 +16143,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_airmode",
             "position": {
-              "x": 881,
-              "y": -105
+              "x": 889,
+              "y": -177
             },
             "parameters": {
               "showName": true,
@@ -14945,8 +16156,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_home_valid",
             "position": {
-              "x": 881,
-              "y": 39
+              "x": 889,
+              "y": -33
             },
             "parameters": {
               "showName": true,
@@ -14958,8 +16169,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_home_distance_m",
             "position": {
-              "x": 881,
-              "y": 183
+              "x": 889,
+              "y": 111
             },
             "parameters": {
               "showName": true,
@@ -14971,8 +16182,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_home_bearing_deg",
             "position": {
-              "x": 881,
-              "y": 327
+              "x": 889,
+              "y": 255
             },
             "parameters": {
               "showName": true,
@@ -14984,8 +16195,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_mode",
             "position": {
-              "x": 887,
-              "y": 471
+              "x": 895,
+              "y": 399
             },
             "parameters": {
               "showName": true,
@@ -14997,8 +16208,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_warnings",
             "position": {
-              "x": 881,
-              "y": 615
+              "x": 889,
+              "y": 543
             },
             "parameters": {
               "showName": true,
@@ -15010,8 +16221,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_failsafe_stage",
             "position": {
-              "x": 881,
-              "y": 759
+              "x": 889,
+              "y": 687
             },
             "parameters": {
               "showName": true,
@@ -15023,8 +16234,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_alt_est",
             "position": {
-              "x": 887,
-              "y": 903
+              "x": 895,
+              "y": 831
             },
             "parameters": {
               "showName": true,
@@ -15036,8 +16247,8 @@
             "type": "sheet_label_sink",
             "name": "Tag_vario_est",
             "position": {
-              "x": 883,
-              "y": 1047
+              "x": 891,
+              "y": 975
             },
             "parameters": {
               "showName": true,
@@ -15049,12 +16260,25 @@
             "type": "sheet_label_sink",
             "name": "Tag_gps_heading_ok",
             "position": {
-              "x": 881,
-              "y": 1191
+              "x": 889,
+              "y": 1119
             },
             "parameters": {
               "showName": true,
               "signalName": "gps_heading_ok"
+            }
+          },
+          {
+            "id": "main__Tag_alt_hold_active",
+            "type": "sheet_label_sink",
+            "name": "Tag_alt_hold_active",
+            "position": {
+              "x": 889,
+              "y": 1263
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "alt_hold_active"
             }
           }
         ],
@@ -15076,7 +16300,7 @@
             "targetBlockId": "main__MotorCmdSplit",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -106.5
+              "midpointOffset": -110.5
             }
           },
           {
@@ -15380,7 +16604,7 @@
             "targetBlockId": "main__Frame",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -677
+              "midpointOffset": -681
             }
           },
           {
@@ -15390,7 +16614,7 @@
             "targetBlockId": "main__Frame",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -669
+              "midpointOffset": -673
             }
           },
           {
@@ -15407,7 +16631,7 @@
             "targetBlockId": "main__Sensors",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -21
+              "midpointOffset": -17
             }
           },
           {
@@ -15417,7 +16641,7 @@
             "targetBlockId": "main__Sensors",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 35
+              "midpointOffset": 31
             }
           },
           {
@@ -15427,7 +16651,7 @@
             "targetBlockId": "main__Sensors",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -5
+              "midpointOffset": -1
             }
           },
           {
@@ -15437,7 +16661,7 @@
             "targetBlockId": "main__Sensors",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": 3
+              "midpointOffset": 7
             }
           },
           {
@@ -15447,7 +16671,7 @@
             "targetBlockId": "main__Sensors",
             "targetPortIndex": 4,
             "routing": {
-              "midpointOffset": -248
+              "midpointOffset": -252
             }
           },
           {
@@ -15457,7 +16681,7 @@
             "targetBlockId": "main__Sensors",
             "targetPortIndex": 5,
             "routing": {
-              "midpointOffset": 67
+              "midpointOffset": 63
             }
           },
           {
@@ -15474,7 +16698,7 @@
             "targetBlockId": "main__FlightController",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -363
+              "midpointOffset": -367
             }
           },
           {
@@ -15484,7 +16708,7 @@
             "targetBlockId": "main__FlightController",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -355
+              "midpointOffset": -359
             }
           },
           {
@@ -15494,7 +16718,7 @@
             "targetBlockId": "main__FlightController",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": -347
+              "midpointOffset": -351
             }
           },
           {
@@ -15504,7 +16728,7 @@
             "targetBlockId": "main__FlightController",
             "targetPortIndex": 4,
             "routing": {
-              "midpointOffset": -339
+              "midpointOffset": -343
             }
           },
           {
@@ -15524,7 +16748,7 @@
             "targetBlockId": "main__FlightController",
             "targetPortIndex": 6,
             "routing": {
-              "midpointOffset": -323
+              "midpointOffset": -327
             }
           },
           {
@@ -15534,7 +16758,7 @@
             "targetBlockId": "main__FlightController",
             "targetPortIndex": 7,
             "routing": {
-              "midpointOffset": -331
+              "midpointOffset": -335
             }
           },
           {
@@ -15564,7 +16788,7 @@
             "targetBlockId": "main__FlightController",
             "targetPortIndex": 10,
             "routing": {
-              "midpointOffset": -315
+              "midpointOffset": -319
             }
           },
           {
@@ -15654,7 +16878,7 @@
             "targetBlockId": "main__Tag_pos_ned",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -36.5
+              "midpointOffset": -32.5
             }
           },
           {
@@ -15664,7 +16888,7 @@
             "targetBlockId": "main__Tag_vel_ned",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 51.5
+              "midpointOffset": 47.5
             }
           },
           {
@@ -15674,7 +16898,7 @@
             "targetBlockId": "main__Tag_quat",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 12.5
+              "midpointOffset": 8.5
             }
           },
           {
@@ -15684,7 +16908,7 @@
             "targetBlockId": "main__Tag_euler",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -11.5
+              "midpointOffset": -7.5
             }
           },
           {
@@ -15694,7 +16918,7 @@
             "targetBlockId": "main__Tag_omega",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -27.5
+              "midpointOffset": -23.5
             }
           },
           {
@@ -15704,7 +16928,7 @@
             "targetBlockId": "main__Tag_accel",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -19.5
+              "midpointOffset": -15.5
             }
           },
           {
@@ -15721,7 +16945,7 @@
             "targetBlockId": "main__Tag_motor_cmd",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -97.5
+              "midpointOffset": -101.5
             }
           },
           {
@@ -15731,7 +16955,7 @@
             "targetBlockId": "main__Tag_rate_setpoint",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -80.5
+              "midpointOffset": -92.5
             }
           },
           {
@@ -15741,7 +16965,7 @@
             "targetBlockId": "main__Tag_gyro_dps",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -66.5
+              "midpointOffset": -70.5
             }
           },
           {
@@ -15751,7 +16975,7 @@
             "targetBlockId": "main__Tag_euler_est",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -41.5
+              "midpointOffset": -53.5
             }
           },
           {
@@ -15761,7 +16985,7 @@
             "targetBlockId": "main__Tag_quat_est",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 13.5
+              "midpointOffset": -6.5
             }
           },
           {
@@ -15771,7 +16995,7 @@
             "targetBlockId": "main__Tag_heading_deg",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 31.5
+              "midpointOffset": 19.5
             }
           },
           {
@@ -15781,7 +17005,7 @@
             "targetBlockId": "main__Tag_fc_armed",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 53.5
+              "midpointOffset": 41.5
             }
           },
           {
@@ -15791,7 +17015,7 @@
             "targetBlockId": "main__Tag_fc_angle_mode",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 71.5
+              "midpointOffset": 59.5
             }
           },
           {
@@ -15801,7 +17025,7 @@
             "targetBlockId": "main__Tag_fc_airmode",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -8.5
+              "midpointOffset": 67.5
             }
           },
           {
@@ -15811,7 +17035,7 @@
             "targetBlockId": "main__Tag_home_valid",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 79.5
+              "midpointOffset": 83.5
             }
           },
           {
@@ -15821,7 +17045,7 @@
             "targetBlockId": "main__Tag_home_distance_m",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 63.5
+              "midpointOffset": 75.5
             }
           },
           {
@@ -15831,7 +17055,7 @@
             "targetBlockId": "main__Tag_home_bearing_deg",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 47.5
+              "midpointOffset": 51.5
             }
           },
           {
@@ -15841,7 +17065,7 @@
             "targetBlockId": "main__Tag_fc_mode",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 20.5
+              "midpointOffset": 24.5
             }
           },
           {
@@ -15851,7 +17075,7 @@
             "targetBlockId": "main__Tag_fc_warnings",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -0.5
+              "midpointOffset": 11.5
             }
           },
           {
@@ -15861,7 +17085,7 @@
             "targetBlockId": "main__Tag_failsafe_stage",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -56.5
+              "midpointOffset": -36.5
             }
           },
           {
@@ -15871,7 +17095,7 @@
             "targetBlockId": "main__Tag_alt_est",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -75.5
+              "midpointOffset": -63.5
             }
           },
           {
@@ -15881,7 +17105,7 @@
             "targetBlockId": "main__Tag_vario_est",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -89.5
+              "midpointOffset": -77.5
             }
           },
           {
@@ -15891,13 +17115,23 @@
             "targetBlockId": "main__Tag_gps_heading_ok",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -104.5
+              "midpointOffset": -84.5
+            }
+          },
+          {
+            "id": "w_86_main__FlightController_main__Tag_alt_hold_active",
+            "sourceBlockId": "main__FlightController",
+            "sourcePortIndex": 18,
+            "targetBlockId": "main__Tag_alt_hold_active",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -108.5
             }
           }
         ],
         "extents": {
-          "width": 2368,
-          "height": 2485
+          "width": 2376,
+          "height": 2557
         }
       },
       {
@@ -15910,7 +17144,7 @@
             "name": "From_battery_voltage",
             "position": {
               "x": 100,
-              "y": -1504
+              "y": -1432
             },
             "parameters": {
               "showName": true,
@@ -15923,7 +17157,7 @@
             "name": "battery_voltage",
             "position": {
               "x": 308,
-              "y": -1494
+              "y": -1422
             },
             "parameters": {
               "showName": true,
@@ -15937,7 +17171,7 @@
             "name": "From_battery_current",
             "position": {
               "x": 100,
-              "y": -1936
+              "y": -1864
             },
             "parameters": {
               "showName": true,
@@ -15950,7 +17184,7 @@
             "name": "battery_current",
             "position": {
               "x": 308,
-              "y": -1926
+              "y": -1854
             },
             "parameters": {
               "showName": true,
@@ -15964,7 +17198,7 @@
             "name": "From_battery_soc",
             "position": {
               "x": 100,
-              "y": -1648
+              "y": -1576
             },
             "parameters": {
               "showName": true,
@@ -15977,7 +17211,7 @@
             "name": "battery_soc",
             "position": {
               "x": 324,
-              "y": -1638
+              "y": -1566
             },
             "parameters": {
               "showName": true,
@@ -15991,7 +17225,7 @@
             "name": "From_battery_mah_drawn",
             "position": {
               "x": 100,
-              "y": -1792
+              "y": -1720
             },
             "parameters": {
               "showName": true,
@@ -16004,7 +17238,7 @@
             "name": "battery_mah_drawn",
             "position": {
               "x": 300,
-              "y": -1782
+              "y": -1710
             },
             "parameters": {
               "showName": true,
@@ -16018,7 +17252,7 @@
             "name": "From_imu_gyro",
             "position": {
               "x": 104,
-              "y": 1376
+              "y": 1448
             },
             "parameters": {
               "showName": true,
@@ -16031,7 +17265,7 @@
             "name": "imu_gyro",
             "position": {
               "x": 336,
-              "y": 1386
+              "y": 1458
             },
             "parameters": {
               "showName": true,
@@ -16045,7 +17279,7 @@
             "name": "From_imu_accel",
             "position": {
               "x": 102,
-              "y": 1232
+              "y": 1304
             },
             "parameters": {
               "showName": true,
@@ -16058,7 +17292,7 @@
             "name": "imu_accel",
             "position": {
               "x": 332,
-              "y": 1242
+              "y": 1314
             },
             "parameters": {
               "showName": true,
@@ -16072,7 +17306,7 @@
             "name": "From_mag",
             "position": {
               "x": 120,
-              "y": 1520
+              "y": 1592
             },
             "parameters": {
               "showName": true,
@@ -16085,7 +17319,7 @@
             "name": "mag",
             "position": {
               "x": 338,
-              "y": 1530
+              "y": 1602
             },
             "parameters": {
               "showName": true,
@@ -16099,7 +17333,7 @@
             "name": "From_pressure",
             "position": {
               "x": 104,
-              "y": 2240
+              "y": 2312
             },
             "parameters": {
               "showName": true,
@@ -16112,7 +17346,7 @@
             "name": "pressure",
             "position": {
               "x": 336,
-              "y": 2250
+              "y": 2322
             },
             "parameters": {
               "showName": true,
@@ -16126,7 +17360,7 @@
             "name": "From_gnss_pos",
             "position": {
               "x": 104,
-              "y": 80
+              "y": 152
             },
             "parameters": {
               "showName": true,
@@ -16139,7 +17373,7 @@
             "name": "gnss_pos",
             "position": {
               "x": 336,
-              "y": 90
+              "y": 162
             },
             "parameters": {
               "showName": true,
@@ -16153,7 +17387,7 @@
             "name": "From_gnss_vel_ned",
             "position": {
               "x": 100,
-              "y": 224
+              "y": 296
             },
             "parameters": {
               "showName": true,
@@ -16166,7 +17400,7 @@
             "name": "gnss_vel_ned",
             "position": {
               "x": 320,
-              "y": 234
+              "y": 306
             },
             "parameters": {
               "showName": true,
@@ -16180,7 +17414,7 @@
             "name": "From_gnss_fix",
             "position": {
               "x": 104,
-              "y": -64
+              "y": 8
             },
             "parameters": {
               "showName": true,
@@ -16193,7 +17427,7 @@
             "name": "gnss_fix",
             "position": {
               "x": 336,
-              "y": -54
+              "y": 18
             },
             "parameters": {
               "showName": true,
@@ -16207,7 +17441,7 @@
             "name": "From_gnss_course",
             "position": {
               "x": 100,
-              "y": -208
+              "y": -136
             },
             "parameters": {
               "showName": true,
@@ -16220,7 +17454,7 @@
             "name": "gnss_course",
             "position": {
               "x": 324,
-              "y": -198
+              "y": -126
             },
             "parameters": {
               "showName": true,
@@ -16234,7 +17468,7 @@
             "name": "From_pos_ned",
             "position": {
               "x": 106,
-              "y": 2096
+              "y": 2168
             },
             "parameters": {
               "showName": true,
@@ -16247,7 +17481,7 @@
             "name": "pos_ned",
             "position": {
               "x": 338,
-              "y": 2106
+              "y": 2178
             },
             "parameters": {
               "showName": true,
@@ -16261,7 +17495,7 @@
             "name": "From_vel_ned",
             "position": {
               "x": 106,
-              "y": 2960
+              "y": 3032
             },
             "parameters": {
               "showName": true,
@@ -16274,7 +17508,7 @@
             "name": "vel_ned",
             "position": {
               "x": 338,
-              "y": 2970
+              "y": 3042
             },
             "parameters": {
               "showName": true,
@@ -16288,7 +17522,7 @@
             "name": "From_quat",
             "position": {
               "x": 120,
-              "y": 2384
+              "y": 2456
             },
             "parameters": {
               "showName": true,
@@ -16301,7 +17535,7 @@
             "name": "quat",
             "position": {
               "x": 338,
-              "y": 2394
+              "y": 2466
             },
             "parameters": {
               "showName": true,
@@ -16315,7 +17549,7 @@
             "name": "From_euler",
             "position": {
               "x": 120,
-              "y": -1360
+              "y": -1288
             },
             "parameters": {
               "showName": true,
@@ -16328,7 +17562,7 @@
             "name": "euler",
             "position": {
               "x": 338,
-              "y": -1350
+              "y": -1278
             },
             "parameters": {
               "showName": true,
@@ -16342,7 +17576,7 @@
             "name": "From_omega",
             "position": {
               "x": 120,
-              "y": 1952
+              "y": 2024
             },
             "parameters": {
               "showName": true,
@@ -16355,7 +17589,7 @@
             "name": "omega",
             "position": {
               "x": 338,
-              "y": 1962
+              "y": 2034
             },
             "parameters": {
               "showName": true,
@@ -16369,7 +17603,7 @@
             "name": "From_accel",
             "position": {
               "x": 120,
-              "y": -2224
+              "y": -2296
             },
             "parameters": {
               "showName": true,
@@ -16382,7 +17616,7 @@
             "name": "accel",
             "position": {
               "x": 338,
-              "y": -2214
+              "y": -2286
             },
             "parameters": {
               "showName": true,
@@ -16396,7 +17630,7 @@
             "name": "From_motor_omega",
             "position": {
               "x": 100,
-              "y": 1808
+              "y": 1880
             },
             "parameters": {
               "showName": true,
@@ -16409,7 +17643,7 @@
             "name": "motor_omega",
             "position": {
               "x": 324,
-              "y": 1818
+              "y": 1890
             },
             "parameters": {
               "showName": true,
@@ -16423,7 +17657,7 @@
             "name": "From_motor_cmd",
             "position": {
               "x": 102,
-              "y": 1664
+              "y": 1736
             },
             "parameters": {
               "showName": true,
@@ -16436,7 +17670,7 @@
             "name": "motor_cmd",
             "position": {
               "x": 332,
-              "y": 1674
+              "y": 1746
             },
             "parameters": {
               "showName": true,
@@ -16450,7 +17684,7 @@
             "name": "From_rate_setpoint",
             "position": {
               "x": 100,
-              "y": 2672
+              "y": 2744
             },
             "parameters": {
               "showName": true,
@@ -16463,7 +17697,7 @@
             "name": "rate_setpoint",
             "position": {
               "x": 316,
-              "y": 2682
+              "y": 2754
             },
             "parameters": {
               "showName": true,
@@ -16477,7 +17711,7 @@
             "name": "From_gyro_dps",
             "position": {
               "x": 104,
-              "y": 512
+              "y": 584
             },
             "parameters": {
               "showName": true,
@@ -16490,7 +17724,7 @@
             "name": "gyro_dps",
             "position": {
               "x": 336,
-              "y": 522
+              "y": 594
             },
             "parameters": {
               "showName": true,
@@ -16504,7 +17738,7 @@
             "name": "From_euler_est",
             "position": {
               "x": 102,
-              "y": -1216
+              "y": -1144
             },
             "parameters": {
               "showName": true,
@@ -16517,7 +17751,7 @@
             "name": "euler_est",
             "position": {
               "x": 332,
-              "y": -1206
+              "y": -1134
             },
             "parameters": {
               "showName": true,
@@ -16531,7 +17765,7 @@
             "name": "From_quat_est",
             "position": {
               "x": 104,
-              "y": 2528
+              "y": 2600
             },
             "parameters": {
               "showName": true,
@@ -16544,7 +17778,7 @@
             "name": "quat_est",
             "position": {
               "x": 336,
-              "y": 2538
+              "y": 2610
             },
             "parameters": {
               "showName": true,
@@ -16558,7 +17792,7 @@
             "name": "From_heading_deg",
             "position": {
               "x": 100,
-              "y": 656
+              "y": 728
             },
             "parameters": {
               "showName": true,
@@ -16571,7 +17805,7 @@
             "name": "heading_deg",
             "position": {
               "x": 324,
-              "y": 666
+              "y": 738
             },
             "parameters": {
               "showName": true,
@@ -16585,7 +17819,7 @@
             "name": "From_fc_armed",
             "position": {
               "x": 104,
-              "y": -640
+              "y": -568
             },
             "parameters": {
               "showName": true,
@@ -16598,7 +17832,7 @@
             "name": "fc_armed",
             "position": {
               "x": 336,
-              "y": -630
+              "y": -558
             },
             "parameters": {
               "showName": true,
@@ -16612,7 +17846,7 @@
             "name": "From_fc_angle_mode",
             "position": {
               "x": 100,
-              "y": -784
+              "y": -712
             },
             "parameters": {
               "showName": true,
@@ -16625,7 +17859,7 @@
             "name": "fc_angle_mode",
             "position": {
               "x": 316,
-              "y": -774
+              "y": -702
             },
             "parameters": {
               "showName": true,
@@ -16639,7 +17873,7 @@
             "name": "From_fc_airmode",
             "position": {
               "x": 100,
-              "y": -928
+              "y": -856
             },
             "parameters": {
               "showName": true,
@@ -16652,7 +17886,7 @@
             "name": "fc_airmode",
             "position": {
               "x": 328,
-              "y": -918
+              "y": -846
             },
             "parameters": {
               "showName": true,
@@ -16666,7 +17900,7 @@
             "name": "From_home_valid",
             "position": {
               "x": 100,
-              "y": 1088
+              "y": 1160
             },
             "parameters": {
               "showName": true,
@@ -16679,7 +17913,7 @@
             "name": "home_valid",
             "position": {
               "x": 328,
-              "y": 1098
+              "y": 1170
             },
             "parameters": {
               "showName": true,
@@ -16693,7 +17927,7 @@
             "name": "From_home_distance_m",
             "position": {
               "x": 100,
-              "y": 944
+              "y": 1016
             },
             "parameters": {
               "showName": true,
@@ -16706,7 +17940,7 @@
             "name": "home_distance_m",
             "position": {
               "x": 308,
-              "y": 954
+              "y": 1026
             },
             "parameters": {
               "showName": true,
@@ -16720,7 +17954,7 @@
             "name": "From_home_bearing_deg",
             "position": {
               "x": 100,
-              "y": 800
+              "y": 872
             },
             "parameters": {
               "showName": true,
@@ -16733,7 +17967,7 @@
             "name": "home_bearing_deg",
             "position": {
               "x": 304,
-              "y": 810
+              "y": 882
             },
             "parameters": {
               "showName": true,
@@ -16747,7 +17981,7 @@
             "name": "From_fc_mode",
             "position": {
               "x": 106,
-              "y": -496
+              "y": -424
             },
             "parameters": {
               "showName": true,
@@ -16760,7 +17994,7 @@
             "name": "fc_mode",
             "position": {
               "x": 338,
-              "y": -486
+              "y": -414
             },
             "parameters": {
               "showName": true,
@@ -16774,7 +18008,7 @@
             "name": "From_fc_warnings",
             "position": {
               "x": 100,
-              "y": -352
+              "y": -280
             },
             "parameters": {
               "showName": true,
@@ -16787,7 +18021,7 @@
             "name": "fc_warnings",
             "position": {
               "x": 324,
-              "y": -342
+              "y": -270
             },
             "parameters": {
               "showName": true,
@@ -16801,7 +18035,7 @@
             "name": "From_failsafe_stage",
             "position": {
               "x": 100,
-              "y": -1072
+              "y": -1000
             },
             "parameters": {
               "showName": true,
@@ -16814,7 +18048,7 @@
             "name": "failsafe_stage",
             "position": {
               "x": 312,
-              "y": -1062
+              "y": -990
             },
             "parameters": {
               "showName": true,
@@ -16828,7 +18062,7 @@
             "name": "From_alt_est",
             "position": {
               "x": 106,
-              "y": -2080
+              "y": -2152
             },
             "parameters": {
               "showName": true,
@@ -16841,7 +18075,7 @@
             "name": "alt_est",
             "position": {
               "x": 338,
-              "y": -2070
+              "y": -2142
             },
             "parameters": {
               "showName": true,
@@ -16855,7 +18089,7 @@
             "name": "From_vario_est",
             "position": {
               "x": 102,
-              "y": 2816
+              "y": 2888
             },
             "parameters": {
               "showName": true,
@@ -16868,7 +18102,7 @@
             "name": "vario_est",
             "position": {
               "x": 332,
-              "y": 2826
+              "y": 2898
             },
             "parameters": {
               "showName": true,
@@ -16882,7 +18116,7 @@
             "name": "From_gps_heading_ok",
             "position": {
               "x": 100,
-              "y": 368
+              "y": 440
             },
             "parameters": {
               "showName": true,
@@ -16895,11 +18129,38 @@
             "name": "gps_heading_ok",
             "position": {
               "x": 312,
-              "y": 378
+              "y": 450
             },
             "parameters": {
               "showName": true,
               "portName": "gps_heading_ok",
+              "dataType": "double"
+            }
+          },
+          {
+            "id": "telemetry__From_alt_hold_active",
+            "type": "sheet_label_source",
+            "name": "From_alt_hold_active",
+            "position": {
+              "x": 100,
+              "y": -2008
+            },
+            "parameters": {
+              "showName": true,
+              "signalName": "alt_hold_active"
+            }
+          },
+          {
+            "id": "telemetry__alt_hold_active",
+            "type": "output_port",
+            "name": "alt_hold_active",
+            "position": {
+              "x": 308,
+              "y": -1998
+            },
+            "parameters": {
+              "showName": true,
+              "portName": "alt_hold_active",
               "dataType": "double"
             }
           }
@@ -17163,11 +18424,18 @@
             "sourcePortIndex": 0,
             "targetBlockId": "telemetry__gps_heading_ok",
             "targetPortIndex": 0
+          },
+          {
+            "id": "w_38_telemetry__From_alt_hold_active_telemetry__alt_hold_active",
+            "sourceBlockId": "telemetry__From_alt_hold_active",
+            "sourcePortIndex": 0,
+            "targetBlockId": "telemetry__alt_hold_active",
+            "targetPortIndex": 0
           }
         ],
         "extents": {
           "width": 638,
-          "height": 3170
+          "height": 3242
         }
       }
     ]

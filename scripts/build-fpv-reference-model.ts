@@ -115,6 +115,32 @@ export const FC = {
     stickThreshold: 0.3,
     /** s of low throttle before a loss after which DROP and AUTO-LAND disarm at once (failsafe_throttle_low_delay) */
     throttleLowDelayS: 10,
+    /** s an AUTO-LAND runs before it disarms (failsafe_landing_time) */
+    landingTimeS: 60,
+  },
+  /**
+   * The shared autopilot altitude controller and Altitude Hold, after Betaflight
+   * 2025.12 (docs/fpv-betaflight-gnss-spec.md §3). Throttle in µs (1000–2000).
+   */
+  autopilot: {
+    /** s: the autopilot task, 100 Hz */
+    ts: 0.01,
+    /** ap_hover_throttle: this quad's hover (Betaflight's default 1275 is a per-quad setting) */
+    get hoverUs() {
+      return Math.round(1000 + 1000 * HOVER_THROTTLE)
+    },
+    throttleMinUs: 1100,
+    throttleMaxUs: 1700,
+    /** ap_altitude_p / i / d / f (scaled ×0.01, ×0.003, ×0.01, ×0.01 per cm) */
+    p: 15, i: 15, d: 15, f: 15,
+    /** µs: altitude I limit; cm: the error above which I accumulates at 0.1× */
+    iLimitUs: 200,
+    iRelaxCm: 200,
+    /** cm/s: D boost starts at this vertical speed, rising toward 3× */
+    dBoostStartCmS: 500,
+    /** alt_hold_climb_rate × 10 cm/s (50 → 5 m/s) and alt_hold_deadband (fraction of travel either side of hover) */
+    climbRateCmS: 500,
+    deadband: 0.2,
   },
 }
 
@@ -669,7 +695,7 @@ const MOTOR_SIZE = { width: 140, height: 80 }
 const FRAME_SIZE = { width: 160, height: 260 }
 const FC_SIZE = { width: 220, height: 180 }
 const SENSORS_SIZE = { width: 170, height: 150 }
-const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok']
+const FC_OUTPUTS = ['motors', 'setpoint', 'gyro_dps', 'euler_est', 'quat_est', 'heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok', 'alt_hold_active']
 
 // ---------------------------------------------------------------------------
 // Motor / ESC / propeller (one definition, referenced by the other three)
@@ -1877,8 +1903,8 @@ function buildMixerSheet(): SheetBuilder {
  * goes low with the AUX switches held (stage 1); delayS after the loss stage 2
  * runs the failsafe procedure. Stage 1 ends the moment the link returns;
  * stage 2 needs recoveryS of valid link and, except after DROP, a stick moved
- * beyond stickThreshold. Phase 8: every procedure disarms (DROP) until the
- * altitude controller (AUTO-LAND, Phase 10) and GPS Rescue (Phase 12) exist.
+ * beyond stickThreshold. DROP disarms at stage 2; AUTO-LAND descends under
+ * Altitude Hold and disarms after landingTimeS; GPS-RESCUE drops until Phase 12.
  */
 function buildFailsafeSheet(): SheetBuilder {
   const f = FC.failsafe
@@ -1934,16 +1960,24 @@ function buildFailsafeSheet(): SheetBuilder {
   s.wire(split, low, 1, 3)
   s.wire(lowPrev, low, 2)
   s.wire(low, lowPrev)
-  // Disarm: stage 2 (every procedure drops until Phases 10 and 12), or a loss after
-  // long low throttle with DROP or AUTO-LAND
+  // Time in stage 2 (for AUTO-LAND's landing time)
+  const s2TimePrev = s.add('unit_delay', 'Stage2TimePrev', { initialValue: 0, sampleInterval: ts })
+  const s2Time = s.add('evaluate', 'Stage2Time', { numInputs: 2, expression: `(in(0) > 0.5) ? fmin(in(1) + ${ts}, 1000.0) : 0.0` })
+  s.wire(stage2, s2Time, 0)
+  s.wire(s2TimePrev, s2Time, 1)
+  s.wire(s2Time, s2TimePrev)
+  // Disarm: stage 2 with DROP (and GPS-RESCUE until Phase 12); AUTO-LAND after its landing
+  // time; or a loss after long low throttle with DROP or AUTO-LAND
+  const { drop, autoLand, gpsRescue } = FAILSAFE_PROCEDURE
+  // in(0) stage 2, in(1) link, in(2) low-throttle time, in(3) live procedure, in(4) latched procedure, in(5) stage-2 time
   const disarm = s.add('evaluate', 'DisarmRequest', {
-    numInputs: 4,
-    expression: `(in(0) > 0.5 || (in(1) < 0.5 && in(2) > ${f.throttleLowDelayS} && fabs(in(3) - ${FAILSAFE_PROCEDURE.gpsRescue}) > 0.5)) ? 1.0 : 0.0`,
+    numInputs: 6,
+    expression:
+      `((in(0) > 0.5 && (fabs(in(4) - ${drop}) < 0.5 || fabs(in(4) - ${gpsRescue}) < 0.5))` +
+      ` || (in(0) > 0.5 && fabs(in(4) - ${autoLand}) < 0.5 && in(5) >= ${f.landingTimeS - 1e-9})` +
+      ` || (in(1) < 0.5 && in(2) > ${f.throttleLowDelayS} && fabs(in(3) - ${gpsRescue}) > 0.5)) ? 1.0 : 0.0`,
   })
-  s.wire(stage2, disarm, 0)
-  s.wire(linkOk, disarm, 1)
-  s.wire(low, disarm, 2)
-  s.wire(procedure, disarm, 3)
+  ;[stage2, linkOk, low, procedure, procLatched, s2Time].forEach((x, k) => s.wire(x, disarm, k))
   // Sticks the controller sees: live; held for holdS after a loss; then failsafe values
   const lastPrev = s.add('unit_delay', 'LastValidPrev', { initialValue: [0, 0, 0, 0, 0, 0, 0, 0], sampleInterval: ts })
   const last = s.add('if', 'LastValid')
@@ -2147,6 +2181,109 @@ function buildHomeVectorSheet(): SheetBuilder {
   return s
 }
 
+/**
+ * Altitude Hold and the shared altitude controller, after Betaflight 2025.12
+ * (docs/fpv-betaflight-gnss-spec.md §3.1–3.2), at 100 Hz. Active when armed,
+ * not in GPS Rescue, the throttle has been raised since arming, and AUX4 is at
+ * mid or high, or a failsafe AUTO-LAND is running. On entry the target is the
+ * current altitude; the throttle stick moves it outside a deadband around
+ * hover (not at low throttle); AUTO-LAND descends faster when higher. The
+ * controller's throttle (µs) is returned in stick units, (µs − 1000) / 1000.
+ */
+function buildAltHoldSheet(startArmed: boolean): SheetBuilder {
+  const A = FC.autopilot
+  const ts = A.ts
+  const s = new SheetBuilder('althold', 'AltHold')
+  const sticks = s.input('sticks', 'double[8]')
+  const armed = s.input('armed', 'double')
+  const stage = s.input('failsafe_stage', 'double')
+  const procedure = s.input('failsafe_procedure', 'double')
+  const alt = s.input('alt_est', 'double')
+  const vario = s.input('vario_est', 'double')
+  const euler = s.input('euler_est', 'double[3]')
+  const rescue = s.input('rescue_active', 'double')
+  const split = s.add('demux', 'StickSplit', { outputCount: 8, inputDimensions: [8] })
+  s.wire(sticks, split)
+  const att = s.add('demux', 'AttitudeSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(euler, att)
+  const state = (name: string, init: number, expression: string, inputs: string[]) => {
+    const prev = s.add('unit_delay', `${name}Prev`, { initialValue: init, sampleInterval: ts })
+    const ev = s.add('evaluate', name, { numInputs: inputs.length + 1, expression })
+    inputs.forEach((x, k) => s.wire(x, ev, k))
+    s.wire(prev, ev, inputs.length)
+    s.wire(ev, prev)
+    return ev
+  }
+  // wasThrottleRaised: since arming, the throttle has been above low
+  const raisedPrev = s.add('unit_delay', 'ThrottleRaisedPrev', { initialValue: startArmed ? 1 : 0, sampleInterval: ts })
+  const raised = s.add('evaluate', 'ThrottleRaised', { numInputs: 3, expression: `(in(0) > 0.5) ? fmax(in(2), (in(1) >= ${FC.minCheck}) ? 1.0 : 0.0) : 0.0` })
+  s.wire(armed, raised, 0)
+  s.wire(split, raised, 1, 3)
+  s.wire(raisedPrev, raised, 2)
+  s.wire(raised, raisedPrev)
+  // in(0) armed, in(1) rescue, in(2) raised, in(3) AUX4, in(4) stage, in(5) procedure
+  const active = s.add('evaluate', 'Active', {
+    numInputs: 6,
+    expression: `(in(0) > 0.5 && in(1) < 0.5 && in(2) > 0.5 && (in(3) > 0.25 || (in(4) > 1.5 && fabs(in(5) - ${FAILSAFE_PROCEDURE.autoLand}) < 0.5))) ? 1.0 : 0.0`,
+  })
+  ;[armed, rescue, raised].forEach((x, k) => s.wire(x, active, k))
+  s.wire(split, active, 3, 7)
+  s.wire(stage, active, 4)
+  s.wire(procedure, active, 5)
+  const activePrev = s.add('unit_delay', 'ActivePrev', { initialValue: 0, sampleInterval: ts })
+  s.wire(active, activePrev)
+  const altCm = s.add('evaluate', 'AltitudeCm', { numInputs: 1, expression: 'in(0) * 100.0' })
+  s.wire(alt, altCm)
+  // Stick factor: outside the deadband around hover (not at low throttle); AUTO-LAND descends, faster when higher
+  const hover = A.hoverUs
+  const low = hover - A.deadband * (hover - 1000), high = hover + A.deadband * (2000 - hover)
+  const us = '(1000.0 + 1000.0 * in(0))'
+  const stickFactor = s.add('evaluate', 'StickFactor', {
+    numInputs: 3,
+    // in(0) throttle stick, in(1) failsafe stage, in(2) altitude cm
+    expression:
+      `(in(1) > 1.5) ? -(0.9 + fmin(fmax(in(2) / 2000.0, 0.1), 9.0)) : ` +
+      `((in(0) < ${FC.minCheck}) ? 0.0 : ((${us} < ${low}) ? (${us} - 1000.0) / ${low - 1000} - 1.0 : ((${us} > ${high}) ? (${us} - ${high}) / ${2000 - high} : 0.0)))`,
+  })
+  s.wire(split, stickFactor, 0, 3)
+  s.wire(stage, stickFactor, 1)
+  s.wire(altCm, stickFactor, 2)
+  const targetVel = s.add('evaluate', 'TargetVelocity', { numInputs: 1, expression: `in(0) * ${A.climbRateCmS}` })
+  s.wire(stickFactor, targetVel)
+  // Target altitude (cm): the current altitude on entry; moved by the target velocity while within 1 s of travel
+  // in(0) active, in(1) active before, in(2) altitude, in(3) target velocity, in(4) target before
+  const target = state('TargetCm', 0,
+    `(in(0) > 0.5 && in(1) < 0.5) ? in(2) : ((fabs(in(2) - in(4)) < ${A.climbRateCmS}) ? in(4) + in(3) * ${ts} : in(4))`,
+    [active, activePrev, altCm, targetVel])
+  const err = s.add('evaluate', 'AltitudeErrorCm', { numInputs: 2, expression: 'in(0) - in(1)' })
+  s.wire(target, err, 0)
+  s.wire(altCm, err, 1)
+  // I: reset on entry; 0.1× above iRelaxCm; limited
+  const iTerm = state('ITerm', 0,
+    `(in(0) > 0.5 && in(1) > 0.5) ? fmin(fmax(in(3) + in(2) * ${A.i * 0.003} * ((fabs(in(2)) < ${A.iRelaxCm}) ? 1.0 : 0.1) * ${ts}, -${A.iLimitUs}), ${A.iLimitUs}) : 0.0`,
+    [active, activePrev, err])
+  // Throttle (µs): (P + I − D·boost + F + hover offset) / max(cos tilt, 0.5), limited; then stick units
+  // in(0) error, in(1) I, in(2) vario m/s, in(3) target velocity, in(4) roll, in(5) pitch
+  const vz = '(in(2) * 100.0)'
+  const boost = `((fabs(${vz}) > ${A.dBoostStartCmS}) ? (3.0 * fabs(${vz}) / ${A.dBoostStartCmS} - 2.0) / (fabs(${vz}) / ${A.dBoostStartCmS}) : 1.0)`
+  const throttle = s.add('evaluate', 'Throttle', {
+    numInputs: 6,
+    expression:
+      `(fmin(fmax(1000.0 + (in(0) * ${A.p * 0.01} + in(1) - ${vz} * ${boost} * ${A.d * 0.01} + in(3) * ${A.f * 0.01} + ${hover - 1000})` +
+      ` / fmax(cos(in(4)) * cos(in(5)), 0.5), ${A.throttleMinUs}), ${A.throttleMaxUs}) - 1000.0) / 1000.0`,
+  })
+  s.wire(err, throttle, 0)
+  s.wire(iTerm, throttle, 1)
+  s.wire(vario, throttle, 2)
+  s.wire(targetVel, throttle, 3)
+  s.wire(att, throttle, 4, 0)
+  s.wire(att, throttle, 5, 1)
+  s.output('active', active, 'double')
+  s.output('throttle', throttle, 'double')
+  s.output('throttle_raised', raised, 'double')
+  return s
+}
+
 function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, magnetometer: boolean): SheetBuilder {
   const s = new SheetBuilder('fc', 'FlightController')
   const rawSticks = s.input('sticks', 'double[8]')
@@ -2167,6 +2304,27 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.wire(link, failsafe, 1)
   s.wire(procedure, failsafe, 2)
   const sticks = failsafe
+  // What Rates and AngleMode see: Altitude Hold replaces the throttle and forces angle mode
+  const altHoldId = `${s.id}__AltHold`
+  const fsSplit = s.add('demux', 'FailsafeStickSplit', { outputCount: 8, inputDimensions: [8] })
+  s.wire(sticks, fsSplit)
+  const apSticks = s.add('mux', 'AutopilotSticks', { rows: 8, cols: 1, baseType: 'double', outputType: 'double[8]' })
+  for (let k = 0; k < 8; k++) {
+    if (k === 3) {
+      const thr = s.add('evaluate', 'ThrottleCommand', { numInputs: 3, expression: '(in(0) > 0.5) ? in(1) : in(2)' })
+      s.wire(altHoldId, thr, 0, 0)
+      s.wire(altHoldId, thr, 1, 1)
+      s.wire(fsSplit, thr, 2, 3)
+      s.wire(thr, apSticks, 3)
+    } else if (k === 4) {
+      const ang = s.add('evaluate', 'AngleModeCommand', { numInputs: 2, expression: '(in(0) > 0.5) ? 1.0 : in(1)' })
+      s.wire(altHoldId, ang, 0, 0)
+      s.wire(fsSplit, ang, 1, 4)
+      s.wire(ang, apSticks, 4)
+    } else {
+      s.wire(fsSplit, apSticks, k, k)
+    }
+  }
 
   // Estimators
   const att = s.add('subsystem', 'AttitudeEstimator', subsystem(
@@ -2185,9 +2343,9 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
 
   // Setpoint: acro rates, or angle mode on the AUX switch
   const rates = s.add('subsystem', 'Rates', subsystem(['sticks'], ['setpoint', 'throttle'], buildRatesSheet()))
-  s.wire(sticks, rates)
+  s.wire(apSticks, rates)
   const angle = s.add('subsystem', 'AngleMode', subsystem(['sticks', 'euler_est', 'acro_setpoint'], ['setpoint', 'angle_mode'], buildAngleModeSheet()))
-  s.wire(sticks, angle, 0)
+  s.wire(apSticks, angle, 0)
   s.wire(att, angle, 1, 1)
   s.wire(rates, angle, 2, 0)
 
@@ -2210,6 +2368,21 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.wire(gnssPos, alt, 1)
   s.wire(gnssFix, alt, 2)
   s.wire(arming, alt, 3, 0)
+  // Altitude Hold and the altitude controller (100 Hz); GPS Rescue (Phase 12) suppresses it
+  const altHold = s.add('subsystem', 'AltHold', {
+    ...subsystem(['sticks', 'armed', 'failsafe_stage', 'failsafe_procedure', 'alt_est', 'vario_est', 'euler_est', 'rescue_active'],
+      ['active', 'throttle', 'throttle_raised'], buildAltHoldSheet(altitude0 > 0)),
+    sampleTimeSec: FC.autopilot.ts,
+  })
+  if (altHold !== altHoldId) throw new Error('AltHold id')
+  s.wire(sticks, altHold, 0)
+  s.wire(arming, altHold, 1, 0)
+  s.wire(failsafe, altHold, 2, 1)
+  s.wire(failsafe, altHold, 3, 3)
+  s.wire(alt, altHold, 4, 0)
+  s.wire(alt, altHold, 5, 1)
+  s.wire(att, altHold, 6, 1)
+  s.wire(s.constant('RescueActive', 0, 'double'), altHold, 7)
   const pid = s.add('subsystem', 'RatePID', subsystem(['setpoint', 'gyro_dps', 'iterm_enable'], ['pid'], buildRatePidSheet()))
   s.wire(angle, pid, 0, 0)
   s.wire(filt, pid, 1, 0)
@@ -2249,18 +2422,20 @@ function buildFlightControllerSheet(initialQuat: number[][], altitude0: number, 
   s.output('home_bearing_deg', home, 'double', 2)
   // Flight-mode text code (FC_MODE), in Betaflight's priority order
   const mode = s.add('evaluate', 'FlightMode', {
-    numInputs: 3,
-    expression: `(in(0) > 0.5) ? ${FC_MODE.failsafe}.0 : ((in(1) > 0.5) ? ${FC_MODE.angle}.0 : ((in(2) > 0.5) ? ${FC_MODE.air}.0 : ${FC_MODE.acro}.0))`,
+    numInputs: 4,
+    expression: `(in(0) > 0.5) ? ${FC_MODE.failsafe}.0 : ((in(3) > 0.5) ? ${FC_MODE.altHold}.0 : ((in(1) > 0.5) ? ${FC_MODE.angle}.0 : ((in(2) > 0.5) ? ${FC_MODE.air}.0 : ${FC_MODE.acro}.0)))`,
   })
   s.wire(failsafe, mode, 0, 1)
   s.wire(angle, mode, 1, 1)
   s.wire(arming, mode, 2, 1)
+  s.wire(altHold, mode, 3, 0)
   s.output('fc_mode', mode, 'double')
   s.output('fc_warnings', arming, 'double', 2)
   s.output('failsafe_stage', failsafe, 'double', 1)
   s.output('alt_est', alt, 'double', 0)
   s.output('vario_est', alt, 'double', 1)
   s.output('gps_heading_ok', att, 'double', 2)
+  s.output('alt_hold_active', altHold, 'double', 0)
   return s
 }
 
@@ -2452,7 +2627,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     publish('gyro_dps', fc, 'double[3]', fcOut('gyro_dps'))
     publish('euler_est', fc, 'double[3]', fcOut('euler_est'))
     publish('quat_est', fc, 'double[4][1]', fcOut('quat_est'))
-    for (const name of ['heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok']) {
+    for (const name of ['heading_deg', 'fc_armed', 'fc_angle_mode', 'fc_airmode', 'home_valid', 'home_distance_m', 'home_bearing_deg', 'fc_mode', 'fc_warnings', 'failsafe_stage', 'alt_est', 'vario_est', 'gps_heading_ok', 'alt_hold_active']) {
       publish(name, fc, 'double', fcOut(name))
     }
   }
@@ -3360,6 +3535,111 @@ export function buildFpvNoMagHeadingTestModel() {
   })
 }
 
+/**
+ * T16 timeline (s) and limits. With Betaflight's default altitude gains
+ * (P, I, D, F 15) this quad's hold is underdamped: about 2 m of overshoot on
+ * entry and a ±1.7 m swing with an 8 s period (P is about 0.6 m/s² per metre,
+ * damping about 0.4 before the vario's lag). Betaflight users tune ap_altitude_*.
+ */
+export const ALT_HOLD_TEST = {
+  earlySwitch: [0.5, 0.9] as [number, number],
+  engage: 4, fullStick: [14, 17] as [number, number], end: 22,
+  holdM: 3, holdVzMs: 1.5, climbMs: [4.5, 6.0] as [number, number],
+}
+
+/** T16: Altitude Hold — not before the throttle is raised; holds; climbs at full stick; holds at low stick. */
+export function buildFpvAltHoldTestModel() {
+  const t = ALT_HOLD_TEST
+  const hov = Number(HOVER_THROTTLE.toFixed(4))
+  const sticks: StickProfile = {
+    roll: [[0, 0]], pitch: [[0, 0]], yaw: [[0, 0]], aux: [[0, 1]], arm: DEMO_STICKS.arm,
+    throttle: [[0, 0], [1.0, 0], [1.001, 0.6], [1.6, 0.6], [1.601, hov], [t.fullStick[0], hov], [t.fullStick[0] + 0.001, 1.0], [t.fullStick[1], 1.0], [t.fullStick[1] + 0.001, 0]],
+    hold: [[0, 0], [t.earlySwitch[0] - 0.001, 0], [t.earlySwitch[0], 0.5], [t.earlySwitch[1], 0.5], [t.earlySwitch[1] + 0.001, 0], [t.engage - 0.001, 0], [t.engage, 0.5]],
+  }
+  const tests = () => {
+    const { s, h, from, pick, expr, check, upright } = testsSheet()
+    const active = from('alt_hold_active')
+    const height = expr('HeightAboveArming', `-in(0) - ${LOCATION.elevationM - GROUND_REST_Z}`, [pick('Down', from('pos_ned'), [2])])
+    const climb = expr('ClimbRate', '-in(0)', [pick('VelDown', from('vel_ned'), [2])])
+    check('NotBeforeThrottleRaised', active, 0, 0, t.earlySwitch[0], t.earlySwitch[1])
+    check('EngagesWithSwitch', active, 1, 1, t.engage + 0.02)
+    check('ModeIsAltHold', from('fc_mode'), FC_MODE.altHold, FC_MODE.altHold, t.engage + 0.02)
+    const held = expr('HoldDeviation', 'in(0) - in(1)', [height, h.heldAt('EntryHeight', height, t.engage)])
+    check('HoldsNearEntryAltitude', held, -t.holdM, t.holdM, t.engage, t.fullStick[0])
+    check('HoldSettles', climb, -t.holdVzMs, t.holdVzMs, t.engage + 2, t.fullStick[0])
+    check('ClimbsAtFullStick', climb, t.climbMs[0], t.climbMs[1], t.fullStick[0] + 2, t.fullStick[1])
+    check('HoldsAtLowStick', climb, -t.holdVzMs, null, t.fullStick[1] + 2, t.end)
+    upright()
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T16 Altitude Hold',
+    description:
+      'Validation test for Altitude Hold (docs/fpv-hud-gnss-test-plan.md, T16): AUX4 at mid before the throttle is raised does ' +
+      `not engage; after a climb it engages at ${t.engage} s and holds near the entry altitude with the stick at hover; full ` +
+      'stick climbs at about 5 m/s; low stick stops the target moving and the quad holds. Default Betaflight gains, so the hold ' +
+      'is underdamped (about ±2 m).',
+    sticks,
+    duration: t.end,
+    displays: [['AltitudeEstimate', 'alt_est'], ['Position', 'pos_ned'], ['AltHold', 'alt_hold_active']],
+    tests,
+  })
+}
+
+/**
+ * T09 timeline (s) and limits. Stage 1's throttle-low second and a half drops
+ * the quad several metres before AUTO-LAND's Altitude Hold arrests it. The
+ * descent then runs below Betaflight's target speed (the target only moves
+ * within 5 m of the altitude, and the throttle floor is 1100 µs), so the check
+ * is a controlled descent, not the target profile.
+ */
+export const AUTO_LAND_TEST = {
+  loss: 10, wind: 3, arrested: 12.5, landedBy: 15,
+  descentMs: [2, 6] as [number, number], maxSinkMs: 6, end: 75,
+}
+
+/** T09: failsafe AUTO-LAND — Altitude Hold descends, lands, and disarms after the landing time. */
+export function buildFpvAutoLandTestModel() {
+  const t = AUTO_LAND_TEST
+  const f = FC.failsafe
+  const stage2 = t.loss + f.delayS
+  const disarmAt = stage2 + f.landingTimeS
+  const tests = () => {
+    const { s, h, from, pick, expr, check } = testsSheet()
+    const stage = from('failsafe_stage'), armed = from('fc_armed')
+    const height = expr('HeightAboveArming', `-in(0) - ${LOCATION.elevationM - GROUND_REST_Z}`, [pick('Down', from('pos_ned'), [2])])
+    const sink = pick('VelDown', from('vel_ned'), [2])
+    check('Stage2AfterDelay', h.firstTime('Stage2Time', expr('InStage2', '(in(0) > 1.5) ? 1.0 : 0.0', [stage])), stage2 - 0.002, stage2 + 0.002, stage2 + 0.1)
+    check('AltHoldLands', from('alt_hold_active'), 1, 1, stage2 + 0.02, disarmAt - 0.02)
+    check('FailsafeModeShown', from('fc_mode'), FC_MODE.failsafe, FC_MODE.failsafe, t.loss + 0.02, disarmAt - 0.02)
+    check('ControlledDescent', sink, t.descentMs[0], t.descentMs[1], t.arrested, t.arrested + 1)
+    check('NoFasterThanMaxSink', sink, null, t.maxSinkMs, t.arrested, disarmAt)
+    check('OnTheGround', height, -0.1, 0.3, t.landedBy, disarmAt)
+    check('ArmedUntilLandingTime', armed, 1, 1, 1, disarmAt - 0.01)
+    check('DisarmedAfterLandingTime', armed, 0, 0, disarmAt + 0.01)
+    const deg = s.add('scale', 'RollPitchDeg', { gain: 180 / Math.PI })
+    s.wire(pick('RollPitch', from('euler'), [0, 1]), deg)
+    check('StaysUpright', deg, -60, 60, 0, disarmAt, 'stop')
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T09 Failsafe Auto-Land',
+    description:
+      'Validation test for failsafe AUTO-LAND (docs/fpv-hud-gnss-test-plan.md, T09): after a climb, in a ' +
+      `${t.wind} m/s north wind, the link is lost at ${t.loss} s. Stage 2 at ${stage2} s runs Altitude Hold, which arrests the ` +
+      `stage-1 drop, descends under control and lands; the quad disarms ${f.landingTimeS} s into stage 2. Phase 11 adds Position Hold.`,
+    sticks: CLIMB_STICKS,
+    duration: t.end,
+    displays: [['Position', 'pos_ned'], ['FailsafeStage', 'failsafe_stage'], ['AltHold', 'alt_hold_active']],
+    tests,
+    conditions: {
+      rcLinkValid: [[0, 1], [t.loss - 0.001, 1], [t.loss, 0]],
+      failsafeProcedure: FAILSAFE_PROCEDURE.autoLand,
+      wind: { north: t.wind },
+    },
+  })
+}
+
 /** A test model renamed for the validation suite ("FPV Tnn …"). */
 const renamed = (model: { name: string; data: Record<string, unknown> }, name: string) => ({ ...model, name })
 
@@ -3381,6 +3661,8 @@ export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<s
     ['t06-grid-convergence.json', buildFpvGridConvergenceTestModel()],
     ['t07-arming-checks.json', buildFpvArmingChecksTestModel()],
     ['t08-failsafe-drop.json', buildFpvFailsafeDropTestModel()],
+    ['t09-failsafe-auto-land.json', buildFpvAutoLandTestModel()],
+    ['t16-altitude-hold.json', buildFpvAltHoldTestModel()],
     ['t19-no-mag-heading.json', buildFpvNoMagHeadingTestModel()],
     ['t21-altitude-estimator.json', buildFpvAltitudeEstimatorTestModel()],
     ['t22-wind.json', buildFpvWindTestModel()],

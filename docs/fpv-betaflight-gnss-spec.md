@@ -340,7 +340,7 @@ It runs on each new GPS sample, with separate east and north PIDs in the earth f
 2. GPS Rescue suppresses Alt Hold and Pos Hold.
 3. Pos Hold, Alt Hold and failsafe force angle mode.
 4. Alt Hold and Pos Hold can be active together.
-5. A stage-2 failsafe with AUTO-LAND uses Alt Hold to descend, while Pos Hold holds position.
+5. A stage-2 failsafe with AUTO-LAND uses Alt Hold to descend, while Pos Hold holds position. The descent target is −(0.9 + clamp(alt/20 m, 0.1, 9)) × the climb rate (5 m/s), so 5 m/s near the ground. **[COMMENT≠CODE]** A comment in `alt_hold_multirotor.c` says "10 m/s at 200 m", which assumes a 1 m/s climb rate; the code multiplies by 5 m/s.
 
 ---
 
