@@ -26358,7 +26358,7 @@
                                 "name": "pos_ned",
                                 "position": {
                                   "x": 150,
-                                  "y": 61
+                                  "y": 290
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26372,7 +26372,7 @@
                                 "name": "vel_ned",
                                 "position": {
                                   "x": 150,
-                                  "y": 720
+                                  "y": 774
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26386,7 +26386,7 @@
                                 "name": "gnss_env",
                                 "position": {
                                   "x": 148,
-                                  "y": 454
+                                  "y": 524
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26400,7 +26400,7 @@
                                 "name": "grid_convergence_deg",
                                 "position": {
                                   "x": 100,
-                                  "y": 595
+                                  "y": 649
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26414,7 +26414,7 @@
                                 "name": "EnvSplit",
                                 "position": {
                                   "x": 380,
-                                  "y": 426
+                                  "y": 501
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26430,7 +26430,7 @@
                                 "name": "TruthPos",
                                 "position": {
                                   "x": 380,
-                                  "y": 44
+                                  "y": 272
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26445,8 +26445,8 @@
                                 "type": "unit_delay",
                                 "name": "GmPrev",
                                 "position": {
-                                  "x": 1118,
-                                  "y": -229
+                                  "x": 1082,
+                                  "y": -260
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26463,8 +26463,8 @@
                                 "type": "scale",
                                 "name": "GmDecay",
                                 "position": {
-                                  "x": 1502,
-                                  "y": -229
+                                  "x": 1369,
+                                  "y": -260
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26477,7 +26477,7 @@
                                 "name": "GmDrive",
                                 "position": {
                                   "x": 380,
-                                  "y": -100
+                                  "y": -135
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26490,7 +26490,7 @@
                                 "name": "GmNoise",
                                 "position": {
                                   "x": 160,
-                                  "y": -100
+                                  "y": -135
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26508,7 +26508,7 @@
                                 "name": "GmState",
                                 "position": {
                                   "x": 702,
-                                  "y": -59
+                                  "y": -146
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26521,8 +26521,8 @@
                                 "type": "demux",
                                 "name": "GmSplit",
                                 "position": {
-                                  "x": 1118,
-                                  "y": 102
+                                  "x": 1919,
+                                  "y": 212
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26533,19 +26533,118 @@
                                 }
                               },
                               {
-                                "id": "gnss__WhiteSplit",
-                                "type": "demux",
-                                "name": "WhiteSplit",
+                                "id": "gnss__GmSmoothPrev",
+                                "type": "unit_delay",
+                                "name": "GmSmoothPrev",
                                 "position": {
-                                  "x": 380,
-                                  "y": 204
+                                  "x": 1644,
+                                  "y": -200
                                 },
                                 "parameters": {
                                   "showName": true,
-                                  "outputCount": 3,
-                                  "inputDimensions": [
-                                    3
-                                  ]
+                                  "initialValue": [
+                                    2.310618,
+                                    0.446505,
+                                    -2.333918
+                                  ],
+                                  "sampleInterval": 0.1
+                                }
+                              },
+                              {
+                                "id": "gnss__GmSmoothDecay",
+                                "type": "scale",
+                                "name": "GmSmoothDecay",
+                                "position": {
+                                  "x": 1919,
+                                  "y": -200
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 0.9801986733067553
+                                }
+                              },
+                              {
+                                "id": "gnss__GmSmoothDrive",
+                                "type": "scale",
+                                "name": "GmSmoothDrive",
+                                "position": {
+                                  "x": 1082,
+                                  "y": -31
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 0.019801326693244747
+                                }
+                              },
+                              {
+                                "id": "gnss__GmSmooth",
+                                "type": "sum",
+                                "name": "GmSmooth",
+                                "position": {
+                                  "x": 1369,
+                                  "y": -32
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "++",
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "gnss__GmSmoothUnit",
+                                "type": "scale",
+                                "name": "GmSmoothUnit",
+                                "position": {
+                                  "x": 1644,
+                                  "y": 220
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 1.0408299882206016
+                                }
+                              },
+                              {
+                                "id": "gnss__FastPrev",
+                                "type": "unit_delay",
+                                "name": "FastPrev",
+                                "position": {
+                                  "x": 1082,
+                                  "y": 113
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": [
+                                    0,
+                                    0,
+                                    0
+                                  ],
+                                  "sampleInterval": 0.1
+                                }
+                              },
+                              {
+                                "id": "gnss__FastDecay",
+                                "type": "scale",
+                                "name": "FastDecay",
+                                "position": {
+                                  "x": 1369,
+                                  "y": 112
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 0.8187307530779818
+                                }
+                              },
+                              {
+                                "id": "gnss__FastDrive",
+                                "type": "scale",
+                                "name": "FastDrive",
+                                "position": {
+                                  "x": 380,
+                                  "y": 128
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 0.5741776327621625
                                 }
                               },
                               {
@@ -26554,7 +26653,7 @@
                                 "name": "PosNoise",
                                 "position": {
                                   "x": 160,
-                                  "y": 212
+                                  "y": 128
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26567,12 +26666,113 @@
                                 }
                               },
                               {
+                                "id": "gnss__FastState",
+                                "type": "sum",
+                                "name": "FastState",
+                                "position": {
+                                  "x": 702,
+                                  "y": 152
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "++",
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "gnss__FastSplit",
+                                "type": "demux",
+                                "name": "FastSplit",
+                                "position": {
+                                  "x": 1919,
+                                  "y": 372
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "outputCount": 3,
+                                  "inputDimensions": [
+                                    3
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "gnss__FastSmoothPrev",
+                                "type": "unit_delay",
+                                "name": "FastSmoothPrev",
+                                "position": {
+                                  "x": 1644,
+                                  "y": 68
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "initialValue": [
+                                    0,
+                                    0,
+                                    0
+                                  ],
+                                  "sampleInterval": 0.1
+                                }
+                              },
+                              {
+                                "id": "gnss__FastSmoothDecay",
+                                "type": "scale",
+                                "name": "FastSmoothDecay",
+                                "position": {
+                                  "x": 1919,
+                                  "y": 68
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 0.8187307530779818
+                                }
+                              },
+                              {
+                                "id": "gnss__FastSmoothDrive",
+                                "type": "scale",
+                                "name": "FastSmoothDrive",
+                                "position": {
+                                  "x": 1082,
+                                  "y": 257
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 0.18126924692201818
+                                }
+                              },
+                              {
+                                "id": "gnss__FastSmooth",
+                                "type": "sum",
+                                "name": "FastSmooth",
+                                "position": {
+                                  "x": 1369,
+                                  "y": 256
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "signs": "++",
+                                  "numInputs": 2
+                                }
+                              },
+                              {
+                                "id": "gnss__FastSmoothUnit",
+                                "type": "scale",
+                                "name": "FastSmoothUnit",
+                                "position": {
+                                  "x": 1644,
+                                  "y": 380
+                                },
+                                "parameters": {
+                                  "showName": true,
+                                  "gain": 1.407241272008722
+                                }
+                              },
+                              {
                                 "id": "gnss__VelNoiseSplit",
                                 "type": "demux",
                                 "name": "VelNoiseSplit",
                                 "position": {
                                   "x": 380,
-                                  "y": 819
+                                  "y": 850
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26588,7 +26788,7 @@
                                 "name": "VelNoise",
                                 "position": {
                                   "x": 160,
-                                  "y": 845
+                                  "y": 899
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26605,8 +26805,8 @@
                                 "type": "mux",
                                 "name": "PositionRaw",
                                 "position": {
-                                  "x": 1877,
-                                  "y": 258
+                                  "x": 2476,
+                                  "y": 321
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26621,8 +26821,8 @@
                                 "type": "evaluate",
                                 "name": "PosNorth",
                                 "position": {
-                                  "x": 1392,
-                                  "y": -85
+                                  "x": 2096,
+                                  "y": 81
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26635,8 +26835,8 @@
                                 "type": "evaluate",
                                 "name": "PosEast",
                                 "position": {
-                                  "x": 1392,
-                                  "y": 115
+                                  "x": 2096,
+                                  "y": 281
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26649,8 +26849,8 @@
                                 "type": "evaluate",
                                 "name": "PosDown",
                                 "position": {
-                                  "x": 1392,
-                                  "y": 315
+                                  "x": 2096,
+                                  "y": 481
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26663,8 +26863,8 @@
                                 "type": "quantizer",
                                 "name": "PositionQuantize",
                                 "position": {
-                                  "x": 2157,
-                                  "y": 266
+                                  "x": 2756,
+                                  "y": 329
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26677,7 +26877,7 @@
                                 "name": "TruthVel",
                                 "position": {
                                   "x": 380,
-                                  "y": 659
+                                  "y": 690
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26692,8 +26892,8 @@
                                 "type": "mux",
                                 "name": "VelocityRaw",
                                 "position": {
-                                  "x": 1113,
-                                  "y": 675
+                                  "x": 1077,
+                                  "y": 689
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26709,7 +26909,7 @@
                                 "name": "VelNorth",
                                 "position": {
                                   "x": 596,
-                                  "y": 569
+                                  "y": 600
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26723,7 +26923,7 @@
                                 "name": "VelEast",
                                 "position": {
                                   "x": 596,
-                                  "y": 749
+                                  "y": 780
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26737,7 +26937,7 @@
                                 "name": "VelDown",
                                 "position": {
                                   "x": 600,
-                                  "y": 929
+                                  "y": 960
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26750,8 +26950,8 @@
                                 "type": "demux",
                                 "name": "VelocityTrueSplit",
                                 "position": {
-                                  "x": 1502,
-                                  "y": 675
+                                  "x": 1369,
+                                  "y": 665
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26766,8 +26966,8 @@
                                 "type": "evaluate",
                                 "name": "VelocityTrueN",
                                 "position": {
-                                  "x": 1772,
-                                  "y": 508
+                                  "x": 1534,
+                                  "y": 583
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26780,8 +26980,8 @@
                                 "type": "evaluate",
                                 "name": "VelocityTrueE",
                                 "position": {
-                                  "x": 1772,
-                                  "y": 668
+                                  "x": 1534,
+                                  "y": 743
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26794,8 +26994,8 @@
                                 "type": "mux",
                                 "name": "VelocityTrue",
                                 "position": {
-                                  "x": 2152,
-                                  "y": 598
+                                  "x": 1914,
+                                  "y": 673
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26810,8 +27010,8 @@
                                 "type": "quantizer",
                                 "name": "VelocityQuantize",
                                 "position": {
-                                  "x": 2322,
-                                  "y": 606
+                                  "x": 2206,
+                                  "y": 681
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26823,8 +27023,8 @@
                                 "type": "unit_delay",
                                 "name": "FixCountPrev",
                                 "position": {
-                                  "x": 1118,
-                                  "y": 262
+                                  "x": 1082,
+                                  "y": 401
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26838,7 +27038,7 @@
                                 "name": "FixCount",
                                 "position": {
                                   "x": 592,
-                                  "y": 265
+                                  "y": 440
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26851,8 +27051,8 @@
                                 "type": "evaluate",
                                 "name": "FixType",
                                 "position": {
-                                  "x": 1008,
-                                  "y": 406
+                                  "x": 972,
+                                  "y": 545
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26865,8 +27065,8 @@
                                 "type": "unit_delay",
                                 "name": "HoldPrev",
                                 "position": {
-                                  "x": 3355,
-                                  "y": 642
+                                  "x": 3679,
+                                  "y": 752
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26886,8 +27086,8 @@
                                 "type": "demux",
                                 "name": "HoldSplit",
                                 "position": {
-                                  "x": 3618,
-                                  "y": 604
+                                  "x": 3942,
+                                  "y": 714
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26902,8 +27102,8 @@
                                 "type": "demux",
                                 "name": "NewPos",
                                 "position": {
-                                  "x": 2322,
-                                  "y": 258
+                                  "x": 3026,
+                                  "y": 495
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26918,8 +27118,8 @@
                                 "type": "demux",
                                 "name": "NewVel",
                                 "position": {
-                                  "x": 2564,
-                                  "y": 598
+                                  "x": 2481,
+                                  "y": 613
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26934,8 +27134,8 @@
                                 "type": "mux",
                                 "name": "Held",
                                 "position": {
-                                  "x": 3185,
-                                  "y": 418
+                                  "x": 3509,
+                                  "y": 515
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26950,8 +27150,8 @@
                                 "type": "evaluate",
                                 "name": "HoldN",
                                 "position": {
-                                  "x": 2482,
-                                  "y": 118
+                                  "x": 3186,
+                                  "y": 355
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26964,8 +27164,8 @@
                                 "type": "evaluate",
                                 "name": "HoldE",
                                 "position": {
-                                  "x": 2482,
-                                  "y": 278
+                                  "x": 3186,
+                                  "y": 515
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26978,8 +27178,8 @@
                                 "type": "evaluate",
                                 "name": "HoldAlt",
                                 "position": {
-                                  "x": 2482,
-                                  "y": 438
+                                  "x": 3186,
+                                  "y": 675
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -26992,8 +27192,8 @@
                                 "type": "evaluate",
                                 "name": "HoldVN",
                                 "position": {
-                                  "x": 2834,
-                                  "y": 318
+                                  "x": 2675,
+                                  "y": 473
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27006,8 +27206,8 @@
                                 "type": "evaluate",
                                 "name": "HoldVE",
                                 "position": {
-                                  "x": 2834,
-                                  "y": 478
+                                  "x": 2675,
+                                  "y": 633
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27020,8 +27220,8 @@
                                 "type": "evaluate",
                                 "name": "HoldVD",
                                 "position": {
-                                  "x": 2805,
-                                  "y": 638
+                                  "x": 2646,
+                                  "y": 793
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27034,8 +27234,8 @@
                                 "type": "demux",
                                 "name": "HeldSplit",
                                 "position": {
-                                  "x": 3355,
-                                  "y": 233
+                                  "x": 3679,
+                                  "y": 316
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27050,8 +27250,8 @@
                                 "type": "mux",
                                 "name": "GnssPos",
                                 "position": {
-                                  "x": 3613,
-                                  "y": 112
+                                  "x": 3937,
+                                  "y": 188
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27066,8 +27266,8 @@
                                 "type": "mux",
                                 "name": "GnssVel",
                                 "position": {
-                                  "x": 3613,
-                                  "y": 444
+                                  "x": 3937,
+                                  "y": 554
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27083,7 +27283,7 @@
                                 "name": "PDOP",
                                 "position": {
                                   "x": 600,
-                                  "y": 425
+                                  "y": 296
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27096,8 +27296,8 @@
                                 "type": "mux",
                                 "name": "GnssFix",
                                 "position": {
-                                  "x": 1497,
-                                  "y": 515
+                                  "x": 1364,
+                                  "y": 444
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27112,8 +27312,8 @@
                                 "type": "evaluate",
                                 "name": "GroundSpeed",
                                 "position": {
-                                  "x": 3515,
-                                  "y": 300
+                                  "x": 3839,
+                                  "y": 351
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27126,8 +27326,8 @@
                                 "type": "evaluate",
                                 "name": "TrackValid",
                                 "position": {
-                                  "x": 3880,
-                                  "y": 300
+                                  "x": 4204,
+                                  "y": 354
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27140,8 +27340,8 @@
                                 "type": "unit_delay",
                                 "name": "TrackPrev",
                                 "position": {
-                                  "x": 4750,
-                                  "y": 170
+                                  "x": 5074,
+                                  "y": 435
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27154,8 +27354,8 @@
                                 "type": "evaluate",
                                 "name": "TrackTrue",
                                 "position": {
-                                  "x": 4260,
-                                  "y": 236
+                                  "x": 4584,
+                                  "y": 323
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27168,8 +27368,8 @@
                                 "type": "evaluate",
                                 "name": "TrackMagnetic",
                                 "position": {
-                                  "x": 4640,
-                                  "y": 314
+                                  "x": 4964,
+                                  "y": 291
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27182,8 +27382,8 @@
                                 "type": "mux",
                                 "name": "GnssCourse",
                                 "position": {
-                                  "x": 5020,
-                                  "y": 289
+                                  "x": 5344,
+                                  "y": 309
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27198,8 +27398,8 @@
                                 "type": "output_port",
                                 "name": "gnss_pos",
                                 "position": {
-                                  "x": 5206,
-                                  "y": 130
+                                  "x": 5530,
+                                  "y": 205
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27212,8 +27412,8 @@
                                 "type": "output_port",
                                 "name": "gnss_vel_ned",
                                 "position": {
-                                  "x": 5190,
-                                  "y": 441
+                                  "x": 5514,
+                                  "y": 587
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27226,8 +27426,8 @@
                                 "type": "output_port",
                                 "name": "gnss_fix",
                                 "position": {
-                                  "x": 5206,
-                                  "y": 576
+                                  "x": 5530,
+                                  "y": 462
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27240,8 +27440,8 @@
                                 "type": "output_port",
                                 "name": "gnss_course",
                                 "position": {
-                                  "x": 5194,
-                                  "y": 316
+                                  "x": 5518,
+                                  "y": 337
                                 },
                                 "parameters": {
                                   "showName": true,
@@ -27256,7 +27456,10 @@
                                 "sourceBlockId": "gnss__gnss_env",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__EnvSplit",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 12
+                                }
                               },
                               {
                                 "id": "w_2_gnss__pos_ned_gnss__TruthPos",
@@ -27286,7 +27489,7 @@
                                 "targetBlockId": "gnss__GmState",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -596
+                                  "midpointOffset": -545.5
                                 }
                               },
                               {
@@ -27294,10 +27497,7 @@
                                 "sourceBlockId": "gnss__GmDrive",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__GmState",
-                                "targetPortIndex": 1,
-                                "routing": {
-                                  "midpointOffset": -83
-                                }
+                                "targetPortIndex": 1
                               },
                               {
                                 "id": "w_7_gnss__GmState_gnss__GmPrev",
@@ -27306,235 +27506,387 @@
                                 "targetBlockId": "gnss__GmPrev",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 36
+                                  "midpointOffset": -8
                                 }
                               },
                               {
-                                "id": "w_8_gnss__GmState_gnss__GmSplit",
-                                "sourceBlockId": "gnss__GmState",
+                                "id": "w_8_gnss__GmSmoothPrev_gnss__GmSmoothDecay",
+                                "sourceBlockId": "gnss__GmSmoothPrev",
                                 "sourcePortIndex": 0,
-                                "targetBlockId": "gnss__GmSplit",
-                                "targetPortIndex": 0,
-                                "routing": {
-                                  "midpointOffset": 36
-                                }
-                              },
-                              {
-                                "id": "w_9_gnss__PosNoise_gnss__WhiteSplit",
-                                "sourceBlockId": "gnss__PosNoise",
-                                "sourcePortIndex": 0,
-                                "targetBlockId": "gnss__WhiteSplit",
+                                "targetBlockId": "gnss__GmSmoothDecay",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_10_gnss__VelNoise_gnss__VelNoiseSplit",
-                                "sourceBlockId": "gnss__VelNoise",
+                                "id": "w_9_gnss__GmState_gnss__GmSmoothDrive",
+                                "sourceBlockId": "gnss__GmState",
                                 "sourcePortIndex": 0,
-                                "targetBlockId": "gnss__VelNoiseSplit",
+                                "targetBlockId": "gnss__GmSmoothDrive",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 38
+                                  "midpointOffset": -8
                                 }
                               },
                               {
-                                "id": "w_11_gnss__TruthPos_gnss__PosNorth",
-                                "sourceBlockId": "gnss__TruthPos",
+                                "id": "w_10_gnss__GmSmoothDecay_gnss__GmSmooth",
+                                "sourceBlockId": "gnss__GmSmoothDecay",
                                 "sourcePortIndex": 0,
-                                "targetBlockId": "gnss__PosNorth",
+                                "targetBlockId": "gnss__GmSmooth",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -420
+                                  "midpointOffset": -398
                                 }
                               },
                               {
-                                "id": "w_12_gnss__GmSplit_gnss__PosNorth",
-                                "sourceBlockId": "gnss__GmSplit",
+                                "id": "w_11_gnss__GmSmoothDrive_gnss__GmSmooth",
+                                "sourceBlockId": "gnss__GmSmoothDrive",
                                 "sourcePortIndex": 0,
-                                "targetBlockId": "gnss__PosNorth",
+                                "targetBlockId": "gnss__GmSmooth",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 35
+                                  "midpointOffset": 28.5
                                 }
                               },
                               {
-                                "id": "w_13_gnss__WhiteSplit_gnss__PosNorth",
-                                "sourceBlockId": "gnss__WhiteSplit",
+                                "id": "w_12_gnss__GmSmooth_gnss__GmSmoothPrev",
+                                "sourceBlockId": "gnss__GmSmooth",
                                 "sourcePortIndex": 0,
-                                "targetBlockId": "gnss__PosNorth",
-                                "targetPortIndex": 2,
-                                "routing": {
-                                  "midpointOffset": -20
-                                }
-                              },
-                              {
-                                "id": "w_14_gnss__EnvSplit_gnss__PosNorth",
-                                "sourceBlockId": "gnss__EnvSplit",
-                                "sourcePortIndex": 1,
-                                "targetBlockId": "gnss__PosNorth",
-                                "targetPortIndex": 3,
-                                "routing": {
-                                  "midpointOffset": -348
-                                }
-                              },
-                              {
-                                "id": "w_15_gnss__EnvSplit_gnss__PosNorth",
-                                "sourceBlockId": "gnss__EnvSplit",
-                                "sourcePortIndex": 3,
-                                "targetBlockId": "gnss__PosNorth",
-                                "targetPortIndex": 4,
-                                "routing": {
-                                  "midpointOffset": 44
-                                }
-                              },
-                              {
-                                "id": "w_16_gnss__PosNorth_gnss__PositionRaw",
-                                "sourceBlockId": "gnss__PosNorth",
-                                "sourcePortIndex": 0,
-                                "targetBlockId": "gnss__PositionRaw",
+                                "targetBlockId": "gnss__GmSmoothPrev",
                                 "targetPortIndex": 0,
-                                "routing": {
-                                  "midpointOffset": -28.5
-                                }
-                              },
-                              {
-                                "id": "w_17_gnss__TruthPos_gnss__PosEast",
-                                "sourceBlockId": "gnss__TruthPos",
-                                "sourcePortIndex": 1,
-                                "targetBlockId": "gnss__PosEast",
-                                "targetPortIndex": 0,
-                                "routing": {
-                                  "midpointOffset": 412
-                                }
-                              },
-                              {
-                                "id": "w_18_gnss__GmSplit_gnss__PosEast",
-                                "sourceBlockId": "gnss__GmSplit",
-                                "sourcePortIndex": 1,
-                                "targetBlockId": "gnss__PosEast",
-                                "targetPortIndex": 1,
-                                "routing": {
-                                  "midpointOffset": 51
-                                }
-                              },
-                              {
-                                "id": "w_19_gnss__WhiteSplit_gnss__PosEast",
-                                "sourceBlockId": "gnss__WhiteSplit",
-                                "sourcePortIndex": 1,
-                                "targetBlockId": "gnss__PosEast",
-                                "targetPortIndex": 2,
-                                "routing": {
-                                  "midpointOffset": 396
-                                }
-                              },
-                              {
-                                "id": "w_20_gnss__EnvSplit_gnss__PosEast",
-                                "sourceBlockId": "gnss__EnvSplit",
-                                "sourcePortIndex": 1,
-                                "targetBlockId": "gnss__PosEast",
-                                "targetPortIndex": 3,
-                                "routing": {
-                                  "midpointOffset": -348
-                                }
-                              },
-                              {
-                                "id": "w_21_gnss__EnvSplit_gnss__PosEast",
-                                "sourceBlockId": "gnss__EnvSplit",
-                                "sourcePortIndex": 3,
-                                "targetBlockId": "gnss__PosEast",
-                                "targetPortIndex": 4,
-                                "routing": {
-                                  "midpointOffset": 452
-                                }
-                              },
-                              {
-                                "id": "w_22_gnss__PosEast_gnss__PositionRaw",
-                                "sourceBlockId": "gnss__PosEast",
-                                "sourcePortIndex": 0,
-                                "targetBlockId": "gnss__PositionRaw",
-                                "targetPortIndex": 1,
-                                "routing": {
-                                  "midpointOffset": -76.5
-                                }
-                              },
-                              {
-                                "id": "w_23_gnss__TruthPos_gnss__PosDown",
-                                "sourceBlockId": "gnss__TruthPos",
-                                "sourcePortIndex": 2,
-                                "targetBlockId": "gnss__PosDown",
-                                "targetPortIndex": 0,
-                                "routing": {
-                                  "midpointOffset": 36
-                                }
-                              },
-                              {
-                                "id": "w_24_gnss__GmSplit_gnss__PosDown",
-                                "sourceBlockId": "gnss__GmSplit",
-                                "sourcePortIndex": 2,
-                                "targetBlockId": "gnss__PosDown",
-                                "targetPortIndex": 1,
-                                "routing": {
-                                  "midpointOffset": 59
-                                }
-                              },
-                              {
-                                "id": "w_25_gnss__WhiteSplit_gnss__PosDown",
-                                "sourceBlockId": "gnss__WhiteSplit",
-                                "sourcePortIndex": 2,
-                                "targetBlockId": "gnss__PosDown",
-                                "targetPortIndex": 2,
-                                "routing": {
-                                  "midpointOffset": 4
-                                }
-                              },
-                              {
-                                "id": "w_26_gnss__EnvSplit_gnss__PosDown",
-                                "sourceBlockId": "gnss__EnvSplit",
-                                "sourcePortIndex": 2,
-                                "targetBlockId": "gnss__PosDown",
-                                "targetPortIndex": 3,
-                                "routing": {
-                                  "midpointOffset": 12
-                                }
-                              },
-                              {
-                                "id": "w_27_gnss__EnvSplit_gnss__PosDown",
-                                "sourceBlockId": "gnss__EnvSplit",
-                                "sourcePortIndex": 3,
-                                "targetBlockId": "gnss__PosDown",
-                                "targetPortIndex": 4,
-                                "routing": {
-                                  "midpointOffset": 452
-                                }
-                              },
-                              {
-                                "id": "w_28_gnss__PosDown_gnss__PositionRaw",
-                                "sourceBlockId": "gnss__PosDown",
-                                "sourcePortIndex": 0,
-                                "targetBlockId": "gnss__PositionRaw",
-                                "targetPortIndex": 2,
                                 "routing": {
                                   "midpointOffset": -60.5
                                 }
                               },
                               {
-                                "id": "w_29_gnss__PositionRaw_gnss__PositionQuantize",
+                                "id": "w_13_gnss__GmSmooth_gnss__GmSmoothUnit",
+                                "sourceBlockId": "gnss__GmSmooth",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__GmSmoothUnit",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -60.5
+                                }
+                              },
+                              {
+                                "id": "w_14_gnss__GmSmoothUnit_gnss__GmSplit",
+                                "sourceBlockId": "gnss__GmSmoothUnit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__GmSplit",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_15_gnss__FastPrev_gnss__FastDecay",
+                                "sourceBlockId": "gnss__FastPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastDecay",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 36.5
+                                }
+                              },
+                              {
+                                "id": "w_16_gnss__PosNoise_gnss__FastDrive",
+                                "sourceBlockId": "gnss__PosNoise",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastDrive",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_17_gnss__FastDecay_gnss__FastState",
+                                "sourceBlockId": "gnss__FastDecay",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastState",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -529.5
+                                }
+                              },
+                              {
+                                "id": "w_18_gnss__FastDrive_gnss__FastState",
+                                "sourceBlockId": "gnss__FastDrive",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastState",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -75
+                                }
+                              },
+                              {
+                                "id": "w_19_gnss__FastState_gnss__FastPrev",
+                                "sourceBlockId": "gnss__FastState",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastPrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_20_gnss__FastSmoothPrev_gnss__FastSmoothDecay",
+                                "sourceBlockId": "gnss__FastSmoothPrev",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastSmoothDecay",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_21_gnss__FastState_gnss__FastSmoothDrive",
+                                "sourceBlockId": "gnss__FastState",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastSmoothDrive",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_22_gnss__FastSmoothDecay_gnss__FastSmooth",
+                                "sourceBlockId": "gnss__FastSmoothDecay",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastSmooth",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -374
+                                }
+                              },
+                              {
+                                "id": "w_23_gnss__FastSmoothDrive_gnss__FastSmooth",
+                                "sourceBlockId": "gnss__FastSmoothDrive",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastSmooth",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 52.5
+                                }
+                              },
+                              {
+                                "id": "w_24_gnss__FastSmooth_gnss__FastSmoothPrev",
+                                "sourceBlockId": "gnss__FastSmooth",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastSmoothPrev",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -36.5
+                                }
+                              },
+                              {
+                                "id": "w_25_gnss__FastSmooth_gnss__FastSmoothUnit",
+                                "sourceBlockId": "gnss__FastSmooth",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastSmoothUnit",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -36.5
+                                }
+                              },
+                              {
+                                "id": "w_26_gnss__FastSmoothUnit_gnss__FastSplit",
+                                "sourceBlockId": "gnss__FastSmoothUnit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__FastSplit",
+                                "targetPortIndex": 0
+                              },
+                              {
+                                "id": "w_27_gnss__VelNoise_gnss__VelNoiseSplit",
+                                "sourceBlockId": "gnss__VelNoise",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__VelNoiseSplit",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 42
+                                }
+                              },
+                              {
+                                "id": "w_28_gnss__TruthPos_gnss__PosNorth",
+                                "sourceBlockId": "gnss__TruthPos",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__PosNorth",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 748
+                                }
+                              },
+                              {
+                                "id": "w_29_gnss__GmSplit_gnss__PosNorth",
+                                "sourceBlockId": "gnss__GmSplit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__PosNorth",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": -29.5
+                                }
+                              },
+                              {
+                                "id": "w_30_gnss__FastSplit_gnss__PosNorth",
+                                "sourceBlockId": "gnss__FastSplit",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__PosNorth",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -5.5
+                                }
+                              },
+                              {
+                                "id": "w_31_gnss__EnvSplit_gnss__PosNorth",
+                                "sourceBlockId": "gnss__EnvSplit",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "gnss__PosNorth",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": 580
+                                }
+                              },
+                              {
+                                "id": "w_32_gnss__EnvSplit_gnss__PosNorth",
+                                "sourceBlockId": "gnss__EnvSplit",
+                                "sourcePortIndex": 3,
+                                "targetBlockId": "gnss__PosNorth",
+                                "targetPortIndex": 4,
+                                "routing": {
+                                  "midpointOffset": 612
+                                }
+                              },
+                              {
+                                "id": "w_33_gnss__PosNorth_gnss__PositionRaw",
+                                "sourceBlockId": "gnss__PosNorth",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__PositionRaw",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 0
+                                }
+                              },
+                              {
+                                "id": "w_34_gnss__TruthPos_gnss__PosEast",
+                                "sourceBlockId": "gnss__TruthPos",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "gnss__PosEast",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 48
+                                }
+                              },
+                              {
+                                "id": "w_35_gnss__GmSplit_gnss__PosEast",
+                                "sourceBlockId": "gnss__GmSplit",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "gnss__PosEast",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 26.5
+                                }
+                              },
+                              {
+                                "id": "w_36_gnss__FastSplit_gnss__PosEast",
+                                "sourceBlockId": "gnss__FastSplit",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "gnss__PosEast",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": 2.5
+                                }
+                              },
+                              {
+                                "id": "w_37_gnss__EnvSplit_gnss__PosEast",
+                                "sourceBlockId": "gnss__EnvSplit",
+                                "sourcePortIndex": 1,
+                                "targetBlockId": "gnss__PosEast",
+                                "targetPortIndex": 3,
+                                "routing": {
+                                  "midpointOffset": 580
+                                }
+                              },
+                              {
+                                "id": "w_38_gnss__EnvSplit_gnss__PosEast",
+                                "sourceBlockId": "gnss__EnvSplit",
+                                "sourcePortIndex": 3,
+                                "targetBlockId": "gnss__PosEast",
+                                "targetPortIndex": 4,
+                                "routing": {
+                                  "midpointOffset": 804
+                                }
+                              },
+                              {
+                                "id": "w_39_gnss__PosEast_gnss__PositionRaw",
+                                "sourceBlockId": "gnss__PosEast",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__PositionRaw",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 8
+                                }
+                              },
+                              {
+                                "id": "w_40_gnss__TruthPos_gnss__PosDown",
+                                "sourceBlockId": "gnss__TruthPos",
+                                "sourcePortIndex": 2,
+                                "targetBlockId": "gnss__PosDown",
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 200
+                                }
+                              },
+                              {
+                                "id": "w_41_gnss__GmSplit_gnss__PosDown",
+                                "sourceBlockId": "gnss__GmSplit",
+                                "sourcePortIndex": 2,
+                                "targetBlockId": "gnss__PosDown",
+                                "targetPortIndex": 1,
+                                "routing": {
+                                  "midpointOffset": 10.5
+                                }
+                              },
+                              {
+                                "id": "w_42_gnss__FastSplit_gnss__PosDown",
+                                "sourceBlockId": "gnss__FastSplit",
+                                "sourcePortIndex": 2,
+                                "targetBlockId": "gnss__PosDown",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -13.5
+                                }
+                              },
+                              {
+                                "id": "w_43_gnss__EnvSplit_gnss__PosDown",
+                                "sourceBlockId": "gnss__EnvSplit",
+                                "sourcePortIndex": 2,
+                                "targetBlockId": "gnss__PosDown",
+                                "targetPortIndex": 3
+                              },
+                              {
+                                "id": "w_44_gnss__EnvSplit_gnss__PosDown",
+                                "sourceBlockId": "gnss__EnvSplit",
+                                "sourcePortIndex": 3,
+                                "targetBlockId": "gnss__PosDown",
+                                "targetPortIndex": 4
+                              },
+                              {
+                                "id": "w_45_gnss__PosDown_gnss__PositionRaw",
+                                "sourceBlockId": "gnss__PosDown",
+                                "sourcePortIndex": 0,
+                                "targetBlockId": "gnss__PositionRaw",
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -16
+                                }
+                              },
+                              {
+                                "id": "w_46_gnss__PositionRaw_gnss__PositionQuantize",
                                 "sourceBlockId": "gnss__PositionRaw",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__PositionQuantize",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_30_gnss__vel_ned_gnss__TruthVel",
+                                "id": "w_47_gnss__vel_ned_gnss__TruthVel",
                                 "sourceBlockId": "gnss__vel_ned",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__TruthVel",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 25
+                                  "midpointOffset": 29
                                 }
                               },
                               {
-                                "id": "w_31_gnss__TruthVel_gnss__VelNorth",
+                                "id": "w_48_gnss__TruthVel_gnss__VelNorth",
                                 "sourceBlockId": "gnss__TruthVel",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelNorth",
@@ -27544,17 +27896,17 @@
                                 }
                               },
                               {
-                                "id": "w_32_gnss__VelNoiseSplit_gnss__VelNorth",
+                                "id": "w_49_gnss__VelNoiseSplit_gnss__VelNorth",
                                 "sourceBlockId": "gnss__VelNoiseSplit",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelNorth",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -46
+                                  "midpointOffset": -38
                                 }
                               },
                               {
-                                "id": "w_33_gnss__EnvSplit_gnss__VelNorth",
+                                "id": "w_50_gnss__EnvSplit_gnss__VelNorth",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__VelNorth",
@@ -27564,7 +27916,7 @@
                                 }
                               },
                               {
-                                "id": "w_34_gnss__EnvSplit_gnss__VelNorth",
+                                "id": "w_51_gnss__EnvSplit_gnss__VelNorth",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 3,
                                 "targetBlockId": "gnss__VelNorth",
@@ -27574,17 +27926,17 @@
                                 }
                               },
                               {
-                                "id": "w_35_gnss__VelNorth_gnss__VelocityRaw",
+                                "id": "w_52_gnss__VelNorth_gnss__VelocityRaw",
                                 "sourceBlockId": "gnss__VelNorth",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelocityRaw",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -46.5
+                                  "midpointOffset": -42.5
                                 }
                               },
                               {
-                                "id": "w_36_gnss__TruthVel_gnss__VelEast",
+                                "id": "w_53_gnss__TruthVel_gnss__VelEast",
                                 "sourceBlockId": "gnss__TruthVel",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__VelEast",
@@ -27594,7 +27946,7 @@
                                 }
                               },
                               {
-                                "id": "w_37_gnss__VelNoiseSplit_gnss__VelEast",
+                                "id": "w_54_gnss__VelNoiseSplit_gnss__VelEast",
                                 "sourceBlockId": "gnss__VelNoiseSplit",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__VelEast",
@@ -27604,7 +27956,7 @@
                                 }
                               },
                               {
-                                "id": "w_38_gnss__EnvSplit_gnss__VelEast",
+                                "id": "w_55_gnss__EnvSplit_gnss__VelEast",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__VelEast",
@@ -27614,7 +27966,7 @@
                                 }
                               },
                               {
-                                "id": "w_39_gnss__EnvSplit_gnss__VelEast",
+                                "id": "w_56_gnss__EnvSplit_gnss__VelEast",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 3,
                                 "targetBlockId": "gnss__VelEast",
@@ -27624,47 +27976,47 @@
                                 }
                               },
                               {
-                                "id": "w_40_gnss__VelEast_gnss__VelocityRaw",
+                                "id": "w_57_gnss__VelEast_gnss__VelocityRaw",
                                 "sourceBlockId": "gnss__VelEast",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelocityRaw",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -78.5
+                                  "midpointOffset": -74.5
                                 }
                               },
                               {
-                                "id": "w_41_gnss__TruthVel_gnss__VelDown",
+                                "id": "w_58_gnss__TruthVel_gnss__VelDown",
                                 "sourceBlockId": "gnss__TruthVel",
                                 "sourcePortIndex": 2,
                                 "targetBlockId": "gnss__VelDown",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -40
+                                  "midpointOffset": -32
                                 }
                               },
                               {
-                                "id": "w_42_gnss__VelNoiseSplit_gnss__VelDown",
+                                "id": "w_59_gnss__VelNoiseSplit_gnss__VelDown",
                                 "sourceBlockId": "gnss__VelNoiseSplit",
                                 "sourcePortIndex": 2,
                                 "targetBlockId": "gnss__VelDown",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 0
+                                  "midpointOffset": -16
                                 }
                               },
                               {
-                                "id": "w_43_gnss__EnvSplit_gnss__VelDown",
+                                "id": "w_60_gnss__EnvSplit_gnss__VelDown",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 2,
                                 "targetBlockId": "gnss__VelDown",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -8
+                                  "midpointOffset": -48
                                 }
                               },
                               {
-                                "id": "w_44_gnss__EnvSplit_gnss__VelDown",
+                                "id": "w_61_gnss__EnvSplit_gnss__VelDown",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 3,
                                 "targetBlockId": "gnss__VelDown",
@@ -27674,131 +28026,134 @@
                                 }
                               },
                               {
-                                "id": "w_45_gnss__VelDown_gnss__VelocityRaw",
+                                "id": "w_62_gnss__VelDown_gnss__VelocityRaw",
                                 "sourceBlockId": "gnss__VelDown",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelocityRaw",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -5
+                                  "midpointOffset": -25
                                 }
                               },
                               {
-                                "id": "w_46_gnss__VelocityRaw_gnss__VelocityTrueSplit",
+                                "id": "w_63_gnss__VelocityRaw_gnss__VelocityTrueSplit",
                                 "sourceBlockId": "gnss__VelocityRaw",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelocityTrueSplit",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 82
+                                }
                               },
                               {
-                                "id": "w_47_gnss__VelocityTrueSplit_gnss__VelocityTrueN",
+                                "id": "w_64_gnss__VelocityTrueSplit_gnss__VelocityTrueN",
                                 "sourceBlockId": "gnss__VelocityTrueSplit",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelocityTrueN",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 39
+                                  "midpointOffset": 2.5
                                 }
                               },
                               {
-                                "id": "w_48_gnss__VelocityTrueSplit_gnss__VelocityTrueN",
+                                "id": "w_65_gnss__VelocityTrueSplit_gnss__VelocityTrueN",
                                 "sourceBlockId": "gnss__VelocityTrueSplit",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__VelocityTrueN",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 71
+                                  "midpointOffset": 10.5
                                 }
                               },
                               {
-                                "id": "w_49_gnss__grid_convergence_deg_gnss__VelocityTrueN",
+                                "id": "w_66_gnss__grid_convergence_deg_gnss__VelocityTrueN",
                                 "sourceBlockId": "gnss__grid_convergence_deg",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelocityTrueN",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -704
+                                  "midpointOffset": -581
                                 }
                               },
                               {
-                                "id": "w_50_gnss__VelocityTrueSplit_gnss__VelocityTrueE",
+                                "id": "w_67_gnss__VelocityTrueSplit_gnss__VelocityTrueE",
                                 "sourceBlockId": "gnss__VelocityTrueSplit",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelocityTrueE",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 39
+                                  "midpointOffset": 2.5
                                 }
                               },
                               {
-                                "id": "w_51_gnss__VelocityTrueSplit_gnss__VelocityTrueE",
+                                "id": "w_68_gnss__VelocityTrueSplit_gnss__VelocityTrueE",
                                 "sourceBlockId": "gnss__VelocityTrueSplit",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__VelocityTrueE",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 71
+                                  "midpointOffset": 10.5
                                 }
                               },
                               {
-                                "id": "w_52_gnss__grid_convergence_deg_gnss__VelocityTrueE",
+                                "id": "w_69_gnss__grid_convergence_deg_gnss__VelocityTrueE",
                                 "sourceBlockId": "gnss__grid_convergence_deg",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelocityTrueE",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 334
+                                  "midpointOffset": -581
                                 }
                               },
                               {
-                                "id": "w_53_gnss__VelocityTrueN_gnss__VelocityTrue",
+                                "id": "w_70_gnss__VelocityTrueN_gnss__VelocityTrue",
                                 "sourceBlockId": "gnss__VelocityTrueN",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelocityTrue",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 4
+                                  "midpointOffset": -8
                                 }
                               },
                               {
-                                "id": "w_54_gnss__VelocityTrueE_gnss__VelocityTrue",
+                                "id": "w_71_gnss__VelocityTrueE_gnss__VelocityTrue",
                                 "sourceBlockId": "gnss__VelocityTrueE",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelocityTrue",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -12
+                                  "midpointOffset": 8
                                 }
                               },
                               {
-                                "id": "w_55_gnss__VelocityTrueSplit_gnss__VelocityTrue",
+                                "id": "w_72_gnss__VelocityTrueSplit_gnss__VelocityTrue",
                                 "sourceBlockId": "gnss__VelocityTrueSplit",
                                 "sourcePortIndex": 2,
                                 "targetBlockId": "gnss__VelocityTrue",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 257
+                                  "midpointOffset": 192.5
                                 }
                               },
                               {
-                                "id": "w_56_gnss__VelocityTrue_gnss__VelocityQuantize",
+                                "id": "w_73_gnss__VelocityTrue_gnss__VelocityQuantize",
                                 "sourceBlockId": "gnss__VelocityTrue",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__VelocityQuantize",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_57_gnss__EnvSplit_gnss__FixCount",
+                                "id": "w_74_gnss__EnvSplit_gnss__FixCount",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__FixCount",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -12
+                                  "midpointOffset": -4
                                 }
                               },
                               {
-                                "id": "w_58_gnss__EnvSplit_gnss__FixCount",
+                                "id": "w_75_gnss__EnvSplit_gnss__FixCount",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__FixCount",
@@ -27808,296 +28163,305 @@
                                 }
                               },
                               {
-                                "id": "w_59_gnss__FixCountPrev_gnss__FixCount",
+                                "id": "w_76_gnss__FixCountPrev_gnss__FixCount",
                                 "sourceBlockId": "gnss__FixCountPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__FixCount",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -333
+                                  "midpointOffset": -315
                                 }
                               },
                               {
-                                "id": "w_60_gnss__FixCount_gnss__FixCountPrev",
+                                "id": "w_77_gnss__FixCount_gnss__FixCountPrev",
                                 "sourceBlockId": "gnss__FixCount",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__FixCountPrev",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -27
+                                  "midpointOffset": -71
                                 }
                               },
                               {
-                                "id": "w_61_gnss__EnvSplit_gnss__FixType",
+                                "id": "w_78_gnss__EnvSplit_gnss__FixType",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__FixType",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -220
+                                  "midpointOffset": 232
                                 }
                               },
                               {
-                                "id": "w_62_gnss__FixCount_gnss__FixType",
+                                "id": "w_79_gnss__FixCount_gnss__FixType",
                                 "sourceBlockId": "gnss__FixCount",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__FixType",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 28
+                                  "midpointOffset": -16
                                 }
                               },
                               {
-                                "id": "w_63_gnss__HoldPrev_gnss__HoldSplit",
+                                "id": "w_80_gnss__HoldPrev_gnss__HoldSplit",
                                 "sourceBlockId": "gnss__HoldPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HoldSplit",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_64_gnss__PositionQuantize_gnss__NewPos",
+                                "id": "w_81_gnss__PositionQuantize_gnss__NewPos",
                                 "sourceBlockId": "gnss__PositionQuantize",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__NewPos",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 67
+                                }
                               },
                               {
-                                "id": "w_65_gnss__VelocityQuantize_gnss__NewVel",
+                                "id": "w_82_gnss__VelocityQuantize_gnss__NewVel",
                                 "sourceBlockId": "gnss__VelocityQuantize",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__NewVel",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": 44.5
+                                }
                               },
                               {
-                                "id": "w_66_gnss__NewPos_gnss__HoldN",
+                                "id": "w_83_gnss__NewPos_gnss__HoldN",
                                 "sourceBlockId": "gnss__NewPos",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HoldN",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -16
+                                  "midpointOffset": -20
                                 }
                               },
                               {
-                                "id": "w_67_gnss__HoldSplit_gnss__HoldN",
+                                "id": "w_84_gnss__HoldSplit_gnss__HoldN",
                                 "sourceBlockId": "gnss__HoldSplit",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HoldN",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -632
+                                  "midpointOffset": -438
                                 }
                               },
                               {
-                                "id": "w_68_gnss__FixType_gnss__HoldN",
+                                "id": "w_85_gnss__FixType_gnss__HoldN",
                                 "sourceBlockId": "gnss__FixType",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HoldN",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 213
+                                  "midpointOffset": 223
                                 }
                               },
                               {
-                                "id": "w_69_gnss__HoldN_gnss__Held",
+                                "id": "w_86_gnss__HoldN_gnss__Held",
                                 "sourceBlockId": "gnss__HoldN",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__Held",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 202
+                                  "midpointOffset": 0
                                 }
                               },
                               {
-                                "id": "w_70_gnss__NewPos_gnss__HoldE",
+                                "id": "w_87_gnss__NewPos_gnss__HoldE",
                                 "sourceBlockId": "gnss__NewPos",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__HoldE",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_71_gnss__HoldSplit_gnss__HoldE",
+                                "id": "w_88_gnss__HoldSplit_gnss__HoldE",
                                 "sourceBlockId": "gnss__HoldSplit",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__HoldE",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -656
+                                  "midpointOffset": -470
                                 }
                               },
                               {
-                                "id": "w_72_gnss__FixType_gnss__HoldE",
+                                "id": "w_89_gnss__FixType_gnss__HoldE",
                                 "sourceBlockId": "gnss__FixType",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HoldE",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 213
+                                  "midpointOffset": 913
                                 }
                               },
                               {
-                                "id": "w_73_gnss__HoldE_gnss__Held",
+                                "id": "w_90_gnss__HoldE_gnss__Held",
                                 "sourceBlockId": "gnss__HoldE",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__Held",
-                                "targetPortIndex": 1,
-                                "routing": {
-                                  "midpointOffset": 186
-                                }
+                                "targetPortIndex": 1
                               },
                               {
-                                "id": "w_74_gnss__NewPos_gnss__HoldAlt",
+                                "id": "w_91_gnss__NewPos_gnss__HoldAlt",
                                 "sourceBlockId": "gnss__NewPos",
                                 "sourcePortIndex": 2,
                                 "targetBlockId": "gnss__HoldAlt",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 8
+                                  "midpointOffset": 12
                                 }
                               },
                               {
-                                "id": "w_75_gnss__HoldSplit_gnss__HoldAlt",
+                                "id": "w_92_gnss__HoldSplit_gnss__HoldAlt",
                                 "sourceBlockId": "gnss__HoldSplit",
                                 "sourcePortIndex": 2,
                                 "targetBlockId": "gnss__HoldAlt",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -648
+                                  "midpointOffset": -454
                                 }
                               },
                               {
-                                "id": "w_76_gnss__FixType_gnss__HoldAlt",
+                                "id": "w_93_gnss__FixType_gnss__HoldAlt",
                                 "sourceBlockId": "gnss__FixType",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HoldAlt",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -163
+                                  "midpointOffset": 223
                                 }
                               },
                               {
-                                "id": "w_77_gnss__HoldAlt_gnss__Held",
+                                "id": "w_94_gnss__HoldAlt_gnss__Held",
                                 "sourceBlockId": "gnss__HoldAlt",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__Held",
-                                "targetPortIndex": 2
+                                "targetPortIndex": 2,
+                                "routing": {
+                                  "midpointOffset": -8
+                                }
                               },
                               {
-                                "id": "w_78_gnss__NewVel_gnss__HoldVN",
+                                "id": "w_95_gnss__NewVel_gnss__HoldVN",
                                 "sourceBlockId": "gnss__NewVel",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HoldVN",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 10
+                                  "midpointOffset": -32
                                 }
                               },
                               {
-                                "id": "w_79_gnss__HoldSplit_gnss__HoldVN",
+                                "id": "w_96_gnss__HoldSplit_gnss__HoldVN",
                                 "sourceBlockId": "gnss__HoldSplit",
                                 "sourcePortIndex": 3,
                                 "targetBlockId": "gnss__HoldVN",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -493
+                                  "midpointOffset": -722.5
                                 }
                               },
                               {
-                                "id": "w_80_gnss__FixType_gnss__HoldVN",
+                                "id": "w_97_gnss__FixType_gnss__HoldVN",
                                 "sourceBlockId": "gnss__FixType",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HoldVN",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -339
+                                  "midpointOffset": 636.5
                                 }
                               },
                               {
-                                "id": "w_81_gnss__HoldVN_gnss__Held",
+                                "id": "w_98_gnss__HoldVN_gnss__Held",
                                 "sourceBlockId": "gnss__HoldVN",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__Held",
                                 "targetPortIndex": 3,
                                 "routing": {
-                                  "midpointOffset": 2
+                                  "midpointOffset": -239.5
                                 }
                               },
                               {
-                                "id": "w_82_gnss__NewVel_gnss__HoldVE",
+                                "id": "w_99_gnss__NewVel_gnss__HoldVE",
                                 "sourceBlockId": "gnss__NewVel",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__HoldVE",
-                                "targetPortIndex": 0,
-                                "routing": {
-                                  "midpointOffset": 18
-                                }
+                                "targetPortIndex": 0
                               },
                               {
-                                "id": "w_83_gnss__HoldSplit_gnss__HoldVE",
+                                "id": "w_100_gnss__HoldSplit_gnss__HoldVE",
                                 "sourceBlockId": "gnss__HoldSplit",
                                 "sourcePortIndex": 4,
                                 "targetBlockId": "gnss__HoldVE",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -485
+                                  "midpointOffset": -754.5
                                 }
                               },
                               {
-                                "id": "w_84_gnss__FixType_gnss__HoldVE",
+                                "id": "w_101_gnss__FixType_gnss__HoldVE",
                                 "sourceBlockId": "gnss__FixType",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HoldVE",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 37
+                                  "midpointOffset": 478.5
                                 }
                               },
                               {
-                                "id": "w_85_gnss__HoldVE_gnss__Held",
+                                "id": "w_102_gnss__HoldVE_gnss__Held",
                                 "sourceBlockId": "gnss__HoldVE",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__Held",
-                                "targetPortIndex": 4
+                                "targetPortIndex": 4,
+                                "routing": {
+                                  "midpointOffset": -223.5
+                                }
                               },
                               {
-                                "id": "w_86_gnss__NewVel_gnss__HoldVD",
+                                "id": "w_103_gnss__NewVel_gnss__HoldVD",
                                 "sourceBlockId": "gnss__NewVel",
                                 "sourcePortIndex": 2,
                                 "targetBlockId": "gnss__HoldVD",
-                                "targetPortIndex": 0
+                                "targetPortIndex": 0,
+                                "routing": {
+                                  "midpointOffset": -1.5
+                                }
                               },
                               {
-                                "id": "w_87_gnss__HoldSplit_gnss__HoldVD",
+                                "id": "w_104_gnss__HoldSplit_gnss__HoldVD",
                                 "sourceBlockId": "gnss__HoldSplit",
                                 "sourcePortIndex": 5,
                                 "targetBlockId": "gnss__HoldVD",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -486.5
+                                  "midpointOffset": -716
                                 }
                               },
                               {
-                                "id": "w_88_gnss__FixType_gnss__HoldVD",
+                                "id": "w_105_gnss__FixType_gnss__HoldVD",
                                 "sourceBlockId": "gnss__FixType",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HoldVD",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 225.5
+                                  "midpointOffset": 107
                                 }
                               },
                               {
-                                "id": "w_89_gnss__HoldVD_gnss__Held",
+                                "id": "w_106_gnss__HoldVD_gnss__Held",
                                 "sourceBlockId": "gnss__HoldVD",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__Held",
                                 "targetPortIndex": 5,
                                 "routing": {
-                                  "midpointOffset": 4
+                                  "midpointOffset": 249.5
                                 }
                               },
                               {
-                                "id": "w_90_gnss__Held_gnss__HoldPrev",
+                                "id": "w_107_gnss__Held_gnss__HoldPrev",
                                 "sourceBlockId": "gnss__Held",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HoldPrev",
@@ -28107,7 +28471,7 @@
                                 }
                               },
                               {
-                                "id": "w_91_gnss__Held_gnss__HeldSplit",
+                                "id": "w_108_gnss__Held_gnss__HeldSplit",
                                 "sourceBlockId": "gnss__Held",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__HeldSplit",
@@ -28117,7 +28481,7 @@
                                 }
                               },
                               {
-                                "id": "w_92_gnss__HeldSplit_gnss__GnssPos",
+                                "id": "w_109_gnss__HeldSplit_gnss__GnssPos",
                                 "sourceBlockId": "gnss__HeldSplit",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__GnssPos",
@@ -28127,7 +28491,7 @@
                                 }
                               },
                               {
-                                "id": "w_93_gnss__HeldSplit_gnss__GnssVel",
+                                "id": "w_110_gnss__HeldSplit_gnss__GnssVel",
                                 "sourceBlockId": "gnss__HeldSplit",
                                 "sourcePortIndex": 3,
                                 "targetBlockId": "gnss__GnssVel",
@@ -28137,7 +28501,7 @@
                                 }
                               },
                               {
-                                "id": "w_94_gnss__HeldSplit_gnss__GnssPos",
+                                "id": "w_111_gnss__HeldSplit_gnss__GnssPos",
                                 "sourceBlockId": "gnss__HeldSplit",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__GnssPos",
@@ -28147,7 +28511,7 @@
                                 }
                               },
                               {
-                                "id": "w_95_gnss__HeldSplit_gnss__GnssVel",
+                                "id": "w_112_gnss__HeldSplit_gnss__GnssVel",
                                 "sourceBlockId": "gnss__HeldSplit",
                                 "sourcePortIndex": 4,
                                 "targetBlockId": "gnss__GnssVel",
@@ -28157,7 +28521,7 @@
                                 }
                               },
                               {
-                                "id": "w_96_gnss__HeldSplit_gnss__GnssPos",
+                                "id": "w_113_gnss__HeldSplit_gnss__GnssPos",
                                 "sourceBlockId": "gnss__HeldSplit",
                                 "sourcePortIndex": 2,
                                 "targetBlockId": "gnss__GnssPos",
@@ -28167,7 +28531,7 @@
                                 }
                               },
                               {
-                                "id": "w_97_gnss__HeldSplit_gnss__GnssVel",
+                                "id": "w_114_gnss__HeldSplit_gnss__GnssVel",
                                 "sourceBlockId": "gnss__HeldSplit",
                                 "sourcePortIndex": 5,
                                 "targetBlockId": "gnss__GnssVel",
@@ -28177,7 +28541,7 @@
                                 }
                               },
                               {
-                                "id": "w_98_gnss__EnvSplit_gnss__PDOP",
+                                "id": "w_115_gnss__EnvSplit_gnss__PDOP",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 1,
                                 "targetBlockId": "gnss__PDOP",
@@ -28187,47 +28551,47 @@
                                 }
                               },
                               {
-                                "id": "w_99_gnss__EnvSplit_gnss__PDOP",
+                                "id": "w_116_gnss__EnvSplit_gnss__PDOP",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 2,
                                 "targetBlockId": "gnss__PDOP",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -8
+                                  "midpointOffset": -48
                                 }
                               },
                               {
-                                "id": "w_100_gnss__FixType_gnss__GnssFix",
+                                "id": "w_117_gnss__FixType_gnss__GnssFix",
                                 "sourceBlockId": "gnss__FixType",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__GnssFix",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": -40.5
+                                  "midpointOffset": 24
                                 }
                               },
                               {
-                                "id": "w_101_gnss__EnvSplit_gnss__GnssFix",
+                                "id": "w_118_gnss__EnvSplit_gnss__GnssFix",
                                 "sourceBlockId": "gnss__EnvSplit",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__GnssFix",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -32.5
+                                  "midpointOffset": 36
                                 }
                               },
                               {
-                                "id": "w_102_gnss__PDOP_gnss__GnssFix",
+                                "id": "w_119_gnss__PDOP_gnss__GnssFix",
                                 "sourceBlockId": "gnss__PDOP",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__GnssFix",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -277
+                                  "midpointOffset": 209.5
                                 }
                               },
                               {
-                                "id": "w_103_gnss__HeldSplit_gnss__GroundSpeed",
+                                "id": "w_120_gnss__HeldSplit_gnss__GroundSpeed",
                                 "sourceBlockId": "gnss__HeldSplit",
                                 "sourcePortIndex": 3,
                                 "targetBlockId": "gnss__GroundSpeed",
@@ -28237,7 +28601,7 @@
                                 }
                               },
                               {
-                                "id": "w_104_gnss__HeldSplit_gnss__GroundSpeed",
+                                "id": "w_121_gnss__HeldSplit_gnss__GroundSpeed",
                                 "sourceBlockId": "gnss__HeldSplit",
                                 "sourcePortIndex": 4,
                                 "targetBlockId": "gnss__GroundSpeed",
@@ -28247,17 +28611,17 @@
                                 }
                               },
                               {
-                                "id": "w_105_gnss__FixType_gnss__TrackValid",
+                                "id": "w_122_gnss__FixType_gnss__TrackValid",
                                 "sourceBlockId": "gnss__FixType",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__TrackValid",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 1242
+                                  "midpointOffset": 244
                                 }
                               },
                               {
-                                "id": "w_106_gnss__GroundSpeed_gnss__TrackValid",
+                                "id": "w_123_gnss__GroundSpeed_gnss__TrackValid",
                                 "sourceBlockId": "gnss__GroundSpeed",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__TrackValid",
@@ -28267,7 +28631,7 @@
                                 }
                               },
                               {
-                                "id": "w_107_gnss__HeldSplit_gnss__TrackTrue",
+                                "id": "w_124_gnss__HeldSplit_gnss__TrackTrue",
                                 "sourceBlockId": "gnss__HeldSplit",
                                 "sourcePortIndex": 3,
                                 "targetBlockId": "gnss__TrackTrue",
@@ -28277,37 +28641,37 @@
                                 }
                               },
                               {
-                                "id": "w_108_gnss__HeldSplit_gnss__TrackTrue",
+                                "id": "w_125_gnss__HeldSplit_gnss__TrackTrue",
                                 "sourceBlockId": "gnss__HeldSplit",
                                 "sourcePortIndex": 4,
                                 "targetBlockId": "gnss__TrackTrue",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -360.5
+                                  "midpointOffset": -11.5
                                 }
                               },
                               {
-                                "id": "w_109_gnss__TrackValid_gnss__TrackTrue",
+                                "id": "w_126_gnss__TrackValid_gnss__TrackTrue",
                                 "sourceBlockId": "gnss__TrackValid",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__TrackTrue",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": 4
+                                  "midpointOffset": 0
                                 }
                               },
                               {
-                                "id": "w_110_gnss__TrackPrev_gnss__TrackTrue",
+                                "id": "w_127_gnss__TrackPrev_gnss__TrackTrue",
                                 "sourceBlockId": "gnss__TrackPrev",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__TrackTrue",
                                 "targetPortIndex": 3,
                                 "routing": {
-                                  "midpointOffset": -329
+                                  "midpointOffset": -317
                                 }
                               },
                               {
-                                "id": "w_111_gnss__TrackTrue_gnss__TrackPrev",
+                                "id": "w_128_gnss__TrackTrue_gnss__TrackPrev",
                                 "sourceBlockId": "gnss__TrackTrue",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__TrackPrev",
@@ -28317,7 +28681,7 @@
                                 }
                               },
                               {
-                                "id": "w_112_gnss__TrackTrue_gnss__TrackMagnetic",
+                                "id": "w_129_gnss__TrackTrue_gnss__TrackMagnetic",
                                 "sourceBlockId": "gnss__TrackTrue",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__TrackMagnetic",
@@ -28327,54 +28691,54 @@
                                 }
                               },
                               {
-                                "id": "w_113_gnss__TrackTrue_gnss__GnssCourse",
+                                "id": "w_130_gnss__TrackTrue_gnss__GnssCourse",
                                 "sourceBlockId": "gnss__TrackTrue",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__GnssCourse",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 186
+                                  "midpointOffset": 194
                                 }
                               },
                               {
-                                "id": "w_114_gnss__TrackMagnetic_gnss__GnssCourse",
+                                "id": "w_131_gnss__TrackMagnetic_gnss__GnssCourse",
                                 "sourceBlockId": "gnss__TrackMagnetic",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__GnssCourse",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 4
+                                  "midpointOffset": -4
                                 }
                               },
                               {
-                                "id": "w_115_gnss__GroundSpeed_gnss__GnssCourse",
+                                "id": "w_132_gnss__GroundSpeed_gnss__GnssCourse",
                                 "sourceBlockId": "gnss__GroundSpeed",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__GnssCourse",
                                 "targetPortIndex": 2,
                                 "routing": {
-                                  "midpointOffset": -566
+                                  "midpointOffset": -198
                                 }
                               },
                               {
-                                "id": "w_116_gnss__TrackValid_gnss__GnssCourse",
+                                "id": "w_133_gnss__TrackValid_gnss__GnssCourse",
                                 "sourceBlockId": "gnss__TrackValid",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__GnssCourse",
                                 "targetPortIndex": 3,
                                 "routing": {
-                                  "midpointOffset": -376
+                                  "midpointOffset": -380
                                 }
                               },
                               {
-                                "id": "w_117_gnss__GnssPos_gnss__gnss_pos",
+                                "id": "w_134_gnss__GnssPos_gnss__gnss_pos",
                                 "sourceBlockId": "gnss__GnssPos",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__gnss_pos",
                                 "targetPortIndex": 0
                               },
                               {
-                                "id": "w_118_gnss__GnssVel_gnss__gnss_vel_ned",
+                                "id": "w_135_gnss__GnssVel_gnss__gnss_vel_ned",
                                 "sourceBlockId": "gnss__GnssVel",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__gnss_vel_ned",
@@ -28384,17 +28748,14 @@
                                 }
                               },
                               {
-                                "id": "w_119_gnss__GnssFix_gnss__gnss_fix",
+                                "id": "w_136_gnss__GnssFix_gnss__gnss_fix",
                                 "sourceBlockId": "gnss__GnssFix",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__gnss_fix",
-                                "targetPortIndex": 0,
-                                "routing": {
-                                  "midpointOffset": -1656.5
-                                }
+                                "targetPortIndex": 0
                               },
                               {
-                                "id": "w_120_gnss__GnssCourse_gnss__gnss_course",
+                                "id": "w_137_gnss__GnssCourse_gnss__gnss_course",
                                 "sourceBlockId": "gnss__GnssCourse",
                                 "sourcePortIndex": 0,
                                 "targetBlockId": "gnss__gnss_course",
@@ -28402,8 +28763,8 @@
                               }
                             ],
                             "extents": {
-                              "width": 5506,
-                              "height": 1129
+                              "width": 5830,
+                              "height": 1160
                             }
                           }
                         ],

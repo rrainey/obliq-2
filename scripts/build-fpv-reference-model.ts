@@ -226,6 +226,9 @@ export const RESCUE_PHASE = { idle: 0, initialize: 1, attainAlt: 2, rotate: 3, f
 export const RESCUE_FAILURE = { healthy: 0, flyaway: 1, gpsLost: 2, lowSats: 3, noHomePoint: 4 }
 
 /** Betaflight's PT1 gain: ω / (ω + 1), ω = 2π f dT. */
+/** Variance of y⁺ = c·y + (1 − c)·x when x is a unit-variance AR(1) with coefficient a. */
+export const lpfVariance = (a: number, c: number) => ((1 - c) ** 2 * (1 + a * c)) / ((1 - c * c) * (1 - a * c))
+
 export const pt1Gain = (cutoffHz: number, ts: number) => {
   const w = 2 * Math.PI * cutoffHz * ts
   return w / (w + 1)
@@ -349,8 +352,20 @@ export const SENSORS = {
     ts: 0.1,
     /** s, correlation time of the slow error */
     tau: 60,
-    /** m per unit DOP, 1σ per axis */
-    uere: { hCorr: 1.5, hWhite: 0.15, vCorr: 1.5, vWhite: 0.3 },
+    /**
+     * s: the slow error is smoothed by a second pole, so it changes smoothly
+     * (0.7 cm per fix at 1.2 m) instead of in first-order random steps
+     */
+    smoothTau: 5,
+    /**
+     * s: the fast error is the residual of the receiver's navigation filter, not
+     * white: unit noise through two poles at this time constant, so successive
+     * 10 Hz fixes differ by about 2.4 cm at 0.12 m (a Groves-style code and
+     * range-rate filter gives 1–3 cm; docs/fpv-hud-gnss-plan.md, GNSS error spectrum)
+     */
+    fastTau: 0.5,
+    /** m per unit DOP, 1σ per axis: the slow (correlated) and fast (filter residual) errors */
+    uere: { hCorr: 1.5, hFast: 0.15, vCorr: 1.5, vFast: 0.3 },
     /** m/s per unit DOP, 1σ per axis */
     vel: { h: 0.05, v: 0.1 },
     /** s a lost fix needs its satellite condition back before it is reported again */
@@ -360,7 +375,7 @@ export const SENSORS = {
     quantVel: 0.01,
     /** m/s: below this ground speed the track is not valid and holds */
     trackMinSpeed: 0.5,
-    seeds: { corr: 120, white: 121, vel: 122 },
+    seeds: { corr: 120, fast: 121, vel: 122 },
   },
 }
 
@@ -1304,25 +1319,53 @@ function buildGnssSheet(ideal: boolean, altitude0: number): SheetBuilder {
     s.wire(gmDecay, gm, 0)
     s.wire(gmDrive, gm, 1)
     s.wire(gm, gmPrev)
+    /** y⁺ = c·y + (1 − c)·u, scaled to unit variance for an input u that is a unit-variance AR(1) with coefficient a */
+    const smooth = (name: string, u: string, a: number, c: number, init: number[]) => {
+      const k = 1 / Math.sqrt(lpfVariance(a, c))
+      const prev = s.add('unit_delay', `${name}Prev`, { initialValue: init.map(v => Number((v / k).toFixed(6))), sampleInterval: g.ts })
+      const decay = s.add('scale', `${name}Decay`, { gain: c })
+      s.wire(prev, decay)
+      const drive = s.add('scale', `${name}Drive`, { gain: 1 - c })
+      s.wire(u, drive)
+      const y = s.add('sum', name, { signs: '++', numInputs: 2 })
+      s.wire(decay, y, 0)
+      s.wire(drive, y, 1)
+      s.wire(y, prev)
+      const out = s.add('scale', `${name}Unit`, { gain: k })
+      s.wire(y, out)
+      return out
+    }
+    // Slow: the Gauss–Markov state through a second pole (smooth, still unit variance and 60 s correlated)
     const gmSplit = s.add('demux', 'GmSplit', { outputCount: 3, inputDimensions: [3] })
-    s.wire(gm, gmSplit)
-    const whiteSplit = s.add('demux', 'WhiteSplit', { outputCount: 3, inputDimensions: [3] })
-    s.wire(noise(s, 'PosNoise', 3, { stdDev: 1, seed: g.seeds.white }), whiteSplit)
+    s.wire(smooth('GmSmooth', gm, a, Math.exp(-g.ts / g.smoothTau), x0), gmSplit)
+    // Fast: the receiver's navigation-filter residual, unit noise through two poles at fastTau
+    const d = Math.exp(-g.ts / g.fastTau)
+    const fastPrev = s.add('unit_delay', 'FastPrev', { initialValue: [0, 0, 0], sampleInterval: g.ts })
+    const fastDecay = s.add('scale', 'FastDecay', { gain: d })
+    s.wire(fastPrev, fastDecay)
+    const fastDrive = s.add('scale', 'FastDrive', { gain: Math.sqrt(1 - d * d) })
+    s.wire(noise(s, 'PosNoise', 3, { stdDev: 1, seed: g.seeds.fast }), fastDrive)
+    const fast1 = s.add('sum', 'FastState', { signs: '++', numInputs: 2 })
+    s.wire(fastDecay, fast1, 0)
+    s.wire(fastDrive, fast1, 1)
+    s.wire(fast1, fastPrev)
+    const fastSplit = s.add('demux', 'FastSplit', { outputCount: 3, inputDimensions: [3] })
+    s.wire(smooth('FastSmooth', fast1, d, d, [0, 0, 0]), fastSplit)
     const velNoiseSplit = s.add('demux', 'VelNoiseSplit', { outputCount: 3, inputDimensions: [3] })
     s.wire(noise(s, 'VelNoise', 3, { stdDev: 1, seed: g.seeds.vel }), velNoiseSplit)
 
-    // Position: truth + (corr·x + white·w)·DOP·scale per axis; altitude = −(d + e_d)
+    // Position: truth + (corr·slow + fast·residual)·DOP·scale per axis; altitude = −(d + e_d)
     const posOut = s.add('mux', 'PositionRaw', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
     ;(['North', 'East', 'Down'] as const).forEach((axis, k) => {
       const vertical = k === 2
       const corr = vertical ? g.uere.vCorr : g.uere.hCorr
-      const white = vertical ? g.uere.vWhite : g.uere.hWhite
-      // in(0) truth, in(1) GM state, in(2) white, in(3) DOP, in(4) scale
-      const expr = `(${corr} * in(1) + ${white} * in(2)) * in(3) * in(4)`
+      const fast = vertical ? g.uere.vFast : g.uere.hFast
+      // in(0) truth, in(1) slow state, in(2) fast state, in(3) DOP, in(4) scale
+      const expr = `(${corr} * in(1) + ${fast} * in(2)) * in(3) * in(4)`
       const ev = s.add('evaluate', `Pos${axis}`, { numInputs: 5, expression: vertical ? `-(in(0) + ${expr})` : `in(0) + ${expr}` })
       s.wire(posSplit, ev, 0, k)
       s.wire(gmSplit, ev, 1, k)
-      s.wire(whiteSplit, ev, 2, k)
+      s.wire(fastSplit, ev, 2, k)
       s.wire(envSplit, ev, 3, vertical ? 2 : 1)
       s.wire(envSplit, ev, 4, 3)
       s.wire(ev, posOut, k)
@@ -3897,15 +3940,29 @@ export const GNSS_SIGMA = (() => {
   const g = SENSORS.gnss, e = DEFAULT_GNSS_ENV
   const qv = g.quantVel / Math.sqrt(12)
   return {
-    horizontal: Math.hypot(g.uere.hCorr, g.uere.hWhite) * e.hdop * e.uereScale,
-    vertical: Math.hypot(g.uere.vCorr, g.uere.vWhite) * e.vdop * e.uereScale,
+    horizontal: Math.hypot(g.uere.hCorr, g.uere.hFast) * e.hdop * e.uereScale,
+    vertical: Math.hypot(g.uere.vCorr, g.uere.vFast) * e.vdop * e.uereScale,
     velHorizontal: Math.hypot(g.vel.h * e.hdop * e.uereScale, qv),
     velVertical: Math.hypot(g.vel.v * e.vdop * e.uereScale, qv),
+    /**
+     * RMS change of a horizontal error between successive fixes: each term is a two-pole
+     * process (poles p₁, p₂) with lag-1 correlation (p₁ + p₂)/(1 + p₁p₂), so its step has
+     * variance 2(1 − ρ); plus the 1 cm quantization of both fixes
+     */
+    stepHorizontal: (() => {
+      const stepVar = (p1: number, p2: number) => 2 * (1 - (p1 + p2) / (1 + p1 * p2))
+      const slow = Math.exp(-g.ts / g.tau), smooth = Math.exp(-g.ts / g.smoothTau), fast = Math.exp(-g.ts / g.fastTau)
+      const units = g.uere.hCorr ** 2 * stepVar(slow, smooth) + g.uere.hFast ** 2 * stepVar(fast, fast)
+      return Math.sqrt(units * (e.hdop * e.uereScale) ** 2 + 2 * g.quantPos ** 2 / 12)
+    })(),
   }
 })()
 
-/** T03 window and tolerances: the position RMS within ±30% (about 25 correlation times), velocity (white) within ±10%. */
-export const GNSS_STATS_TEST = { duration: 3000, window: [10, 2990] as [number, number], posTol: 0.3, velTol: 0.1, minCorr1s: 0.9 }
+/**
+ * T03 window and tolerances: the position RMS within ±30% (about 25 correlation times), velocity (white)
+ * within ±10%, the fix-to-fix change within ±10% (30 000 steps, smooth over about 1 s).
+ */
+export const GNSS_STATS_TEST = { duration: 3000, window: [10, 2990] as [number, number], posTol: 0.3, velTol: 0.1, stepTol: 0.1, minCorr1s: 0.9 }
 
 /** T03: GNSS error statistics, disarmed at rest (the fix is all error). */
 export function buildFpvGnssStatisticsTestModel() {
@@ -3929,6 +3986,11 @@ export function buildFpvGnssStatisticsTestModel() {
       check(`RMS${name}MatchesSigma`, ms, ((1 - tol) * sigma) ** 2, ((1 + tol) * sigma) ** 2, w1 + 1)
     }
     check('ErrorCorrelated1s', h.windowCorr('CorrNorth1s', errs[0]![1], Math.round(1 / SENSORS.gnss.ts), SENSORS.gnss.ts, w0, w1), t.minCorr1s, 1, w1 + 1)
+    // Smooth, as a receiver's navigation filter reports it: successive fixes differ by centimetres
+    const errPrev = s.add('unit_delay', 'ErrNorthPrevFix', { initialValue: 0, sampleInterval: SENSORS.gnss.ts })
+    s.wire(errs[0]![1], errPrev)
+    const stepMs = h.windowMeanSquare('MSStepNorth', expr('StepNorth', 'in(0) - in(1)', [errs[0]![1], errPrev]), w0, w1, SENSORS.gnss.ts)
+    check('FixToFixStepMatches', stepMs, ((1 - t.stepTol) * sig.stepHorizontal) ** 2, ((1 + t.stepTol) * sig.stepHorizontal) ** 2, w1 + 1)
     // Reported to the centimetre
     const offGrid = expr('NorthOffGrid', `fabs(in(0) / ${SENSORS.gnss.quantPos} - round(in(0) / ${SENSORS.gnss.quantPos}))`, [pick('NorthFix', g, [0])])
     check('PositionOnCentimetreGrid', offGrid, 0, 1e-6)
@@ -3940,7 +4002,8 @@ export function buildFpvGnssStatisticsTestModel() {
     name: 'FPV T03 GNSS Statistics',
     description:
       `Validation test for the GNSS error model (docs/fpv-hud-gnss-test-plan.md, T03): ${t.duration} s disarmed at rest in open sky. ` +
-      'Per-axis RMS position and velocity errors match DOP × UERE, the slow error is correlated over 1 s, the fix is on the ' +
+      'Per-axis RMS position and velocity errors match DOP × UERE, the slow error is correlated over 1 s, successive fixes differ ' +
+      'by the filtered amount (about 2.5 cm), the fix is on the ' +
       'centimetre grid and stays 3D. Exact DOP and UERE-scale scaling is checked in __tests__/reference-models/fpv-gnss.test.ts.',
     sticks: REST_STICKS,
     duration: t.duration,

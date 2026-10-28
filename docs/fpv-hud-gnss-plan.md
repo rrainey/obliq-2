@@ -79,12 +79,14 @@
 **Constants** in a new `SENSORS.gnss` block:
 
 ```
-ts: 0.1, tau: 60,
-uere: { hCorr: 1.5, hWhite: 0.15, vCorr: 1.5, vWhite: 0.3 },   // m per unit DOP
+ts: 0.1, tau: 60, smoothTau: 5, fastTau: 0.5,
+uere: { hCorr: 1.5, hFast: 0.15, vCorr: 1.5, vFast: 0.3 },     // m per unit DOP
 vel: { h: 0.05, v: 0.10 },                                      // m/s per unit DOP
 reacquireS: 1.0, quantPos: 0.01, quantVel: 0.01,
-seeds: { corr: 120, white: 121, vel: 122 }
+seeds: { corr: 120, fast: 121, vel: 122 }
 ```
+
+As built in Phase 3 the fast term was white (`hWhite`, `vWhite`) and the slow term first-order. Both were reshaped after Phase 12; see [GNSS error spectrum](#gnss-error-spectrum-done-2026-10-28). Items 1–2 below describe the Phase 3 build.
 
 **Error model:**
 1. **Gauss–Markov states** for three axes (n, e, d), unit variance:
@@ -414,7 +416,26 @@ Phases 8–12 used Betaflight's default gains. They are firmware defaults for an
 
 **Not modelled, noted:** Betaflight's angle-mode feed-forward (on stick motion), D-max's dynamic boost, TPA and anti-gravity. The first two shape pilot stick response only; TPA matters above 1350 µs throttle.
 
-**GNSS noise limits the outer loops.** Position Hold's D and the rescue's velocity to home difference 10 Hz positions, and the receiver model's white position noise (0.12 m per axis at HDOP 0.8) gives about 1.7 m/s of velocity noise. In a 3 m/s wind Position Hold's tilt swings to 15–20° (8° with ideal sensors), and the rescue's FLY_HOME pitch jitters about 8° (0.1° ideal). Real receivers smooth their 10 Hz positions far more; reducing the white term is a GNSS model decision, not a gain.
+**GNSS noise limited the outer loops.** Position Hold's D and the rescue's velocity to home difference 10 Hz positions, and the receiver model's white position noise (0.12 m per axis at HDOP 0.8) gave about 1.7 m/s of velocity noise: Position Hold's tilt swung to 15–20° in a 3 m/s wind, and the rescue's FLY_HOME pitch jittered about 8°. Fixed in the GNSS model, not the gains: see [GNSS error spectrum](#gnss-error-spectrum-done-2026-10-28).
+
+### GNSS error spectrum (done 2026-10-28)
+
+**Problem.** Position Hold's D term and the rescue's velocity to home both difference successive 10 Hz positions. The Phase 3 receiver added independent white noise (0.12 m per horizontal axis at HDOP 0.8) to every fix, so successive fixes differed by about 17 cm: about 1.7 m/s of noise in any differenced speed. Its first-order slow error added random steps of 6.9 cm. In a 3 m/s wind, Position Hold's tilt swung to 15–20° (8° with ideal sensors), and the rescue's FLY_HOME pitch jittered 8° (0.1° ideal).
+
+**What open sources say.** No published measurement of a small receiver's epoch-to-epoch jitter was found, but every open model agrees on its character:
+- **Groves' MATLAB software** (*Principles of GNSS, Inertial, and Multisensor Integrated Navigation Systems*, 2nd ed.; [zbai/MATLAB-Groves](https://github.com/zbai/MATLAB-Groves)) simulates the raw measurements: per-epoch code-tracking noise of 1 m (`code_track_err_SD`) and range-rate noise of 0.02 m/s (`rate_track_err_SD`), with the signal-in-space, ionosphere and troposphere errors as slow biases (`Initialize_GNSS_biases`). A single-epoch least-squares fix (`GNSS_Demo_1`) passes the code noise straight through; the receiver's navigation processor is his GNSS Kalman filter (`GNSS_Demo_2`, `GNSS_Demo_3`; acceleration PSD 10 m²/s³ for a car, 0.01 stationary), which smooths it with the range rates. That filter, run at 10 Hz on one axis with his noise values at DOP 0.8, leaves 6–11 cm of residual error, but smooth: successive fixes differ by 0.9–2.9 cm (0.09–0.29 m/s when differenced) for acceleration PSDs of 1–10 m²/s³.
+- **MATLAB `gpsSensor`** has no white position term: a first-order Gauss–Markov process (1.6 m, decay factor 0.999 per sample) and 0.1 m/s velocity noise.
+- **PX4's Gazebo GPS plugin** (`gazebo_gps_plugin`) has a negligible white term (2 × 10⁻⁴ m/√Hz) and a 60 s correlated error.
+- **u-blox** describes its dynamic platform models as filtering noisy readings into smoother output, without figures.
+
+So the white term's size (about 0.1 m) was reasonable, but a receiver reports it filtered, not white.
+
+**Change.** The error sizes T03 checks are unchanged (per-axis σ, 60 s correlation, velocity noise); only how fast the error varies changes:
+- **Fast term** (`hFast`, `vFast`, was `hWhite`, `vWhite`): unit noise through two poles at `fastTau` = 0.5 s, renormalised to unit variance, standing for the navigation filter's residual. Successive fixes differ by about 2.4 cm (0.24 m/s), within the range the Groves-style filter gives for airborne dynamics.
+- **Slow term:** the 60 s Gauss–Markov state through a second pole at `smoothTau` = 5 s, renormalised, so it drifts smoothly (0.7 cm per fix) instead of in random steps.
+- **T03** adds `FixToFixStepMatches`: the RMS change of the north error between fixes within ±10% of the value predicted from the constants (2.51 cm; measured 2.53 cm).
+
+**Effect** (same flights, before → after): rescue FLY_HOME pitch jitter 8.3° → 2.1° SD, and its mean speed 6.9 → 7.2 m/s (7.25 with ideal sensors); Position Hold's peak tilt in a 3 m/s wind 16.6° → 11.8°, and a stop settles within 1 m in 2.7 s instead of 6.4 s with half the overshoot.
 
 ### Phase 13: OSD outputs and test models
 
@@ -505,6 +526,8 @@ New model states are named in the generated C as `<subsystem path>_<block>_state
 | State (generated name) | Holds | Trim action |
 |---|---|---|
 | `Sensors_GNSS_GmPrev_state` [3] | Correlated GNSS error, unit variance | Leave. `_init` sets it to its seeded stationary draw. |
+| `Sensors_GNSS_GmSmoothPrev_state` [3] | The slow error after its 5 s smoothing pole (unnormalised) | Leave. `_init` sets it to match the seeded draw. |
+| `Sensors_GNSS_FastPrev_state`, `Sensors_GNSS_FastSmoothPrev_state` [3] | The fast (navigation-filter residual) error's two poles | Leave at 0; it settles within about 2 s. |
 | `Sensors_GNSS_FixCountPrev_state` | Reacquisition counter: samples with the satellite condition met, capped at 11 (a fix needs more than 10) | Leave. It starts at 11, a fix from t = 0. |
 | `Sensors_GNSS_HoldPrev_state` [6] | Last fix [n, e, alt, vn, ve, vd] | **Write** [north, east, msl, 0, 0, 0]. Otherwise a start without a fix reports the compiled rest position at the origin. |
 | `Sensors_GNSS_TrackPrev_state` | Last valid track, true ° | Leave at 0. A hover has no valid track, and OSD consumers must check the valid flag. |
