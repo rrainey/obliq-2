@@ -1,5 +1,22 @@
 # obliq-2 Change Log
 
+## What's New in 3.5.1
+
+- **GPS Rescue start gate, documented correctly** (issue #4). A rescue that starts within 5 m of home with `alt_est` below 4 m (`ap_landing_altitude_m`) aborts and disarms at once. This applies in the air too: `alt_est` is the height above the arming point, so a hover trimmed or armed at home reads about 0. The model already did this, as Betaflight 2025.12 does. The 3.5.0 notes and the obliq-fpv-unity hand-off said that only a start on the ground aborts. A new test model, T12c, checks the abort from a 2.5 m hover near home. T12b now checks that its start, also within 5 m of home, is above 4 m, so it climbs.
+- **Fixed: the Jest runner for the FPV test models skipped T12a–T12c and T13a–T13c.** Its file pattern did not accept a letter after the number. These models ran only with `npm run obliq:test`. The runner now checks that it finds every test model the builder writes.
+- **`scripts/obliq-cgen.ts` records more in `cgen-manifest.json`:**
+  - `inputs` and `outputs`: each port's name, C type and dimensions, from the generated header;
+  - `generator`: the obliq-2 version and git commit, and `dirty` if the generator or the model differs from that commit;
+  - `files`: now includes segregated subsystem modules, such as `Motor_RR.c`.
+
+  A host can check an export against its interface from the manifest alone.
+- **Dependencies:**
+  - removed `@pdf-lib/fontkit` and `undici` (unused) and `@types/katex` (`katex` has its own types);
+  - `lucide-react` replaced by `@tabler/icons-react`, which the rest of the app uses;
+  - `dotenv` moved to devDependencies, and `@jest/globals` is declared;
+  - `package-lock.json` regenerated: patch and minor updates, including Next.js 15.5.28 and React 19.3.1.
+- **`CLAUDE.md`** gives coding agents two rules: write documents in ASD-STE100 Simplified Technical English where practical, and put unit suffixes on model signal names (issue #3 lists the FPV Vehicle names to change).
+
 ## What's New in 3.5.0
 
 The FPV Vehicle becomes a Betaflight 2025.12 quad with GNSS, for hardware-in-the-loop simulation: a GNSS receiver, Betaflight's failsafe, altitude estimate, Altitude Hold, Position Hold and GPS Rescue, OSD outputs, tuned controllers, and a validation suite of 26 test models.
