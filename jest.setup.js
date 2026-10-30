@@ -7,8 +7,8 @@ require('dotenv').config({ path: '.env.local' });
 // Basic Jest setup for our model schema tests
 // No additional testing library imports needed for schema validation tests
 
-// Note: Integration tests import fetch directly from 'undici' in api-client.ts
-// so no global polyfill is needed here
+// Integration tests import fetch from 'cross-fetch' in api-client.ts, because the
+// jsdom environment has no global fetch. No global polyfill is needed here.
 
 // Stores created by tests start empty: don't import the repo's reference
 // models unless a test opts in (see __tests__/storage/reference-models.test.ts).

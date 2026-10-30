@@ -4,7 +4,7 @@
 import { useUser } from '@/lib/auth'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Key, Trash2 } from 'lucide-react'
+import { IconArrowLeft, IconKey, IconPlus, IconTrash } from '@tabler/icons-react'
 
 interface ApiToken {
   id: string
@@ -256,14 +256,14 @@ export default function TokensPage() {
             href="/models"
             className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
           >
-            <ArrowLeft className="w-4 h-4 mr-1" />
+            <IconArrowLeft className="w-4 h-4 mr-1" />
             Back to Models
           </Link>
           
           <div className="md:flex md:items-center md:justify-between">
             <div className="flex-1 min-w-0">
               <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-                <Key className="w-8 h-8 mr-3 text-gray-600" />
+                <IconKey className="w-8 h-8 mr-3 text-gray-600" />
                 API Keys
               </h1>
               <p className="mt-2 text-gray-600">
@@ -280,7 +280,7 @@ export default function TokensPage() {
                 }}
                 className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
               >
-                <Plus className="w-4 h-4 mr-2" />
+                <IconPlus className="w-4 h-4 mr-2" />
                 Create New API Key
               </button>
             </div>
@@ -302,7 +302,7 @@ export default function TokensPage() {
             </div>
           ) : tokens.length === 0 ? (
             <div className="p-6 text-center">
-              <Key className="mx-auto h-12 w-12 text-gray-400" />
+              <IconKey className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No API keys</h3>
               <p className="mt-1 text-sm text-gray-500">
                 Get started by creating a new API key.
@@ -317,7 +317,7 @@ export default function TokensPage() {
                   }}
                   className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
                 >
-                  <Plus className="w-4 h-4 mr-2" />
+                  <IconPlus className="w-4 h-4 mr-2" />
                   Create
                 </button>
               </div>
@@ -368,7 +368,7 @@ export default function TokensPage() {
                           } ${token.isExpired ? 'opacity-50 cursor-not-allowed' : ''}`}
                           title={token.isExpired ? 'Expired tokens are automatically cleaned up' : 'Delete token'}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <IconTrash className="w-4 h-4" />
                           <span className="sr-only">Delete {token.name}</span>
                         </button>
                       </td>

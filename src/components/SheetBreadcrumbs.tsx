@@ -3,7 +3,7 @@
 'use client'
 
 import React from 'react'
-import { ChevronRight } from 'lucide-react'
+import { IconChevronRight } from '@tabler/icons-react'
 import { Breadcrumb } from '@/lib/types'
 import { useComputedColorScheme } from '@mantine/core'
 
@@ -42,7 +42,7 @@ export default function SheetBreadcrumbs({
       {breadcrumbs.map((breadcrumb, index) => (
         <React.Fragment key={breadcrumb.sheetId}>
           {index > 0 && (
-            <ChevronRight className={`w-4 h-4 ${isDark ? 'text-[#5C5F66]' : 'text-gray-400'}`} />
+            <IconChevronRight className={`w-4 h-4 ${isDark ? 'text-[#5C5F66]' : 'text-gray-400'}`} />
           )}
           <span
             className={`
