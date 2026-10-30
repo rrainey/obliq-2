@@ -25,8 +25,9 @@ describe('FPV validation suite (test-models/fpv)', () => {
   })
 
   test('every test model passes all of its Asserts, resolving the vehicle from the folder', () => {
-    const files = fs.readdirSync(DIR).filter(f => /^t\d\d-.*\.json$/.test(f)).sort()
-    expect(files.length).toBeGreaterThan(0)
+    // tNN- and tNNa- (T12a, T13c, ...)
+    const files = fs.readdirSync(DIR).filter(f => /^t\d\d[a-z]?-.*\.json$/.test(f)).sort()
+    expect(files).toHaveLength(TEST_FPV_MODELS().filter(([f]) => f.startsWith('t')).length)
     const { targets, errors } = resolveTestTargets(files.map(f => path.join(DIR, f)))
     expect(errors).toEqual([])
     expect(targets).toHaveLength(files.length)

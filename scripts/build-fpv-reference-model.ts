@@ -4815,7 +4815,10 @@ export function buildFpvRescueTooCloseTestModel() {
     const ctx = testsSheet()
     const { s, h, from, expr, check, upright } = ctx
     check('StartsTooClose', h.heldAt('DistanceAtSwitch', from('home_distance_m'), t.on), 0, R.minStartDistM - 0.01, t.on + 0.01)
-    const ret = expr('ReturnAltitudeM', `fmax(10.0, in(0) + ${R.initialClimbM}.0)`, [h.heldAt('AltitudeAtSwitch', from('alt_est'), t.on)])
+    // Inside 5 m of home too, but above the landing altitude, so it climbs (T12c is the other side of that gate)
+    const altAtSwitch = h.heldAt('AltitudeAtSwitch', from('alt_est'), t.on)
+    check('StartsAboveLandingAltitude', altAtSwitch, R.landingAltitudeM, null, t.on + 0.01)
+    const ret = expr('ReturnAltitudeM', `fmax(10.0, in(0) + ${R.initialClimbM}.0)`, [altAtSwitch])
     const { is } = rescueReturnChecks(ctx, { on: t.on, duration: t.duration, returnAltM: ret, descentDistM: 0.5 * R.minStartDistM, flyHomeSettleS: t.flyHomeSettleS })
     check('PitchesOutBeyondMinStart', h.heldWhen('DistanceOnRotate', from('home_distance_m'), is(RESCUE_PHASE.rotate)), R.minStartDistM, null, t.duration - 0.5)
     upright()
@@ -4830,6 +4833,50 @@ export function buildFpvRescueTooCloseTestModel() {
     sticks: { ...rescueFlyoutSticks(windows([t.on, t.duration + 1]), t.on), roll: [[0, 0], [t.roll[0], 0], [t.roll[0] + 0.2, 0.25], [t.roll[1] + 0.2, 0.25], [t.roll[1] + 0.4, 0]] },
     duration: t.duration,
     displays: [['Position', 'pos_ned'], ['RescuePhase', 'rescue_phase'], ['Altitude', 'alt_est'], ['HomeDistance', 'home_distance_m']],
+    tests,
+  })
+}
+
+/** T12c: a short climb, Alt Hold at about 2.5 m from 2 s; the rescue switch at 6 s, about 1 m from home. */
+export const RESCUE_LOW_AT_HOME_TEST = { holdOn: 2, on: 6, duration: 8 }
+
+/**
+ * T12c: a rescue started within 5 m of home and below ap_landing_altitude_m
+ * (4 m on alt_est, which is height above the arming point) aborts and disarms
+ * at once, in the air as on the ground. Betaflight's INITIALIZE does this for
+ * safety (gps_rescue_multirotor.c: distance < 5 m && isBelowLandingAltitude()).
+ * T12b is the other side of the gate: inside 5 m but above 4 m, it climbs.
+ */
+export function buildFpvRescueLowAtHomeTestModel() {
+  const t = RESCUE_LOW_AT_HOME_TEST
+  const R = FC.rescue
+  const hov = Number(HOVER_THROTTLE.toFixed(4))
+  const tests = () => {
+    const ctx = testsSheet()
+    const { s, h, from, check } = ctx
+    const { first } = rescuePhases(ctx)
+    check('StartsWithin5mOfHome', h.heldAt('DistanceAtSwitch', from('home_distance_m'), t.on), 0, 4.99, t.on + 0.01)
+    check('StartsBelowLandingAltitude', h.heldAt('AltitudeAtSwitch', from('alt_est'), t.on), 0.5, R.landingAltitudeM - 0.01, t.on + 0.01)
+    check('ArmedInTheAirBefore', from('fc_armed'), 1, 1, t.holdOn, t.on - 0.01)
+    check('AbortsAtOnce', first(RESCUE_PHASE.abort), t.on - 0.001, t.on + 0.02, t.on + 0.05)
+    check('NeverClimbs', h.phaseVisited('Climbed', from('rescue_phase'), RESCUE_PHASE.attainAlt), 0, 0)
+    check('Disarmed', from('fc_armed'), 0, 0, t.on + 0.05)
+    return s
+  }
+  return buildFpvTestModel({
+    name: 'FPV T12c Rescue Low At Home',
+    description:
+      'Validation test for the GPS Rescue start gate (docs/fpv-hud-gnss-test-plan.md, T12c): Alt Hold at about 2.5 m, about 1 m ' +
+      `from home, then the rescue switch at ${t.on} s. Within 5 m of home and below the ${R.landingAltitudeM} m landing altitude ` +
+      '(alt_est, height above the arming point), Betaflight aborts and disarms at once, in the air as on the ground.',
+    sticks: {
+      roll: [[0, 0]], pitch: [[0, 0]], yaw: [[0, 0]], aux: [[0, 1]], arm: DEMO_STICKS.arm,
+      throttle: [[0, 0], [0.5, 0], [0.6, 0.6], [0.9, 0.6], [1.0, hov]],
+      hold: step([[0, 0], [t.holdOn, 0.5]]),
+      rescue: windows([t.on, t.duration + 1]),
+    },
+    duration: t.duration,
+    displays: [['RescuePhase', 'rescue_phase'], ['Altitude', 'alt_est'], ['HomeDistance', 'home_distance_m'], ['Armed', 'fc_armed']],
     tests,
   })
 }
@@ -5074,6 +5121,7 @@ export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<s
     ['t11-gps-rescue-switch.json', buildFpvRescueSwitchTestModel()],
     ['t12a-rescue-switch-off.json', buildFpvRescueSwitchOffTestModel()],
     ['t12b-rescue-too-close.json', buildFpvRescueTooCloseTestModel()],
+    ['t12c-rescue-low-at-home.json', buildFpvRescueLowAtHomeTestModel()],
     ['t13a-rescue-low-sats.json', buildFpvRescueLowSatsTestModel()],
     ['t13b-rescue-low-sats-failsafe.json', buildFpvRescueLowSatsFailsafeTestModel()],
     ['t13c-rescue-no-home.json', buildFpvRescueNoHomeTestModel()],

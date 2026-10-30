@@ -1361,7 +1361,7 @@
             "name": "From_home_distance_m",
             "position": {
               "x": 100,
-              "y": 659
+              "y": 663
             },
             "parameters": {
               "showName": true,
@@ -1374,7 +1374,7 @@
             "name": "Time",
             "position": {
               "x": 120,
-              "y": 88
+              "y": 102
             },
             "parameters": {
               "showName": true
@@ -1385,8 +1385,8 @@
             "type": "unit_delay",
             "name": "DistanceAtSwitchPrev",
             "position": {
-              "x": 918,
-              "y": -41
+              "x": 926,
+              "y": -36
             },
             "parameters": {
               "showName": true,
@@ -1400,7 +1400,7 @@
             "name": "DistanceAtSwitch",
             "position": {
               "x": 365,
-              "y": 176
+              "y": 195
             },
             "parameters": {
               "showName": true,
@@ -1413,8 +1413,8 @@
             "type": "assert",
             "name": "StartsTooClose",
             "position": {
-              "x": 2797,
-              "y": 350
+              "x": 2805,
+              "y": 397
             },
             "parameters": {
               "showName": true,
@@ -1432,7 +1432,7 @@
             "name": "From_alt_est",
             "position": {
               "x": 106,
-              "y": -165
+              "y": -141
             },
             "parameters": {
               "showName": true,
@@ -1444,8 +1444,8 @@
             "type": "unit_delay",
             "name": "AltitudeAtSwitchPrev",
             "position": {
-              "x": 918,
-              "y": -329
+              "x": 926,
+              "y": -324
             },
             "parameters": {
               "showName": true,
@@ -1459,7 +1459,7 @@
             "name": "AltitudeAtSwitch",
             "position": {
               "x": 365,
-              "y": -265
+              "y": -187
             },
             "parameters": {
               "showName": true,
@@ -1468,12 +1468,30 @@
             }
           },
           {
+            "id": "tests__StartsAboveLandingAltitude",
+            "type": "assert",
+            "name": "StartsAboveLandingAltitude",
+            "position": {
+              "x": 2805,
+              "y": -35
+            },
+            "parameters": {
+              "showName": true,
+              "mode": "bounds",
+              "lower": 4,
+              "upper": null,
+              "checkFrom": 12.01,
+              "checkUntil": null,
+              "onFailure": "record"
+            }
+          },
+          {
             "id": "tests__ReturnAltitudeM",
             "type": "evaluate",
             "name": "ReturnAltitudeM",
             "position": {
-              "x": 854,
-              "y": -185
+              "x": 862,
+              "y": -180
             },
             "parameters": {
               "showName": true,
@@ -1487,7 +1505,7 @@
             "name": "From_rescue_phase",
             "position": {
               "x": 100,
-              "y": 803
+              "y": 807
             },
             "parameters": {
               "showName": true,
@@ -1500,7 +1518,7 @@
             "name": "InAttainAlt",
             "position": {
               "x": 337,
-              "y": 32
+              "y": 51
             },
             "parameters": {
               "showName": true,
@@ -1513,8 +1531,8 @@
             "type": "unit_delay",
             "name": "FirstAttainAltPrev",
             "position": {
-              "x": 1334,
-              "y": -253
+              "x": 1342,
+              "y": -248
             },
             "parameters": {
               "showName": true,
@@ -1527,8 +1545,8 @@
             "type": "evaluate",
             "name": "FirstAttainAlt",
             "position": {
-              "x": 808,
-              "y": 103
+              "x": 816,
+              "y": 108
             },
             "parameters": {
               "showName": true,
@@ -1541,8 +1559,8 @@
             "type": "assert",
             "name": "StartsAtSwitch",
             "position": {
-              "x": 2797,
-              "y": 206
+              "x": 2805,
+              "y": 253
             },
             "parameters": {
               "showName": true,
@@ -1560,7 +1578,7 @@
             "name": "InRotate",
             "position": {
               "x": 337,
-              "y": 1153
+              "y": 1154
             },
             "parameters": {
               "showName": true,
@@ -1573,8 +1591,8 @@
             "type": "unit_delay",
             "name": "FirstRotatePrev",
             "position": {
-              "x": 1334,
-              "y": 971
+              "x": 1342,
+              "y": 976
             },
             "parameters": {
               "showName": true,
@@ -1587,8 +1605,8 @@
             "type": "evaluate",
             "name": "FirstRotate",
             "position": {
-              "x": 808,
-              "y": 743
+              "x": 816,
+              "y": 748
             },
             "parameters": {
               "showName": true,
@@ -1602,7 +1620,7 @@
             "name": "InFlyHome",
             "position": {
               "x": 337,
-              "y": 560
+              "y": 563
             },
             "parameters": {
               "showName": true,
@@ -1615,8 +1633,8 @@
             "type": "unit_delay",
             "name": "FirstFlyHomePrev",
             "position": {
-              "x": 1334,
-              "y": 339
+              "x": 1342,
+              "y": 344
             },
             "parameters": {
               "showName": true,
@@ -1629,8 +1647,8 @@
             "type": "evaluate",
             "name": "FirstFlyHome",
             "position": {
-              "x": 808,
-              "y": 263
+              "x": 816,
+              "y": 268
             },
             "parameters": {
               "showName": true,
@@ -1644,7 +1662,7 @@
             "name": "InDescent",
             "position": {
               "x": 337,
-              "y": 865
+              "y": 866
             },
             "parameters": {
               "showName": true,
@@ -1657,8 +1675,8 @@
             "type": "unit_delay",
             "name": "FirstDescentPrev",
             "position": {
-              "x": 1334,
-              "y": 683
+              "x": 1342,
+              "y": 688
             },
             "parameters": {
               "showName": true,
@@ -1671,8 +1689,8 @@
             "type": "evaluate",
             "name": "FirstDescent",
             "position": {
-              "x": 808,
-              "y": 583
+              "x": 816,
+              "y": 588
             },
             "parameters": {
               "showName": true,
@@ -1686,7 +1704,7 @@
             "name": "InLanding",
             "position": {
               "x": 337,
-              "y": 411
+              "y": 416
             },
             "parameters": {
               "showName": true,
@@ -1699,8 +1717,8 @@
             "type": "unit_delay",
             "name": "FirstLandingPrev",
             "position": {
-              "x": 1334,
-              "y": 51
+              "x": 1342,
+              "y": 56
             },
             "parameters": {
               "showName": true,
@@ -1713,8 +1731,8 @@
             "type": "evaluate",
             "name": "FirstLanding",
             "position": {
-              "x": 808,
-              "y": 423
+              "x": 816,
+              "y": 428
             },
             "parameters": {
               "showName": true,
@@ -1727,8 +1745,8 @@
             "type": "evaluate",
             "name": "PhaseOrder",
             "position": {
-              "x": 1224,
-              "y": 483
+              "x": 1232,
+              "y": 488
             },
             "parameters": {
               "showName": true,
@@ -1741,8 +1759,8 @@
             "type": "assert",
             "name": "PhasesInOrder",
             "position": {
-              "x": 2797,
-              "y": 530
+              "x": 2805,
+              "y": 541
             },
             "parameters": {
               "showName": true,
@@ -1760,7 +1778,7 @@
             "name": "AbortedNow",
             "position": {
               "x": 344,
-              "y": 1656
+              "y": 1658
             },
             "parameters": {
               "showName": true,
@@ -1773,8 +1791,8 @@
             "type": "unit_delay",
             "name": "AbortedPrev",
             "position": {
-              "x": 1334,
-              "y": 1854
+              "x": 1342,
+              "y": 1855
             },
             "parameters": {
               "showName": true,
@@ -1787,8 +1805,8 @@
             "type": "evaluate",
             "name": "Aborted",
             "position": {
-              "x": 808,
-              "y": 1667
+              "x": 816,
+              "y": 1668
             },
             "parameters": {
               "showName": true,
@@ -1801,8 +1819,8 @@
             "type": "assert",
             "name": "NeverAborts",
             "position": {
-              "x": 2797,
-              "y": 1411
+              "x": 2805,
+              "y": 1413
             },
             "parameters": {
               "showName": true,
@@ -1820,7 +1838,7 @@
             "name": "From_rescue_active",
             "position": {
               "x": 100,
-              "y": -830
+              "y": -831
             },
             "parameters": {
               "showName": true,
@@ -1833,7 +1851,7 @@
             "name": "From_fc_mode",
             "position": {
               "x": 106,
-              "y": -686
+              "y": -687
             },
             "parameters": {
               "showName": true,
@@ -1846,7 +1864,7 @@
             "name": "ModeWhileActive",
             "position": {
               "x": 336,
-              "y": -780
+              "y": -777
             },
             "parameters": {
               "showName": true,
@@ -1859,8 +1877,8 @@
             "type": "assert",
             "name": "ModeIsRescueWhileActive",
             "position": {
-              "x": 2797,
-              "y": -714
+              "x": 2805,
+              "y": -722
             },
             "parameters": {
               "showName": true,
@@ -1877,8 +1895,8 @@
             "type": "evaluate",
             "name": "FlyHomeSettled",
             "position": {
-              "x": 1224,
-              "y": -109
+              "x": 1232,
+              "y": -104
             },
             "parameters": {
               "showName": true,
@@ -1891,8 +1909,8 @@
             "type": "evaluate",
             "name": "ReturnAltitudeError",
             "position": {
-              "x": 1680,
-              "y": -61
+              "x": 1688,
+              "y": -90
             },
             "parameters": {
               "showName": true,
@@ -1905,8 +1923,8 @@
             "type": "unit_delay",
             "name": "ReturnAltitudeMeanErrorSumPrev",
             "position": {
-              "x": 2535,
-              "y": -70
+              "x": 2543,
+              "y": -32
             },
             "parameters": {
               "showName": true,
@@ -1919,8 +1937,8 @@
             "type": "evaluate",
             "name": "ReturnAltitudeMeanErrorSum",
             "position": {
-              "x": 2052,
-              "y": -12
+              "x": 2060,
+              "y": 27
             },
             "parameters": {
               "showName": true,
@@ -1933,8 +1951,8 @@
             "type": "source",
             "name": "ReturnAltitudeMeanErrorOne",
             "position": {
-              "x": 1334,
-              "y": 195
+              "x": 1342,
+              "y": 200
             },
             "parameters": {
               "showName": true,
@@ -1948,8 +1966,8 @@
             "type": "unit_delay",
             "name": "ReturnAltitudeMeanErrorCountPrev",
             "position": {
-              "x": 2162,
-              "y": 201
+              "x": 2170,
+              "y": 204
             },
             "parameters": {
               "showName": true,
@@ -1962,8 +1980,8 @@
             "type": "evaluate",
             "name": "ReturnAltitudeMeanErrorCount",
             "position": {
-              "x": 1672,
-              "y": 134
+              "x": 1680,
+              "y": 155
             },
             "parameters": {
               "showName": true,
@@ -1976,8 +1994,8 @@
             "type": "evaluate",
             "name": "ReturnAltitudeMeanError",
             "position": {
-              "x": 2432,
-              "y": 74
+              "x": 2440,
+              "y": 112
             },
             "parameters": {
               "showName": true,
@@ -1990,8 +2008,8 @@
             "type": "assert",
             "name": "ReturnAltitude",
             "position": {
-              "x": 2797,
-              "y": 62
+              "x": 2805,
+              "y": 109
             },
             "parameters": {
               "showName": true,
@@ -2008,8 +2026,8 @@
             "type": "assert",
             "name": "ReturnAltitudeSwing",
             "position": {
-              "x": 2797,
-              "y": -82
+              "x": 2805,
+              "y": -179
             },
             "parameters": {
               "showName": true,
@@ -2027,7 +2045,7 @@
             "name": "From_heading_deg",
             "position": {
               "x": 100,
-              "y": 947
+              "y": 951
             },
             "parameters": {
               "showName": true,
@@ -2040,7 +2058,7 @@
             "name": "From_home_bearing_deg",
             "position": {
               "x": 100,
-              "y": 1091
+              "y": 1095
             },
             "parameters": {
               "showName": true,
@@ -2053,7 +2071,7 @@
             "name": "HeadingToHomeError",
             "position": {
               "x": 336,
-              "y": 1009
+              "y": 1010
             },
             "parameters": {
               "showName": true,
@@ -2066,8 +2084,8 @@
             "type": "unit_delay",
             "name": "HeadingErrorOnFlyHomeSeenBefore",
             "position": {
-              "x": 1334,
-              "y": 1115
+              "x": 1342,
+              "y": 1120
             },
             "parameters": {
               "showName": true,
@@ -2080,8 +2098,8 @@
             "type": "unit_delay",
             "name": "HeadingErrorOnFlyHomeSeenPrev",
             "position": {
-              "x": 1334,
-              "y": 1259
+              "x": 1342,
+              "y": 1264
             },
             "parameters": {
               "showName": true,
@@ -2094,8 +2112,8 @@
             "type": "evaluate",
             "name": "HeadingErrorOnFlyHomeSeen",
             "position": {
-              "x": 808,
-              "y": 1115
+              "x": 816,
+              "y": 1120
             },
             "parameters": {
               "showName": true,
@@ -2108,8 +2126,8 @@
             "type": "unit_delay",
             "name": "HeadingErrorOnFlyHomePrev",
             "position": {
-              "x": 2162,
-              "y": 1016
+              "x": 2170,
+              "y": 1014
             },
             "parameters": {
               "showName": true,
@@ -2122,8 +2140,8 @@
             "type": "evaluate",
             "name": "HeadingErrorOnFlyHome",
             "position": {
-              "x": 1672,
-              "y": 998
+              "x": 1680,
+              "y": 996
             },
             "parameters": {
               "showName": true,
@@ -2136,8 +2154,8 @@
             "type": "assert",
             "name": "HeadingOnFlyHome",
             "position": {
-              "x": 2797,
-              "y": 1016
+              "x": 2805,
+              "y": 1014
             },
             "parameters": {
               "showName": true,
@@ -2154,8 +2172,8 @@
             "type": "unit_delay",
             "name": "DistanceOnDescentSeenBefore",
             "position": {
-              "x": 1334,
-              "y": 827
+              "x": 1342,
+              "y": 832
             },
             "parameters": {
               "showName": true,
@@ -2168,8 +2186,8 @@
             "type": "unit_delay",
             "name": "DistanceOnDescentSeenPrev",
             "position": {
-              "x": 1334,
-              "y": 1547
+              "x": 1342,
+              "y": 1552
             },
             "parameters": {
               "showName": true,
@@ -2182,8 +2200,8 @@
             "type": "evaluate",
             "name": "DistanceOnDescentSeen",
             "position": {
-              "x": 808,
-              "y": 1259
+              "x": 816,
+              "y": 1264
             },
             "parameters": {
               "showName": true,
@@ -2196,8 +2214,8 @@
             "type": "unit_delay",
             "name": "DistanceOnDescentPrev",
             "position": {
-              "x": 2162,
-              "y": 836
+              "x": 2170,
+              "y": 834
             },
             "parameters": {
               "showName": true,
@@ -2210,8 +2228,8 @@
             "type": "evaluate",
             "name": "DistanceOnDescent",
             "position": {
-              "x": 1672,
-              "y": 818
+              "x": 1680,
+              "y": 816
             },
             "parameters": {
               "showName": true,
@@ -2224,8 +2242,8 @@
             "type": "assert",
             "name": "DescentDistance",
             "position": {
-              "x": 2797,
-              "y": 836
+              "x": 2805,
+              "y": 834
             },
             "parameters": {
               "showName": true,
@@ -2243,7 +2261,7 @@
             "name": "From_pos_ned",
             "position": {
               "x": 106,
-              "y": -542
+              "y": -543
             },
             "parameters": {
               "showName": true,
@@ -2256,7 +2274,7 @@
             "name": "North",
             "position": {
               "x": 446,
-              "y": -492
+              "y": -489
             },
             "parameters": {
               "showName": true,
@@ -2271,7 +2289,7 @@
             "name": "East",
             "position": {
               "x": 446,
-              "y": -636
+              "y": -633
             },
             "parameters": {
               "showName": true,
@@ -2285,8 +2303,8 @@
             "type": "unit_delay",
             "name": "HomeNorthPrev",
             "position": {
-              "x": 1334,
-              "y": -397
+              "x": 1342,
+              "y": -392
             },
             "parameters": {
               "showName": true,
@@ -2299,8 +2317,8 @@
             "type": "evaluate",
             "name": "HomeNorth",
             "position": {
-              "x": 833,
-              "y": -489
+              "x": 841,
+              "y": -484
             },
             "parameters": {
               "showName": true,
@@ -2313,8 +2331,8 @@
             "type": "unit_delay",
             "name": "HomeEastPrev",
             "position": {
-              "x": 1334,
-              "y": -721
+              "x": 1342,
+              "y": -716
             },
             "parameters": {
               "showName": true,
@@ -2327,8 +2345,8 @@
             "type": "evaluate",
             "name": "HomeEast",
             "position": {
-              "x": 833,
-              "y": -649
+              "x": 841,
+              "y": -644
             },
             "parameters": {
               "showName": true,
@@ -2341,8 +2359,8 @@
             "type": "evaluate",
             "name": "DistanceFromHome",
             "position": {
-              "x": 1224,
-              "y": -577
+              "x": 1232,
+              "y": -572
             },
             "parameters": {
               "showName": true,
@@ -2355,8 +2373,8 @@
             "type": "assert",
             "name": "LandsNearHome",
             "position": {
-              "x": 2797,
-              "y": -540
+              "x": 2805,
+              "y": -539
             },
             "parameters": {
               "showName": true,
@@ -2374,7 +2392,7 @@
             "name": "From_fc_armed",
             "position": {
               "x": 104,
-              "y": -1118
+              "y": -1119
             },
             "parameters": {
               "showName": true,
@@ -2386,8 +2404,8 @@
             "type": "assert",
             "name": "DisarmedOnImpact",
             "position": {
-              "x": 2797,
-              "y": -1074
+              "x": 2805,
+              "y": -1082
             },
             "parameters": {
               "showName": true,
@@ -2404,8 +2422,8 @@
             "type": "unit_delay",
             "name": "DistanceOnRotateSeenBefore",
             "position": {
-              "x": 1334,
-              "y": 1403
+              "x": 1342,
+              "y": 1408
             },
             "parameters": {
               "showName": true,
@@ -2418,8 +2436,8 @@
             "type": "unit_delay",
             "name": "DistanceOnRotateSeenPrev",
             "position": {
-              "x": 1334,
-              "y": 1710
+              "x": 1342,
+              "y": 1711
             },
             "parameters": {
               "showName": true,
@@ -2432,8 +2450,8 @@
             "type": "evaluate",
             "name": "DistanceOnRotateSeen",
             "position": {
-              "x": 808,
-              "y": 1523
+              "x": 816,
+              "y": 1524
             },
             "parameters": {
               "showName": true,
@@ -2446,8 +2464,8 @@
             "type": "unit_delay",
             "name": "DistanceOnRotatePrev",
             "position": {
-              "x": 2162,
-              "y": 1196
+              "x": 2170,
+              "y": 1194
             },
             "parameters": {
               "showName": true,
@@ -2460,8 +2478,8 @@
             "type": "evaluate",
             "name": "DistanceOnRotate",
             "position": {
-              "x": 1672,
-              "y": 1178
+              "x": 1680,
+              "y": 1176
             },
             "parameters": {
               "showName": true,
@@ -2474,8 +2492,8 @@
             "type": "assert",
             "name": "PitchesOutBeyondMinStart",
             "position": {
-              "x": 2797,
-              "y": 1196
+              "x": 2805,
+              "y": 1194
             },
             "parameters": {
               "showName": true,
@@ -2492,8 +2510,8 @@
             "type": "scale",
             "name": "RollPitchDeg",
             "position": {
-              "x": 918,
-              "y": -930
+              "x": 926,
+              "y": -938
             },
             "parameters": {
               "showName": true,
@@ -2506,7 +2524,7 @@
             "name": "From_euler",
             "position": {
               "x": 120,
-              "y": -974
+              "y": -975
             },
             "parameters": {
               "showName": true,
@@ -2519,7 +2537,7 @@
             "name": "RollPitch",
             "position": {
               "x": 446,
-              "y": -930
+              "y": -938
             },
             "parameters": {
               "showName": true,
@@ -2534,8 +2552,8 @@
             "type": "assert",
             "name": "StaysUpright",
             "position": {
-              "x": 2797,
-              "y": -930
+              "x": 2805,
+              "y": -938
             },
             "parameters": {
               "showName": true,
@@ -2566,7 +2584,7 @@
             "targetBlockId": "tests__DistanceAtSwitch",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 15.5
+              "midpointOffset": 7.5
             }
           },
           {
@@ -2576,7 +2594,7 @@
             "targetBlockId": "tests__DistanceAtSwitch",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -359.5
+              "midpointOffset": -371.5
             }
           },
           {
@@ -2586,7 +2604,7 @@
             "targetBlockId": "tests__DistanceAtSwitchPrev",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -89
+              "midpointOffset": -85
             }
           },
           {
@@ -2596,7 +2614,7 @@
             "targetBlockId": "tests__StartsTooClose",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -144.5
+              "midpointOffset": -148.5
             }
           },
           {
@@ -2606,7 +2624,7 @@
             "targetBlockId": "tests__AltitudeAtSwitch",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -47.5
+              "midpointOffset": -23.5
             }
           },
           {
@@ -2616,7 +2634,7 @@
             "targetBlockId": "tests__AltitudeAtSwitch",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 15.5
+              "midpointOffset": 7.5
             }
           },
           {
@@ -2626,7 +2644,7 @@
             "targetBlockId": "tests__AltitudeAtSwitch",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -367.5
+              "midpointOffset": -379.5
             }
           },
           {
@@ -2636,61 +2654,71 @@
             "targetBlockId": "tests__AltitudeAtSwitchPrev",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -57
+              "midpointOffset": -69
             }
           },
           {
-            "id": "w_10_tests__AltitudeAtSwitch_tests__ReturnAltitudeM",
+            "id": "w_10_tests__AltitudeAtSwitch_tests__StartsAboveLandingAltitude",
+            "sourceBlockId": "tests__AltitudeAtSwitch",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__StartsAboveLandingAltitude",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 1058.5
+            }
+          },
+          {
+            "id": "w_11_tests__AltitudeAtSwitch_tests__ReturnAltitudeM",
             "sourceBlockId": "tests__AltitudeAtSwitch",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeM",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -25
+              "midpointOffset": -37
             }
           },
           {
-            "id": "w_11_tests__From_rescue_phase_tests__InAttainAlt",
+            "id": "w_12_tests__From_rescue_phase_tests__InAttainAlt",
             "sourceBlockId": "tests__From_rescue_phase",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__InAttainAlt",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4.5
+              "midpointOffset": 43.5
             }
           },
           {
-            "id": "w_12_tests__InAttainAlt_tests__FirstAttainAlt",
+            "id": "w_13_tests__InAttainAlt_tests__FirstAttainAlt",
             "sourceBlockId": "tests__InAttainAlt",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstAttainAlt",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 0
+              "midpointOffset": -4
             }
           },
           {
-            "id": "w_13_tests__Time_tests__FirstAttainAlt",
+            "id": "w_14_tests__Time_tests__FirstAttainAlt",
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstAttainAlt",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -206
+              "midpointOffset": -218
             }
           },
           {
-            "id": "w_14_tests__FirstAttainAltPrev_tests__FirstAttainAlt",
+            "id": "w_15_tests__FirstAttainAltPrev_tests__FirstAttainAlt",
             "sourceBlockId": "tests__FirstAttainAltPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstAttainAlt",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -397
+              "midpointOffset": -341
             }
           },
           {
-            "id": "w_15_tests__FirstAttainAlt_tests__FirstAttainAltPrev",
+            "id": "w_16_tests__FirstAttainAlt_tests__FirstAttainAltPrev",
             "sourceBlockId": "tests__FirstAttainAlt",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstAttainAltPrev",
@@ -2700,47 +2728,47 @@
             }
           },
           {
-            "id": "w_16_tests__FirstAttainAlt_tests__StartsAtSwitch",
+            "id": "w_17_tests__FirstAttainAlt_tests__StartsAtSwitch",
             "sourceBlockId": "tests__FirstAttainAlt",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__StartsAtSwitch",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 812.5
+              "midpointOffset": 447.5
             }
           },
           {
-            "id": "w_17_tests__From_rescue_phase_tests__InRotate",
+            "id": "w_18_tests__From_rescue_phase_tests__InRotate",
             "sourceBlockId": "tests__From_rescue_phase",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__InRotate",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4.5
+              "midpointOffset": 43.5
             }
           },
           {
-            "id": "w_18_tests__InRotate_tests__FirstRotate",
+            "id": "w_19_tests__InRotate_tests__FirstRotate",
             "sourceBlockId": "tests__InRotate",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstRotate",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -64
+              "midpointOffset": -52
             }
           },
           {
-            "id": "w_19_tests__Time_tests__FirstRotate",
+            "id": "w_20_tests__Time_tests__FirstRotate",
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstRotate",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -206
+              "midpointOffset": -218
             }
           },
           {
-            "id": "w_20_tests__FirstRotatePrev_tests__FirstRotate",
+            "id": "w_21_tests__FirstRotatePrev_tests__FirstRotate",
             "sourceBlockId": "tests__FirstRotatePrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstRotate",
@@ -2750,7 +2778,7 @@
             }
           },
           {
-            "id": "w_21_tests__FirstRotate_tests__FirstRotatePrev",
+            "id": "w_22_tests__FirstRotate_tests__FirstRotatePrev",
             "sourceBlockId": "tests__FirstRotate",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstRotatePrev",
@@ -2760,47 +2788,47 @@
             }
           },
           {
-            "id": "w_22_tests__From_rescue_phase_tests__InFlyHome",
+            "id": "w_23_tests__From_rescue_phase_tests__InFlyHome",
             "sourceBlockId": "tests__From_rescue_phase",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__InFlyHome",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4.5
+              "midpointOffset": 43.5
             }
           },
           {
-            "id": "w_23_tests__InFlyHome_tests__FirstFlyHome",
+            "id": "w_24_tests__InFlyHome_tests__FirstFlyHome",
             "sourceBlockId": "tests__InFlyHome",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstFlyHome",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -56
+              "midpointOffset": -60
             }
           },
           {
-            "id": "w_24_tests__Time_tests__FirstFlyHome",
+            "id": "w_25_tests__Time_tests__FirstFlyHome",
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstFlyHome",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -206
+              "midpointOffset": -218
             }
           },
           {
-            "id": "w_25_tests__FirstFlyHomePrev_tests__FirstFlyHome",
+            "id": "w_26_tests__FirstFlyHomePrev_tests__FirstFlyHome",
             "sourceBlockId": "tests__FirstFlyHomePrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstFlyHome",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -333
+              "midpointOffset": -325
             }
           },
           {
-            "id": "w_26_tests__FirstFlyHome_tests__FirstFlyHomePrev",
+            "id": "w_27_tests__FirstFlyHome_tests__FirstFlyHomePrev",
             "sourceBlockId": "tests__FirstFlyHome",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstFlyHomePrev",
@@ -2810,47 +2838,47 @@
             }
           },
           {
-            "id": "w_27_tests__From_rescue_phase_tests__InDescent",
+            "id": "w_28_tests__From_rescue_phase_tests__InDescent",
             "sourceBlockId": "tests__From_rescue_phase",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__InDescent",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4.5
+              "midpointOffset": 43.5
             }
           },
           {
-            "id": "w_28_tests__InDescent_tests__FirstDescent",
+            "id": "w_29_tests__InDescent_tests__FirstDescent",
             "sourceBlockId": "tests__InDescent",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstDescent",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -72
+              "midpointOffset": -76
             }
           },
           {
-            "id": "w_29_tests__Time_tests__FirstDescent",
+            "id": "w_30_tests__Time_tests__FirstDescent",
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstDescent",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -206
+              "midpointOffset": -218
             }
           },
           {
-            "id": "w_30_tests__FirstDescentPrev_tests__FirstDescent",
+            "id": "w_31_tests__FirstDescentPrev_tests__FirstDescent",
             "sourceBlockId": "tests__FirstDescentPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstDescent",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -325
+              "midpointOffset": -333
             }
           },
           {
-            "id": "w_31_tests__FirstDescent_tests__FirstDescentPrev",
+            "id": "w_32_tests__FirstDescent_tests__FirstDescentPrev",
             "sourceBlockId": "tests__FirstDescent",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstDescentPrev",
@@ -2860,44 +2888,44 @@
             }
           },
           {
-            "id": "w_32_tests__From_rescue_phase_tests__InLanding",
+            "id": "w_33_tests__From_rescue_phase_tests__InLanding",
             "sourceBlockId": "tests__From_rescue_phase",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__InLanding",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4.5
+              "midpointOffset": 43.5
             }
           },
           {
-            "id": "w_33_tests__InLanding_tests__FirstLanding",
+            "id": "w_34_tests__InLanding_tests__FirstLanding",
             "sourceBlockId": "tests__InLanding",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstLanding",
             "targetPortIndex": 0
           },
           {
-            "id": "w_34_tests__Time_tests__FirstLanding",
+            "id": "w_35_tests__Time_tests__FirstLanding",
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstLanding",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -206
+              "midpointOffset": 150
             }
           },
           {
-            "id": "w_35_tests__FirstLandingPrev_tests__FirstLanding",
+            "id": "w_36_tests__FirstLandingPrev_tests__FirstLanding",
             "sourceBlockId": "tests__FirstLandingPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstLanding",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -349
+              "midpointOffset": -357
             }
           },
           {
-            "id": "w_36_tests__FirstLanding_tests__FirstLandingPrev",
+            "id": "w_37_tests__FirstLanding_tests__FirstLandingPrev",
             "sourceBlockId": "tests__FirstLanding",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstLandingPrev",
@@ -2907,7 +2935,7 @@
             }
           },
           {
-            "id": "w_37_tests__FirstAttainAlt_tests__PhaseOrder",
+            "id": "w_38_tests__FirstAttainAlt_tests__PhaseOrder",
             "sourceBlockId": "tests__FirstAttainAlt",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__PhaseOrder",
@@ -2917,7 +2945,7 @@
             }
           },
           {
-            "id": "w_38_tests__FirstRotate_tests__PhaseOrder",
+            "id": "w_39_tests__FirstRotate_tests__PhaseOrder",
             "sourceBlockId": "tests__FirstRotate",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__PhaseOrder",
@@ -2927,7 +2955,7 @@
             }
           },
           {
-            "id": "w_39_tests__FirstFlyHome_tests__PhaseOrder",
+            "id": "w_40_tests__FirstFlyHome_tests__PhaseOrder",
             "sourceBlockId": "tests__FirstFlyHome",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__PhaseOrder",
@@ -2937,7 +2965,7 @@
             }
           },
           {
-            "id": "w_40_tests__FirstDescent_tests__PhaseOrder",
+            "id": "w_41_tests__FirstDescent_tests__PhaseOrder",
             "sourceBlockId": "tests__FirstDescent",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__PhaseOrder",
@@ -2947,7 +2975,7 @@
             }
           },
           {
-            "id": "w_41_tests__FirstLanding_tests__PhaseOrder",
+            "id": "w_42_tests__FirstLanding_tests__PhaseOrder",
             "sourceBlockId": "tests__FirstLanding",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__PhaseOrder",
@@ -2957,7 +2985,7 @@
             }
           },
           {
-            "id": "w_42_tests__PhaseOrder_tests__PhasesInOrder",
+            "id": "w_43_tests__PhaseOrder_tests__PhasesInOrder",
             "sourceBlockId": "tests__PhaseOrder",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__PhasesInOrder",
@@ -2967,34 +2995,34 @@
             }
           },
           {
-            "id": "w_43_tests__From_rescue_phase_tests__AbortedNow",
+            "id": "w_44_tests__From_rescue_phase_tests__AbortedNow",
             "sourceBlockId": "tests__From_rescue_phase",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__AbortedNow",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -8
+              "midpointOffset": 40
             }
           },
           {
-            "id": "w_44_tests__AbortedNow_tests__Aborted",
+            "id": "w_45_tests__AbortedNow_tests__Aborted",
             "sourceBlockId": "tests__AbortedNow",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__Aborted",
             "targetPortIndex": 0
           },
           {
-            "id": "w_45_tests__AbortedPrev_tests__Aborted",
+            "id": "w_46_tests__AbortedPrev_tests__Aborted",
             "sourceBlockId": "tests__AbortedPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__Aborted",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -365
+              "midpointOffset": -373
             }
           },
           {
-            "id": "w_46_tests__Aborted_tests__AbortedPrev",
+            "id": "w_47_tests__Aborted_tests__AbortedPrev",
             "sourceBlockId": "tests__Aborted",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__AbortedPrev",
@@ -3004,7 +3032,7 @@
             }
           },
           {
-            "id": "w_47_tests__Aborted_tests__NeverAborts",
+            "id": "w_48_tests__Aborted_tests__NeverAborts",
             "sourceBlockId": "tests__Aborted",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__NeverAborts",
@@ -3014,47 +3042,47 @@
             }
           },
           {
-            "id": "w_48_tests__From_rescue_active_tests__ModeWhileActive",
+            "id": "w_49_tests__From_rescue_active_tests__ModeWhileActive",
             "sourceBlockId": "tests__From_rescue_active",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ModeWhileActive",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -20
+              "midpointOffset": -28
             }
           },
           {
-            "id": "w_49_tests__From_fc_mode_tests__ModeWhileActive",
+            "id": "w_50_tests__From_fc_mode_tests__ModeWhileActive",
             "sourceBlockId": "tests__From_fc_mode",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ModeWhileActive",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -9
+              "midpointOffset": -17
             }
           },
           {
-            "id": "w_50_tests__ModeWhileActive_tests__ModeIsRescueWhileActive",
+            "id": "w_51_tests__ModeWhileActive_tests__ModeIsRescueWhileActive",
             "sourceBlockId": "tests__ModeWhileActive",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ModeIsRescueWhileActive",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 1024.5
+              "midpointOffset": 1028.5
             }
           },
           {
-            "id": "w_51_tests__InFlyHome_tests__FlyHomeSettled",
+            "id": "w_52_tests__InFlyHome_tests__FlyHomeSettled",
             "sourceBlockId": "tests__InFlyHome",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FlyHomeSettled",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -264
+              "midpointOffset": -268
             }
           },
           {
-            "id": "w_52_tests__FirstFlyHome_tests__FlyHomeSettled",
+            "id": "w_53_tests__FirstFlyHome_tests__FlyHomeSettled",
             "sourceBlockId": "tests__FirstFlyHome",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FlyHomeSettled",
@@ -3064,37 +3092,37 @@
             }
           },
           {
-            "id": "w_53_tests__Time_tests__FlyHomeSettled",
+            "id": "w_54_tests__Time_tests__FlyHomeSettled",
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FlyHomeSettled",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -414
+              "midpointOffset": -426
             }
           },
           {
-            "id": "w_54_tests__FlyHomeSettled_tests__ReturnAltitudeError",
+            "id": "w_55_tests__FlyHomeSettled_tests__ReturnAltitudeError",
             "sourceBlockId": "tests__FlyHomeSettled",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeError",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -60
+              "midpointOffset": -28
             }
           },
           {
-            "id": "w_55_tests__From_alt_est_tests__ReturnAltitudeError",
+            "id": "w_56_tests__From_alt_est_tests__ReturnAltitudeError",
             "sourceBlockId": "tests__From_alt_est",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeError",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 683
+              "midpointOffset": -685
             }
           },
           {
-            "id": "w_56_tests__ReturnAltitudeM_tests__ReturnAltitudeError",
+            "id": "w_57_tests__ReturnAltitudeM_tests__ReturnAltitudeError",
             "sourceBlockId": "tests__ReturnAltitudeM",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeError",
@@ -3104,7 +3132,7 @@
             }
           },
           {
-            "id": "w_57_tests__ReturnAltitudeError_tests__ReturnAltitudeMeanErrorSum",
+            "id": "w_58_tests__ReturnAltitudeError_tests__ReturnAltitudeMeanErrorSum",
             "sourceBlockId": "tests__ReturnAltitudeError",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeMeanErrorSum",
@@ -3114,157 +3142,157 @@
             }
           },
           {
-            "id": "w_58_tests__FlyHomeSettled_tests__ReturnAltitudeMeanErrorSum",
+            "id": "w_59_tests__FlyHomeSettled_tests__ReturnAltitudeMeanErrorSum",
             "sourceBlockId": "tests__FlyHomeSettled",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeMeanErrorSum",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -246
+              "midpointOffset": -214
             }
           },
           {
-            "id": "w_59_tests__ReturnAltitudeMeanErrorSumPrev_tests__ReturnAltitudeMeanErrorSum",
+            "id": "w_60_tests__ReturnAltitudeMeanErrorSumPrev_tests__ReturnAltitudeMeanErrorSum",
             "sourceBlockId": "tests__ReturnAltitudeMeanErrorSumPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeMeanErrorSum",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -313.5
+              "midpointOffset": -321.5
             }
           },
           {
-            "id": "w_60_tests__ReturnAltitudeMeanErrorSum_tests__ReturnAltitudeMeanErrorSumPrev",
+            "id": "w_61_tests__ReturnAltitudeMeanErrorSum_tests__ReturnAltitudeMeanErrorSumPrev",
             "sourceBlockId": "tests__ReturnAltitudeMeanErrorSum",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeMeanErrorSumPrev",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -55.5
+              "midpointOffset": -51.5
             }
           },
           {
-            "id": "w_61_tests__ReturnAltitudeMeanErrorOne_tests__ReturnAltitudeMeanErrorCount",
+            "id": "w_62_tests__ReturnAltitudeMeanErrorOne_tests__ReturnAltitudeMeanErrorCount",
             "sourceBlockId": "tests__ReturnAltitudeMeanErrorOne",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeMeanErrorCount",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 7
+              "midpointOffset": -1
             }
           },
           {
-            "id": "w_62_tests__FlyHomeSettled_tests__ReturnAltitudeMeanErrorCount",
+            "id": "w_63_tests__FlyHomeSettled_tests__ReturnAltitudeMeanErrorCount",
             "sourceBlockId": "tests__FlyHomeSettled",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeMeanErrorCount",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -56
+              "midpointOffset": -24
             }
           },
           {
-            "id": "w_63_tests__ReturnAltitudeMeanErrorCountPrev_tests__ReturnAltitudeMeanErrorCount",
+            "id": "w_64_tests__ReturnAltitudeMeanErrorCountPrev_tests__ReturnAltitudeMeanErrorCount",
             "sourceBlockId": "tests__ReturnAltitudeMeanErrorCountPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeMeanErrorCount",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -303
+              "midpointOffset": -311
             }
           },
           {
-            "id": "w_64_tests__ReturnAltitudeMeanErrorCount_tests__ReturnAltitudeMeanErrorCountPrev",
+            "id": "w_65_tests__ReturnAltitudeMeanErrorCount_tests__ReturnAltitudeMeanErrorCountPrev",
             "sourceBlockId": "tests__ReturnAltitudeMeanErrorCount",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeMeanErrorCountPrev",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -55
+              "midpointOffset": -47
             }
           },
           {
-            "id": "w_65_tests__ReturnAltitudeMeanErrorSum_tests__ReturnAltitudeMeanError",
+            "id": "w_66_tests__ReturnAltitudeMeanErrorSum_tests__ReturnAltitudeMeanError",
             "sourceBlockId": "tests__ReturnAltitudeMeanErrorSum",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeMeanError",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -4
-            }
-          },
-          {
-            "id": "w_66_tests__ReturnAltitudeMeanErrorCount_tests__ReturnAltitudeMeanError",
-            "sourceBlockId": "tests__ReturnAltitudeMeanErrorCount",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__ReturnAltitudeMeanError",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": 194
-            }
-          },
-          {
-            "id": "w_67_tests__ReturnAltitudeMeanError_tests__ReturnAltitude",
-            "sourceBlockId": "tests__ReturnAltitudeMeanError",
-            "sourcePortIndex": 0,
-            "targetBlockId": "tests__ReturnAltitude",
             "targetPortIndex": 0,
             "routing": {
               "midpointOffset": 0
             }
           },
           {
-            "id": "w_68_tests__ReturnAltitudeError_tests__ReturnAltitudeSwing",
+            "id": "w_67_tests__ReturnAltitudeMeanErrorCount_tests__ReturnAltitudeMeanError",
+            "sourceBlockId": "tests__ReturnAltitudeMeanErrorCount",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ReturnAltitudeMeanError",
+            "targetPortIndex": 1,
+            "routing": {
+              "midpointOffset": -182
+            }
+          },
+          {
+            "id": "w_68_tests__ReturnAltitudeMeanError_tests__ReturnAltitude",
+            "sourceBlockId": "tests__ReturnAltitudeMeanError",
+            "sourcePortIndex": 0,
+            "targetBlockId": "tests__ReturnAltitude",
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 8
+            }
+          },
+          {
+            "id": "w_69_tests__ReturnAltitudeError_tests__ReturnAltitudeSwing",
             "sourceBlockId": "tests__ReturnAltitudeError",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ReturnAltitudeSwing",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -377
+              "midpointOffset": 3
             }
           },
           {
-            "id": "w_69_tests__From_heading_deg_tests__HeadingToHomeError",
+            "id": "w_70_tests__From_heading_deg_tests__HeadingToHomeError",
             "sourceBlockId": "tests__From_heading_deg",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingToHomeError",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 4
+              "midpointOffset": -4
             }
           },
           {
-            "id": "w_70_tests__From_home_bearing_deg_tests__HeadingToHomeError",
+            "id": "w_71_tests__From_home_bearing_deg_tests__HeadingToHomeError",
             "sourceBlockId": "tests__From_home_bearing_deg",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingToHomeError",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 12
+              "midpointOffset": 4
             }
           },
           {
-            "id": "w_71_tests__InFlyHome_tests__HeadingErrorOnFlyHomeSeen",
+            "id": "w_72_tests__InFlyHome_tests__HeadingErrorOnFlyHomeSeen",
             "sourceBlockId": "tests__InFlyHome",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingErrorOnFlyHomeSeen",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -56
+              "midpointOffset": -60
             }
           },
           {
-            "id": "w_72_tests__HeadingErrorOnFlyHomeSeenPrev_tests__HeadingErrorOnFlyHomeSeen",
+            "id": "w_73_tests__HeadingErrorOnFlyHomeSeenPrev_tests__HeadingErrorOnFlyHomeSeen",
             "sourceBlockId": "tests__HeadingErrorOnFlyHomeSeenPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingErrorOnFlyHomeSeen",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -341
+              "midpointOffset": -349
             }
           },
           {
-            "id": "w_73_tests__HeadingErrorOnFlyHomeSeen_tests__HeadingErrorOnFlyHomeSeenPrev",
+            "id": "w_74_tests__HeadingErrorOnFlyHomeSeen_tests__HeadingErrorOnFlyHomeSeenPrev",
             "sourceBlockId": "tests__HeadingErrorOnFlyHomeSeen",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingErrorOnFlyHomeSeenPrev",
@@ -3274,88 +3302,88 @@
             }
           },
           {
-            "id": "w_74_tests__HeadingErrorOnFlyHomeSeen_tests__HeadingErrorOnFlyHomeSeenBefore",
+            "id": "w_75_tests__HeadingErrorOnFlyHomeSeen_tests__HeadingErrorOnFlyHomeSeenBefore",
             "sourceBlockId": "tests__HeadingErrorOnFlyHomeSeen",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingErrorOnFlyHomeSeenBefore",
             "targetPortIndex": 0
           },
           {
-            "id": "w_75_tests__HeadingToHomeError_tests__HeadingErrorOnFlyHome",
+            "id": "w_76_tests__HeadingToHomeError_tests__HeadingErrorOnFlyHome",
             "sourceBlockId": "tests__HeadingToHomeError",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingErrorOnFlyHome",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 436
+              "midpointOffset": 448
             }
           },
           {
-            "id": "w_76_tests__InFlyHome_tests__HeadingErrorOnFlyHome",
+            "id": "w_77_tests__InFlyHome_tests__HeadingErrorOnFlyHome",
             "sourceBlockId": "tests__InFlyHome",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingErrorOnFlyHome",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -488
+              "midpointOffset": 408
             }
           },
           {
-            "id": "w_77_tests__HeadingErrorOnFlyHomeSeenBefore_tests__HeadingErrorOnFlyHome",
+            "id": "w_78_tests__HeadingErrorOnFlyHomeSeenBefore_tests__HeadingErrorOnFlyHome",
             "sourceBlockId": "tests__HeadingErrorOnFlyHomeSeenBefore",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingErrorOnFlyHome",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": 63
+              "midpointOffset": 71
             }
           },
           {
-            "id": "w_78_tests__HeadingErrorOnFlyHomePrev_tests__HeadingErrorOnFlyHome",
+            "id": "w_79_tests__HeadingErrorOnFlyHomePrev_tests__HeadingErrorOnFlyHome",
             "sourceBlockId": "tests__HeadingErrorOnFlyHomePrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingErrorOnFlyHome",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": -359
+              "midpointOffset": -351
             }
           },
           {
-            "id": "w_79_tests__HeadingErrorOnFlyHome_tests__HeadingErrorOnFlyHomePrev",
+            "id": "w_80_tests__HeadingErrorOnFlyHome_tests__HeadingErrorOnFlyHomePrev",
             "sourceBlockId": "tests__HeadingErrorOnFlyHome",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingErrorOnFlyHomePrev",
             "targetPortIndex": 0
           },
           {
-            "id": "w_80_tests__HeadingErrorOnFlyHome_tests__HeadingOnFlyHome",
+            "id": "w_81_tests__HeadingErrorOnFlyHome_tests__HeadingOnFlyHome",
             "sourceBlockId": "tests__HeadingErrorOnFlyHome",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeadingOnFlyHome",
             "targetPortIndex": 0
           },
           {
-            "id": "w_81_tests__InDescent_tests__DistanceOnDescentSeen",
+            "id": "w_82_tests__InDescent_tests__DistanceOnDescentSeen",
             "sourceBlockId": "tests__InDescent",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnDescentSeen",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -72
+              "midpointOffset": -76
             }
           },
           {
-            "id": "w_82_tests__DistanceOnDescentSeenPrev_tests__DistanceOnDescentSeen",
+            "id": "w_83_tests__DistanceOnDescentSeenPrev_tests__DistanceOnDescentSeen",
             "sourceBlockId": "tests__DistanceOnDescentSeenPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnDescentSeen",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -381
+              "midpointOffset": -389
             }
           },
           {
-            "id": "w_83_tests__DistanceOnDescentSeen_tests__DistanceOnDescentSeenPrev",
+            "id": "w_84_tests__DistanceOnDescentSeen_tests__DistanceOnDescentSeenPrev",
             "sourceBlockId": "tests__DistanceOnDescentSeen",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnDescentSeenPrev",
@@ -3365,7 +3393,7 @@
             }
           },
           {
-            "id": "w_84_tests__DistanceOnDescentSeen_tests__DistanceOnDescentSeenBefore",
+            "id": "w_85_tests__DistanceOnDescentSeen_tests__DistanceOnDescentSeenBefore",
             "sourceBlockId": "tests__DistanceOnDescentSeen",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnDescentSeenBefore",
@@ -3375,111 +3403,111 @@
             }
           },
           {
-            "id": "w_85_tests__From_home_distance_m_tests__DistanceOnDescent",
+            "id": "w_86_tests__From_home_distance_m_tests__DistanceOnDescent",
             "sourceBlockId": "tests__From_home_distance_m",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnDescent",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 628
+              "midpointOffset": 640
             }
           },
           {
-            "id": "w_86_tests__InDescent_tests__DistanceOnDescent",
+            "id": "w_87_tests__InDescent_tests__DistanceOnDescent",
             "sourceBlockId": "tests__InDescent",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnDescent",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 412
+              "midpointOffset": 416
             }
           },
           {
-            "id": "w_87_tests__DistanceOnDescentSeenBefore_tests__DistanceOnDescent",
+            "id": "w_88_tests__DistanceOnDescentSeenBefore_tests__DistanceOnDescent",
             "sourceBlockId": "tests__DistanceOnDescentSeenBefore",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnDescent",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": 39
+              "midpointOffset": 47
             }
           },
           {
-            "id": "w_88_tests__DistanceOnDescentPrev_tests__DistanceOnDescent",
+            "id": "w_89_tests__DistanceOnDescentPrev_tests__DistanceOnDescent",
             "sourceBlockId": "tests__DistanceOnDescentPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnDescent",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": -311
+              "midpointOffset": -303
             }
           },
           {
-            "id": "w_89_tests__DistanceOnDescent_tests__DistanceOnDescentPrev",
+            "id": "w_90_tests__DistanceOnDescent_tests__DistanceOnDescentPrev",
             "sourceBlockId": "tests__DistanceOnDescent",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnDescentPrev",
             "targetPortIndex": 0
           },
           {
-            "id": "w_90_tests__DistanceOnDescent_tests__DescentDistance",
+            "id": "w_91_tests__DistanceOnDescent_tests__DescentDistance",
             "sourceBlockId": "tests__DistanceOnDescent",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DescentDistance",
             "targetPortIndex": 0
           },
           {
-            "id": "w_91_tests__From_pos_ned_tests__North",
+            "id": "w_92_tests__From_pos_ned_tests__North",
             "sourceBlockId": "tests__From_pos_ned",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__North",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -24
+              "midpointOffset": -32
             }
           },
           {
-            "id": "w_92_tests__From_pos_ned_tests__East",
+            "id": "w_93_tests__From_pos_ned_tests__East",
             "sourceBlockId": "tests__From_pos_ned",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__East",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -24
+              "midpointOffset": -32
             }
           },
           {
-            "id": "w_93_tests__North_tests__HomeNorth",
+            "id": "w_94_tests__North_tests__HomeNorth",
             "sourceBlockId": "tests__North",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HomeNorth",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 10.5
+              "midpointOffset": 22.5
             }
           },
           {
-            "id": "w_94_tests__Time_tests__HomeNorth",
+            "id": "w_95_tests__Time_tests__HomeNorth",
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HomeNorth",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -218.5
+              "midpointOffset": -230.5
             }
           },
           {
-            "id": "w_95_tests__HomeNorthPrev_tests__HomeNorth",
+            "id": "w_96_tests__HomeNorthPrev_tests__HomeNorth",
             "sourceBlockId": "tests__HomeNorthPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HomeNorth",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -425.5
+              "midpointOffset": -417.5
             }
           },
           {
-            "id": "w_96_tests__HomeNorth_tests__HomeNorthPrev",
+            "id": "w_97_tests__HomeNorth_tests__HomeNorthPrev",
             "sourceBlockId": "tests__HomeNorth",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HomeNorthPrev",
@@ -3489,37 +3517,37 @@
             }
           },
           {
-            "id": "w_97_tests__East_tests__HomeEast",
+            "id": "w_98_tests__East_tests__HomeEast",
             "sourceBlockId": "tests__East",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HomeEast",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 2.5
+              "midpointOffset": 6.5
             }
           },
           {
-            "id": "w_98_tests__Time_tests__HomeEast",
+            "id": "w_99_tests__Time_tests__HomeEast",
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HomeEast",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -218.5
+              "midpointOffset": -230.5
             }
           },
           {
-            "id": "w_99_tests__HomeEastPrev_tests__HomeEast",
+            "id": "w_100_tests__HomeEastPrev_tests__HomeEast",
             "sourceBlockId": "tests__HomeEastPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HomeEast",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -369.5
+              "midpointOffset": -377.5
             }
           },
           {
-            "id": "w_100_tests__HomeEast_tests__HomeEastPrev",
+            "id": "w_101_tests__HomeEast_tests__HomeEastPrev",
             "sourceBlockId": "tests__HomeEast",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HomeEastPrev",
@@ -3529,27 +3557,27 @@
             }
           },
           {
-            "id": "w_101_tests__North_tests__DistanceFromHome",
+            "id": "w_102_tests__North_tests__DistanceFromHome",
             "sourceBlockId": "tests__North",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceFromHome",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -185
+              "midpointOffset": -173
             }
           },
           {
-            "id": "w_102_tests__East_tests__DistanceFromHome",
+            "id": "w_103_tests__East_tests__DistanceFromHome",
             "sourceBlockId": "tests__East",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceFromHome",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -193
+              "midpointOffset": -189
             }
           },
           {
-            "id": "w_103_tests__HomeNorth_tests__DistanceFromHome",
+            "id": "w_104_tests__HomeNorth_tests__DistanceFromHome",
             "sourceBlockId": "tests__HomeNorth",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceFromHome",
@@ -3559,7 +3587,7 @@
             }
           },
           {
-            "id": "w_104_tests__HomeEast_tests__DistanceFromHome",
+            "id": "w_105_tests__HomeEast_tests__DistanceFromHome",
             "sourceBlockId": "tests__HomeEast",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceFromHome",
@@ -3569,7 +3597,7 @@
             }
           },
           {
-            "id": "w_105_tests__DistanceFromHome_tests__LandsNearHome",
+            "id": "w_106_tests__DistanceFromHome_tests__LandsNearHome",
             "sourceBlockId": "tests__DistanceFromHome",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__LandsNearHome",
@@ -3579,37 +3607,37 @@
             }
           },
           {
-            "id": "w_106_tests__From_fc_armed_tests__DisarmedOnImpact",
+            "id": "w_107_tests__From_fc_armed_tests__DisarmedOnImpact",
             "sourceBlockId": "tests__From_fc_armed",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DisarmedOnImpact",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 1226.5
+              "midpointOffset": 1230.5
             }
           },
           {
-            "id": "w_107_tests__InRotate_tests__DistanceOnRotateSeen",
+            "id": "w_108_tests__InRotate_tests__DistanceOnRotateSeen",
             "sourceBlockId": "tests__InRotate",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnRotateSeen",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -64
+              "midpointOffset": -52
             }
           },
           {
-            "id": "w_108_tests__DistanceOnRotateSeenPrev_tests__DistanceOnRotateSeen",
+            "id": "w_109_tests__DistanceOnRotateSeenPrev_tests__DistanceOnRotateSeen",
             "sourceBlockId": "tests__DistanceOnRotateSeenPrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnRotateSeen",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -373
+              "midpointOffset": -381
             }
           },
           {
-            "id": "w_109_tests__DistanceOnRotateSeen_tests__DistanceOnRotateSeenPrev",
+            "id": "w_110_tests__DistanceOnRotateSeen_tests__DistanceOnRotateSeenPrev",
             "sourceBlockId": "tests__DistanceOnRotateSeen",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnRotateSeenPrev",
@@ -3619,7 +3647,7 @@
             }
           },
           {
-            "id": "w_110_tests__DistanceOnRotateSeen_tests__DistanceOnRotateSeenBefore",
+            "id": "w_111_tests__DistanceOnRotateSeen_tests__DistanceOnRotateSeenBefore",
             "sourceBlockId": "tests__DistanceOnRotateSeen",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnRotateSeenBefore",
@@ -3629,78 +3657,78 @@
             }
           },
           {
-            "id": "w_111_tests__From_home_distance_m_tests__DistanceOnRotate",
+            "id": "w_112_tests__From_home_distance_m_tests__DistanceOnRotate",
             "sourceBlockId": "tests__From_home_distance_m",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnRotate",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 208
+              "midpointOffset": 212
             }
           },
           {
-            "id": "w_112_tests__InRotate_tests__DistanceOnRotate",
+            "id": "w_113_tests__InRotate_tests__DistanceOnRotate",
             "sourceBlockId": "tests__InRotate",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnRotate",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -496
+              "midpointOffset": -484
             }
           },
           {
-            "id": "w_113_tests__DistanceOnRotateSeenBefore_tests__DistanceOnRotate",
+            "id": "w_114_tests__DistanceOnRotateSeenBefore_tests__DistanceOnRotate",
             "sourceBlockId": "tests__DistanceOnRotateSeenBefore",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnRotate",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": 79
+              "midpointOffset": 87
             }
           },
           {
-            "id": "w_114_tests__DistanceOnRotatePrev_tests__DistanceOnRotate",
+            "id": "w_115_tests__DistanceOnRotatePrev_tests__DistanceOnRotate",
             "sourceBlockId": "tests__DistanceOnRotatePrev",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnRotate",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": -343
+              "midpointOffset": -335
             }
           },
           {
-            "id": "w_115_tests__DistanceOnRotate_tests__DistanceOnRotatePrev",
+            "id": "w_116_tests__DistanceOnRotate_tests__DistanceOnRotatePrev",
             "sourceBlockId": "tests__DistanceOnRotate",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__DistanceOnRotatePrev",
             "targetPortIndex": 0
           },
           {
-            "id": "w_116_tests__DistanceOnRotate_tests__PitchesOutBeyondMinStart",
+            "id": "w_117_tests__DistanceOnRotate_tests__PitchesOutBeyondMinStart",
             "sourceBlockId": "tests__DistanceOnRotate",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__PitchesOutBeyondMinStart",
             "targetPortIndex": 0
           },
           {
-            "id": "w_117_tests__From_euler_tests__RollPitch",
+            "id": "w_118_tests__From_euler_tests__RollPitch",
             "sourceBlockId": "tests__From_euler",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__RollPitch",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -73
+              "midpointOffset": -81
             }
           },
           {
-            "id": "w_118_tests__RollPitch_tests__RollPitchDeg",
+            "id": "w_119_tests__RollPitch_tests__RollPitchDeg",
             "sourceBlockId": "tests__RollPitch",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__RollPitchDeg",
             "targetPortIndex": 0
           },
           {
-            "id": "w_119_tests__RollPitchDeg_tests__StaysUpright",
+            "id": "w_120_tests__RollPitchDeg_tests__StaysUpright",
             "sourceBlockId": "tests__RollPitchDeg",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__StaysUpright",
@@ -3708,8 +3736,8 @@
           }
         ],
         "extents": {
-          "width": 3097,
-          "height": 2054
+          "width": 3105,
+          "height": 2055
         }
       }
     ]
