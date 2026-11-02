@@ -15,6 +15,16 @@ In practice:
 
 "As practical" means: do not change established names in the code or the model, and do not rewrite a sentence so that it becomes less exact. When STE and precision conflict, keep the precision.
 
+## Engineering models: sensor fidelity is a key goal
+
+The sensor models are a key goal of the FPV reference model, not a detail. A control result is only as good as the sensor path behind it. In practice:
+
+- **Compare with the manufacturer's data.** Check each sensor model against the datasheet: density and RMS conventions, filters, output rates and lag. Name the document and its revision in the code or the docs.
+- **Compare the whole path.** Include on-chip filters and the firmware's handling of samples. A correct parameter value in a wrong structure gives a wrong result.
+- **Test against independent numbers.** Do not check a sensor model only against the formula it implements. That test cannot find an error in the formula.
+- **Say what is an estimate.** Mark values that do not come from a datasheet or a measurement as estimates, and state what the model leaves out.
+- **Do not state a conclusion about a device from a model structure.** Before you report that a sensor change helps or harms, confirm that the model represents the mechanism.
+
 ## Engineering models: units in names
 
 In engineering models that you create or change, put a unit suffix on the name of each signal that has physical units, and on each block that holds a continuous state. Signals include input and output port names, sheet labels and signal names. Blocks with continuous states include integrators, transfer functions and state-space blocks. Examples: `altitude_m`, `pitch_rad`, `heading_deg`, `case_temp_degK`.

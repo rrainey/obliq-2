@@ -1,5 +1,21 @@
 # obliq-2 Change Log
 
+## What's New in 3.6.0
+
+The FPV Vehicle's IMU path now agrees with the ICM-42688-P datasheet, and one set of gains is tested across mass configurations. **The ports do not change, but flight traces do.** Export the model again for each host.
+
+- **The Random Noise block's noise density is now one-sided.** The block uses σ = N/√(2·Ts), the datasheet convention (RMS = N·√bandwidth). It used σ = N/√Ts, and its output was √2 too high. **A saved model that uses density mode changes:** multiply its density by √2 to keep the old noise. For a two-sided value, such as an Allan-deviation coefficient (Kalibr's N), multiply by √2.
+- **The FPV IMU has an anti-alias filter.** The new `ImuFrontEnd` subsystem adds noise at the plant step and applies a 2nd-order 258 Hz low-pass filter to the gyro and the accelerometer. This agrees with the datasheet and Betaflight's default. Motor noise at hover falls from 0.78‰ to 0.45‰. The filter adds about 0.87 ms of lag, and the gain at which the loop first goes unstable falls from 18× to 12×.
+- **An IMU faster than the controller no longer adds noise.** As in Betaflight, `gyro_lpf2` runs on each gyro sample when `SENSORS.imu.ts` is less than `FC.ts`. The shipped rate stays at 1 kHz.
+- **TPA is modelled**, with Betaflight's defaults: D only, 65% rate, 1350 µs breakpoint. The baseline hovers at 1438 µs, so D is 9% lower at hover. Roll overshoot is 16%; it was 14%.
+- **Tuning across mass configurations.** Seven airframes from 0.67 kg to 1.15 kg fly with the same gains. The gains do not change. Overshoot stays below 23% on a full battery, and the loop first goes unstable at 12× gain or higher. At 20% charge, the worst measured overshoot is 25.7%, and the test limit is 30%.
+  - `fpv-tuning.test.ts` enforces the limits, and `scripts/fpv-tuning-sweep.ts` prints all the tables.
+  - The builder has `AIRFRAMES`, `airframeWith()`, `hoverThrottleFor()` and `withFpvVariant()` for these studies.
+- **Rotor vibration is available for studies.** The `vibration` option adds rotor-synchronous motion to the IMU input. It is off in the shipped models, because RPM and dynamic notch filters are not modelled yet. A level of 1 deg/s per rotor gives about 14 times the motor noise of the sensor noise. The filters are the next work.
+- **Sensor mode `'noiseless'`** keeps the IMU's filter lag and has no noise, for measurements of loop stability.
+- **Corrected:** the documented roll "t90 15 ms" is measured from the end of a 50 ms stick ramp. From the start of a 1 ms stick move, t90 is about 39 ms.
+- **`CLAUDE.md`** now says that sensor fidelity is a key goal of the reference model.
+
 ## What's New in 3.5.1
 
 - **GPS Rescue start gate, documented correctly** (issue #4). A rescue that starts within 5 m of home with `alt_est` below 4 m (`ap_landing_altitude_m`) aborts and disarms at once. This applies in the air too: `alt_est` is the height above the arming point, so a hover trimmed or armed at home reads about 0. The model already did this, as Betaflight 2025.12 does. The 3.5.0 notes and the obliq-fpv-unity hand-off said that only a start on the ground aborts. A new test model, T12c, checks the abort from a 2.5 m hover near home. T12b now checks that its start, also within 5 m of home, is above 4 m, so it climbs.
