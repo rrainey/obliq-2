@@ -210,9 +210,9 @@ describe('Random Noise native codegen', () => {
     for (let k = 0; k < 100; k++) expect(h[5 * k]).toBeCloseTo(ref.gaussian(), 12)
   })
 
-  test('noise density scales by 1/√Ts', () => {
-    // N = 0.01/√Hz at Ts = dt = 0.01 s → σ = 0.1
-    expect(Math.abs(std(col(5)) - 0.1)).toBeLessThan(0.004)
+  test('noise density is one-sided: σ = N/√(2·Ts)', () => {
+    // N = 0.01/√Hz at Ts = dt = 0.01 s → σ = 0.0707, so N·√(fs/2) over the Nyquist band
+    expect(Math.abs(std(col(5)) - 0.1 / Math.SQRT2)).toBeLessThan(0.003)
   })
 
   test('vector output draws independent elements with per-element mean and σ', () => {

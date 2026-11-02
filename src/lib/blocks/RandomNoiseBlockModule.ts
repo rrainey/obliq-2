@@ -8,9 +8,11 @@
 // values use Box–Muller with u1 in (0, 1]; uniform values span mean ± √3·σ so
 // both distributions have the same variance.
 //
-// Amplitude: either a standard deviation σ, or a noise density N (units/√Hz,
-// the IMU-datasheet convention) with σ = N/√Ts. Ts is `sampleTime`, else an
-// inherited subsystem sample scope, else the model step.
+// Amplitude: either a standard deviation σ, or a one-sided noise density N
+// (units/√Hz, the IMU-datasheet convention, where RMS = N·√bandwidth) with
+// σ = N·√(fs/2) = N/√(2·Ts). Ts is `sampleTime`, else an inherited subsystem
+// sample scope, else the model step. An Allan-deviation random-walk coefficient
+// (Kalibr's N) is a two-sided density: multiply it by √2 first.
 //
 // Timing: a new value is drawn in the output phase on each sample hit,
 // sample_tick % round(Ts/dt) == 0, so it takes effect at the start of the
@@ -100,7 +102,7 @@ export class RandomNoiseBlockModule implements IBlockModule {
     code += `        if (${st}_drawn_tick != (long long)model->sample_tick &&\n`
     code += `            (${st}_drawn_tick < 0 || model->sample_tick % rn_n == 0ULL)) {\n`
     if (useDensity) {
-      code += `            const double rn_scale = 1.0 / sqrt(${tsExpr}); /* sigma = N / sqrt(Ts) */\n`
+      code += `            const double rn_scale = 1.0 / sqrt(2.0 * ${tsExpr}); /* sigma = N * sqrt(fs / 2) */\n`
     } else {
       code += `            const double rn_scale = 1.0;\n`
     }

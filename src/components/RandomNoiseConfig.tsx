@@ -126,7 +126,7 @@ export default function RandomNoiseConfig({ block, onUpdate, onClose }: RandomNo
           onChange={(v) => setAmplitudeMode(v || 'stdDev')}
           data={[
             { value: 'stdDev', label: 'Standard deviation σ' },
-            { value: 'density', label: 'Noise density N (σ = N/√Ts)' },
+            { value: 'density', label: 'Noise density N (σ = N/√(2·Ts))' },
           ]}
           allowDeselect={false}
         />
@@ -143,7 +143,7 @@ export default function RandomNoiseConfig({ block, onUpdate, onClose }: RandomNo
             label="Noise density N (units/√Hz)"
             value={noiseDensity}
             onChange={(e) => setNoiseDensity(e.target.value)}
-            description="Datasheet white-noise density, e.g. a gyro's rad/s/√Hz. Ts is the sample time, or the model step."
+            description="One-sided datasheet white-noise density, e.g. a gyro's rad/s/√Hz. Ts is the sample time, or the model step."
           />
         )}
 

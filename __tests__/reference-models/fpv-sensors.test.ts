@@ -10,6 +10,7 @@ import {
   buildFpvModel,
   ESTIMATOR,
   FC,
+  butterworth2,
   FPV,
   HOVER_THROTTLE,
   LOCATION,
@@ -98,6 +99,9 @@ const toBody = (q: number[], v: number[]) => {
   return C.map(row => row.reduce((s, x, i) => s + x * v[i]!, 0))
 }
 
+/** s: the anti-alias filter starts at zero and settles from the first sample */
+const AAF_SETTLE_S = 0.05
+
 describe('FPV reference model: sensors and estimators', () => {
   const dirs: string[] = []
   let hover: Row[] = []
@@ -113,11 +117,44 @@ describe('FPV reference model: sensors and estimators', () => {
   afterAll(() => dirs.forEach(cleanupNativeDir))
 
   /** Rows at IMU sample instants (the IMU runs every other plant step). */
-  const imuTicks = (rows: Row[]) => rows.filter(r => Math.round(r.t / FPV.dt) % Math.round(SENSORS.imu.ts / FPV.dt) === 0)
+  const imuTicks = (rows: Row[]) => rows.filter(r => r.t >= AAF_SETTLE_S && Math.round(r.t / FPV.dt) % Math.round(SENSORS.imu.ts / FPV.dt) === 0)
 
-  it('gyro: bias plus white noise of the datasheet density, quantized to 16 bits', () => {
+  /** RMS gain of the anti-alias filter on white noise: √(Σ h²) over its impulse response. */
+  const aafRmsGain = () => {
+    const { numerator: b, denominator: a } = butterworth2(SENSORS.imu.aafHz, FPV.dt)
+    let sum = 0, y1 = 0, y2 = 0
+    for (let n = 0; n < 2000; n++) {
+      const y = (b[n] ?? 0) - a[1]! * y1 - a[2]! * y2
+      sum += y * y
+      y2 = y1
+      y1 = y
+    }
+    return Math.sqrt(sum)
+  }
+  /** Datasheet density through the anti-alias filter, at the plant step that carries the noise. */
+  const filteredSigma = (density: number) => (density / Math.sqrt(2 * FPV.dt)) * aafRmsGain()
+
+  it('anti-alias filter: 3 dB down at its cutoff and passes DC', () => {
+    const { numerator: b, denominator: a } = butterworth2(SENSORS.imu.aafHz, FPV.dt)
+    const gainAt = (hz: number) => {
+      const w = 2 * Math.PI * hz * FPV.dt
+      const mag = (c: number[]) => Math.hypot(c.reduce((t, x, k) => t + x * Math.cos(k * w), 0), c.reduce((t, x, k) => t + x * Math.sin(k * w), 0))
+      return mag(b) / mag(a)
+    }
+    expect(gainAt(0)).toBeCloseTo(1, 9)
+    expect(gainAt(SENSORS.imu.aafHz)).toBeCloseTo(Math.SQRT1_2, 6)
+  })
+
+  it('white noise of the datasheet density gives the datasheet RMS through the filter', () => {
+    // ICM-42688-P: 2.8 mdps/√Hz. A 2nd-order Butterworth has a noise bandwidth of 1.11 fc: 0.047 dps at 258 Hz
+    const dps = filteredSigma(SENSORS.gyro.density) * (180 / Math.PI)
+    expect(dps).toBeGreaterThan(0.042)
+    expect(dps).toBeLessThan(0.0475)
+  })
+
+  it('gyro: bias plus filtered noise of the datasheet density, quantized to 16 bits', () => {
     const g = SENSORS.gyro
-    const sigma = Math.hypot(g.density / Math.sqrt(SENSORS.imu.ts), g.lsb / Math.sqrt(12))
+    const sigma = Math.hypot(filteredSigma(g.density), g.lsb / Math.sqrt(12))
     const rows = imuTicks(hover)
     for (let k = 0; k < 3; k++) {
       const err = rows.map(r => r.gyro[k]! - r.w[k]!)
@@ -128,14 +165,16 @@ describe('FPV reference model: sensors and estimators', () => {
     }
   })
 
-  it('accelerometer: bias plus datasheet noise on the true specific force', () => {
+  it('accelerometer: bias plus filtered datasheet noise on the true specific force', () => {
     const a = SENSORS.accel
-    const sigma = Math.hypot(a.density / Math.sqrt(SENSORS.imu.ts), a.lsb / Math.sqrt(12))
+    const sigma = Math.hypot(filteredSigma(a.density), a.lsb / Math.sqrt(12))
     const rows = imuTicks(hover)
     for (let k = 0; k < 3; k++) {
       const err = rows.map(r => r.acc[k]! - r.f[k]!)
       expect(Math.abs(mean(err) - a.bias[k]!)).toBeLessThan((4 * sigma) / Math.sqrt(err.length))
-      expect(std(err) / sigma).toBeCloseTo(1, 1)
+      // The reading lags the true force through the filter, so thrust motion adds a little to the noise
+      expect(std(err) / sigma).toBeGreaterThan(0.9)
+      expect(std(err) / sigma).toBeLessThan(1.3)
     }
   })
 

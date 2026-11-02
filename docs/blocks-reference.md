@@ -387,7 +387,7 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 - `mean` (number or number[], default 0): one value for all elements, or one per element
 - `amplitudeMode` (`stdDev` | `density`, default `stdDev`)
 - `stdDev` (number or number[], default 1): σ, used when `amplitudeMode` is `stdDev`
-- `noiseDensity` (number or number[], default 0): white-noise density N in units/√Hz, used when `amplitudeMode` is `density`; σ = N/√Ts
+- `noiseDensity` (number or number[], default 0): one-sided white-noise density N in units/√Hz (the datasheet convention, RMS = N·√bandwidth), used when `amplitudeMode` is `density`; σ = N/√(2·Ts)
 - `sampleTime` (seconds, default 0): hold time; 0 draws a new value every model step. Inside a sampled subsystem, 0 inherits the subsystem's period
 - `seed` (non-negative integer, default 1): give each noise block its own seed
 - `dataType` (`double` or `double[N]`)
@@ -400,7 +400,7 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 
 **Ports**: no inputs, one output. Not direct feedthrough.
 
-**Example**: a gyro axis with density 4.9e-5 rad/s/√Hz sampled at 1 kHz has σ = 4.9e-5/√0.001 ≈ 1.55e-3 rad/s.
+**Example**: a gyro axis with density 4.9e-5 rad/s/√Hz sampled at 1 kHz has σ = 4.9e-5/√(2·0.001) ≈ 1.10e-3 rad/s.
 
 ---
 

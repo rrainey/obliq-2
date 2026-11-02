@@ -59,7 +59,7 @@ Defaults: center 70 °/s, max 670 °/s, expo 0.
   - Defaults P/I/D/FF: roll 45/80/30/120, pitch 47/84/34/125, yaw 45/80/0/120.
   - Betaflight scale factors: P 0.032029, I 0.244381, D 0.000529, FF 0.013754.
 - **Mixer (quad X):** a 4×4 matrix (one Matrix Multiply), then airmode desaturation, then a clamp to [idle 0.055, 1].
-- **Later (v2):** angle mode (level P 50 / I 75 / D 75, 60° angle limit), throttle PID attenuation (TPA), anti-gravity, and a dynamic notch filter.
+- **Later (v2):** angle mode (level P 50 / I 75 / D 75, 60° angle limit), throttle PID attenuation (TPA, now modelled), anti-gravity, and a dynamic notch filter.
 
 **Estimator.**
 
@@ -73,7 +73,7 @@ Defaults: center 70 °/s, max 670 °/s, expo 0.
 **Sensors.** Each output is `y = quantize(saturate((I+S+M)·x + b + n))`, where:
 
 - S is the scale error and M the axis misalignment;
-- n is white noise with `σ = N/√Ts`;
+- n is white noise with `σ = N/√(2·Ts)`, where N is the one-sided datasheet density;
 - b is a Gauss–Markov bias, `b⁺ = e^(−Ts/τ)·b + σ_b·√(τ/2·(1−e^(−2Ts/τ)))·w`.
 
 | Sensor | Model | Parameters |
@@ -119,7 +119,7 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
 
 - **Output:** a scalar or vector (`dataType`: `double` or `double[N]`), held for `sampleTime` seconds (zero-order hold). `sampleTime` 0 means every model step.
 - **Distribution:** `gaussian` (default) or `uniform`. The uniform distribution has the same mean and variance, so its range is `mean ± √3·σ`.
-- **Amplitude:** given either as `stdDev` σ, or as a noise density N with `σ = N/√Ts`. This is the IMU-datasheet convention; Ts is the sample time, or the model step when `sampleTime` is 0.
+- **Amplitude:** given either as `stdDev` σ, or as a one-sided noise density N with `σ = N/√(2·Ts)`. This is the IMU-datasheet convention (RMS = N·√bandwidth); Ts is the sample time, or the model step when `sampleTime` is 0.
 - **Determinism:**
   - A self-contained SplitMix64 generator is emitted in the generated C, seeded by the block's `seed` parameter.
   - Gaussian values use the Box–Muller transform.
@@ -230,7 +230,7 @@ Each phase adds native-codegen tests to `__tests__/reference-models/` that fly t
    - an explicit rate-transition / zero-order-hold block, if the sensor → controller crossings need one.
 3. **Convenience blocks:** quaternion multiply, inverse and normalise; vector min/max. Each can be built from existing blocks first and promoted to a block if the diagram gets unreadable.
 4. **PID anti-windup:** a clamped discrete accumulator, built from Unit Delay + Limit.
-5. **Deferred:** filters with time-varying coefficients (dynamic notch, dynamic LPF, TPA).
+5. **Deferred:** filters with time-varying coefficients (dynamic notch, dynamic LPF). TPA is now modelled as a factor on D, which needs no time-varying filter.
 6. **Integration accuracy (found in Phase 2, fixed):** obliq's RK4 used to be stage-accurate only for a block's own state terms, such as a transfer function's poles. An integrator fed through other blocks got one derivative per step, which is effectively forward Euler. Codegen v32 re-evaluates the algebra at each RK4 stage on the model and then restores the major-step snapshot, so discrete states, logged samples and outputs are unaffected (`__tests__/codegen/rk4-stage-evaluation.test.ts` checks fourth-order convergence). The quaternion is still renormalised in the model, because no integrator preserves |q| = 1 exactly.
 
 7. **Algebraic loops through segregated subsystems** are broken silently at an arbitrary point. In the FPV battery loop this gave one motor a different supply voltage from the other three. A validation warning would help.
