@@ -136,6 +136,40 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     outputs: ['output']
   },
   {
+    type: 'notch_filter',
+    displayName: 'Notch Filter',
+    category: 'Dynamic',
+    description:
+      'Second-order state-variable notch. The centre frequency and depth can change on every sample, so a ' +
+      'tracking signal can drive it. Inputs: signal (double or double[N], element-wise), center_Hz (limited to ' +
+      '1 Hz … 0.48/Ts), weight (0 passes the signal, 1 is the full notch).',
+    parameters: {
+      q: { type: 'number', description: 'Centre frequency divided by the bandwidth', default: 5 },
+      sampleTime: { type: 'number', description: 'Seconds. 0 uses the enclosing sample scope, or the model step', default: 0 }
+    },
+    inputs: ['signal', 'center_Hz', 'weight'],
+    outputs: ['output']
+  },
+  {
+    type: 'spectrum_peaks',
+    displayName: 'Spectrum Peaks',
+    category: 'Dynamic',
+    description:
+      'Tracks the strongest frequencies in a scalar signal with a damped sliding DFT and a frequency-domain Hann ' +
+      'window, as the analysis of a Betaflight dynamic notch. A peak moves its output only above twice the noise ' +
+      'floor, through a PT1 of 4 to 40 Hz. Output: double[count] in Hz, in frequency order, to drive Notch Filter blocks.',
+    parameters: {
+      count: { type: 'number', description: 'Number of peaks', default: 3 },
+      windowSize: { type: 'number', description: 'Samples in the sliding DFT (even)', default: 72 },
+      minHz: { type: 'number', description: 'Lower limit of the search range', default: 100 },
+      maxHz: { type: 'number', description: 'Upper limit of the search range', default: 600 },
+      updateEvery: { type: 'number', description: 'Input samples between peak searches', default: 12 },
+      sampleTime: { type: 'number', description: 'Seconds. 0 uses the enclosing sample scope, or the model step', default: 0 }
+    },
+    inputs: ['signal'],
+    outputs: ['peaks_Hz']
+  },
+  {
     type: 'random_noise',
     displayName: 'Random Noise',
     category: 'Sources',
@@ -152,7 +186,7 @@ const blockTypeSchemas: BlockTypeInfo[] = [
       mean: { type: 'number', description: 'Mean; a number or one value per element', default: 0 },
       amplitudeMode: {
         type: 'string',
-        description: 'stdDev uses σ directly; density uses σ = noiseDensity/√Ts (Ts = sampleTime, or the model step)',
+        description: 'stdDev uses σ directly; density uses σ = noiseDensity/√(2·Ts), the one-sided datasheet convention (Ts = sampleTime, or the model step)',
         default: 'stdDev',
         enum: ['stdDev', 'density']
       },

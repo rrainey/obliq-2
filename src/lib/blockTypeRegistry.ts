@@ -20,6 +20,8 @@ export const BlockTypes = {
   SOURCE: 'source',
   CLOCK: 'clock',
   RANDOM_NOISE: 'random_noise',
+  NOTCH_FILTER: 'notch_filter',
+  SPECTRUM_PEAKS: 'spectrum_peaks',
   INPUT_PORT: 'input_port',
   
   // Math blocks
@@ -140,6 +142,36 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [],
     outputs: [{ name: 'output' }],
     description: 'Outputs the current simulation time in seconds as a double scalar'
+  },
+
+  [BlockTypes.NOTCH_FILTER]: {
+    type: BlockTypes.NOTCH_FILTER,
+    displayName: 'Notch Filter',
+    category: 'Dynamic',
+    defaultParameters: {
+      q: 5,
+      sampleTime: 0
+    },
+    inputs: [{ name: 'signal' }, { name: 'center_Hz' }, { name: 'weight' }],
+    outputs: [{ name: 'output' }],
+    description: 'Second-order notch whose centre frequency and depth can change on every sample',
+  },
+
+  [BlockTypes.SPECTRUM_PEAKS]: {
+    type: BlockTypes.SPECTRUM_PEAKS,
+    displayName: 'Spectrum Peaks',
+    category: 'Dynamic',
+    defaultParameters: {
+      count: 3,
+      windowSize: 72,
+      minHz: 100,
+      maxHz: 600,
+      updateEvery: 12,
+      sampleTime: 0
+    },
+    inputs: [{ name: 'signal' }],
+    outputs: [{ name: 'peaks_Hz' }],
+    description: 'Tracks the strongest frequencies in a signal with a sliding DFT, to drive Notch Filter blocks',
   },
 
   [BlockTypes.RANDOM_NOISE]: {

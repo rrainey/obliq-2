@@ -25,7 +25,7 @@ Only for checks that cannot live in a model:
 
 These suites compile with `compileAndRunNative`, as the existing FPV suites do.
 
-`fpv-tuning.test.ts` is the Level 2 suite for the rate tune. It flies each airframe in `AIRFRAMES` against limits on overshoot, t90, settling, gain margin and motor noise. It also checks TPA and the downsample path. The plan's section "Tuning across mass configurations" gives the measured values. Run `scripts/fpv-tuning-sweep.ts` to measure them again.
+`fpv-tuning.test.ts` is the Level 2 suite for the rate tune. It flies each airframe in `AIRFRAMES` against limits on overshoot, t90, settling, gain margin and motor noise. It also checks TPA, the downsample path, the notch filters, and the vibration source against a public log. The plan's section "Tuning across mass configurations" gives the measured values. Run `scripts/fpv-tuning-sweep.ts` to measure them again.
 
 ### 1.3 Level 3: host acceptance (obliq-fpv-unity)
 

@@ -74,8 +74,11 @@ export const FPV = {
  * units (rates in deg/s, PID sum in per-mille of motor range).
  */
 export const FC = {
-  /** Controller (PID loop) period: 1 kHz. Must be a multiple of FPV.dt. */
-  ts: 0.001,
+  /**
+   * Controller (PID loop) period: 2 kHz. Must be a multiple of FPV.dt. Betaflight turns
+   * its dynamic notch off below 2 kHz, so this is the slowest rate with its full gyro chain.
+   */
+  ts: 0.0005,
   /** Rates ("Actual"): center sensitivity, max rate (deg/s), expo; roll, pitch, yaw. */
   rates: { center: [70, 70, 70], max: [670, 670, 670], expo: [0, 0, 0] },
   /**
@@ -108,11 +111,24 @@ export const FC = {
    */
   angle: { limitDeg: 60, gain: 8 },
   /**
+   * RPM filter, Betaflight's defaults: a notch on each gyro axis for each harmonic of each
+   * motor. A notch fades out over fadeHz above minHz. The frequency comes from the rotor
+   * speed through a lpfHz PT1, as bidirectional DShot telemetry does. 0 harmonics: off.
+   */
+  rpmFilter: { harmonics: 3, q: 5, minHz: 100, fadeHz: 50, lpfHz: 150 },
+  /**
+   * Dynamic notch, Betaflight's defaults: count notches on each axis at the peaks of the
+   * filtered gyro's spectrum (the Spectrum Peaks block). 0 count: off. It needs FC.ts ≤ 500 µs.
+   */
+  dynNotch: { count: 3, q: 3, minHz: 100, maxHz: 600, windowSize: 72, updateEvery: 12 },
+  /**
    * TPA, Betaflight's defaults (tpa_mode D, tpa_rate 65, tpa_breakpoint 1350): above the
    * breakpoint the D term scales by 1 − rate × (throttle − breakpoint) / (1 − breakpoint).
    * tpa_low_rate acts only below 1050 µs, so it is not modelled.
    */
   tpa: { breakpointUs: 1350, ratePct: 65 },
+  /** Hz: accelerometer low-pass, a PT2 (Betaflight's acc_lpf_hz). The estimator and the rescue's impact check read its output. */
+  accLpfHz: 25,
   /** Airmode (and the I-term) starts once throttle first exceeds this after arming (airmode_start_throttle_percent 25). */
   airmodeStartThrottle: 0.25,
   /** Satellites needed to take home at arming (Betaflight gps_rescue_min_sats). */
@@ -247,6 +263,14 @@ export function butterworth2(cutoffHz: number, ts: number): { numerator: number[
   return { numerator: [b0, 2 * b0, b0], denominator: [1, (2 * (k * k - 1)) / d, (1 - Math.SQRT2 * k + k * k) / d] }
 }
 
+/** 2nd-order band-pass by the bilinear transform, prewarped: unity × gain at its centre. */
+export function bandpass2(centreHz: number, q: number, gain: number, ts: number): { numerator: number[]; denominator: number[] } {
+  const k = Math.tan(Math.PI * centreHz * ts)
+  const d = 1 + k / q + k * k
+  const b0 = (gain * k) / (q * d)
+  return { numerator: [b0, 0, -b0], denominator: [1, (2 * (k * k - 1)) / d, (1 - k / q + k * k) / d] }
+}
+
 export const pt1Gain = (cutoffHz: number, ts: number) => {
   const w = 2 * Math.PI * cutoffHz * ts
   return w / (w + 1)
@@ -317,13 +341,39 @@ export const SITE_FIELD = (() => {
 export const SENSORS = {
   imu: {
     /** s: output data rate (ODR). A multiple of FPV.dt and a divisor of FC.ts. */
-    ts: 0.001,
+    ts: 0.0005,
     /**
      * Hz: the on-chip 2nd-order anti-alias filter on rate, specific force and noise.
      * 258 Hz is GYRO_AAF_DELT 6 in the ICM-42688-P datasheet (Rev 1.6, §5.3) and
      * Betaflight's gyro_hardware_lpf NORMAL; its accelerometer always uses this value.
      */
     aafHz: 258,
+  },
+  /**
+   * Airframe vibration at the IMU (est.), scaled from one 4S 5-inch log; see
+   * docs/fpv-hud-gnss-plan.md, "Notch filters". All amplitudes grow with rotor speed squared.
+   */
+  vibration: {
+    /** Hz: rotor speed at which the amplitudes below apply */
+    refRotorHz: 175,
+    /** deg/s per rotor at the 1×, 2× and 3× rotor harmonics, on the roll axis */
+    harmonicsDps: [2, 3, 1],
+    /** deg/s/√Hz: broadband motion (prop wash, air flow) at refRotorHz, on the roll axis */
+    broadbandDensity: 0.03,
+    /** Share of the roll amplitude on the roll, pitch and yaw axes */
+    axisShare: [1, 0.75, 0.5],
+    /** A frame resonance adds gain × band-pass(x) */
+    resonanceHz: 225,
+    resonanceQ: 8,
+    resonanceGain: 2,
+    /** m/s² per deg/s of vibration */
+    accelPerDps: 0.1,
+    /**
+     * rad: each rotor's phase, per harmonic. Rotors at equal speed would otherwise add or
+     * cancel by chance; these make each harmonic add as four unrelated rotors do (|sum| ≈ 2).
+     */
+    rotorPhase: [0.0, 4.28, 3.19, 4.15],
+    seed: 104,
   },
   gyro: {
     /** rad/s/√Hz (2.8 mdps/√Hz) */
@@ -631,6 +681,10 @@ export interface FpvVariant {
   initialSoc?: number
   /** 0 disables TPA */
   tpaRatePct?: number
+  /** 0 disables the RPM filter */
+  rpmHarmonics?: number
+  /** 0 disables the dynamic notch */
+  dynNotchCount?: number
   /** s: IMU output data rate, controller period and plant step. Each must divide the slower ones. */
   imuTs?: number
   fcTs?: number
@@ -642,6 +696,7 @@ export function withFpvVariant<T>(v: FpvVariant, fn: () => T): T {
   const saved = {
     mass: FPV.mass, inertia: FPV.inertia, rotorXY: FPV.rotorXY, motorTau: FPV.motorTau, dt: FPV.dt,
     pid: FC.pid, ts: FC.ts, tpaRate: FC.tpa.ratePct, imuTs: SENSORS.imu.ts, soc: BATTERY.initialSoc,
+    rpmHarmonics: FC.rpmFilter.harmonics, dynNotchCount: FC.dynNotch.count,
   }
   try {
     if (v.airframe) {
@@ -655,6 +710,8 @@ export function withFpvVariant<T>(v: FpvVariant, fn: () => T): T {
     if (v.motorTau !== undefined) FPV.motorTau = v.motorTau
     if (v.initialSoc !== undefined) BATTERY.initialSoc = v.initialSoc
     if (v.tpaRatePct !== undefined) FC.tpa.ratePct = v.tpaRatePct
+    if (v.rpmHarmonics !== undefined) FC.rpmFilter.harmonics = v.rpmHarmonics
+    if (v.dynNotchCount !== undefined) FC.dynNotch.count = v.dynNotchCount
     if (v.imuTs !== undefined) SENSORS.imu.ts = v.imuTs
     if (v.fcTs !== undefined) FC.ts = v.fcTs
     if (v.dt !== undefined) FPV.dt = v.dt
@@ -662,6 +719,7 @@ export function withFpvVariant<T>(v: FpvVariant, fn: () => T): T {
   } finally {
     FPV.mass = saved.mass; FPV.inertia = saved.inertia; FPV.rotorXY = saved.rotorXY; FPV.motorTau = saved.motorTau; FPV.dt = saved.dt
     FC.pid = saved.pid; FC.ts = saved.ts; FC.tpa.ratePct = saved.tpaRate; SENSORS.imu.ts = saved.imuTs; BATTERY.initialSoc = saved.soc
+    FC.rpmFilter.harmonics = saved.rpmHarmonics; FC.dynNotch.count = saved.dynNotchCount
   }
 }
 
@@ -1347,29 +1405,58 @@ function buildImuFrontEndSheet(withNoise: boolean, vibration?: VibrationOptions)
   let w = s.input('omega', 'double[3]')
   let f = s.input('specific_force', 'double[3]')
   if (vibration) {
-    // Each rotor shakes the frame at its own speed: one integrator holds the four phases
+    const V = SENSORS.vibration
+    const omegaRef = 2 * Math.PI * V.refRotorHz
     const motorOmega = s.input('motor_omega_radps', 'double[4]')
-    const phase = s.add('integrator', 'rotor_phase_rad', { initialValue: [0, 1, 2, 3] })
+    // Each rotor shakes the frame at its own speed: one integrator holds the four phases
+    const phase = s.add('integrator', 'rotor_phase_rad', { initialValue: [0, 0, 0, 0] })
     s.wire(motorOmega, phase)
-    const split = s.add('demux', 'RotorPhaseSplit', { outputCount: 4, inputDimensions: [4] })
-    s.wire(phase, split)
-    const shake = (prefix: string, x: string, amplitude: number) => {
-      const out = s.add('mux', `${prefix}Vibration`, { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
-      ;[['sin', 0.5], ['cos', 0.5], ['sin', 0.25]].forEach(([fn, share], axis) => {
-        const ev = s.add('evaluate', `${prefix}Vibration${'XYZ'[axis]}`, {
-          numInputs: 4,
-          expression: `${amplitude * (share as number)} * (${fn}(in(0)) + ${fn}(in(1)) + ${fn}(in(2)) + ${fn}(in(3)))`,
-        })
-        for (let i = 0; i < 4; i++) s.wire(split, ev, i, i)
-        s.wire(ev, out, axis)
-      })
+    const phaseSplit = s.add('demux', 'RotorPhaseSplit', { outputCount: 4, inputDimensions: [4] })
+    s.wire(phase, phaseSplit)
+    const omegaSplit = s.add('demux', 'RotorSpeedSplit', { outputCount: 4, inputDimensions: [4] })
+    s.wire(motorOmega, omegaSplit)
+    const harmonics = s.add('mux', 'RotorHarmonics_dps', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+    V.axisShare.forEach((share, axis) => {
+      // in(0..3) phases, in(4..7) speeds. Each axis and harmonic has its own phase offset.
+      const terms = [0, 1, 2, 3].flatMap(i => V.harmonicsDps.map((amp, h) =>
+        `${(amp * share * vibration.scale) / (omegaRef * omegaRef)} * in(${4 + i}) * in(${4 + i}) * sin(${h + 1}.0 * (in(${i}) + ${V.rotorPhase[i]}) + ${(1.7 * axis + 0.9 * h).toFixed(2)})`))
+      const ev = s.add('evaluate', `RotorHarmonics${'XYZ'[axis]}`, { numInputs: 8, expression: terms.join(' + ') })
+      for (let i = 0; i < 4; i++) {
+        s.wire(phaseSplit, ev, i, i)
+        s.wire(omegaSplit, ev, 4 + i, i)
+      }
+      s.wire(ev, harmonics, axis)
+    })
+    // Broadband motion: white noise scaled by the mean rotor speed squared
+    const broadbandDensity = V.axisShare.map(share => V.broadbandDensity * share * vibration.scale)
+    const broadbandNoise = noise(s, 'BroadbandNoise_dps', 3, { amplitudeMode: 'density', noiseDensity: broadbandDensity, seed: V.seed })
+    const rotorScale = s.add('evaluate', 'BroadbandScale', {
+      numInputs: 4,
+      expression: `pow((in(0) + in(1) + in(2) + in(3)) / ${4 * omegaRef}, 2.0)`,
+    })
+    for (let i = 0; i < 4; i++) s.wire(omegaSplit, rotorScale, i, i)
+    const broadband = s.add('multiply', 'Broadband_dps', { numInputs: 2 })
+    s.wire(broadbandNoise, broadband, 0)
+    s.wire(rotorScale, broadband, 1)
+    const excitation = s.add('sum', 'Excitation_dps', { signs: '++', numInputs: 2 })
+    s.wire(harmonics, excitation, 0)
+    s.wire(broadband, excitation, 1)
+    // The frame resonance rings on the excitation
+    const resonance = s.add('discrete_transform', 'FrameResonance', { ...bandpass2(V.resonanceHz, V.resonanceQ, V.resonanceGain, FPV.dt), sampleInterval: FPV.dt })
+    s.wire(excitation, resonance)
+    const vibrationDps = s.add('sum', 'Vibration_dps', { signs: '++', numInputs: 2 })
+    s.wire(excitation, vibrationDps, 0)
+    s.wire(resonance, vibrationDps, 1)
+    const addTo = (prefix: string, x: string, gain: number) => {
+      const scaled = s.add('scale', `${prefix}VibrationScale`, { gain })
+      s.wire(vibrationDps, scaled)
       const sum = s.add('sum', `${prefix}PlusVibration`, { signs: '++', numInputs: 2 })
       s.wire(x, sum, 0)
-      s.wire(out, sum, 1)
+      s.wire(scaled, sum, 1)
       return sum
     }
-    w = shake('Gyro', w, (vibration.gyroDps * Math.PI) / 180)
-    f = shake('Accel', f, vibration.accelMps2)
+    w = addTo('Gyro', w, Math.PI / 180)
+    f = addTo('Accel', f, V.accelPerDps)
   }
   const { numerator, denominator } = butterworth2(SENSORS.imu.aafHz, FPV.dt)
   const channel = (prefix: string, x: string, sensor: { density: number; seed: number }) => {
@@ -2162,21 +2249,101 @@ function buildAngleModeSheet(): SheetBuilder {
   return s
 }
 
+/** A notch for each harmonic of each motor, on all gyro axes (Betaflight's RPM filter). */
+function buildRpmFilterSheet(): SheetBuilder {
+  const R = FC.rpmFilter
+  const s = new SheetBuilder('rpmFilter', 'RpmFilter')
+  const gyro = s.input('gyro_dps', 'double[3]')
+  const omega = s.input('motor_omega_radps', 'double[4]')
+  const toHz = s.add('scale', 'RotorHz', { gain: 1 / (2 * Math.PI) })
+  s.wire(omega, toHz)
+  const rotorLpf = pt1(s, 'RotorHzLpf', R.lpfHz)
+  s.wire(toHz, rotorLpf)
+  const split = s.add('demux', 'RotorHzSplit', { outputCount: 4, inputDimensions: [4] })
+  s.wire(rotorLpf, split)
+  let last = gyro
+  for (let motor = 0; motor < 4; motor++) {
+    for (let h = 1; h <= R.harmonics; h++) {
+      const tag = `M${motor}H${h}`
+      const hz = s.add('evaluate', `${tag}Hz`, { numInputs: 1, expression: `fmin(fmax(${h}.0 * in(0), ${R.minHz}.0), ${0.48 / FC.ts})` })
+      s.wire(split, hz, 0, motor)
+      const weight = s.add('evaluate', `${tag}Weight`, { numInputs: 1, expression: `fmin((in(0) - ${R.minHz}.0) / ${R.fadeHz}.0, 1.0)` })
+      s.wire(hz, weight)
+      const notch = s.add('notch_filter', `${tag}Notch`, { q: R.q, sampleTime: FC.ts })
+      s.wire(last, notch, 0)
+      s.wire(hz, notch, 1)
+      s.wire(weight, notch, 2)
+      last = notch
+    }
+  }
+  s.output('gyro_notched_dps', last, 'double[3]')
+  return s
+}
+
+/** Notches on each axis at the peaks of that axis's spectrum (Betaflight's dynamic notch). */
+function buildDynamicNotchSheet(): SheetBuilder {
+  const D = FC.dynNotch
+  const s = new SheetBuilder('dynNotch', 'DynamicNotch')
+  const gyro = s.input('gyro_dps', 'double[3]')
+  const split = s.add('demux', 'AxisSplit', { outputCount: 3, inputDimensions: [3] })
+  s.wire(gyro, split)
+  const one = s.constant('NotchWeight', 1, 'double')
+  const out = s.add('mux', 'AxisMerge', { rows: 3, cols: 1, baseType: 'double', outputType: 'double[3]' })
+  for (let axis = 0; axis < 3; axis++) {
+    const tag = 'RPY'[axis]!
+    const peaks = s.add('spectrum_peaks', `${tag}Peaks_Hz`, { count: D.count, windowSize: D.windowSize, minHz: D.minHz, maxHz: D.maxHz, updateEvery: D.updateEvery, sampleTime: FC.ts })
+    s.wire(split, peaks, 0, axis)
+    // A demux needs at least two outputs; one notch takes its element with a selector
+    const peakSplit = D.count > 1
+      ? s.add('demux', `${tag}PeakSplit`, { outputCount: D.count, inputDimensions: [D.count] })
+      : s.add('selector', `${tag}PeakSplit`, { indices: [0] })
+    s.wire(peaks, peakSplit)
+    let last: string | null = null
+    for (let n = 0; n < D.count; n++) {
+      const notch = s.add('notch_filter', `${tag}Notch${n}`, { q: D.q, sampleTime: FC.ts })
+      if (last) s.wire(last, notch, 0)
+      else s.wire(split, notch, 0, axis)
+      s.wire(peakSplit, notch, 1, n)
+      s.wire(one, notch, 2)
+      last = notch
+    }
+    s.wire(last!, out, axis)
+  }
+  s.output('gyro_notched_dps', out, 'double[3]')
+  return s
+}
+
+/**
+ * Betaflight's gyro chain: LPF2 (the downsample filter), RPM filter, LPF1, dynamic notch.
+ * The dynamic notch needs a loop of at least 2 kHz, as in Betaflight.
+ */
 function buildGyroFilterSheet(): SheetBuilder {
   const s = new SheetBuilder('gyro', 'GyroFilters')
   const gyro = s.input('gyro', 'double[3]')
-  const deg = s.add('scale', 'RadToDeg', { gain: 180 / Math.PI })
-  s.wire(gyro, deg)
-  const lpf1 = pt1(s, 'GyroLPF1', FC.gyroLpfHz[0]!)
-  s.wire(deg, lpf1)
+  const omega = s.input('motor_omega_radps', 'double[4]')
+  let last = s.add('scale', 'RadToDeg', { gain: 180 / Math.PI })
+  s.wire(gyro, last)
   // With an IMU faster than the loop, LPF2 runs at the IMU rate (GyroDownsample) instead
-  if (imuOversampled()) {
-    s.output('gyro_dps', lpf1, 'double[3]')
-    return s
+  if (!imuOversampled()) {
+    const lpf2 = pt1(s, 'GyroLPF2', FC.gyroLpfHz[1]!)
+    s.wire(last, lpf2)
+    last = lpf2
   }
-  const lpf2 = pt1(s, 'GyroLPF2', FC.gyroLpfHz[1]!)
-  s.wire(lpf1, lpf2)
-  s.output('gyro_dps', lpf2, 'double[3]')
+  if (FC.rpmFilter.harmonics > 0) {
+    const rpm = s.add('subsystem', 'RpmFilter', subsystem(['gyro_dps', 'motor_omega_radps'], ['gyro_notched_dps'], buildRpmFilterSheet()))
+    s.wire(last, rpm, 0)
+    s.wire(omega, rpm, 1)
+    last = rpm
+  }
+  const lpf1 = pt1(s, 'GyroLPF1', FC.gyroLpfHz[0]!)
+  s.wire(last, lpf1)
+  last = lpf1
+  if (FC.dynNotch.count > 0 && FC.ts <= 0.0005 * (1 + 1e-9)) {
+    const dyn = s.add('subsystem', 'DynamicNotch', subsystem(['gyro_dps'], ['gyro_notched_dps'], buildDynamicNotchSheet()))
+    s.wire(last, dyn)
+    last = dyn
+  }
+  s.output('gyro_dps', last, 'double[3]')
   return s
 }
 
@@ -3247,9 +3414,9 @@ function buildFlightControllerSheet(
   const rawSticks = s.input('sticks', 'double[8]')
   /**
    * A task boundary: the 100 Hz autopilot and rescue tasks write values that
-   * later controller and IMU loops read, so their outputs reach the 1 kHz path
+   * later controller and IMU loops read, so their outputs reach the controller's path
    * one controller sample later, as in Betaflight's scheduler. This also keeps
-   * the 1 kHz loop from forming algebraic loops through the motors.
+   * the controller's loop from forming algebraic loops through the motors.
    */
   const fromTask = (name: string, src: string, port: number, init: number | number[] = 0): [string, number] => {
     const id = s.add('unit_delay', `${name}Task`, { initialValue: init, sampleInterval: FC.ts })
@@ -3305,8 +3472,15 @@ function buildFlightControllerSheet(
     ['gyro', 'accel', 'mag', 'grid_convergence_deg', 'gnss_course', 'gnss_fix', 'yaw_stick', 'armed', 'mag_disable', 'rescue_active', 'rescue_cog_gain'],
     ['quat', 'euler', 'gps_heading_ok'],
     buildAttitudeEstimatorSheet(initialQuat, magnetometer)))
-  s.wire(gyro, att, 0)
-  s.wire(acc, att, 1)
+  // As in Betaflight, the estimator reads the filtered gyro (wired below) and the low-passed accelerometer
+  const accK = pt2Gain(FC.accLpfHz, FC.ts)
+  const accSmooth = s.add('discrete_transform', 'AccelLPF', {
+    numerator: [accK * accK, 0, 0],
+    denominator: [1, -2 * (1 - accK), (1 - accK) * (1 - accK)],
+    sampleInterval: FC.ts,
+  })
+  s.wire(acc, accSmooth)
+  s.wire(accSmooth, att, 1)
   s.wire(mag, att, 2)
   s.wire(gamma, att, 3)
   s.wire(gnssCourse, att, 4)
@@ -3344,8 +3518,12 @@ function buildFlightControllerSheet(
   s.wire(yawCmd, setpoint, 2)
 
   // Rate loop and mixer
-  const filt = s.add('subsystem', 'GyroFilters', subsystem(['gyro'], ['gyro_dps'], buildGyroFilterSheet()))
-  s.wire(gyro, filt)
+  const filt = s.add('subsystem', 'GyroFilters', subsystem(['gyro', 'motor_omega_radps'], ['gyro_dps'], buildGyroFilterSheet()))
+  s.wire(gyro, filt, 0)
+  s.wire(s.input('motor_omega_radps', 'double[4]'), filt, 1)
+  const filteredRad = s.add('scale', 'FilteredGyroRad', { gain: Math.PI / 180 })
+  s.wire(filt, filteredRad, 0, 0)
+  s.wire(filteredRad, att, 0)
   const arming = s.add('subsystem', 'Arming', subsystem(['sticks', 'gnss_fix', 'disarm_request', 'rc_link_valid'], ['armed', 'airmode', 'warnings'], buildArmingSheet(altitude0 > 0)))
   s.wire(sticks, arming, 0)
   s.wire(gnssFix, arming, 1)
@@ -3407,7 +3585,7 @@ function buildFlightControllerSheet(
   s.wire(alt, rescue, 9, 0)
   s.wire(gnssCourse, rescue, 10)
   s.wire(gnssFix, rescue, 11)
-  s.wire(acc, rescue, 12)
+  s.wire(accSmooth, rescue, 12)
   const rescueActive: [string, number] = [rescue, rOut('active')]
   s.wire(rescue, altHold, 7, rOut('active'))
   s.wire(rescue, altHold, 8, rOut('alt_target_cm'))
@@ -3513,16 +3691,9 @@ export const FPV_VEHICLE_NAME = 'FPV Vehicle'
 
 export type SensorMode = 'modelled' | 'noiseless' | 'ideal'
 
-/**
- * Rotor-synchronous vibration on the IMU, for robustness studies: amplitude per
- * rotor. Off in the shipped models, because Betaflight's RPM and dynamic notch
- * filters, which remove most of it, are not modelled.
- */
+/** Airframe vibration on the IMU: SENSORS.vibration times `scale`. */
 export interface VibrationOptions {
-  /** deg/s */
-  gyroDps: number
-  /** m/s² */
-  accelMps2: number
+  scale: number
 }
 
 export interface FpvModelOptions {
@@ -3544,8 +3715,11 @@ export interface FpvModelOptions {
    * filter, for measuring loop stability with the true sensor lag.
    */
   sensors?: SensorMode
-  /** Rotor vibration on the IMU (needs 'modelled' or 'noiseless' sensors). Default none. */
-  vibration?: VibrationOptions
+  /**
+   * Airframe vibration on the IMU. Default on with 'modelled' sensors and off with the
+   * others (not available with 'ideal'). false turns it off, to study sensor noise alone.
+   */
+  vibration?: VibrationOptions | false
   /**
    * Initial attitude, ZYX Euler degrees [roll, pitch, yaw]. The attitude
    * estimator starts aligned to it (as if it had converged before take-off).
@@ -3589,6 +3763,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   const initialQuat = eulerToQuat(opts.initialEuler ?? [0, 0, 0])
   const magnetometer = opts.magnetometer ?? true
   const altitude0 = Math.max(0, opts.initialAltitude ?? 0)
+  const vibration = opts.vibration === false ? undefined : opts.vibration ?? ((opts.sensors ?? 'modelled') === 'modelled' ? { scale: 1 } : undefined)
   const split = main.add('demux', 'MotorCmdSplit', { outputCount: 4, inputDimensions: [4] })
   let fc: string | null = null
   /** Where each non-stick vehicle input comes from: [block id, port] */
@@ -3618,7 +3793,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
       : main.add('subsystem', 'Pilot', subsystem([], ['sticks'], buildPilotSheet(opts.sticks ?? DEMO_STICKS)))
 
     fc = main.add('subsystem', 'FlightController', {
-      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure', 'grid_convergence_deg', 'gnss_pos', 'gnss_fix', 'rc_link_valid', 'failsafe_procedure', 'gnss_course'], FC_OUTPUTS,
+      ...subsystem(['sticks', 'gyro', 'accel', 'mag', 'pressure', 'grid_convergence_deg', 'gnss_pos', 'gnss_fix', 'rc_link_valid', 'failsafe_procedure', 'gnss_course', 'motor_omega_radps'], FC_OUTPUTS,
         buildFlightControllerSheet(magnetometer ? initialQuat : eulerToQuat([...(opts.initialEuler ?? [0, 0, 0]).slice(0, 2), 0]), altitude0, magnetometer, opts.posHoldWithoutMag ?? FC.posHold.withoutMag, opts.apThrottleMaxUs), FC_SIZE),
       sampleTimeSec: FC.ts,
     })
@@ -3682,9 +3857,10 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   wireCondition('wind_ned', frame, 2)
   if (fc) {
     const sensors = main.add('subsystem', 'Sensors', subsystem(
-      ['pos_ned', 'quat', 'omega', 'specific_force', 'grid_convergence_deg', 'vel_ned', 'gnss_env', ...(opts.vibration ? ['motor_omega_radps'] : [])], ['gyro', 'accel', 'mag', 'pressure', ...GNSS_OUTPUTS],
-      buildSensorsSheet(opts.sensors ?? 'modelled', altitude0, magnetometer, opts.vibration), SENSORS_SIZE))
-    if (opts.vibration) main.wire(omegaVec, sensors, 7)
+      ['pos_ned', 'quat', 'omega', 'specific_force', 'grid_convergence_deg', 'vel_ned', 'gnss_env', ...(vibration ? ['motor_omega_radps'] : [])], ['gyro', 'accel', 'mag', 'pressure', ...GNSS_OUTPUTS],
+      buildSensorsSheet(opts.sensors ?? 'modelled', altitude0, magnetometer, vibration), SENSORS_SIZE))
+    if (vibration) main.wire(omegaVec, sensors, 7)
+    main.wire(omegaVec, fc, 11)
     main.wire(frame, sensors, 0, 0)
     main.wire(frame, sensors, 1, 2)
     main.wire(frame, sensors, 2, 4)
@@ -3769,11 +3945,11 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
         description:
           '5-inch FPV quadcopter reference model. ' +
           'NED world / FRD body axes, quaternion 6-DOF rigid body, four first-order motor/propeller subsystems, ' +
-          'and a Betaflight-style acro flight controller at 1 kHz (rates, gyro PT1 filters, rate PID with feed-forward, ' +
+          'and a Betaflight-style acro flight controller at 2 kHz (rates, gyro PT1 filters, rate PID with feed-forward, ' +
           'quad-X mixer with airmode) re-implemented from documented behaviour and defaults. ' +
           `Site: ${LOCATION.name}, ${LOCATION.latitudeDeg} N ${-LOCATION.longitudeDeg} W, elevation ${LOCATION.elevationM.toFixed(1)} m; ` +
           `WMM2025 field (${LOCATION.epoch}) N/E/D ${SITE_FIELD.ned.join(' / ')} uT. ` +
-          'Sensors: IMU (gyro, accelerometer) at 1 kHz, magnetometer at 100 Hz and barometer at 50 Hz with datasheet noise, ' +
+          'Sensors: IMU (gyro, accelerometer) at 2 kHz, magnetometer at 100 Hz and barometer at 50 Hz with datasheet noise, ' +
           'bias, quantization and range; the controller flies on the sensor gyro and runs a Mahony attitude filter and a ' +
           'baro/accelerometer altitude filter. ' +
           'Motors draw from a 4S LiPo battery model (state of charge, internal resistance; speed scales with voltage) and ' +

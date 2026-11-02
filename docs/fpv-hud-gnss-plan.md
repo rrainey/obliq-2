@@ -251,7 +251,7 @@ This is listed for interface agreement. It is implemented in that repo. The host
 
 **Ordering.** These phases run after Phase 4 and before Phase 5, so the test models and documentation cover the finished controller. Phase 5 then also adds the test models listed in Phase 13.
 
-**Rates.** Rescue, the holds, the altitude estimator and the altitude controller sit in 100 Hz sample-time subsystems inside FlightController. GPS-driven pieces sit in 10 Hz subsystems aligned with the receiver, so they step on each new fix. The rate PID stays at 1 kHz. The 100 Hz and 10 Hz rates are exact multiples of the 2 kHz plant step.
+**Rates.** Rescue, the holds, the altitude estimator and the altitude controller sit in 100 Hz sample-time subsystems inside FlightController. GPS-driven pieces sit in 10 Hz subsystems aligned with the receiver, so they step on each new fix. The rate PID runs at `FC.ts`. The 100 Hz and 10 Hz rates are exact multiples of the 2 kHz plant step.
 
 **State machines.** obliq has no state-machine block. The rescue phase, the failsafe stage, the arming latch and the counters are numeric states in Unit Delays, with transitions in Evaluate blocks (C99 conditional expressions). Each machine is one subsystem, with its state and transition logic named after the reference's phases, so the generated C reads against the spec.
 
@@ -377,7 +377,7 @@ This is listed for interface agreement. It is implemented in that repo. The host
 - **GpsRescue (100 Hz)** follows `gps_rescue_multirotor.c` tick by tick: start, sensor update, the phase switch, the sanity checks (1 Hz), then the controls. Its outputs are in this model's conventions: pitch positive nose-up, yaw rate positive nose-right (Betaflight's rescue pitch is nose-down, its yaw left).
 - **The shared altitude controller** takes the rescue's target, per-tick step (as feed-forward), run and reset. AngleMode takes the rescue's angles, the yaw setpoint its yaw rate, and the estimator its COG gain and magnetometer disable.
 - **A new fix** is a 10 Hz receiver solution with a 3D fix, as Betaflight's GPS stamp. Without one the velocity PID holds. Without this gate, a satellite loss in FLY_HOME let the stale PID fly the quad 200 m away in 9 s.
-- **Task boundaries.** The 100 Hz autopilot and rescue outputs reach the 1 kHz loop one controller sample later (`…Task` unit delays), as in Betaflight's scheduler, and the rescue's disarm request is delayed one sample. This keeps the generator from breaking algebraic loops in the wrong place: without it, the phase machine read its failure before the phase switch had run, and the rescue stuck in FLY_HOME. The 12 remaining loop warnings are the 4 motor false loops (×3) that were there before.
+- **Task boundaries.** The 100 Hz autopilot and rescue outputs reach the controller's loop one controller sample later (`…Task` unit delays), as in Betaflight's scheduler, and the rescue's disarm request is delayed one sample. This keeps the generator from breaking algebraic loops in the wrong place: without it, the phase machine read its failure before the phase switch had run, and the rescue stuck in FLY_HOME. The 12 remaining loop warnings are the 4 motor false loops (×3) that were there before.
 - **Failsafe:** GPS-RESCUE no longer drops in stage 2; DROP and AUTO-LAND keep their rules. A stage-2 rescue on the ground at home aborts and disarms on its next tick (`fpv-failsafe`). So does any rescue that starts within 5 m of home below 4 m on `alt_est`, in the air too (T12c; added in 3.5.1 for issue #4).
 - **Build option `apThrottleMaxUs`** (Betaflight `ap_throttle_max`) for the stalled-climb test.
 - **New outputs:** `rescue_active`, `rescue_phase`; `fc_mode` shows RESC; `fc_warnings` adds RESCUE N/A (1) and RESCUE OFF (2).
@@ -439,32 +439,66 @@ So the white term's size (about 0.1 m) was reasonable, but a receiver reports it
 
 ### IMU signal path (ICM-42688-P)
 
-The first IMU model did not agree with the datasheet (DS-000347, Rev 1.6). The density value was correct, but the path was not. Motor noise was about 1.7 times too high at 1 kHz. It was much higher when the IMU ran faster than the controller. These items changed:
+The first IMU model did not agree with the datasheet (DS-000347, Rev 1.6). The density value was correct, but the path was not. Motor noise was about 1.7 times too high at the 1 kHz rate used then. It was much higher when the IMU ran faster than the controller. These items changed:
 
 - **Noise density is one-sided.** The datasheet gives 2.8 mdps/√Hz and 0.028 dps RMS in 100 Hz, which is RMS = N·√bandwidth. The Random Noise block now uses σ = N/√(2·Ts). Before, it used σ = N/√Ts, which is the Kalibr form for a two-sided density, and its output was √2 too high.
 - **Anti-alias filter.** The new `ImuFrontEnd` subsystem adds noise to rate and specific force at the plant step. It then applies a 2nd-order Butterworth low-pass filter at 258 Hz. This is the datasheet's `GYRO_AAF_DELT` 6 and Betaflight's `gyro_hardware_lpf` NORMAL. The datasheet gives order and bandwidth; the Butterworth shape is an assumption. RMS gyro noise is 0.046 dps before quantization, and the filter adds about 0.87 ms of lag.
 - **Output registers.** The `IMU` subsystem applies bias, 16-bit quantization and range at the output data rate.
-- **IMU faster than the controller.** Betaflight runs `gyro_lpf2` on each gyro sample as its downsample filter. A `GyroDownsample` subsystem does this when `SENSORS.imu.ts` is less than `FC.ts`. At equal rates the model has no such subsystem, and LPF2 stays in `GyroFilters`.
+- **IMU faster than the controller.** The shipped model has equal rates. Betaflight runs `gyro_lpf2` on each gyro sample as its downsample filter. A `GyroDownsample` subsystem does this when `SENSORS.imu.ts` is less than `FC.ts`. At equal rates the model has no such subsystem, and LPF2 stays in `GyroFilters`.
 
 **Not modelled:** the datasheet's UI filter (Betaflight sets it to low latency), noise above the plant step's Nyquist frequency, and bias drift. The datasheet gives the density only at 10 Hz. The model assumes that the density is flat above 10 Hz.
 
 **Sensor modes.** `sensors: 'noiseless'` keeps the filter and has no noise, bias or quantization. Use it to measure the stability of the loop. `'ideal'` has no filter either.
 
+### Notch filters and vibration
+
+The model now has Betaflight's full gyro chain and an airframe vibration source. Motor activity at hover falls from 30‰ with no notch filters to 2.45‰ with both filters.
+
+**Gyro chain.** The order is LPF2, RPM filter, LPF1, dynamic notch. These agree with Betaflight's defaults:
+
+- **RPM filter:** 3 harmonics of each motor on all axes, Q 5. A notch fades out over 50 Hz above 100 Hz. Rotor speed goes through a 150 Hz PT1, as telemetry does. It uses the new Notch Filter block.
+- **Dynamic notch:** 3 notches on each axis, Q 3, 100–600 Hz. The new Spectrum Peaks block finds their frequencies. It runs a 72-sample sliding DFT on the signal after LPF1.
+- **Rate:** Betaflight turns the dynamic notch off below 2 kHz, so the controller and the IMU now run at 2 kHz. The plant step does not change, so a host steps the model at the same rate.
+- **Attitude estimator:** it now reads the filtered gyro and a 25 Hz PT2 of the accelerometer, as in Betaflight. It read the raw signals before. Vibration showed this error in T19.
+
+**Not modelled:** Betaflight updates its notches over several loops, and the model updates them on each sample. D-term notches and the dynamic gyro and D-term low-pass filters are also not modelled. `gyro_dps` here has the fixed 250 Hz and 500 Hz low-pass filters, with a fixed 150 Hz filter on D.
+
+**Vibration source.** `SENSORS.vibration` adds these items to the rate and specific force at the plant step, before the anti-alias filter. It is on with `'modelled'` sensors. All amplitudes grow with rotor speed squared.
+
+- **Rotor harmonics:** 2, 3 and 1 deg/s per rotor at 1×, 2× and 3× rotor speed, at a rotor speed of 175 Hz.
+- **Broadband motion:** 0.03 deg/s/√Hz.
+- **Frame resonance:** 225 Hz, Q 8, gain 2.
+- **Axis shares:** 1, 0.75 and 0.5 on roll, pitch and yaw.
+- **Accelerometer:** 0.1 m/s² per deg/s. This value is an estimate with no log data.
+
+**Source of the values.** They are estimates scaled from one public log: Oscar Liang's 4S 5-inch practice log (Betaflight 4.3.1, raw gyro in the debug fields). A peak stays near 222–234 Hz at different throttles, so the model treats it as a frame resonance. The log has no rotor speed. It removes 8–21 times the vibration with only a 750 Hz low-pass filter, so most of its vibration is in narrow lines.
+
+| Above 80 Hz | Log | Model |
+|---|---|---|
+| Raw gyro RMS, roll, rotor speed about 175 Hz (deg/s) | 4.0 | 3.4 |
+| Raw gyro RMS, roll, rotor speed about 220 Hz (deg/s) | 8.7–11 | 8.0–9.7 |
+| Attenuation, with the log's filter settings | 8–21 times | 14–21 times |
+| Motor SD, with the log's filter settings (‰) | 4.5–6.3 | 3.9–5.3 |
+
+The log's rate gains and D-term filters differ from the model's, and its flight is not a steady hover. Use these values as an order of magnitude, and replace them with a log from this quad when one is available. The filter-setting rows were not used to set the vibration values. The model's own filter settings are heavier, which gives 2.45‰ at hover.
+
 ### Tuning across mass configurations
 
 One set of gains must fly all the mass configurations in `AIRFRAMES`. `__tests__/reference-models/fpv-tuning.test.ts` enforces the limits. `scripts/fpv-tuning-sweep.ts` prints the numbers. Masses and positions are estimates from typical parts.
 
-All values use the same gains, with TPA and the IMU filter in the loop, on a full battery. The input is a 124 deg/s step from a 1 ms stick move. t90 and settling time start at the stick move. "Unstable at gain" is the first value on the test grid at which P, I and D together cause a sustained oscillation.
+All values use the same gains, with TPA, the IMU filter and the notch filters in the loop, on a full battery. The input is a 124 deg/s step from a 1 ms stick move. t90 and settling time start at the stick move. "Unstable at gain" is the first value on the test grid at which P, I and D together cause a sustained oscillation. These runs have no vibration, so the dynamic notches stay at their start frequencies.
 
-| Airframe | Mass (kg) | Thrust/weight | Hover (µs) | Overshoot roll / pitch / yaw (%) | t90 roll / pitch (ms) | Settling to 5%, roll / pitch (ms) | Unstable at gain, roll / pitch | Motor noise SD (‰) |
+| Airframe | Mass (kg) | Thrust/weight | Hover (µs) | Overshoot roll / pitch / yaw (%) | t90 roll / pitch (ms) | Settling to 5%, roll / pitch (ms) | Unstable at gain, roll / pitch | Motor SD with vibration (‰) |
 |---|---|---|---|---|---|---|---|---|
-| `smallerPack` (−80 g) | 0.67 | 5.17 | 1410 | 15.6 / 14.2 / 7.6 | 39.5 / 41.0 | 107 / 115 | 12 / 12 | 0.47 |
-| `baseline` | 0.75 | 4.62 | 1438 | 16.2 / 15.0 / 7.9 | 39.0 / 41.0 | 106 / 115 | 12 / 12 | 0.45 |
-| `frontCamera` (60 g) | 0.81 | 4.28 | 1458 | 16.2 / 18.0 / 8.8 | 38.0 / 44.5 | 103 / 126 | 12 / 14 | 0.44 |
-| `largerPack` (+90 g) | 0.84 | 4.13 | 1468 | 16.9 / 16.0 / 8.2 | 38.5 / 41.0 | 104 / 115 | 12 / 12 | 0.44 |
-| `frontSensor` (150 g) | 0.90 | 3.85 | 1487 | 16.7 / 22.7 / 10.3 | 37.5 / 50.5 | 100 / 146 | 12 / 20 | 0.42 |
-| `bellyLoad` (250 g) | 1.00 | 3.47 | 1518 | 19.1 / 19.3 / 9.1 | 39.5 / 43.5 | 107 / 122 | 14 / 16 | 0.41 |
-| `allUp` (all except `frontSensor`) | 1.15 | 3.01 | 1562 | 20.5 / 22.6 / 10.3 | 39.5 / 47.0 | 107 / 133 | 16 / 20 | 0.39 |
+| `smallerPack` (−80 g) | 0.67 | 5.17 | 1410 | 17.4 / 15.5 / 7.7 | 37.0 / 38.5 | 102 / 110 | 8 / 8 | 2.20 |
+| `baseline` | 0.75 | 4.62 | 1438 | 18.1 / 16.4 / 7.9 | 36.5 / 38.5 | 100 / 109 | 8 / 8 | 2.45 |
+| `frontCamera` (60 g) | 0.81 | 4.28 | 1458 | 18.8 / 19.8 / 8.8 | 35.5 / 41.5 | 96 / 120 | 8 / 8 | 2.59 |
+| `largerPack` (+90 g) | 0.84 | 4.13 | 1468 | 18.8 / 17.5 / 8.2 | 36.5 / 39.0 | 99 / 109 | 8 / 8 | 2.73 |
+| `frontSensor` (150 g) | 0.90 | 3.85 | 1487 | 19.6 / 24.7 / 10.4 | 34.5 / 48.0 | 94 / 140 | 8 / 12 | 2.71 |
+| `bellyLoad` (250 g) | 1.00 | 3.47 | 1518 | 21.1 / 20.9 / 9.2 | 37.5 / 41.5 | 103 / 118 | 10 / 10 | 3.18 |
+| `allUp` (all except `frontSensor`) | 1.15 | 3.01 | 1562 | 23.5 / 24.5 / 10.4 | 37.0 / 45.0 | 154 / 183 | 10 / 12 | 3.55 |
+
+**Settling time.** A step undershoots by about 5% after its peak. On `allUp` the undershoot is 5.2%, so the settling time jumps. Without notch filters the undershoot is 4.2%. The metric finds large changes only.
 
 **Why the change is small.** Thrust is proportional to command squared, so a heavier quad has more authority per unit of command at its hover point. This cancels much of the added inertia.
 
@@ -472,32 +506,38 @@ All values use the same gains, with TPA and the IMU filter in the loop, on a ful
 
 | Condition | `smallerPack` overshoot (%) | `baseline` overshoot (%) | `allUp` overshoot (%) | Lowest unstable gain |
 |---|---|---|---|---|
-| Motor lag 20 ms | 6.7 / 7.2 | 6.7 / 7.3 | 8.8 / 11.5 | 8 |
-| Motor lag 50 ms | 27.6 / 25.7 | 28.3 / 26.8 | 33.3 / 35.8 | 16 |
-| 20% charge | 18.5 / 17.0 | 19.1 / 18.0 | 23.9 / 25.7 | 14 |
-| No TPA | 14.5 / 13.3 | 14.4 / 13.6 | 16.0 / 19.3 | 10 |
+| Motor lag 20 ms | 6.5 / 6.9 | 6.6 / 7.0 | 9.8 / 12.1 | 5 |
+| Motor lag 50 ms | 30.6 / 28.2 | 31.2 / 29.3 | 36.9 / 38.1 | 10 |
+| 20% charge | 20.7 / 18.8 | 21.4 / 19.8 | 27.0 / 27.5 | 8 |
+| No TPA | 15.9 / 14.2 | 15.8 / 14.5 | 17.8 / 20.5 | 6 |
+| No notch filters | 15.5 / 14.2 | 16.0 / 15.0 | 20.1 / 22.3 | 14 |
 
-**IMU and controller rate.** All rates give the same step response, within 0.3 percentage points, because the 33 ms motor lag sets it. The rates below use the baseline airframe.
+**IMU and controller rate.** The rates below use the baseline airframe. The motor lag sets the step response, so rates above 2 kHz do not change it much.
 
-| IMU / controller / plant step | Unstable at gain | Motor noise SD (‰) |
-|---|---|---|
-| 1k / 1k / 500 µs (current) | 12 | 0.45 |
-| 2k / 1k / 500 µs | 12 | 0.46 |
-| 8k / 1k / 125 µs | 12 | 0.46 |
-| 2k / 2k / 500 µs | 14 | 0.51 |
-| 4k / 4k / 125 µs | 14 | 0.55 |
-| 8k / 4k / 125 µs | 14 | 0.56 |
-| 8k / 8k / 125 µs | 16 | 0.59 |
+| IMU / controller / plant step | Roll overshoot (%) | Unstable at gain | Motor SD with vibration (‰) |
+|---|---|---|---|
+| 1k / 1k / 500 µs (no dynamic notch) | 17.3 | 8 | 3.84 |
+| 2k / 2k / 500 µs (shipped) | 18.1 | 8 | 2.45 |
+| 4k / 4k / 125 µs | 18.5 | 8 | 2.42 |
+| 8k / 4k / 125 µs | 18.5 | 8 | 2.45 |
+| 8k / 8k / 125 µs | 18.4 | 8 | 2.49 |
 
-**Rotor vibration.** `vibration` adds rotor-synchronous motion to the IMU input, for studies only. It is off in the shipped models, because Betaflight's RPM and dynamic notch filters are not modelled. At hover the rotors turn at about 174 Hz, which is in the pass band of the gyro filters. Thus 1 deg/s per rotor gives 6.5‰ motor SD, and 5 deg/s gives 33‰. This is more than 14 and 74 times the 0.45‰ from sensor noise. The amplitudes are not measurements.
+**Filter contributions**, baseline airframe with vibration:
+
+| Filters | Motor SD (‰) |
+|---|---|
+| None | 30.33 |
+| Dynamic notch only | 5.16 |
+| RPM only | 4.06 |
+| RPM and dynamic notch | 2.45 |
 
 **Decisions:**
 
-- **Gains stay at D 40/46.** All corners are in the limits. D 44/50 returns the baseline to 14.4% but `allUp` pitch moves only from 22.6% to 21.3%, and motor noise increases by about 8%.
-- **The IMU and controller stay at 1 kHz.** A faster rate gives no change in step response and little change in margin. A 125 µs plant step also costs the host about 3.5 times the CPU time.
-- **Gain margin is not the real limit.** The plant has no frame flex, ESC delay or prop wash, so its margins are higher than a real quad's. Vibration, and the notch filters that remove it, is the next item to model.
+- **Gains stay at D 40/46.** All corners are in the limits. The notch filters' lag increases baseline roll overshoot from 16.0% to 18.1%. They reduce the lowest unstable gain from 14 to 8 at the shipped rate.
+- **The IMU and controller run at 2 kHz.** This is the slowest rate with the dynamic notch. Faster rates give no measured benefit, and a 125 µs plant step costs a host about 3.5 times the CPU time.
+- **Gain margin is not yet a real limit.** The plant has no frame flex, ESC delay or prop wash, so its margins are higher than a real quad's. The vibration source excites the gyro, but it does not model the loop gain of a flexible frame.
 
-**Limits** (in the test): overshoot below 25% on roll and pitch and below 12% on yaw, and below 30% on roll and pitch at 20% charge; t90 below 55 ms on roll and pitch and below 100 ms on yaw; settling below 150 ms on roll and pitch; stable at 4 times the loop gain with motor lag 20, 33 and 50 ms; motor noise below 0.6‰.
+**Limits** (in the test): overshoot below 25% on roll and pitch and below 12% on yaw, and below 30% on roll and pitch at 20% charge; t90 below 55 ms on roll and pitch and below 100 ms on yaw; settling below 200 ms on roll and pitch; stable at 4 times the loop gain with motor lag 20, 33 and 50 ms; motor SD from sensor noise below 0.6‰ and with vibration below 5‰; notch filters remove at least 8 times the vibration on every airframe.
 
 **Not tested:** Altitude Hold and the other outer loops across airframes. `ap_hover_throttle` stays at 1438 µs, and `allUp` needs 1562 µs on a full battery. This difference is 124 µs of the 200 µs altitude I limit. A low battery uses more.
 
@@ -541,7 +581,7 @@ The generated `FPV_Vehicle_inputs_t` becomes:
 - **Threading.** The IOS sets `gnss_env` from the UI thread. Hand it to the model thread the same way the sticks are handed over; never write `model->inputs` from another thread.
 - **When changes take effect.**
   - `gnss_env` changes take effect at the next 10 Hz GNSS sample.
-  - γ changes take effect at the next magnetometer sample (100 Hz) and the next flight controller sample (1 kHz).
+  - γ changes take effect at the next magnetometer sample (100 Hz) and the next flight controller sample (2 kHz).
 - **Satellite count** is compared numerically: ≥ 3 for 2D, ≥ 4 for 3D, ≥ 8 for home. Integers are expected. HDOP ≤ 0 means no fix.
 
 ### 2. New outputs
@@ -554,12 +594,12 @@ These are appended to `FPV_Vehicle_outputs_t`. Existing fields keep their names,
 | `gnss_vel_ned` | `double[3]` | **true**-north NED, m/s, 1 cm/s | 10 Hz | Holds the last fix (2D: down = 0) |
 | `gnss_fix` | `double[3]` | [fix type 0/2/3 (UBX), satellites, pDOP] | 10 Hz | fix type 0 |
 | `gnss_course` | `double[4]` | [track true °, track magnetic °, ground speed m/s, track valid 0/1] | 10 Hz | track held, valid = 0 (below 0.5 m/s or no fix) |
-| `gps_heading_ok` | `double` | 1 once GPS course has established the heading (Betaflight `canUseGPSHeading`); reset at arming; only rises without a magnetometer | 1 kHz | 0 |
-| `fc_armed`, `fc_angle_mode`, `fc_airmode` | `double` | 0 or 1 | 1 kHz | — |
+| `gps_heading_ok` | `double` | 1 once GPS course has established the heading (Betaflight `canUseGPSHeading`); reset at arming; only rises without a magnetometer | 2 kHz | 0 |
+| `fc_armed`, `fc_angle_mode`, `fc_airmode` | `double` | 0 or 1 | 2 kHz | — |
 | `vario_est` (Phase 9) | `double` | m/s, positive up: the derivative of `alt_est` through a 1 Hz PT2 | 100 Hz | — |
 | `alt_est` (Phase 9) | `double` | m, relative to the arming point (Betaflight's estimate) | 100 Hz | 0 while disarmed |
-| `heading_deg` | `double` | true heading, 0–360 | 1 kHz | — |
-| `home_valid` | `double` | 0 or 1; set only on the arming sample | 1 kHz | 0 |
+| `heading_deg` | `double` | true heading, 0–360 | 2 kHz | — |
+| `home_valid` | `double` | 0 or 1; set only on the arming sample | 2 kHz | 0 |
 | `home_distance_m`, `home_bearing_deg` | `double` | m; true bearing from the vehicle to home, 0–360 | 10 Hz (on each fix) | 0 while `home_valid` = 0 |
 | `battery_mah_drawn` | `double` | mAh drawn from the 1300 mAh pack | 2 kHz | — |
 
@@ -589,7 +629,10 @@ New model states are named in the generated C as `<subsystem path>_<block>_state
 
 | State (generated name) | Holds | Trim action |
 |---|---|---|
-| `Sensors_ImuFrontEnd_GyroAntiAlias_*`, `Sensors_ImuFrontEnd_AccelAntiAlias_*` | The IMU's anti-alias filters | Leave. They start at 0 and settle within about 5 ms; estimated tilt moves less than 0.01°. |
+| `Sensors_ImuFrontEnd_GyroAntiAlias_*`, `Sensors_ImuFrontEnd_AccelAntiAlias_*` | The IMU's anti-alias filters | Leave. They start at 0 and settle within about 5 ms. |
+| `Sensors_ImuFrontEnd_rotor_phase_rad`, `Sensors_ImuFrontEnd_FrameResonance_*`, `Sensors_ImuFrontEnd_BroadbandNoise_dps_*` | The vibration source | Leave. |
+| `FlightController_GyroFilters_*` (notch states, Spectrum Peaks states, rotor speed filter) | The RPM filter and the dynamic notch | Leave. The rotor speed filter settles within about 5 ms, and the dynamic notches take about 100 ms (est., not measured) to find their peaks. |
+| `FlightController_AccelLPF_*` | The accelerometer's 25 Hz PT2 | Leave. It starts at 0, so the estimator does not use the accelerometer for about 50 ms. |
 | `Sensors_GNSS_GmPrev_state` [3] | Correlated GNSS error, unit variance | Leave. `_init` sets it to its seeded stationary draw. |
 | `Sensors_GNSS_GmSmoothPrev_state` [3] | The slow error after its 5 s smoothing pole (unnormalised) | Leave. `_init` sets it to match the seeded draw. |
 | `Sensors_GNSS_FastPrev_state`, `Sensors_GNSS_FastSmoothPrev_state` [3] | The fast (navigation-filter residual) error's two poles | Leave at 0; it settles within about 2 s. |

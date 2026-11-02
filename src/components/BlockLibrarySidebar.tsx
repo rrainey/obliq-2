@@ -180,6 +180,21 @@ const blockTypes: BlockType[] = [
     vectorSupport: 'element-wise'
   },
   {
+    id: 'notch_filter',
+    name: 'Notch Filter',
+    category: 'Dynamic',
+    description: 'Notch with a centre frequency and depth that can change',
+    icon: 'N(f)',
+    vectorSupport: 'element-wise'
+  },
+  {
+    id: 'spectrum_peaks',
+    name: 'Spectrum Peaks',
+    category: 'Dynamic',
+    description: 'Track the strongest frequencies in a signal',
+    icon: 'P(f)',
+  },
+  {
     id: 'discrete_transform',
     name: 'Discrete Transform',
     category: 'Dynamic',

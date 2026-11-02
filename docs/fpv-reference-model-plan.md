@@ -148,7 +148,7 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
    - Verify the step responses of the motor lag.
    - Check that thrust and torque signs match the mixer convention.
 3. **Flight controller (acro).** Add the rates, gyro filters, rate PID and mixer, with perfect sensors. ✅ Done: `__tests__/reference-models/fpv-acro.test.ts`.
-   - **Timing:** the plant steps at 0.5 ms (2 kHz). The `FlightController` subsystem runs at 1 ms (1 kHz) through `sampleTimeSec`, so its outputs hold for two plant steps.
+   - **Timing:** the plant steps at 0.5 ms (2 kHz). The `FlightController` subsystem ran at 1 ms (2 kHz from the notch filter work; see `fpv-hud-gnss-plan.md`) (1 kHz) through `sampleTimeSec`, so its outputs hold for two plant steps.
    - **Structure:** it contains the Rates, GyroFilters, RatePID and Mixer sheets. The PT1 filters and derivatives are discrete transfer functions, and the I term is a unit-delay accumulator.
    - **Pilot:** the `Pilot` subsystem scripts sticks from time-indexed lookup tables: a roll doublet, a pitch doublet, then a yaw step at hover throttle.
    - **Stick axes are body-rate commands in FRD:** +roll rolls right, +pitch is nose up (pull-back), +yaw is nose right.
@@ -160,7 +160,7 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
      - Airmode holds full-stick rates at zero throttle while keeping motors inside idle..full.
 4. **Sensors and estimator.** ✅ Done: `__tests__/reference-models/fpv-sensors.test.ts`.
    - **Sensors subsystem:**
-     - IMU at 1 kHz: gyro 2.8 mdps/√Hz, accelerometer 70 µg/√Hz; turn-on biases; 16-bit quantisation; ±2000 dps and ±16 g ranges.
+     - IMU at 1 kHz (now 2 kHz): gyro 2.8 mdps/√Hz, accelerometer 70 µg/√Hz; turn-on biases; 16-bit quantisation; ±2000 dps and ±16 g ranges.
      - Magnetometer at 100 Hz: C_bn·m_NED plus hard iron, 0.4 µT noise, 0.3 µT LSB.
      - Barometer at 50 Hz: ISA troposphere pressure at altitude MSL (−z, because z = 0 is 0 m MSL), 1.3 Pa noise, and a 30 ms lag that starts at the field pressure.
      - Each rate is its own nested sample scope; the noise sources are seeded Random Noise blocks.

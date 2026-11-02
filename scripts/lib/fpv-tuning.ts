@@ -6,6 +6,7 @@
 
 import {
   buildFpvModel,
+  butterworth2,
   FPV,
   hoverThrottleFor,
   withFpvVariant,
@@ -29,6 +30,11 @@ export interface FlightRow {
   setpointDps: number[]
   rateDps: number[]
   motorCmd: number[]
+  /** The IMU's reading, deg/s */
+  imuGyroDps: number[]
+  /** After the flight controller's gyro filters, deg/s */
+  gyroFilteredDps: number[]
+  rotorHz: number[]
 }
 
 let runCount = 0
@@ -39,7 +45,7 @@ export function flyVariant(
   sticks: (hoverThrottle: number) => StickProfile,
   seconds: number,
   sensors: SensorMode,
-  vibration?: VibrationOptions
+  vibration?: VibrationOptions | false
 ): FlightRow[] {
   return withFpvVariant(variant, () => {
     const hover = hoverThrottleFor(FPV.mass, BATTERY.initialSoc)
@@ -61,6 +67,9 @@ export function flyVariant(
     for (int k = 0; k < 3; ++k) printf(" %.7g", o->rate_setpoint[k]);
     for (int k = 0; k < 3; ++k) printf(" %.7g", o->omega[k] * ${R2D});
     for (int k = 0; k < 4; ++k) printf(" %.7g", o->motor_cmd[k]);
+    for (int k = 0; k < 3; ++k) printf(" %.7g", o->imu_gyro[k] * ${R2D});
+    for (int k = 0; k < 3; ++k) printf(" %.7g", o->gyro_dps[k]);
+    for (int k = 0; k < 4; ++k) printf(" %.7g", o->motor_omega[k] / ${2 * Math.PI});
     printf("\\n");
   }
   return 0;
@@ -69,7 +78,7 @@ export function flyVariant(
     cleanupNativeDir(result.outDir)
     return result.stdout.trim().split('\n').map(line => {
       const v = line.split(' ').map(Number)
-      return { tS: v[0]!, setpointDps: v.slice(1, 4), rateDps: v.slice(4, 7), motorCmd: v.slice(7, 11) }
+      return { tS: v[0]!, setpointDps: v.slice(1, 4), rateDps: v.slice(4, 7), motorCmd: v.slice(7, 11), imuGyroDps: v.slice(11, 14), gyroFilteredDps: v.slice(14, 17), rotorHz: v.slice(17, 21) }
     })
   })
 }
@@ -167,10 +176,46 @@ export interface MotorNoise {
 }
 
 /** Motor activity in a steady hover with sensor noise: the signal that heats real motors. */
-export function hoverMotorNoise(variant: FpvVariant, vibration?: VibrationOptions): MotorNoise {
+export function hoverMotorNoise(variant: FpvVariant, vibration: VibrationOptions | false = false): MotorNoise {
   const rows = flyVariant(variant, thr => ({ roll: hold(0), pitch: hold(0), yaw: hold(0), throttle: hold(thr) }), 4, 'modelled', vibration)
   const m = rows.filter(r => r.tS > 2).map(r => r.motorCmd[0]!)
   let travel = 0
   for (let i = 1; i < m.length; i++) travel += Math.abs(m[i]! - m[i - 1]!)
   return { sdPermille: stdDev(m) * 1000, travelPerS: travel / 2 }
+}
+
+export interface VibrationLevels {
+  /** RMS above 80 Hz of the IMU's reading, deg/s, roll/pitch/yaw */
+  rawDps: number[]
+  /** RMS above 80 Hz after the flight controller's gyro filters, deg/s */
+  filteredDps: number[]
+  /** SD above 80 Hz of a motor command, ‰ of full command */
+  motorPermille: number
+  /** Mean rotor speed, Hz */
+  rotorHz: number
+}
+
+/** What is left above 80 Hz: x minus a 2nd-order 80 Hz low-pass, run forward. The log analysis uses the same cutoff. */
+function aboveEightyHz(xs: number[], ts: number): number[] {
+  const { numerator: b, denominator: a } = butterworth2(80, ts)
+  let x1 = xs[0]!, x2 = xs[0]!, y1 = xs[0]!, y2 = xs[0]!
+  return xs.map(x => {
+    const y = b[0]! * x + b[1]! * x1 + b[2]! * x2 - a[1]! * y1 - a[2]! * y2
+    x2 = x1; x1 = x; y2 = y1; y1 = y
+    return x - y
+  })
+}
+
+/** Vibration in a steady hover, in the same terms as a blackbox log. */
+export function hoverVibration(variant: FpvVariant, scale = 1): VibrationLevels {
+  const rows = flyVariant(variant, thr => ({ roll: hold(0), pitch: hold(0), yaw: hold(0), throttle: hold(thr) }), 4, 'modelled', { scale })
+  const tail = rows.filter(r => r.tS > 2)
+  const ts = tail[1]!.tS - tail[0]!.tS
+  const rms = (xs: number[]) => stdDev(aboveEightyHz(xs, ts).slice(40))
+  return {
+    rawDps: [0, 1, 2].map(a => rms(tail.map(r => r.imuGyroDps[a]!))),
+    filteredDps: [0, 1, 2].map(a => rms(tail.map(r => r.gyroFilteredDps[a]!))),
+    motorPermille: rms(tail.map(r => r.motorCmd[0]!)) * 1000,
+    rotorHz: tail.reduce((t, r) => t + r.rotorHz.reduce((p, q) => p + q, 0) / 4, 0) / tail.length,
+  }
 }

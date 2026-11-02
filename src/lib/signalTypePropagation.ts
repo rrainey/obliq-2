@@ -246,6 +246,7 @@ function getBlockOutputType(block: BlockData): string | null {
     case 'units_conversion':
     case 'transfer_function':
     case 'discrete_transform':
+    case 'notch_filter':
     case 'lookup_1d':
     case 'lookup_2d':
     case 'matrix_multiply':  // New: matrix multiply output depends on inputs
@@ -550,6 +551,10 @@ function determineProcessingBlockOutputType(
       // Preserve vector shape (incl. both sincos ports)
       return typeToString(parsedTypes[0])
 
+    case 'spectrum_peaks':
+      return `double[${Math.max(1, Math.trunc(Number(block?.parameters?.count ?? 3)))}]`
+
+    case 'notch_filter':
     case 'transfer_function':
     case 'discrete_transform':
       // Transfer function: output type matches input type
@@ -2231,6 +2236,8 @@ function getBlockOutputPortCount(block: BlockData): number {
     case 'units_conversion':
     case 'transfer_function':
     case 'discrete_transform':
+    case 'notch_filter':
+    case 'spectrum_peaks':
     case 'lookup_1d':
     case 'lookup_2d':
     case 'input_port':
@@ -2320,6 +2327,7 @@ function getBlockInputPortCount(block: BlockData): number {
     case 'atmosphere':
       return 1
     case 'saturation_dynamic':
+    case 'notch_filter':
       return 3
     case 'data_store_read':
       return 0
@@ -2617,6 +2625,7 @@ export function getMatrixBlockOutputType(
     case 'units_conversion':
     case 'transfer_function':
     case 'discrete_transform':
+    case 'notch_filter':
     case 'sign':
     case 'square':
     case 'quantizer':

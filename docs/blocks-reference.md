@@ -119,6 +119,47 @@
 
 ---
 
+### Notch Filter Block
+
+**Type**: `notch_filter`
+
+A second-order notch. Its centre frequency and depth can change on every sample, so another signal can drive it. It uses a state-variable form, which stays valid when the frequency moves.
+
+**Parameters**:
+- `q` (default 5): centre frequency divided by the bandwidth
+- `sampleTime` (seconds, default 0): 0 uses the enclosing sample scope, or the model step
+
+**Ports**:
+- Input 0, `signal`: `double` or `double[N]`, filtered element by element
+- Input 1, `center_Hz`: limited to 1 Hz … 0.48/Ts
+- Input 2, `weight`: limited to 0 … 1. Weight 1 gives the full notch. Weight 0 passes the signal, and the states keep running
+- Output: the same type as `signal`
+
+**Semantics**: with g = tan(π·f·Ts) and k = 1/Q, the block is the bilinear transform of (s² + ω²) / (s² + (ω/Q)·s + ω²) at weight 1.
+
+### Spectrum Peaks Block
+
+**Type**: `spectrum_peaks`
+
+Tracks the strongest frequencies in a signal, to drive Notch Filter blocks. It re-implements the behaviour of the analysis in Betaflight's dynamic notch.
+
+**Parameters**:
+- `count` (default 3): number of peaks
+- `windowSize` (default 72): samples in the sliding DFT, an even number
+- `minHz`, `maxHz` (defaults 100, 600): search range
+- `updateEvery` (default 12): input samples between peak searches
+- `sampleTime` (seconds, default 0): 0 uses the enclosing sample scope, or the model step
+
+**Ports**: input 0 is `double`. The output is `double[count]`, in Hz, in frequency order.
+
+**Semantics**:
+1. Average floor(fs / (2·maxHz)) samples, at least one. Push the result through a sliding DFT, damped by r = 0.9999.
+2. At each search, apply a Hann window in the frequency domain, take the power of each bin, and keep the `count` highest local maxima.
+3. Calculate the noise floor without the peaks. The threshold is twice the floor.
+4. Each peak above the threshold moves its output. Parabolic interpolation gives its frequency, and a PT1 follows it. The cutoff is 4 Hz × (power / threshold), limited to 4–40 Hz.
+
+Outputs start evenly spaced across the search range, and stay in place while no peak is above the threshold.
+
 ### Evaluate Block
 **Purpose**: Computes a custom expression using C-style arithmetic and logical operations.
 

@@ -1,5 +1,5 @@
 /**
- * FPV quadcopter reference model, Phase 4: sensor models (IMU at 1 kHz,
+ * FPV quadcopter reference model, Phase 4: sensor models (IMU at 2 kHz,
  * magnetometer at 100 Hz, barometer at 50 Hz) and the flight controller's
  * estimators (Mahony attitude filter, baro/accelerometer altitude filter).
  */
@@ -37,7 +37,8 @@ interface Row {
 }
 
 function fly(name: string, sticks: StickProfile | undefined, seconds: number) {
-  const model = buildFpvModel({ sticks: sticks ?? AIRBORNE_DEMO_STICKS, initialAltitude: ALT0 })
+  // No vibration: these tests compare the sensor models with their data sheets
+  const model = buildFpvModel({ sticks: sticks ?? AIRBORNE_DEMO_STICKS, initialAltitude: ALT0, vibration: false })
   const n = Math.round(seconds / FPV.dt)
   const result = compileAndRunNative({
     modelName: `fpvs_${name}`,

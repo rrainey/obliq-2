@@ -67,7 +67,7 @@ describe('FPV flight-controller OSD outputs', () => {
   test('mode flags follow the controller: armed, angle mode, airmode latched at 25% throttle', () => {
     const sticks: StickProfile = { ...DEMO_STICKS, aux: [[0, 1], [3, 1], [3.001, 0]] }
     const rows = run(sticks, 4)
-    // The controller samples at 1 kHz (every other plant step) and holds between
+    // The controller samples at FC.ts and holds between
     const fcTicks = rows.filter(r => r.tick % Math.round(FC.ts / FPV.dt) === 0)
     for (const r of fcTicks) {
       expect(r.armed).toBe(r.sticks[5]! > 0.5 ? 1 : 0)

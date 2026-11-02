@@ -207,6 +207,14 @@ const getBlockSymbol = (data: BlockNodeData) => {
   }
 
   // Handle discrete transfer function (z-transform) special case
+  if (data.type === 'notch_filter') {
+    return <span style={{ fontSize: '11px' }}>{`N(f), Q ${data.parameters?.q ?? 5}`}</span>
+  }
+
+  if (data.type === 'spectrum_peaks') {
+    return <span style={{ fontSize: '11px' }}>{`peaks: ${data.parameters?.count ?? 3}`}</span>
+  }
+
   if (data.type === 'discrete_transform') {
     return renderDiscreteTransform(data.parameters)
   }

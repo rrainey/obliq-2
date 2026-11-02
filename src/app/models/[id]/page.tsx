@@ -61,6 +61,8 @@ import RelayConfig from '@/components/RelayConfig'
 import RateLimiterConfig from '@/components/RateLimiterConfig'
 import QuantizerConfig from '@/components/QuantizerConfig'
 import RandomNoiseConfig from '@/components/RandomNoiseConfig'
+import NotchFilterConfig from '@/components/NotchFilterConfig'
+import SpectrumPeaksConfig from '@/components/SpectrumPeaksConfig'
 import AssertConfig from '@/components/AssertConfig'
 import SelectorConfig from '@/components/SelectorConfig'
 import DataStoreWriteConfig from '@/components/DataStoreWriteConfig'
@@ -1663,6 +1665,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       block.type === 'rate_limiter' ||
       block.type === 'quantizer' ||
       block.type === 'random_noise' ||
+      block.type === 'notch_filter' ||
+      block.type === 'spectrum_peaks' ||
       block.type === 'assert' ||
       block.type === 'selector' ||
       block.type === 'data_store_write' ||
@@ -2634,6 +2638,20 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
           )}
           {configBlock.type === 'quantizer' && (
             <QuantizerConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'notch_filter' && (
+            <NotchFilterConfig
+              block={configBlock}
+              onUpdate={handleBlockConfigUpdate}
+              onClose={() => setConfigBlock(null)}
+            />
+          )}
+          {configBlock.type === 'spectrum_peaks' && (
+            <SpectrumPeaksConfig
               block={configBlock}
               onUpdate={handleBlockConfigUpdate}
               onClose={() => setConfigBlock(null)}
