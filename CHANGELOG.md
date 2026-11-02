@@ -1,5 +1,22 @@
 # obliq-2 Change Log
 
+## What's New in 3.7.0
+
+The FPV Vehicle now has Betaflight's RPM filter and dynamic notch, and airframe vibration on its IMU. At hover, the filters reduce motor activity from 30‰ to 2.45‰ of full command. **The ports and `--dt 0.0005` do not change, but flight traces do.** Export the model again for each host.
+
+- **New block: Notch Filter.** A second-order notch whose centre frequency and depth can change on every sample. It uses a state-variable form, which stays valid when the frequency moves.
+- **New block: Spectrum Peaks.** Tracks the strongest frequencies in a signal with a sliding DFT, to drive Notch Filter blocks. It re-implements the behaviour of Betaflight's dynamic notch analysis.
+- **RPM filter and dynamic notch**, with Betaflight's defaults. The gyro chain is now LPF2, RPM filter, LPF1, dynamic notch.
+- **The FPV controller and IMU run at 2 kHz; they ran at 1 kHz.** Betaflight turns the dynamic notch off below 2 kHz. Faster rates gave no measured benefit. The plant step stays at 500 µs.
+- **Airframe vibration is on with modelled sensors.** It has three rotor harmonics, a little broadband motion and a 225 Hz frame resonance. All amplitudes grow with rotor speed squared. To turn it off, set `vibration: false` in the builder.
+  - The values are estimates scaled from one public 4S 5-inch log, so use them as an order of magnitude.
+  - With the log's filter settings, the model removes 14–21 times the vibration (log: 8–21 times), and its motor activity is 3.9–5.3‰ (log: 4.5–6.3‰).
+- **Fixed: the attitude estimator read raw sensors.** As in Betaflight, it now reads the filtered gyro and a 25 Hz PT2 of the accelerometer. The rescue's impact check also reads the low-passed accelerometer.
+- **Fixed: the MCP server's Random Noise description** still gave the density formula from before 3.6.0.
+- **The rate tune stays the same, and the notch filters' lag has a cost.** Baseline roll overshoot is 18.1%; it was 16.2%. The loop first goes unstable at 8× gain; without the notch filters it does so at 14×. The worst full-battery overshoot is 24.7%, and the test limit is 25%.
+- **`fpv-tuning.test.ts`** now compares the vibration source with the log, and checks that the notch filters remove at least 8 times the vibration on all seven airframes. The settling limit is now 200 ms: a step undershoots by about 5%, so this metric can jump by about 40 ms for a 1% change.
+- **The model runs about 30% slower**, at about 22 times real time on the development machine.
+
 ## What's New in 3.6.0
 
 The FPV Vehicle's IMU path now agrees with the ICM-42688-P datasheet, and one set of gains is tested across mass configurations. **The ports do not change, but flight traces do.** Export the model again for each host.
