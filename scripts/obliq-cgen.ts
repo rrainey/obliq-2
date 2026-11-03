@@ -6,6 +6,10 @@
  *   npx --yes tsx scripts/obliq-cgen.ts <model.json> --out <dir> \
  *     [--name my_model] [--profile generic|saturn-ib-stack] [--dt 0.005] [--compile]
  *
+ * The editor's C code download has the same files (src/lib/codegen/cProject.ts).
+ * Model references are expanded from the model files beside the model, then from
+ * the store, as npm run obliq:test does.
+ *
  * Accepts either:
  *   { "name": "...", "data": { "sheets": [...], "parameters": [...] } }
  *   { "sheets": [...], "parameters": [...], ... }   // bare ModelData
@@ -13,9 +17,13 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
-import { execFileSync, execSync } from 'child_process'
+import { execSync } from 'child_process'
 import { CodeGenerator } from '../src/lib/codegen/CodeGenerator'
 import { CCodeBuilder } from '../src/lib/codegen/CCodeBuilder'
+import { buildCProject, defaultStep } from '../src/lib/codegen/cProject'
+import { generatorInfo } from '../src/lib/server/generatorInfo'
+import { expandModelFile } from '../src/lib/testing/resolveTestTargets'
+import { hasModelReferences } from '../src/lib/modelReferences'
 
 type Profile = 'generic' | 'saturn-ib-stack'
 
@@ -26,7 +34,8 @@ Options:
   --out <dir>              Output directory (required)
   --name <id>              C identifier / lib name (default: from JSON name or 'obliq_model')
   --profile <name>         generic (default) | saturn-ib-stack
-  --dt <sec>               Default step used in smoke main (default 0.005)
+  --dt <sec>               Step used in smoke_main.c and the README, not in the model
+                           (default: the model's simulation step, else 0.005)
   --algorithm <rk4|euler>  Integration algorithm (default rk4)
   --debug-math             Safe divide/mod abort + RK4 isfinite checks
   --compile                gcc-compile static lib + smoke main after emit
@@ -68,22 +77,25 @@ function loadModelJson(filePath: string): {
   parameters: any[]
   dataStores: any[]
   integrationAlgorithm?: 'rk4' | 'euler'
+  globalSettings?: { simulationTimeStep?: unknown }
 } {
   const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'))
-  const data = raw.data && raw.data.sheets ? raw.data : raw
-  if (!data.sheets || !Array.isArray(data.sheets)) {
+  const unexpanded = raw.data && raw.data.sheets ? raw.data : raw
+  if (!unexpanded.sheets || !Array.isArray(unexpanded.sheets)) {
     throw new Error(`No sheets[] in ${filePath}`)
   }
   const displayName =
     (typeof raw.name === 'string' && raw.name) ||
-    data.metadata?.description ||
+    unexpanded.metadata?.description ||
     path.basename(filePath, '.json')
+  const data = hasModelReferences(unexpanded.sheets) ? expandModelFile(unexpanded, filePath, displayName) : unexpanded
   const algo = data.globalSettings?.integrationAlgorithm
   return {
     displayName,
     sheets: data.sheets,
     parameters: data.parameters || [],
     dataStores: data.dataStores || [],
+    globalSettings: data.globalSettings,
     integrationAlgorithm: algo === 'euler' || algo === 'rk4' ? algo : undefined
   }
 }
@@ -286,33 +298,8 @@ void ${modelName}_rtw_step(
 `
 }
 
-function cmakeLists(
-  modelName: string,
-  profile: Profile,
-  subsystemSources: string[] = []
-): string {
-  const adapter =
-    profile === 'saturn-ib-stack'
-      ? `  ${modelName}_rtw_adapter.c\n`
-      : ''
-  const subSrc = subsystemSources.map(s => `  ${s}\n`).join('')
-  return `cmake_minimum_required(VERSION 3.16)
-project(${modelName}_cgen C)
-
-add_library(${modelName} STATIC
-  ${modelName}.c
-${adapter}${subSrc})
-target_include_directories(${modelName} PUBLIC \${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_options(${modelName} PRIVATE -Wall -Wextra -O2)
-
-add_executable(${modelName}_smoke smoke_main.c)
-target_link_libraries(${modelName}_smoke PRIVATE ${modelName} m)
-`
-}
-
-function smokeMain(modelName: string, dt: number, profile: Profile): string {
-  if (profile === 'saturn-ib-stack') {
-    return `#include "${modelName}_rtw_adapter.h"
+function saturnIbSmokeMain(modelName: string, dt: number): string {
+  return `#include "${modelName}_rtw_adapter.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -399,115 +386,6 @@ int main(int argc, char **argv) {
   return 0;
 }
 `
-  }
-  return `#include "${modelName}.h"
-#include <stdio.h>
-
-int main(void) {
-  ${modelName}_t model;
-  ${modelName}_init(&model, ${dt});
-  for (int i = 0; i < 10; i++) {
-    ${modelName}_step(&model);
-  }
-  printf("smoke ok steps=10 time=%g\\n", model.time);
-  return 0;
-}
-`
-}
-
-export interface PortSpec {
-  name: string
-  /** C element type, e.g. double */
-  cType: string
-  /** Array dimensions; [] for a scalar */
-  dims: number[]
-}
-
-/**
- * The model's input and output ports, read from the generated header's
- * `<model>_inputs_t` and `<model>_outputs_t` structs, so the manifest lists
- * exactly what a host compiles against.
- */
-export function portsFromHeader(header: string, modelName: string): { inputs: PortSpec[]; outputs: PortSpec[] } {
-  const struct = (suffix: string): PortSpec[] => {
-    const m = header.match(new RegExp(`typedef struct \\{([^}]*)\\} ${modelName}_${suffix}_t;`))
-    if (!m) return []
-    const ports: PortSpec[] = []
-    for (const line of m[1]!.split('\n')) {
-      const f = line.match(/^\s*([A-Za-z_][\w ]*?)\s+([A-Za-z_]\w*)((?:\[\d+\])*);\s*\/\*\s*(?:Input|Output) port/)
-      if (!f) continue
-      ports.push({ name: f[2]!, cType: f[1]!.trim(), dims: [...f[3]!.matchAll(/\[(\d+)\]/g)].map(d => Number(d[1])) })
-    }
-    return ports
-  }
-  return { inputs: struct('inputs'), outputs: struct('outputs') }
-}
-
-/**
- * obliq-2's version, and the git commit it was built from when available.
- * `dirty` is true when anything that shapes the generated C (the generator
- * under src/ and scripts/, or the model when it is in the repo) differs from
- * that commit.
- */
-function generatorInfo(modelPath: string): { version: string; commit: string | null; dirty: boolean | null } {
-  const root = path.resolve(__dirname, '..')
-  let version = 'unknown'
-  try {
-    version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version
-  } catch {}
-  try {
-    const commit = execSync('git rev-parse HEAD', { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
-    const model = path.relative(root, path.resolve(modelPath))
-    const paths = ['src', 'scripts', ...(model.startsWith('..') || path.isAbsolute(model) ? [] : [model])]
-    const dirty = execFileSync('git', ['status', '--porcelain', '--untracked-files=no', '--', ...paths], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() !== ''
-    return { version, commit, dirty }
-  } catch {
-    return { version, commit: null, dirty: null }
-  }
-}
-
-function writeManifest(
-  outDir: string,
-  meta: {
-    modelName: string
-    displayName: string
-    profile: Profile
-    sourceJson: string
-    warnings: string[]
-    stats: Record<string, number>
-    header: string
-    subsystemFiles: string[]
-  }
-) {
-  const ports = portsFromHeader(meta.header, meta.modelName)
-  const manifest = {
-    modelName: meta.modelName,
-    displayName: meta.displayName,
-    profile: meta.profile,
-    sourceJson: meta.sourceJson,
-    generatedAt: new Date().toISOString(),
-    generator: { name: 'obliq-2', ...generatorInfo(meta.sourceJson) },
-    warnings: meta.warnings,
-    stats: meta.stats,
-    inputs: ports.inputs,
-    outputs: ports.outputs,
-    files:
-      meta.profile === 'saturn-ib-stack'
-        ? [
-            `${meta.modelName}.c`,
-            `${meta.modelName}.h`,
-            `${meta.modelName}_rtw_adapter.c`,
-            `${meta.modelName}_rtw_adapter.h`,
-            ...meta.subsystemFiles,
-            'CMakeLists.txt',
-            'smoke_main.c'
-          ]
-        : [`${meta.modelName}.c`, `${meta.modelName}.h`, ...meta.subsystemFiles, 'CMakeLists.txt', 'smoke_main.c']
-  }
-  fs.writeFileSync(
-    path.join(outDir, 'cgen-manifest.json'),
-    JSON.stringify(manifest, null, 2) + '\n'
-  )
 }
 
 function main() {
@@ -530,8 +408,8 @@ function main() {
     process.exit(1)
   }
 
-  const dt = Number(arg('--dt') ?? '0.005')
   const loaded = loadModelJson(modelPath!)
+  const dt = arg('--dt') !== undefined ? Number(arg('--dt')) : defaultStep(loaded)
   const rawName = arg('--name') || loaded.displayName
   const modelName = CCodeBuilder.sanitizeIdentifier(rawName)
   const algorithm =
@@ -561,49 +439,30 @@ function main() {
 
   const absOut = path.resolve(outDir!)
   fs.mkdirSync(absOut, { recursive: true })
-  fs.writeFileSync(path.join(absOut, `${modelName}.h`), result.header)
-  fs.writeFileSync(path.join(absOut, `${modelName}.c`), result.source)
-  fs.writeFileSync(path.join(absOut, 'smoke_main.c'), smokeMain(modelName, dt, profile))
-
-  if (profile === 'saturn-ib-stack') {
-    fs.writeFileSync(
-      path.join(absOut, `${modelName}_rtw_adapter.h`),
-      saturnIbAdapterHeader(modelName)
-    )
-    fs.writeFileSync(
-      path.join(absOut, `${modelName}_rtw_adapter.c`),
-      saturnIbAdapterSource(modelName)
-    )
-  }
-
-  const subsystemSources: string[] = []
-  const subsystemFiles: string[] = []
-  for (const sub of result.subsystemFiles || []) {
-    const base = sub.subsystemName
-    const headerName = `${base}.h`
-    const sourceName = `${base}.c`
-    fs.writeFileSync(path.join(absOut, headerName), sub.header)
-    fs.writeFileSync(path.join(absOut, sourceName), sub.source)
-    subsystemSources.push(sourceName)
-    subsystemFiles.push(sourceName, headerName)
-    console.log(`  segregated module: ${headerName} + ${sourceName}`)
-  }
-
-  fs.writeFileSync(
-    path.join(absOut, 'CMakeLists.txt'),
-    cmakeLists(modelName, profile, subsystemSources)
-  )
-
-  writeManifest(absOut, {
-    modelName,
-    displayName: loaded.displayName,
-    profile,
-    sourceJson: path.resolve(modelPath!),
-    warnings: result.warnings || [],
-    stats: result.stats as any,
-    header: result.header,
-    subsystemFiles
+  const project = buildCProject({
+    displayName: rawName,
+    result,
+    dt,
+    source: path.resolve(modelPath!),
+    generator: generatorInfo(path.resolve(__dirname, '..'), modelPath!),
+    profile: profile === 'saturn-ib-stack'
+      ? {
+          name: profile,
+          smokeMain: saturnIbSmokeMain(modelName, dt),
+          files: {
+            [`${modelName}_rtw_adapter.h`]: saturnIbAdapterHeader(modelName),
+            [`${modelName}_rtw_adapter.c`]: saturnIbAdapterSource(modelName),
+          },
+          sources: [`${modelName}_rtw_adapter.c`],
+        }
+      : undefined,
   })
+  for (const [name, content] of Object.entries(project)) {
+    fs.writeFileSync(path.join(absOut, name), content)
+  }
+  for (const sub of result.subsystemFiles || []) {
+    console.log(`  segregated module: ${sub.subsystemName}.h + ${sub.subsystemName}.c`)
+  }
 
   console.log(`Wrote C project → ${absOut}`)
   console.log(`  model: ${modelName}  profile: ${profile}  algo: ${algorithm}`)

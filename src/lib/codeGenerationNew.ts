@@ -3,6 +3,7 @@
 import { Sheet } from '@/lib/simulationTypes'
 import { CodeGenerator, CodeGenerationOptions } from './codegen/CodeGenerator'
 import { ModelParameter } from './modelSchema'
+import { DataStoreDeclaration } from './dataStoreUtils'
 
 /**
  * Wrapper class to maintain backward compatibility with existing code
@@ -22,10 +23,11 @@ export class ModelCodeGenerator {
    * @param parameters Model parameters (Feature 3)
    * @returns Object containing header and source code
    */
-  generateCode(sheets: Sheet[], modelName: string = 'model', parameters: ModelParameter[] = []): {
+  generateCode(sheets: Sheet[], modelName: string = 'model', parameters: ModelParameter[] = [], dataStores: DataStoreDeclaration[] = []): {
     header: string
     source: string
     warnings: string[]
+    stats: unknown
     subsystemFiles: Array<{ header: string; source: string; subsystemName: string; warnings: string[] }>
   } {
     // Pass integration method from metadata if available
@@ -37,7 +39,7 @@ export class ModelCodeGenerator {
 
     // Create new generator with updated options
     const customGenerator = new CodeGenerator(options)
-    const result = customGenerator.generate(sheets, parameters)
+    const result = customGenerator.generate(sheets, parameters, dataStores)
 
     // Log any warnings
     if (result.warnings.length > 0) {
@@ -58,6 +60,7 @@ export class ModelCodeGenerator {
       header: result.header,
       source: result.source,
       warnings: result.warnings,
+      stats: result.stats,
       subsystemFiles: result.subsystemFiles
     }
   }

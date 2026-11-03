@@ -125,6 +125,34 @@ export function resolveTestTargets(args: string[], opts: ResolveOptions = {}): R
 }
 
 /**
+ * Expands the model references of a model file: from the model files beside it, by
+ * name, then from the store when one exists. Used by the command line C generator.
+ */
+export function expandModelFile<T extends { sheets?: any[] }>(data: T, filePath: string, name: string): T {
+  const home = resolveObliqHome()
+  const loaders: ModelLoader[] = [siblingFileLoader(path.dirname(filePath))]
+  let storage: Storage | null = null
+  if (fs.existsSync(createStoragePaths(home).db)) {
+    loaders.push(ref => {
+      storage = storage ?? openStorage(home, { referenceModelsDir: null })
+      return storageModelLoader(storage)(ref)
+    })
+  }
+  const load: ModelLoader = ref => {
+    let last: Error | null = null
+    for (const l of loaders) {
+      try {
+        return l(ref)
+      } catch (e) {
+        last = e as Error
+      }
+    }
+    throw last ?? new ModelReferenceError(`the referenced model (${ref.modelId}) does not exist`)
+  }
+  return expandModelReferences(data as any, load, { rootName: name }).data as T
+}
+
+/**
  * Resolves references against the model files in a folder, by the
  * reference's recorded model name (files carry no store id). Pinned versions
  * are not available from files.

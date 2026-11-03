@@ -12,6 +12,8 @@ import {
   type ModelData
 } from '@/lib/server/storage'
 import JSZip from 'jszip'
+import { buildCProject, cProjectModelName, defaultStep } from '@/lib/codegen/cProject'
+import { generatorInfo } from '@/lib/server/generatorInfo'
 import { expandForBuild, ModelReferenceError } from '@/lib/server/modelReferenceLoader'
 
 export const runtime = 'nodejs'
@@ -132,11 +134,9 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
 
   //console.log('CodeGenerator instantiated successfully')
 
-  const result = codeGenerator.generateCode(sheets, model.name, parameters)
+  const result = codeGenerator.generateCode(sheets, cProjectModelName(model.name), parameters, modelData.dataStores || [])
 
   //console.log('generateCode result:', result)
-
-  const safeName = sanitizeFilename(model.name)
 
   // Log warnings but don't fail - allow users to inspect generated code
   if (result.warnings.length > 0) {
@@ -162,24 +162,17 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
   try {
     zip = new JSZip()
 
-    // Add main model files
-    zip.file(`${safeName}.h`, result.header)
-    zip.file(`${safeName}.c`, result.source)
-
-    // Add segregated subsystem files
-    if (result.subsystemFiles && result.subsystemFiles.length > 0) {
-      console.log(`Adding ${result.subsystemFiles.length} subsystem file(s) to ZIP`)
-      for (const subFile of result.subsystemFiles) {
-        zip.file(`${subFile.subsystemName}.h`, subFile.header)
-        zip.file(`${subFile.subsystemName}.c`, subFile.source)
-      }
+    const project = buildCProject({
+      displayName: model.name,
+      result,
+      dt: defaultStep(modelData),
+      modelVersion: versionToUse,
+      source: `model ${modelId}`,
+      generator: generatorInfo(process.cwd()),
+    })
+    for (const [name, content] of Object.entries(project)) {
+      zip.file(name, content)
     }
-
-    zip.file('library.properties', `name=${safeName}\nversion=${versionToUse}\ndescription=Generated C library for ${model.name}\n\n`)
-
-    // Add a README file
-    const readmeContent = generateReadmeContent(model.name, versionToUse, result.subsystemFiles)
-    zip.file('README.md', readmeContent)
 
     // Generate the ZIP buffer
     zipBuffer = await zip.generateAsync({ type: 'nodebuffer' })
@@ -207,70 +200,6 @@ async function generateCodeHandler(request: NextRequest): Promise<NextResponse> 
       'Content-Disposition': `attachment; filename="${sanitizeFilename(model.name)}_v${versionToUse}_library.zip"`
     }
   })
-}
-
-function generateReadmeContent(
-  modelName: string,
-  version: number,
-  subsystemFiles?: Array<{ subsystemName: string }>
-): string {
-  // Build file list
-  let filesList = `- ${modelName}.h - Header file with data structures and function declarations
-- ${modelName}.c - Implementation file with the model logic`
-
-  if (subsystemFiles && subsystemFiles.length > 0) {
-    filesList += '\n\n### Segregated Subsystems:'
-    for (const sub of subsystemFiles) {
-      filesList += `\n- ${sub.subsystemName}.h - Subsystem header`
-      filesList += `\n- ${sub.subsystemName}.c - Subsystem implementation`
-    }
-  }
-
-  filesList += '\n- library.properties - PlatformIO library configuration'
-
-  return `# ${modelName} - Generated C Library (Version ${version})
-
-This library was automatically generated from a visual block diagram model.
-
-## Files:
-${filesList}
-
-## Version Information:
-- Model: ${modelName}
-- Version: ${version}
-- Generated on: ${new Date().toISOString()}
-
-## Usage:
-1. Include this library in your PlatformIO project
-2. Include the header: #include "${modelName}.h"
-3. Create an instance: ${modelName}_t model_instance;
-4. Initialize: ${modelName}_init(&model_instance, 0.01); // 10ms time step
-5. In your main loop: ${modelName}_step(&model_instance);
-
-## Example:
-\`\`\`c
-#include "${modelName}.h"
-
-${modelName}_t model;
-
-void setup() {
-  ${modelName}_init(&model, 0.01); // 10ms time step
-}
-
-void loop() {
-  // Set inputs
-  model.inputs.Input1 = analogRead(A0) / 1023.0;
-
-  // Execute one step
-  ${modelName}_step(&model);
-
-  // Use outputs
-  analogWrite(9, (int)(model.outputs.Output1 * 255));
-
-  delay(10); // Match the time step
-}
-\`\`\`
-`
 }
 
 /**

@@ -166,6 +166,39 @@ independent adjustments, each of which can be left alone:
 - Generates structured APIs with input/output/state structs
 - Support for Runge-Kutta 4th order or Euler integration in generated code
 
+**From the editor:** **Export → Generate Code (C library)** downloads a zip file of the project.
+
+**From the command line:** give a model JSON file and an output folder. Use Node 22 if the model has model references that are in the store.
+
+```bash
+npm run obliq:cgen -- reference-models/fpv-vehicle.json --out build/fpv --dt 0.0005
+cmake -S build/fpv -B build/fpv/build && cmake --build build/fpv/build
+./build/fpv/build/FPV_Vehicle_smoke
+```
+
+Add `--compile` to build and run the smoke test in one step. `npm run obliq:cgen -- --help` lists all options:
+
+- `--name <id>`: the C name. The default comes from the model's name, with characters that C does not allow replaced
+- `--algorithm <rk4|euler>`: the integration algorithm. The default is the model's setting
+- `--dt <sec>`: the step in `smoke_main.c` and the README. It does not change the model code, and a host passes its own step to `<model>_init`. The default is the model's simulation step, else 0.005
+- `--debug-math`: safe divide and modulo, with checks for non-finite RK4 values
+
+Model references are expanded from the model files beside the model file, by name, then from the store.
+
+**Both give the same files**, from the same code (`src/lib/codegen/cProject.ts`); `__tests__/cgen-project-parity.test.ts` compares them:
+
+| File | Purpose |
+|---|---|
+| `<model>.c`, `<model>.h` | The model |
+| `<module>.c`, `<module>.h` | One pair for each segregated subsystem |
+| `CMakeLists.txt` | Builds a static library and a smoke test |
+| `smoke_main.c` | The smoke test, compiled only by `CMakeLists.txt` |
+| `cgen-manifest.json` | Ports, generator version and commit, warnings, statistics and files |
+| `library.properties` | PlatformIO and Arduino library description |
+| `README.md` | How to build and call the library |
+
+Apart from timestamps, the only differences are the model version (a file has none, so `library.properties` uses 1) and the manifest's `sourceJson`. The `saturn-ib-stack` profile, on the command line only, adds its adapter files and replaces the smoke test.
+
 ### Local, File-Based Storage
 - Runs locally as your OS user; no database server or account needed
 - Models stored as JSON files under `~/.config/obliq-2/` with a SQLite index

@@ -1,6 +1,7 @@
 //app/api/automations/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { CodeGenerator } from '@/lib/codeGenerationNew'
+import { cProjectModelName } from '@/lib/codegen/cProject'
 import { executeServerSimulation, type SimulationConfig } from '@/lib/wasm/ServerWasmExecutor'
 import { withErrorHandling, AppError, ErrorTypes, validateRequiredFields } from '@/lib/apiErrorHandler'
 import { authenticateRequest } from '@/lib/apiAuthMiddleware'
@@ -249,8 +250,8 @@ async function handleGenerateCode(model: any, versionData: any, baseResponse: Au
 
   let result: any
   try {
-    const codeGenerator = new CodeGenerator({ modelName: model.name })
-    result = codeGenerator.generate(sheets)
+    const codeGenerator = new CodeGenerator({ modelName: cProjectModelName(model.name) })
+    result = codeGenerator.generate(sheets, versionData.data.parameters || [], versionData.data.dataStores || [])
   } catch (error) {
     return {
       ...baseResponse,
@@ -264,10 +265,11 @@ async function handleGenerateCode(model: any, versionData: any, baseResponse: Au
   }
 
   // For automation API, return code generation summary
-  const filesGenerated = [`${model.name}.h`, `${model.name}.c`]
+  const fileBase = cProjectModelName(model.name)
+  const filesGenerated = [`${fileBase}.h`, `${fileBase}.c`]
   if (result.subsystemFiles && result.subsystemFiles.length > 0) {
     result.subsystemFiles.forEach((sf: any) => {
-      filesGenerated.push(`${sf.name}.h`, `${sf.name}.c`)
+      filesGenerated.push(`${sf.subsystemName}.h`, `${sf.subsystemName}.c`)
     })
   }
 
@@ -277,8 +279,8 @@ async function handleGenerateCode(model: any, versionData: any, baseResponse: Au
     data: {
       filesGenerated,
       summary: {
-        headerFile: `${model.name}.h`,
-        sourceFile: `${model.name}.c`,
+        headerFile: `${fileBase}.h`,
+        sourceFile: `${fileBase}.c`,
         blocksProcessed: result.stats?.blocksProcessed || blocks.length,
         connectionsProcessed: result.stats?.connectionsProcessed || connections.length,
         subsystemsFlattened: result.stats?.subsystemsFlattened || 0
