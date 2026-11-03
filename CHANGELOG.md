@@ -1,5 +1,19 @@
 # obliq-2 Change Log
 
+## What's New in 3.7.1
+
+The C code download and `npm run obliq:cgen` now deliver the same project, from the same code. **Generated code changes for a model with a declared data store or a name that C does not allow, if you exported it from the editor.** Export such a model again.
+
+- **Fixed: the download lost the initial values of declared data stores.** A store declared with 5.0 started at 0, with no warning. The command line was correct.
+- **Fixed: the download did not compile for some model names.** For `2nd-stage.v1`, the zip file was `2nd-stage.v1.h`, but the code included `_2nd_stage_v1.h`. The download now uses the same C-safe name as the command line.
+- **Fixed: the zip's README had invalid C for a name with a space**, such as `#include "FPV Vehicle.h"` and `FPV Vehicle_t model;`. It now uses the real names and calls `seed_from_inputs`, and a test compiles and runs its example.
+- **The command line now expands model references**, from the model files beside the model file by name, then from the store, as `npm run obliq:test` does. It stopped with an error before.
+- **One inventory.** Both now give the model and module sources, `CMakeLists.txt`, `smoke_main.c`, `cgen-manifest.json`, `library.properties` and `README.md`. `src/lib/codegen/cProject.ts` builds them, and `__tests__/cgen-project-parity.test.ts` runs both on the same models and compares the results.
+- **`smoke_main.c` compiles only under `CMakeLists.txt`.** PlatformIO compiles every source in a library's folder, so its contents are guarded by `OBLIQ_SMOKE_MAIN`. It now also calls `seed_from_inputs`.
+- **`--dt` now defaults to the model's simulation step**, else 0.005. It sets only the step in `smoke_main.c` and the README.
+- **Fixed: the automations API's `generateCode` action** dropped parameters and data stores, and listed segregated modules as `undefined.c`.
+- **The README's "Code Generation" section documents the command line** and the inventory.
+
 ## What's New in 3.7.0
 
 The FPV Vehicle now has Betaflight's RPM filter and dynamic notch, and airframe vibration on its IMU. At hover, the filters reduce motor activity from 30‰ to 2.45‰ of full command. **The ports and `--dt 0.0005` do not change, but flight traces do.** Export the model again for each host.
