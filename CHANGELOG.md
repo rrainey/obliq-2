@@ -1,5 +1,27 @@
 # obliq-2 Change Log
 
+## What's New in 3.7.2
+
+GPS Rescue on the FPV Vehicle is steadier. Pitch was unsteady in FLY_HOME, and pitch and roll were unsteady in DESCENT and LANDING. **The ports do not change, but flight traces do.** Export the model again for each host.
+
+- **New rescue settings.** The algorithm stays as in Betaflight, so a pilot can set the same values on a real quad.
+  - `gps_rescue_velocity_p / i / d`: 4 / 30 / 4 (Betaflight: 8 / 40 / 12)
+  - `gps_rescue_pitch_cutoff`: 50 (Betaflight: 75)
+  - `gps_rescue_roll_mix`: 50 (Betaflight: 150)
+- **Results**, the mean of seven airframes in calm air:
+  - FLY_HOME pitch jitter is 0.54°; it was 1.49°.
+  - DESCENT pitch and roll jitter are 1.11° and 0.29°; they were 2.28° and 0.82°.
+  - LANDING pitch and roll jitter are 0.64° and 0.39°; they were 1.86° and 0.77°.
+- **Costs:**
+  - The largest landing distance in a 5 m/s wind is 13.6–15.0 m; it was 9.0–11.1 m. In calm air it is 4.8 m; it was 4.4 m.
+  - Without a magnetometer, FLY_HOME takes longer: 11.3 s instead of 9.3 s on the baseline, and 18.0 s instead of 9.0 s at 1.15 kg.
+- **Not changed:** DESCENT starts with a flare from about −16° to +9°, as in Betaflight.
+- **`fpv-tuning.test.ts`** now flies the rescue on all seven airframes.
+- **Test changes:**
+  - T13a climbs higher, because DO_NOTHING reached the ground before ABORT. Its tilt limit is 7° (measured 5.7°), and its upright check ends at ABORT.
+  - T20 runs for 66 s, and its speed limit is 10 m/s (measured 9.6 m/s).
+- **`docs/fpv-hud-gnss-plan.md`, "Rescue tuning"** gives the causes and the measurements. It also records receiver Doppler velocity as a possible improvement for future flight software of our own. Betaflight does not use it, so this model does not.
+
 ## What's New in 3.7.1
 
 The C code download and `npm run obliq:cgen` now deliver the same project, from the same code. **Generated code changes for a model with a declared data store or a name that C does not allow, if you exported it from the editor.** Export such a model again.
