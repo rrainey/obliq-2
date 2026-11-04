@@ -1640,7 +1640,7 @@
               "lower": -60,
               "upper": 60,
               "checkFrom": 0,
-              "checkUntil": null,
+              "checkUntil": 35.5,
               "onFailure": "stop"
             }
           }

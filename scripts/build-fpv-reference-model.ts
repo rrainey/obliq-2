@@ -223,15 +223,17 @@ export const FC = {
     descendRateCmS: 150,
     groundSpeedCmS: 750,
     maxAngleDeg: 45,
-    rollMix: 150,
-    /** Hz: velocity D cutoff (pitch_cutoff 75); the pitch PT3 upsampling runs at 4× */
-    pitchCutoffHz: 0.75,
+    /** Tuned from 150: bearing noise near home otherwise commands roll (docs/fpv-hud-gnss-plan.md, "Rescue tuning") */
+    rollMix: 50,
+    /** Hz: velocity D cutoff (pitch_cutoff 50; Betaflight's default is 75); the pitch PT3 upsampling runs at 4× */
+    pitchCutoffHz: 0.5,
     /** m/s: normalises the groundspeed error ratio */
     imuYawGainMs: 10,
     descentDistM: 20,
     /** g: impact disarm (disarm_threshold 30 × 0.1) */
     disarmThresholdG: 3.0,
-    velP: 8, velI: 40, velD: 12,
+    /** Tuned from Betaflight's 8 / 40 / 12: the velocity to home carries the noise of differenced GNSS positions */
+    velP: 4, velI: 30, velD: 4,
     yawP: 20,
     /** ap_landing_altitude_m */
     landingAltitudeM: 4,
@@ -4376,10 +4378,11 @@ function testsSheet() {
     const id = s.add('assert', name, { mode: 'bounds', lower, upper, checkFrom: from_, checkUntil: until, onFailure })
     s.wire(input, id, 0)
   }
-  const upright = () => {
+  /** `until` (s): a check that ends at a disarm in the air, because a falling quad tumbles. */
+  const upright = (until: number | null = null) => {
     const deg = s.add('scale', 'RollPitchDeg', { gain: 180 / Math.PI })
     s.wire(pick('RollPitch', from('euler'), [0, 1]), deg)
-    check('StaysUpright', deg, -60, 60, 0, null, 'stop')
+    check('StaysUpright', deg, -60, 60, 0, until, 'stop')
   }
   /** 1 when the given fc_warnings bit is set. */
   const bit = (name: string, warnings: string, value: number) => expr(name, `fmod(floor(in(0) / ${value}.0 + 1e-9), 2.0)`, [warnings])
@@ -5139,11 +5142,11 @@ function rescueReturnChecks(ctx: ReturnType<typeof testsSheet>, o: {
 }
 
 /** Return-check limits (m, deg). */
-/** (The heading is checked a sample after ROTATE hands over below 30°; the speed limits cover T11 and T20, measured 6.8 and 8.8 m/s.) */
+/** (The heading is checked a sample after ROTATE hands over below 30°; the speed limits cover T11 and T20, measured 7.2 and 9.6 m/s.) */
 export const RESCUE_RETURN_TEST = { altitudeM: 1.5, swingM: 3, headingDeg: 32, descentDistM: 1, landM: 5 }
 
 /** T11 / T20: rescue switch at 20 s, about 82 m east; FLY_HOME settles 4.5 s after entry (ATTAIN_ALT overshoots). */
-export const RESCUE_SWITCH_TEST = { on: 20, flyHomeSettleS: 4.5, speed: [6, 9.5] as [number, number], duration: 60, noMagDuration: 62 }
+export const RESCUE_SWITCH_TEST = { on: 20, flyHomeSettleS: 4.5, speed: [6, 10] as [number, number], duration: 60, noMagDuration: 66 }
 
 function buildRescueSwitchTestModel(noMag: boolean) {
   const t = RESCUE_SWITCH_TEST
@@ -5337,7 +5340,7 @@ export function buildFpvRescueLowAtHomeTestModel() {
 
 /** T13 timelines (s): satellites to 2 two seconds into FLY_HOME; LOWSATS needs 10 s of 1 Hz checks. */
 export const RESCUE_SANITY_TEST = {
-  on: 20, lowSats: 27, failBy: [35.5, 37] as [number, number], durationA: 60,
+  on: 20, lowSats: 27, failBy: [35.5, 37] as [number, number], durationA: 60, climbEndA: 1.8,
   linkLost: 19, durationB: 40,
   rearm: 1.5, holdOn: 4, onC: 6, durationC: 12,
 }
@@ -5367,7 +5370,7 @@ function buildRescueLowSatsTestModel(linkLost: boolean) {
       check('LevelInDoNothing', tiltDeg, 0, RESCUE_SANITY_TEST_TILT_DEG)
       check('DisarmedByAbort', from('fc_armed'), 0, 0, t.failBy[1] + 20.05)
     }
-    upright()
+    upright(linkLost ? t.failBy[0] : t.failBy[0] + 20)
     return s
   }
   return buildFpvTestModel({
@@ -5377,7 +5380,10 @@ function buildRescueLowSatsTestModel(linkLost: boolean) {
       (linkLost ? `the link is lost at ${t.linkLost} s (GPS-RESCUE procedure)` : `the rescue switch goes on at ${t.on} s`) +
       `; satellites drop to 2 at ${t.lowSats} s, in FLY_HOME. After 10 s of 1 Hz checks the rescue fails with LOWSATS: ` +
       (linkLost ? 'with the link lost the FS_ONLY policy aborts and disarms at once.' : 'the switch-started rescue does nothing (level, last throttle) for 20 s, then aborts and disarms.'),
-    sticks: rescueFlyoutSticks(linkLost ? [[0, 0]] : windows([t.on, duration + 1]), linkLost ? t.linkLost : t.on),
+    sticks: linkLost
+      ? rescueFlyoutSticks([[0, 0]], t.linkLost)
+      // DO_NOTHING holds the last throttle and the quad sinks, so a higher climb lets the full 20 s run before ABORT
+      : { ...rescueFlyoutSticks(windows([t.on, duration + 1]), t.on), throttle: [[0, 0], [0.5, 0], [0.6, 0.6], [t.climbEndA, 0.6], [t.climbEndA + 0.1, Number(HOVER_THROTTLE.toFixed(4))]] },
     duration,
     displays: [['Position', 'pos_ned'], ['RescuePhase', 'rescue_phase'], ['Warnings', 'fc_warnings'], ['Altitude', 'alt_est']],
     tests,
@@ -5388,8 +5394,11 @@ function buildRescueLowSatsTestModel(linkLost: boolean) {
   })
 }
 
-/** T13a's limit on roll and pitch (deg) once DO_NOTHING has levelled the quad. */
-export const RESCUE_SANITY_TEST_TILT_DEG = 5
+/**
+ * T13a's limit on roll and pitch (deg) once DO_NOTHING has levelled the quad. The estimate
+ * recovers from about 10° of cruise tilt, so the true pitch reaches 5.7° with the rescue's angle at 0.
+ */
+export const RESCUE_SANITY_TEST_TILT_DEG = 7
 
 export function buildFpvRescueLowSatsTestModel() {
   return buildRescueLowSatsTestModel(false)

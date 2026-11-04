@@ -11141,7 +11141,7 @@
                                 "parameters": {
                                   "showName": true,
                                   "numInputs": 5,
-                                  "expression": "(in(0) > 0.5) ? fmin(fmax(-in(2) * 150.0 * fmin(fmax(1.0 - fabs(in(2)) * 0.01, 0.0), 1.0), -100.0 * in(3)), 100.0 * in(3)) : ((fabs(in(1) - 1.0) < 0.5) ? in(4) : 0.0)"
+                                  "expression": "(in(0) > 0.5) ? fmin(fmax(-in(2) * 50.0 * fmin(fmax(1.0 - fabs(in(2)) * 0.01, 0.0), 1.0), -100.0 * in(3)), 100.0 * in(3)) : ((fabs(in(1) - 1.0) < 0.5) ? in(4) : 0.0)"
                                 }
                               },
                               {
@@ -11267,7 +11267,7 @@
                                 "parameters": {
                                   "showName": true,
                                   "numInputs": 6,
-                                  "expression": "(in(0) > 0.5) ? fmin(fmax((in(1) + 0.4 * in(2) * in(3)) * in(4), -50.0 * in(5)), 50.0 * in(5)) : in(1)"
+                                  "expression": "(in(0) > 0.5) ? fmin(fmax((in(1) + 0.3 * in(2) * in(3)) * in(4), -50.0 * in(5)), 50.0 * in(5)) : in(1)"
                                 }
                               },
                               {
@@ -11275,13 +11275,13 @@
                                 "type": "evaluate",
                                 "name": "VelocityD",
                                 "position": {
-                                  "x": 6177,
+                                  "x": 6181,
                                   "y": 485
                                 },
                                 "parameters": {
                                   "showName": true,
                                   "numInputs": 2,
-                                  "expression": "(in(0) - in(1)) * 12.0"
+                                  "expression": "(in(0) - in(1)) * 4.0"
                                 }
                               },
                               {
@@ -11295,7 +11295,7 @@
                                 "parameters": {
                                   "showName": true,
                                   "numInputs": 4,
-                                  "expression": "(in(0) > 0.5) ? in(2) + (2.0 * 3.141592653589793 * 0.75 * in(3) * 0.1) / (2.0 * 3.141592653589793 * 0.75 * in(3) * 0.1 + 1.0) * (in(1) - in(2)) : in(2)"
+                                  "expression": "(in(0) > 0.5) ? in(2) + (2.0 * 3.141592653589793 * 0.5 * in(3) * 0.1) / (2.0 * 3.141592653589793 * 0.5 * in(3) * 0.1 + 1.0) * (in(1) - in(2)) : in(2)"
                                 }
                               },
                               {
@@ -11323,7 +11323,7 @@
                                 "parameters": {
                                   "showName": true,
                                   "numInputs": 8,
-                                  "expression": "((fabs(in(6) - 2.0) < 0.5) && in(7) < 15.0) ? 1500.0 : ((in(0) > 0.5) ? fmin(fmax(in(1) * 8.0 + in(2) + in(3), -100.0 * in(4)), 100.0 * in(4)) : in(5))"
+                                  "expression": "((fabs(in(6) - 2.0) < 0.5) && in(7) < 15.0) ? 1500.0 : ((in(0) > 0.5) ? fmin(fmax(in(1) * 4.0 + in(2) + in(3), -100.0 * in(4)), 100.0 * in(4)) : in(5))"
                                 }
                               },
                               {
@@ -11351,7 +11351,7 @@
                                 "parameters": {
                                   "showName": true,
                                   "numInputs": 3,
-                                  "expression": "(in(0) > 0.5) ? in(2) + 0.26992716168871017 * (in(1) - in(2)) : in(2)"
+                                  "expression": "(in(0) > 0.5) ? in(2) + 0.19774356046535077 * (in(1) - in(2)) : in(2)"
                                 }
                               },
                               {
@@ -11379,7 +11379,7 @@
                                 "parameters": {
                                   "showName": true,
                                   "numInputs": 3,
-                                  "expression": "(in(0) > 0.5) ? in(2) + 0.26992716168871017 * (in(1) - in(2)) : in(2)"
+                                  "expression": "(in(0) > 0.5) ? in(2) + 0.19774356046535077 * (in(1) - in(2)) : in(2)"
                                 }
                               },
                               {
@@ -11407,7 +11407,7 @@
                                 "parameters": {
                                   "showName": true,
                                   "numInputs": 3,
-                                  "expression": "(in(0) > 0.5) ? in(2) + 0.26992716168871017 * (in(1) - in(2)) : in(2)"
+                                  "expression": "(in(0) > 0.5) ? in(2) + 0.19774356046535077 * (in(1) - in(2)) : in(2)"
                                 }
                               },
                               {
@@ -14839,7 +14839,7 @@
                                 "targetBlockId": "rescue__VelocityD",
                                 "targetPortIndex": 0,
                                 "routing": {
-                                  "midpointOffset": 473.5
+                                  "midpointOffset": 471.5
                                 }
                               },
                               {
@@ -14849,7 +14849,7 @@
                                 "targetBlockId": "rescue__VelocityD",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": -1
+                                  "midpointOffset": -3
                                 }
                               },
                               {
@@ -14869,7 +14869,7 @@
                                 "targetBlockId": "rescue__VelocityDFilteredNext",
                                 "targetPortIndex": 1,
                                 "routing": {
-                                  "midpointOffset": 18.5
+                                  "midpointOffset": 20
                                 }
                               },
                               {

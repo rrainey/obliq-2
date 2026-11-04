@@ -381,7 +381,7 @@ This is listed for interface agreement. It is implemented in that repo. The host
 - **Failsafe:** GPS-RESCUE no longer drops in stage 2; DROP and AUTO-LAND keep their rules. A stage-2 rescue on the ground at home aborts and disarms on its next tick (`fpv-failsafe`). So does any rescue that starts within 5 m of home below 4 m on `alt_est`, in the air too (T12c; added in 3.5.1 for issue #4).
 - **Build option `apThrottleMaxUs`** (Betaflight `ap_throttle_max`) for the stalled-climb test.
 - **New outputs:** `rescue_active`, `rescue_phase`; `fc_mode` shows RESC; `fc_warnings` adds RESCUE N/A (1) and RESCUE OFF (2).
-- **Measured** (T11): ATTAIN_ALT overshoots the return altitude by about 5 m (the 7.5 m/s ramp and the altitude controller's lag) and settles about 4 s into FLY_HOME; FLY_HOME averages 6.8 m/s against 7.5, with a noisy pitch, because the velocity to home is the 10 Hz difference of GNSS distances (σ about 1.7 m/s); touchdown 1.4 m from home. The quad's top airspeed at the 45° rescue pitch limit is about 22 m/s, so T14's fly-away needs a 25 m/s wind.
+- **Measured** (T11): ATTAIN_ALT overshoots the return altitude by about 5 m (the 7.5 m/s ramp and the altitude controller's lag) and settles about 4 s into FLY_HOME; FLY_HOME averaged 6.8 m/s against 7.5 at Betaflight's rescue gains (7.5 m/s now: see [Rescue tuning](#rescue-tuning)), with a noisy pitch, because the velocity to home is the 10 Hz difference of GNSS distances (σ about 1.7 m/s); touchdown 1.4 m from home. The quad's top airspeed at the 45° rescue pitch limit is about 22 m/s, so T14's fly-away needs a 25 m/s wind.
 - **Faithful but surprising:** DO_NOTHING holds the last throttle and yaw rate, so after a fly-away the quad climbs and turns for 20 s before ABORT; and with no home and no earlier autopilot use, its throttle is 0.
 
 1. **Phase machine and control:**
@@ -412,11 +412,54 @@ Phases 8–12 used Betaflight's default gains. They are firmware defaults for an
 | Angle | level P (`angle_p`) | 50 → 80 | A 15° step reaches 90% in 0.28 s instead of 0.46 s; no overshoot up to 220, so ample margin. |
 | Altitude | `ap_altitude_p/i/d/f` | 15/15/15/15 → 30/15/40/30 | Damped (ζ ≈ 0.4 before): after a climb, 0.6 m overshoot settling in 1.6 s (was 2.1 m, 8.5 s); hover RMS 0.3 m (1.35 m). D acts on vertical speed and opposes steady climbs; F 30 offsets most of it, so a full-stick climb runs at about 4.5 m/s of the 5 m/s target. F = D would track the stick fully but overshoots 1.6 m on release. |
 | Position | `ap_position_p/i/d/a` | 30/30/30/30 → 40/60/40/30 | With ideal sensors a stop settles within 1 m in 1.2 s (was 3.7 s) and a wind step is absorbed faster. With GNSS the true-position hold is about 0.4 m RMS for any of the gains tried: the GNSS error sets it. |
-| Rescue | `gps_rescue_velocity_p/i/d` | 8/40/12 kept | I 80 brought FLY_HOME to 7.46 m/s with ideal sensors (7.25), but with GNSS the gain is lost in the noise of the velocity to home, and T20 then overspeeds. |
+| Rescue | `gps_rescue_velocity_p/i/d` | 8/40/12 → 4/30/4 | See [Rescue tuning](#rescue-tuning). In this first tuning the gains stayed at 8/40/12: I 80 brought FLY_HOME to 7.46 m/s with ideal sensors (7.25), but with GNSS the gain is lost in the noise of the velocity to home, and T20 then overspeeds. |
 
 **Not modelled, noted:** Betaflight's angle-mode feed-forward (on stick motion), D-max's dynamic boost and anti-gravity. The first two shape pilot stick response only. TPA was on this list; it is now modelled.
 
 **GNSS noise limited the outer loops.** Position Hold's D and the rescue's velocity to home difference 10 Hz positions, and the receiver model's white position noise (0.12 m per axis at HDOP 0.8) gave about 1.7 m/s of velocity noise: Position Hold's tilt swung to 15–20° in a 3 m/s wind, and the rescue's FLY_HOME pitch jittered about 8°. Fixed in the GNSS model, not the gains: see [GNSS error spectrum](#gnss-error-spectrum-done-2026-10-28).
+
+### Rescue tuning
+
+Pitch was unsteady in FLY_HOME, and pitch and roll were unsteady in DESCENT and LANDING. These settings reduce this. The algorithm stays as in Betaflight, and the same values can go on a real quad.
+
+| Setting | Betaflight | This model |
+|---|---|---|
+| `gps_rescue_velocity_p/i/d` | 8 / 40 / 12 | 4 / 30 / 4 |
+| `gps_rescue_pitch_cutoff` | 75 (0.75 Hz) | 50 (0.5 Hz) |
+| `gps_rescue_roll_mix` | 150 | 50 |
+
+**Causes**, measured with each noise source removed:
+
+- **Pitch:** the velocity to home is a 10 Hz difference of GNSS positions, and its noise goes to the velocity PID. Without the GNSS fast noise, FLY_HOME pitch jitter falls from 1.37° to 0.18°. Vibration has no effect. The fast noise is an estimate ([GNSS error spectrum](#gnss-error-spectrum-done-2026-10-28)).
+- **Roll:** the quad moves slowly at about 2.5 m from home, where GNSS noise is a large bearing error. With `yaw_p` 20 and `roll_mix` 150, 1° of bearing error commanded 3° of roll.
+- **Not changed:** DESCENT starts with a flare, from about −16° to +9°, as the target speed falls. This occurs with ideal sensors too.
+
+**Results.** Each value is the mean over seven airframes and three noise seeds, in calm air, with the highest airframe mean in parentheses. Jitter is the SD about a 1 s moving mean of the true attitude.
+
+| Measure | Betaflight's values | This model |
+|---|---|---|
+| FLY_HOME pitch jitter (°) | 1.49 (1.60) | 0.54 (0.57) |
+| FLY_HOME pitch rate, RMS (deg/s) | 13 (13) | 4 (5) |
+| DESCENT pitch jitter, with the flare (°) | 2.28 (2.37) | 1.11 (1.16) |
+| DESCENT roll jitter (°) | 0.82 (0.85) | 0.29 (0.32) |
+| LANDING pitch jitter (°) | 1.86 (2.14) | 0.64 (0.71) |
+| LANDING roll jitter (°) | 0.77 (0.86) | 0.39 (0.41) |
+
+**Costs.** The largest landing distances are from 21 flights in each wind condition. Lower gains hold position less firmly.
+
+| Largest landing distance (m) | Betaflight's values | This model |
+|---|---|---|
+| Calm | 4.4 | 4.8 |
+| 5 m/s wind, against the return | 9.0 | 13.6 |
+| 5 m/s wind, across the return | 11.1 | 15.0 |
+| 6 m/s gust in FLY_HOME | 4.5 | 4.8 |
+
+- **Without a magnetometer:** roll into the turn reduces sideways drift while the heading settles, so the lower `roll_mix` makes the return slower. FLY_HOME takes 11.3 s on the baseline (it took 9.3 s) and 18.0 s on `allUp` (it took 9.0 s). Peak tilt on the baseline falls from 52° to 40°. T20 measures 9.6 m/s of mean ground speed. All five airframes flown landed and disarmed.
+- **T13a:** DO_NOTHING holds the last throttle, and the quad sinks. With these values it reached the ground before ABORT, so T13a now climbs higher. This changes the test only. It had 0.3 m of height left at ABORT with Betaflight's values.
+
+`fpv-tuning.test.ts` flies the rescue on every airframe in calm air.
+
+**Possible later improvement (not implemented).** The velocity PID could use the receiver's Doppler velocity, projected on the bearing to home, in place of the difference of positions. A prototype with Betaflight's gains gave 0.31° of FLY_HOME pitch jitter and almost no loss of landing accuracy in wind (9.5 m against 9.0 m in the 5 m/s headwind, on four airframes). This departs from Betaflight's algorithm, so it does not apply while this model represents Betaflight. It is an item for flight software of our own, if that work starts.
 
 ### GNSS error spectrum (done 2026-10-28)
 

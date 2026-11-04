@@ -7,6 +7,8 @@
 import {
   buildFpvModel,
   butterworth2,
+  HOVER_THROTTLE,
+  rescueFlyoutSticks,
   FPV,
   hoverThrottleFor,
   withFpvVariant,
@@ -218,4 +220,83 @@ export function hoverVibration(variant: FpvVariant, scale = 1): VibrationLevels 
     motorPermille: rms(tail.map(r => r.motorCmd[0]!)) * 1000,
     rotorHz: tail.reduce((t, r) => t + r.rotorHz.reduce((p, q) => p + q, 0) / 4, 0) / tail.length,
   }
+}
+
+export interface RescueFlight {
+  /** s; NaN if the phase was not reached */
+  flyHomeS: number
+  descentS: number
+  landingS: number
+  /** deg: SD about a 1 s moving mean, the unsteadiness a pilot sees */
+  flyHomePitchDeg: number
+  landingPitchDeg: number
+  landingRollDeg: number
+  /** m/s: mean ground speed in FLY_HOME, from 4.5 s after it starts */
+  flyHomeSpeedMps: number
+  /** m: from home at disarm */
+  landDistanceM: number
+  disarmed: boolean
+}
+
+const RESCUE_ON_S = 20
+const PHASE = { flyHome: 4, descent: 5, landing: 6 }
+
+/** SD of a signal about its own 1 s moving mean. */
+function jitterDeg(xs: number[], samplesPerS: number): number {
+  const half = Math.round(samplesPerS / 2)
+  const sum = [0]
+  for (const x of xs) sum.push(sum[sum.length - 1]! + x)
+  const d = xs.map((x, i) => {
+    const lo = Math.max(0, i - half), hi = Math.min(xs.length, i + half)
+    return x - (sum[hi]! - sum[lo]!) / (hi - lo)
+  })
+  return Math.sqrt(d.reduce((a, x) => a + x * x, 0) / d.length)
+}
+
+/** The T11 flight on any airframe: fly out about 80 m, then the rescue switch. Calm air. */
+export function rescueFlight(variant: FpvVariant): RescueFlight {
+  return withFpvVariant(variant, () => {
+    const seconds = 75
+    const on: Array<[number, number]> = [[0, 0], [RESCUE_ON_S - 0.001, 0], [RESCUE_ON_S, 1], [seconds, 1]]
+    const flyout = rescueFlyoutSticks(on, RESCUE_ON_S)
+    const scale = hoverThrottleFor(FPV.mass, BATTERY.initialSoc) / HOVER_THROTTLE
+    const sticks = { ...flyout, throttle: flyout.throttle.map(([t, v]): [number, number] => [t, v * scale]) }
+    const model = buildFpvModel({ sticks })
+    const name = `fpvrescue_${process.pid}_${runCount++}`
+    const result = compileAndRunNative({
+      modelName: name,
+      sheets: (model.data as { sheets: never }).sheets,
+      dt: FPV.dt,
+      smokeMainBody: `
+  ${name}_seed_from_inputs(&model);
+  for (int i = 0; i < ${Math.round(seconds / FPV.dt)}; ++i) {
+    ${name}_step(&model);
+    if (i % 10) continue;
+    const ${name}_outputs_t *o = &model.outputs;
+    printf("%.3f %.0f %.4f %.4f %.4f %.4f %.4f %.4f %.0f\\n", model.time - model.dt, o->rescue_phase, o->euler[0] * ${R2D}, o->euler[1] * ${R2D},
+      o->pos_ned[0], o->pos_ned[1], o->vel_ned[0], o->vel_ned[1], o->fc_armed);
+  }
+  return 0;
+`,
+    })
+    cleanupNativeDir(result.outDir)
+    const rows = result.stdout.trim().split('\n').map(l => l.split(' ').map(Number))
+    const samplesPerS = 1 / (rows[1]![0]! - rows[0]![0]!)
+    const first = (phase: number) => rows.find(r => r[1] === phase)?.[0] ?? NaN
+    const flyHomeS = first(PHASE.flyHome), descentS = first(PHASE.descent), landingS = first(PHASE.landing)
+    const off = rows.find(r => r[0]! > landingS && r[8] === 0)
+    const span = (a: number, b: number) => rows.filter(r => r[0]! >= a && r[0]! < b)
+    const cruise = span(flyHomeS + 4.5, descentS)
+    const landing = span(landingS, off?.[0] ?? seconds)
+    const home = rows.find(r => r[0]! >= 0.3)!, end = off ?? rows[rows.length - 1]!
+    return {
+      flyHomeS, descentS, landingS,
+      flyHomePitchDeg: jitterDeg(cruise.map(r => r[3]!), samplesPerS),
+      landingPitchDeg: jitterDeg(landing.map(r => r[3]!), samplesPerS),
+      landingRollDeg: jitterDeg(landing.map(r => r[2]!), samplesPerS),
+      flyHomeSpeedMps: cruise.reduce((a, r) => a + Math.hypot(r[6]!, r[7]!), 0) / cruise.length,
+      landDistanceM: Math.hypot(end[4]! - home[4]!, end[5]! - home[5]!),
+      disarmed: !!off,
+    }
+  })
 }

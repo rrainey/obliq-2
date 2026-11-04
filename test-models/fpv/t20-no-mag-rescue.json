@@ -8,7 +8,7 @@
     },
     "globalSettings": {
       "simulationTimeStep": 0.0005,
-      "simulationDuration": 62,
+      "simulationDuration": 66,
       "integrationAlgorithm": "rk4",
       "debugMath": false
     },
@@ -222,8 +222,8 @@
                           0,
                           19.999,
                           20,
-                          62.999,
-                          63
+                          66.999,
+                          67
                         ],
                         "outputValues": [
                           0,
@@ -1741,7 +1741,7 @@
               "mode": "bounds",
               "lower": 1,
               "upper": 1,
-              "checkFrom": 61.5,
+              "checkFrom": 65.5,
               "checkUntil": null,
               "onFailure": "record"
             }
@@ -1990,7 +1990,7 @@
               "mode": "bounds",
               "lower": -1.5,
               "upper": 1.5,
-              "checkFrom": 61.5,
+              "checkFrom": 65.5,
               "checkUntil": null,
               "onFailure": "record"
             }
@@ -2136,7 +2136,7 @@
               "mode": "bounds",
               "lower": -32,
               "upper": 32,
-              "checkFrom": 61.5,
+              "checkFrom": 65.5,
               "checkUntil": null,
               "onFailure": "record"
             }
@@ -2266,8 +2266,8 @@
               "showName": true,
               "mode": "bounds",
               "lower": 6,
-              "upper": 9.5,
-              "checkFrom": 61.5,
+              "upper": 10,
+              "checkFrom": 65.5,
               "checkUntil": null,
               "onFailure": "record"
             }
@@ -2368,7 +2368,7 @@
               "mode": "bounds",
               "lower": 19,
               "upper": 20.01,
-              "checkFrom": 61.5,
+              "checkFrom": 65.5,
               "checkUntil": null,
               "onFailure": "record"
             }
@@ -2499,7 +2499,7 @@
               "mode": "bounds",
               "lower": 0,
               "upper": 5,
-              "checkFrom": 61.5,
+              "checkFrom": 65.5,
               "checkUntil": null,
               "onFailure": "record"
             }
@@ -2530,7 +2530,7 @@
               "mode": "bounds",
               "lower": 0,
               "upper": 0,
-              "checkFrom": 61.5,
+              "checkFrom": 65.5,
               "checkUntil": null,
               "onFailure": "record"
             }

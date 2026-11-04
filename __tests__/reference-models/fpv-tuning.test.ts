@@ -7,7 +7,7 @@
  */
 
 import { AIRFRAMES, airframeWith, BATTERY, buildFpvModel, FC, FPV, hoverThrottleFor, HOVER_THROTTLE, withFpvVariant } from '../../scripts/build-fpv-reference-model'
-import { doubletTailDps, hoverMotorNoise, hoverVibration, isStable, rateStep } from '../../scripts/lib/fpv-tuning'
+import { doubletTailDps, hoverMotorNoise, hoverVibration, isStable, rateStep, rescueFlight } from '../../scripts/lib/fpv-tuning'
 
 jest.setTimeout(600000)
 
@@ -171,5 +171,31 @@ describe('FPV tuning: vibration and notch filters', () => {
     expect(rpm).toBeLessThan(none / 3)
     expect(dynamic).toBeLessThan(none / 3)
     expect(both).toBeLessThan(Math.min(rpm, dynamic))
+  })
+})
+
+/**
+ * GPS Rescue on every airframe with the gains in FC.rescue, in calm air. Wind and
+ * no-magnetometer results are in docs/fpv-hud-gnss-plan.md, "Rescue tuning".
+ */
+describe('FPV tuning: GPS Rescue', () => {
+  beforeAll(() => {
+    jest.spyOn(console, 'log').mockImplementation(() => {})
+    jest.spyOn(console, 'warn').mockImplementation(() => {})
+    jest.spyOn(console, 'error').mockImplementation(() => {})
+  })
+  afterAll(() => jest.restoreAllMocks())
+
+  it.each(airframes)('%s: returns, lands near home and disarms, with a steady attitude', (_name, airframe) => {
+    const r = rescueFlight({ airframe })
+    expect(r.descentS).toBeGreaterThan(r.flyHomeS)
+    expect(r.landingS).toBeGreaterThan(r.descentS)
+    expect(r.disarmed).toBe(true)
+    expect(r.landDistanceM).toBeLessThan(6)
+    expect(r.flyHomeSpeedMps).toBeGreaterThan(6)
+    expect(r.flyHomeSpeedMps).toBeLessThan(9.5)
+    expect(r.flyHomePitchDeg).toBeLessThan(0.9)
+    expect(r.landingPitchDeg).toBeLessThan(1.0)
+    expect(r.landingRollDeg).toBeLessThan(0.7)
   })
 })

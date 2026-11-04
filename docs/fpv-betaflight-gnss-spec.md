@@ -189,6 +189,8 @@ There are two ways in:
 
 ### 2.3 Parameters (defaults)
 
+This table gives Betaflight's defaults. The model tunes some of them: see `fpv-hud-gnss-plan.md`, "Controller tuning" and "Rescue tuning".
+
 | Parameter | Default |
 |---|---|
 | `min_start_dist` | 15 m |
