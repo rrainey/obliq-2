@@ -92,7 +92,8 @@ describe('Segregated Subsystem Code Generation', () => {
       // Segregated info should be collected
       expect(result.model.segregatedSubsystems).toHaveLength(1)
       expect(result.model.segregatedSubsystems[0].subsystemName).toBe('Controller')
-      expect(result.model.segregatedSubsystems[0].sanitizedName).toBe('Controller')
+      // The instance field name is the parent path joined with the block name
+      expect(result.model.segregatedSubsystems[0].sanitizedName).toBe('Controller_Controller')
       expect(result.model.segregatedSubsystems[0].inputPorts).toHaveLength(1)
       expect(result.model.segregatedSubsystems[0].outputPorts).toHaveLength(1)
     })

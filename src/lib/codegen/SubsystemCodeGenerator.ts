@@ -416,7 +416,7 @@ export class SubsystemCodeGenerator {
   private formatScalarLiteral(value: number, baseType: string): string {
     switch (baseType) {
       case 'float':
-        return `${value}f`
+        return CCodeBuilder.floatLiteral(value)
       case 'double':
         return `${value}`
       case 'long':

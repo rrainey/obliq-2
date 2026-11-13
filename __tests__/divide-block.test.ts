@@ -41,7 +41,7 @@ describe('Divide Block (P2)', () => {
         ['double', 'double']
       )
       expect(code).toContain('Divide block: Div1')
-      expect(code).toContain('model->signals.Div1 = model->signals.A / model->signals.B')
+      expect(code).toContain('model->signals.Div1 = (model->signals.A) / (model->signals.B);')
     })
 
     test('vector / scalar broadcasts denominator', () => {
@@ -51,7 +51,7 @@ describe('Divide Block (P2)', () => {
         ['double[3]', 'double']
       )
       expect(code).toContain('for (int i = 0; i < 3; i++)')
-      expect(code).toContain('model->signals.Div1[i] = model->signals.V[i] / model->signals.S')
+      expect(code).toContain('model->signals.Div1[i] = (model->signals.V[i]) / (model->signals.S);')
     })
 
     test('vector / vector element-wise', () => {
@@ -60,7 +60,7 @@ describe('Divide Block (P2)', () => {
         ['model->signals.A', 'model->signals.B'],
         ['double[3]', 'double[3]']
       )
-      expect(code).toContain('model->signals.Div1[i] = model->signals.A[i] / model->signals.B[i]')
+      expect(code).toContain('model->signals.Div1[i] = (model->signals.A[i]) / (model->signals.B[i]);')
     })
 
     test('matrix / scalar broadcasts', () => {
@@ -71,7 +71,7 @@ describe('Divide Block (P2)', () => {
       )
       expect(code).toContain('for (int i = 0; i < 2; i++)')
       expect(code).toContain('for (int j = 0; j < 2; j++)')
-      expect(code).toContain('model->signals.M[i][j] / model->signals.S')
+      expect(code).toContain('model->signals.Div1[i][j] = (model->signals.M[i][j]) / (model->signals.S);')
     })
   })
 

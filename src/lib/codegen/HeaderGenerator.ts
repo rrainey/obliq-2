@@ -714,12 +714,15 @@ export class HeaderGenerator {
         // Matrix: dimensions in header; storage defined once in the .c (avoid ODR)
         code += `#define ${safeName}_ROWS ${parsedType.rows}\n`
         code += `#define ${safeName}_COLS ${parsedType.cols}\n`
-        code += `extern const ${baseType} ${safeName}[${safeName}_ROWS][${safeName}_COLS];\n\n`
+        code += `extern const ${baseType} ${safeName}[${safeName}_ROWS][${safeName}_COLS];\n`
+        // Source blocks read every parameter as PARAM_<name>
+        code += `#define PARAM_${safeName} ${safeName}\n\n`
 
       } else if (parsedType.isArray && parsedType.arraySize) {
         // Vector: size in header; storage defined once in the .c
         code += `#define ${safeName}_SIZE ${parsedType.arraySize}\n`
-        code += `extern const ${baseType} ${safeName}[${safeName}_SIZE];\n\n`
+        code += `extern const ${baseType} ${safeName}[${safeName}_SIZE];\n`
+        code += `#define PARAM_${safeName} ${safeName}\n\n`
 
       } else {
         // Scalar: prefer bare #define for evaluate expressions; avoid clobbering signals
@@ -801,7 +804,7 @@ export class HeaderGenerator {
   private formatScalarLiteral(value: number, baseType: string): string {
     switch (baseType) {
       case 'float':
-        return `${value}f`
+        return CCodeBuilder.floatLiteral(value)
       case 'double':
         return `${value}`
       case 'long':

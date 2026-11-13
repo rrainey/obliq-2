@@ -63,8 +63,10 @@ describe('Howlett UH-60 servo TFs (companion form)', () => {
       'current_states',
       'double'
     )
-    expect(out).toMatch(/\(3125/)
-    expect(deriv).toMatch(/\(3125/)
+    // 1 / 0.00032 is 3124.9999999999995 as a double: compare the value, not the text
+    const gainOf = (code: string) => Number(/\((312[45][0-9.]*)\)/.exec(code)?.[1])
+    expect(gainOf(out)).toBeCloseTo(3125, 6)
+    expect(gainOf(deriv)).toBeCloseTo(3125, 6)
     expect(deriv).toMatch(/\(78\.125\)/)
   })
 

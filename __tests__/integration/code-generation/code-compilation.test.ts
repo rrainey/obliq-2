@@ -6,6 +6,26 @@ import path from 'path'
 import { generateCCode } from '@/lib/codeGeneration'
 import { Sheet } from '@/lib/simulationTypes'
 
+/**
+ * Remove a temp directory of a Docker run. An earlier run can leave a
+ * root-owned `.pio` folder in it, which this process cannot remove. In that
+ * case, remove the contents from inside the container.
+ */
+function removeTempDir(tempDir: string): void {
+  if (!fs.existsSync(tempDir)) return
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EACCES') throw error
+    execSync(
+      `docker run --rm -v ${tempDir}:/workspace -w /workspace platformio-test bash -c "rm -rf .pio"`,
+      { stdio: 'ignore' }
+    )
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
+
 describe('Code Generation Compilation Tests', () => {
   const testDir = path.join(__dirname, 'platformio-test')
   const modelsDir = path.join(__dirname, 'models')
@@ -146,6 +166,8 @@ CMD ["/bin/bash"]
 
     // Create a temporary directory for this test
     const tempDir = path.join(testDir, 'temp', testName.replace(/\s+/g, '_').toLowerCase())
+    // Start clean: a build folder from an earlier run must not hide a failure
+    removeTempDir(tempDir)
     fs.mkdirSync(tempDir, { recursive: true })
 
     try {
@@ -230,7 +252,9 @@ lib_deps =
         '-w', '/workspace',
         'platformio-test',
         'bash', '-c',
-        '"pio run -e native -v && .pio/build/native/program"'
+        // The container runs as root. Remove its build folder on exit, so that
+        // no root-owned file stays in the temp directory on the host.
+        '"trap \'rm -rf .pio\' EXIT; pio run -e native -v && .pio/build/native/program"'
       ].join(' ')
 
       const result = executeWithFullOutput(dockerCommand, { cwd: process.cwd() })
@@ -249,9 +273,7 @@ lib_deps =
       }
     } finally {
       // Clean up temp directory
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true })
-      }
+      removeTempDir(tempDir)
     }
   }
   

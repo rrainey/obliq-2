@@ -3,6 +3,7 @@
 
 import { C99Token, C99TokenType, c99Tokenizer } from './c99Tokenizer'
 import { parseType, ParsedType } from './typeValidator'
+import { CCodeBuilder } from './codegen/CCodeBuilder'
 
 /**
  * Result of parsing a C99 initializer
@@ -331,7 +332,7 @@ function scalarToC99(value: any, baseType: string): string {
     return value ? 'true' : 'false'
   }
   if (baseType === 'float') {
-    return typeof value === 'number' ? `${value}f` : String(value)
+    return typeof value === 'number' ? CCodeBuilder.floatLiteral(value) : String(value)
   }
   if (baseType === 'long') {
     return typeof value === 'number' ? `${Math.floor(value)}L` : String(value)

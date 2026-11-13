@@ -54,7 +54,7 @@ describe('Feature 3: Type Propagation with Parameters', () => {
 
       // Should generate code with GAIN parameter
       expect(result.header).toContain('#define GAIN 2.5f')
-      expect(result.source).toContain('model->signals.GainValue = GAIN')
+      expect(result.source).toContain('model->signals.GainValue = PARAM_GAIN')
 
       // Should have no type mismatch warnings
       const typeMismatchWarnings = result.warnings.filter(w =>
@@ -111,7 +111,7 @@ describe('Feature 3: Type Propagation with Parameters', () => {
       // Should generate code with vector parameter
       expect(result.header).toContain('#define COEFFS_SIZE 3')
       expect(result.header).toContain('const double COEFFS[COEFFS_SIZE]')
-      expect(result.source).toContain('model->signals.Coefficients[0] = COEFFS[0]')
+      expect(result.source).toContain('model->signals.Coefficients[0] = PARAM_COEFFS[0]')
     })
 
     test('should handle matrix parameter with matching source type', () => {
@@ -163,7 +163,7 @@ describe('Feature 3: Type Propagation with Parameters', () => {
       expect(result.header).toContain('#define MATRIX_A_ROWS 2')
       expect(result.header).toContain('#define MATRIX_A_COLS 2')
       expect(result.header).toContain('const double MATRIX_A[MATRIX_A_ROWS][MATRIX_A_COLS]')
-      expect(result.source).toContain('model->signals.TransformMatrix[0][0] = MATRIX_A[0][0]')
+      expect(result.source).toContain('model->signals.TransformMatrix[0][0] = PARAM_MATRIX_A[0][0]')
     })
   })
 
@@ -363,11 +363,11 @@ describe('Feature 3: Type Propagation with Parameters', () => {
       // Should define all parameters
       expect(result.header).toContain('#define PI 3.14159')
       expect(result.header).toContain('#define FREQUENCY 60')
-      expect(result.header).toContain('#define AMPLITUDE 1f')
+      expect(result.header).toContain('#define AMPLITUDE 1.0f')
 
       // Should use parameters in source blocks
-      expect(result.source).toContain('model->signals.FrequencyParam = FREQUENCY')
-      expect(result.source).toContain('model->signals.AmplitudeParam = AMPLITUDE')
+      expect(result.source).toContain('model->signals.FrequencyParam = PARAM_FREQUENCY')
+      expect(result.source).toContain('model->signals.AmplitudeParam = PARAM_AMPLITUDE')
 
       // Should use parameters in evaluate expressions
       expect(result.source).toContain('2')

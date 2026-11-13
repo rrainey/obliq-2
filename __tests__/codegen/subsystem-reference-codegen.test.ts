@@ -39,10 +39,10 @@ describe('subsystem reference codegen', () => {
     const mods = flat.model.segregatedSubsystems!
     expect(mods.every(m => m.sharedModule)).toBe(true)
     expect(new Set(mods.map(m => m.moduleTypeName))).toEqual(new Set(['Blade']))
-    expect(mods.map(m => m.sanitizedName).sort()).toEqual(['Blade', 'Blade_2'])
-    const ref = mods.find(m => m.sanitizedName === 'Blade_2')!
+    expect(mods.map(m => m.sanitizedName).sort()).toEqual(['Blade_2_Blade_2', 'Blade_Blade'])
+    const ref = mods.find(m => m.sanitizedName === 'Blade_2_Blade_2')!
     expect(ref.instanceParameters?.find(p => p.name === 'gain')?.value).toBe(2)
-    const def = mods.find(m => m.sanitizedName === 'Blade')!
+    const def = mods.find(m => m.sanitizedName === 'Blade_Blade')!
     expect(def.instanceParameters?.find(p => p.name === 'gain')?.value).toBe(1)
   })
 
@@ -57,17 +57,17 @@ describe('subsystem reference codegen', () => {
       /Blade_init\(Blade_t\* model, const Blade_params_t\* params\)/
     )
 
-    expect(result.header).toMatch(/Blade_t Blade;/)
-    expect(result.header).toMatch(/Blade_t Blade_2;/)
+    expect(result.header).toMatch(/Blade_t Blade_Blade;/)
+    expect(result.header).toMatch(/Blade_t Blade_2_Blade_2;/)
     // Single include
     expect((result.header.match(/#include "Blade\.h"/g) || []).length).toBe(1)
 
     expect(result.source).toMatch(/\.gain = 1/)
     expect(result.source).toMatch(/\.gain = 2/)
-    expect(result.source).toMatch(/Blade_init\(&model->Blade/)
-    expect(result.source).toMatch(/Blade_init\(&model->Blade_2/)
-    expect(result.source).toMatch(/Blade_compute_outputs\(&model->Blade\)/)
-    expect(result.source).toMatch(/Blade_compute_outputs\(&model->Blade_2\)/)
+    expect(result.source).toMatch(/Blade_init\(&model->Blade_Blade\b/)
+    expect(result.source).toMatch(/Blade_init\(&model->Blade_2_Blade_2\b/)
+    expect(result.source).toMatch(/Blade_compute_outputs\(&model->Blade_Blade\)/)
+    expect(result.source).toMatch(/Blade_compute_outputs\(&model->Blade_2_Blade_2\)/)
   })
 
   test('references saved with empty port lists take their ports from the definition', () => {

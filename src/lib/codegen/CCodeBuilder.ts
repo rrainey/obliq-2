@@ -5,6 +5,18 @@
  */
 export class CCodeBuilder {
   /**
+   * A C `float` literal. A whole number needs a decimal point before the
+   * suffix: `1f` is not valid C, `1.0f` is.
+   */
+  static floatLiteral(value: number): string {
+    if (!Number.isFinite(value)) {
+      return Number.isNaN(value) ? '(0.0f / 0.0f)' : value > 0 ? '(1.0f / 0.0f)' : '(-1.0f / 0.0f)'
+    }
+    const text = String(value)
+    return /[.eE]/.test(text) ? `${text}f` : `${text}.0f`
+  }
+
+  /**
    * Sanitize a name to be a valid C identifier
    */
   static sanitizeIdentifier(name: string): string {

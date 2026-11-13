@@ -24,7 +24,7 @@ describe('Source Block Parameter References (Feature 3)', () => {
       const code = module.generateComputation(block, [])
 
       expect(code).toContain('// Using parameter: PI')
-      expect(code).toContain('model->signals.MySource = PI;')
+      expect(code).toContain('model->signals.MySource = PARAM_PI;')
     })
 
     test('should generate literal value when not using parameter', () => {
@@ -45,7 +45,9 @@ describe('Source Block Parameter References (Feature 3)', () => {
       const code = module.generateComputation(block, [])
 
       expect(code).not.toContain('Using parameter')
-      expect(code).toContain('model->signals.MySource = 3.14159;')
+      // A literal constant is set once in _init, not in each step
+      expect(code).toContain('(constant value initialized in _init)')
+      expect(code).not.toContain('model->signals.MySource =')
     })
 
     test('should generate vector parameter reference', () => {
@@ -67,9 +69,9 @@ describe('Source Block Parameter References (Feature 3)', () => {
       const code = module.generateComputation(block, [])
 
       expect(code).toContain('// Using parameter: GAINS')
-      expect(code).toContain('model->signals.VectorSource[0] = GAINS[0];')
-      expect(code).toContain('model->signals.VectorSource[1] = GAINS[1];')
-      expect(code).toContain('model->signals.VectorSource[2] = GAINS[2];')
+      expect(code).toContain('model->signals.VectorSource[0] = PARAM_GAINS[0];')
+      expect(code).toContain('model->signals.VectorSource[1] = PARAM_GAINS[1];')
+      expect(code).toContain('model->signals.VectorSource[2] = PARAM_GAINS[2];')
     })
 
     test('should generate matrix parameter reference', () => {
@@ -91,8 +93,8 @@ describe('Source Block Parameter References (Feature 3)', () => {
       const code = module.generateComputation(block, [])
 
       expect(code).toContain('// Using parameter: TRANSFORM')
-      expect(code).toContain('model->signals.MatrixSource[0][0] = TRANSFORM[0][0];')
-      expect(code).toContain('model->signals.MatrixSource[1][1] = TRANSFORM[1][1];')
+      expect(code).toContain('model->signals.MatrixSource[0][0] = PARAM_TRANSFORM[0][0];')
+      expect(code).toContain('model->signals.MatrixSource[1][1] = PARAM_TRANSFORM[1][1];')
     })
   })
 })

@@ -131,7 +131,8 @@ describe('Parameter Code Generation (Feature 3)', () => {
 
       expect(result.header).toContain('#define GAINS_SIZE 3')
       expect(result.header).toContain('const double GAINS[GAINS_SIZE]')
-      expect(result.header).toContain('{1, 2, 3}')
+      // The header declares the array; the .c file holds the storage
+      expect(result.source).toContain('const double GAINS[GAINS_SIZE] = {1, 2, 3}')
     })
 
     test('should generate const array for float vector with f suffix', () => {
@@ -158,7 +159,7 @@ describe('Parameter Code Generation (Feature 3)', () => {
 
       expect(result.header).toContain('#define COEFFS_SIZE 4')
       expect(result.header).toContain('const float COEFFS[COEFFS_SIZE]')
-      expect(result.header).toContain('{0.5f, 1.5f, 2.5f, 3.5f}')
+      expect(result.source).toContain('const float COEFFS[COEFFS_SIZE] = {0.5f, 1.5f, 2.5f, 3.5f}')
     })
   })
 
@@ -191,7 +192,7 @@ describe('Parameter Code Generation (Feature 3)', () => {
       expect(result.header).toContain('#define MATRIX_A_ROWS 2')
       expect(result.header).toContain('#define MATRIX_A_COLS 3')
       expect(result.header).toContain('const double MATRIX_A[MATRIX_A_ROWS][MATRIX_A_COLS]')
-      expect(result.header).toContain('{{1, 2, 3}, {4, 5, 6}}')
+      expect(result.source).toContain('{{1, 2, 3}, {4, 5, 6}}')
     })
 
     test('should generate const 2D array for float matrix with f suffix', () => {
@@ -223,9 +224,10 @@ describe('Parameter Code Generation (Feature 3)', () => {
       expect(result.header).toContain('#define TRANSFORM_ROWS 3')
       expect(result.header).toContain('#define TRANSFORM_COLS 3')
       expect(result.header).toContain('const float TRANSFORM[TRANSFORM_ROWS][TRANSFORM_COLS]')
-      expect(result.header).toContain('{1f, 0f, 0f}')
-      expect(result.header).toContain('{0f, 1f, 0f}')
-      expect(result.header).toContain('{0f, 0f, 1f}')
+      // A whole-number float needs a decimal point: `1f` is not valid C
+      expect(result.source).toContain('{1.0f, 0.0f, 0.0f}')
+      expect(result.source).toContain('{0.0f, 1.0f, 0.0f}')
+      expect(result.source).toContain('{0.0f, 0.0f, 1.0f}')
     })
   })
 
@@ -296,5 +298,54 @@ describe('Parameter Code Generation (Feature 3)', () => {
 
       expect(result.header).toContain('No model parameters defined')
     })
+  })
+})
+
+// A text check of the generated code cannot find C that does not compile:
+// a Source block once read `PARAM_<name>` for a vector parameter that the
+// header did not define, and a float `1` was written as `1f`. Compile it.
+describe('Parameter code compiles (C99)', () => {
+  const { execFileSync, spawnSync } = require('child_process') as typeof import('child_process')
+  const fs = require('fs') as typeof import('fs')
+  const os = require('os') as typeof import('os')
+  const path = require('path') as typeof import('path')
+  const hasGcc = spawnSync('gcc', ['--version']).status === 0
+  const maybe = hasGcc ? test : test.skip
+
+  const cases: Array<[string, string, unknown]> = [
+    ['scalar double', 'double', 2.5],
+    ['scalar float, whole number', 'float', 2],
+    ['vector double', 'double[3]', [1, 2, 3]],
+    ['vector float, whole numbers', 'float[3]', [0.5, 1, 2]],
+    ['matrix double', 'double[2][2]', [[1, 2], [3, 4]]],
+    ['matrix float, whole numbers', 'float[2][2]', [[1, 0], [0, 1]]],
+  ]
+
+  maybe.each(cases)('a Source block that uses a %s parameter', (_label, signalType, value) => {
+    const parameters = [{ name: 'P', signalType, value }] as any
+    const sheets = [{
+      id: 'main',
+      name: 'Main',
+      blocks: [
+        {
+          id: 'src', type: 'source', name: 'Src', position: { x: 0, y: 0 },
+          parameters: { signalType: 'constant', dataType: signalType, value, useParameter: true, parameterName: 'P' },
+        },
+        { id: 'out', type: 'output_port', name: 'Out', position: { x: 200, y: 0 }, parameters: { portName: 'Out' } },
+      ],
+      connections: [{ id: 'w', sourceBlockId: 'src', sourcePortIndex: 0, targetBlockId: 'out', targetPortIndex: 0 }],
+      extents: { width: 800, height: 600 },
+    }] as any
+    const result = new CodeGenerator({ modelName: 'ptest' }).generate(sheets, parameters)
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'obliq-param-'))
+    try {
+      fs.writeFileSync(path.join(dir, 'ptest.h'), result.header)
+      fs.writeFileSync(path.join(dir, 'ptest.c'), result.source)
+      // Throws, with the compiler's message, when the code does not compile
+      execFileSync('gcc', ['-std=c99', '-fsyntax-only', 'ptest.c'], { cwd: dir, stdio: 'pipe' })
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
