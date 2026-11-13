@@ -1,5 +1,47 @@
 # obliq-2 Change Log
 
+## What's New in 3.8.4
+
+This release puts the **Saturation Dynamic** block on the block palette, documents four more blocks and adds them to the MCP server, fixes defects in those blocks and in two server routes, and removes material that referred to other repositories or to the retired cloud design. **The models and the generated code of the FPV Vehicle do not change.** Only page 16 of `reference-models/fpv-vehicle.pdf` changes, where the Saturation Dynamic block now has its symbol.
+
+- **New on the palette: Saturation Dynamic (`saturation_dynamic`).** It keeps the input `u` between a lower limit `lo` and an upper limit `up`, for each element: `y = fmax(lo, fmin(up, u))`. Two input signals supply the limits, thus the limits can change during the simulation. The block has no parameters.
+  - The input ports are, in order: `up` (upper limit), `u` (input signal) and `lo` (lower limit). This is the order of the Simulink Saturation Dynamic block. The order does not change, so the models that use the block are not affected.
+  - When `lo` is more than `up`, the output is `lo`.
+  - A scalar limit applies to all elements of a vector or matrix `u`. Inputs that are not scalars must have the same dimensions.
+- **The block on the canvas and in the PDF.** The block shows a saturation curve, and the names `up`, `u` and `lo` inside its body, next to the input ports. The tooltip of each input port gives its name and function, for example `lo: lower limit`. The PDF draws the same symbol as vector paths. Before, the canvas and the PDF showed `?`. A double-click on the block does not open a dialog, the same as for the other blocks without parameters.
+- **Drag and drop, the Model Builder API and the MCP server.** The block is now in the block type registry, in the model schema and in the parameter validator. Thus you can drop it on the canvas, and add it with `addBlock` and with the MCP tool `add_block`. The MCP tool `list_block_types` gives its port names.
+- **Validation.** **Validate Model**, and the check before a simulation run, show an error when the dimensions of `up`, `u` and `lo` do not agree, or when an input is `bool`. Before, such a model gave C code that did not compile or that read past the end of an array. The check before a run shows a warning when an input is not connected.
+- **Documentation.** `docs/blocks-reference.md` has a full entry for the block, with an anti-windup example. The README block table and `docs/model-builder-api.md` list it. `docs/adding-new-block-types.md` has the steps that its checklist did not have before.
+- **Corrected descriptions.**
+  - On the palette, the Limit block was in a category `Signal` that no other block used. It is now in `Math`, as in the registry, the README and the MCP server.
+  - The registry description of the Rate Limiter said that it always uses the simulation time step. In a subsystem with a sample time, it uses the sample period.
+- **New test: `block-type-consistency.test.ts`.** It finds each block type of the block module factory that is not in the registry, on the palette, in the MCP list or in `getSupportedBlockTypes()`. The block types that have such a gap now are listed in the test. A new gap makes the test fail. `getSupportedBlockTypes()` now also lists `square`, `sheet_label_sink` and `sheet_label_source`, which have block modules.
+- **Removed: material that referred to other repositories or to the retired cloud design.** The application does not change.
+  - Eleven Saturn IB analysis scripts and their six `npm run` entries (`as205:compare`, `as205:compare-final`, `obliq:regen-saturnib-plant`, `eom:mdl-vs-rhs`, `ic:dual-path`, `onpad:dual-path`). They imported code from a different repository and could not run without it. The Saturn sample README files, the LVDA/LVDC status document and its snapshot are also removed.
+  - The one-time import from the 2.x database: `scripts/migrate-from-supabase.ts`, `npm run migrate:supabase`, the `@supabase/supabase-js` dependency, the archived database scripts and the migration plan. To import a 2.x database, use release 3.8.3.
+  - Thirteen WASM and design documents that described the retired cloud design, and nine historical task lists in `design/`. `docs/wasm-compilation-api.md` stays, corrected to agree with the code.
+  - Three tests that read their models from a different repository: `lookup-param-tables`, `memory-major-step` and `p4-dcm-goto`.
+- **No file refers to a home directory.** Two files contained an absolute path to a home directory. They are among the removed files.
+- **New: `design/00-architecture.md`.** It replaces the document of the same name. It describes the system as it is now: the parts, the main flows, the storage on disk and the rules that a change must keep.
+- **`ModelRepository.importModel()` is marked as not used.** Its one caller was the 2.x import. It stays for a future bulk import.
+- **Fixed: a simulation that an automation or MCP client started did not use the model parameters.** The `compile-wasm` route did not give the model parameters to the code generator, and did not include them in the cache key. A model with parameters could fail to compile, or could run a module that was built with old parameter values. The route now does the same as the route that the editor uses.
+- **Fixed: the cache maintenance route did not always ask for authentication.** `POST /api/cache-maintenance` deletes entries of the WASM cache. It asked for a key only when the environment variable `CACHE_MAINTENANCE_API_KEY` was set. It now always asks for an API token or the session cookie, as the other routes do. It also accepts `x-api-key` when that environment variable is set and the key is the same. A body value that is not a number of zero or more now gives status 400.
+- **Documented, and added to the MCP server: Derivative, Variable Transport Delay, For Iterator Subsystem and Iteration Index.** `docs/blocks-reference.md` has a full entry for each block. The README block table, `docs/model-builder-api.md` and the MCP tool `list_block_types` list them, with their parameters and port names. The parameter validator accepts their parameters and rejects bad values. The blocks are not on the palette.
+  - **For Iterator Subsystem through the Model Builder API.** `addBlock` now gives the block a body sheet with the ports `Input1` and `Output1`, and gives the sheet ID in `subsystemSheet`. `addBlock`, `addConnection`, `createSheet` and `updateBlockParameters` now find the body sheet. A port block in the body adds a port to the block. `updateBlockParameters` keeps the body. The API rejects `codeGenStrategy` `flatten` for this block. GitHub issue #5 lists the parts of the API and of the editor that do not support the block.
+  - The registry category of Derivative and Variable Transport Delay is now `Dynamic`, as for the Integrator. Before, it was `Continuous`, which no other block used.
+- **Fixed: Derivative under RK4.** The block divided by `dt` also in the RK4 stages, where the time from the major step is `dt/2`. An Integrator of the output gained only about 2/3 of the change of the input. The block now divides by the time since the last major step. At the major steps the output does not change.
+- **Fixed: Variable Transport Delay.**
+  - The output had one more step of delay than `delay_sec`. A delay of 0 gave `u` of the previous step. The output is now `u(t - d)`, and a delay of 0 gives `u`.
+  - Before the input history covered the delay, the output was the oldest sample, not `initialInput`. It is now `initialInput`.
+  - A NaN delay gave an array index that is not defined. It now gives a delay of 0.
+  - A vector or matrix input gave C code that did not compile. **Validate Model** and the check before a run now show an error. The C has an `#error` with the block name.
+  - A second algebra pass at the same time (`seed_from_inputs`) added a sample to the buffer. It does not now.
+- **Fixed: For Iterator Subsystem.**
+  - With `accumulateOutputs`, a vector or matrix output was the value of the last pass, not the sum. It is now the sum.
+  - With `codeGenStrategy` `flatten`, the body ran only one time in each step. Code generation now always makes the body a separate module.
+- **Fixed: an Iteration Index outside a For Iterator body gave C code that did not compile, with no clear message.** **Validate Model** and the check before a run now show an error. The C has an `#error` with the block name.
+- **The model schema accepts all registered block types.** The block type list of the schema now comes from the block type registry. Before, the schema did not accept 27 registered types, for example `relay`, `rate_limiter`, `quantizer`, `edge_detect`, `divide`, `sign` and `square`. Only the tests use the schema validation functions, thus no stored model changes. `block-type-consistency.test.ts` now fails when the schema does not accept a registered type. `inertia_diag_pack` is not in the registry, and the schema does not accept it. No shipped model uses it.
+
 ## What's New in 3.8.3
 
 Two defects in the C code generator are fixed, and the full test suite passes again. Thirty tests failed before this release. **The generated code of the FPV Vehicle does not change.** You do not have to export the model again.
