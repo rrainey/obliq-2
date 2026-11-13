@@ -78,7 +78,11 @@ Block-specific parameters for subsystem blocks:
   - 'segregated': Subsystem generates separate init/step functions that are called from parent
   - 'segregated_atomic': Like segregated, but guarantees atomic execution
 - inputPorts: Array of input port names (e.g., ['Input1', 'Input2']). Default: ['Input1']
-- outputPorts: Array of output port names (e.g., ['Output1']). Default: ['Output1']`,
+- outputPorts: Array of output port names (e.g., ['Output1']). Default: ['Output1']
+- subsystemFunction (optional): 'controller' | 'actuator' | 'plant' | 'sensor' | 'compensator' | 'other'. Only the diagram layout uses it.
+
+Parameter of all block types except comments:
+- flipped (optional): true draws the block mirrored, with its inputs on the right and its outputs on the left. Only the diagram uses it.`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -171,7 +175,11 @@ For subsystem blocks, you can update:
 - outputPorts: array of port name strings
 - showEnableInput: boolean
 - showPortNames: boolean
+- subsystemFunction: 'controller' | 'actuator' | 'plant' | 'sensor' | 'compensator' | 'other', or null to remove it. Only the diagram layout uses it.
 - parameters: array of subsystem-scoped parameters (ONLY for segregated/segregated_atomic strategies)
+
+For all block types except comments:
+- flipped: true draws the block mirrored (inputs on the right, outputs on the left); false or null removes the flip. Only the diagram uses it. For a block that is not a subsystem, the update replaces all parameters: send its other parameters too.
 
 IMPORTANT: Subsystem parameters can only be set when codeGenStrategy is 'segregated' or 'segregated_atomic'.
 If you attempt to set parameters on a 'flatten' strategy subsystem, you will receive an error explaining
@@ -219,7 +227,7 @@ Example subsystem parameter update:
           },
           parameters: {
             type: 'object',
-            description: 'Updated block parameters. For subsystems, can include codeGenStrategy, inputPorts, outputPorts, showEnableInput, showPortNames, and parameters (subsystem-scoped constants).'
+            description: 'Updated block parameters. For subsystems, can include codeGenStrategy, inputPorts, outputPorts, showEnableInput, showPortNames, subsystemFunction, and parameters (subsystem-scoped constants). Any block except a comment can include flipped (boolean): inputs on the right, outputs on the left.'
           }
         },
         description: 'Properties to update'

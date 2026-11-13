@@ -3,7 +3,7 @@
 'use client'
 
 import { memo, CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
-import { Handle, Position, NodeProps, useStore } from 'reactflow'
+import { Handle, Position, NodeProps, useStore, useUpdateNodeInternals } from 'reactflow'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import { BlockModuleFactory } from '@/lib/blocks/BlockModuleFactory'
 import { IconMathIntegral, IconMathMaxMin, IconFileTypeCsv, IconChartCovariate, IconCube, IconClockCog, IconActivity, IconChecklist, IconPackageImport, IconX } from '@tabler/icons-react'
@@ -742,13 +742,15 @@ const portSignStyles = `
     white-space: nowrap;
   }
 
-  .port-name-label.input {
+  /* Port names go outside the edge that holds the port: inputs on the left
+     and outputs on the right, or the opposite for a flipped block */
+  .port-name-label.side-left {
     right: 100%;
     text-align: right;
     margin-right: 12px;  /* 6px base + 6px (0.75 char) additional spacing */
   }
 
-  .port-name-label.output {
+  .port-name-label.side-right {
     left: 100%;
     text-align: left;
     margin-left: 12px;  /* 6px base + 6px (0.75 char) additional spacing */
@@ -801,6 +803,21 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
   // Stored dimensions for resized subsystems are handled inside getBlockWidth.
   const blockWidth = getBlockWidth(data)
   const minHeight = BlockGeometry.getBlockHeight(data, inputCount, outputCount)
+  // A flipped block has its inputs on the right edge and its outputs on the
+  // left edge (BlockGeometry.dataPortGeometry). Text and icons stay as they are.
+  const inputSide = BlockGeometry.dataPortSide(data, 'input')
+  const outputSide = BlockGeometry.dataPortSide(data, 'output')
+  const sidePosition = (side: BlockGeometry.PortSide) => (side === 'left' ? Position.Left : Position.Right)
+  const sideOffset = (side: BlockGeometry.PortSide) => (side === 'left' ? { left: -6 } : { right: -6 })
+  // React Flow measures the handle positions when a node changes size. A flip
+  // moves the handles without a change of size, so ask it to measure again.
+  const updateNodeInternals = useUpdateNodeInternals()
+  const flippedNow = BlockGeometry.isFlipped(data)
+  const firstFlipRender = useRef(true)
+  useEffect(() => {
+    if (firstFlipRender.current) { firstFlipRender.current = false; return }
+    updateNodeInternals(data.id)
+  }, [flippedNow, data.id, updateNodeInternals])
   const [updateTrigger, setUpdateTrigger] = useState(0);
 
   // --- Resize mode wiring ---------------------------------------------------
@@ -842,6 +859,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
       if (e.button !== 0) return
       e.preventDefault()
       e.stopPropagation()
+      // The sheet's blocks before the resize, to repair wire waypoints after it
+      const blocksBefore = useModelStore.getState().blocks
       dragRef.current = {
         corner,
         startX: e.clientX,
@@ -904,6 +923,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
         dragRef.current = null
         document.removeEventListener('mousemove', onMove)
         document.removeEventListener('mouseup', onUp)
+        // Waypoints are absolute: repair or clear those of this block's wires
+        useModelStore.getState().repairWireRoutingAfterBlockChange(blocksBefore)
       }
 
       document.addEventListener('mousemove', onMove)
@@ -1011,7 +1032,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
         <Handle
           key={`input-${i}`}
           type="target"
-          position={Position.Left}
+          position={sidePosition(inputSide)}
           id={`input-${i}`}
           style={{
             top: `${((i + 1) / (inputCount + 1)) * 100}%`,
@@ -1036,7 +1057,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
         <Handle
           key={`output-${i}`}
           type="source"
-          position={Position.Right}
+          position={sidePosition(outputSide)}
           id={`output-${i}`}
           style={{
             top: `${((i + 1) / (outputCount + 1)) * 100}%`,
@@ -1240,7 +1261,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
             className={`port-sign ${sign === '+' ? 'positive' : 'negative'}`}
             style={{
               top: calculatePortPosition(index, inputCount, minHeight) - 8,
-              left: 8,
+              // Next to the input ports: the right edge of a flipped block
+              ...(inputSide === 'left' ? { left: 8 } : { right: 8 }),
             }}
           >
             {sign}
@@ -1275,7 +1297,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
               return (
                 <div
                   key={`input-label-${index}`}
-                  className="port-name-label input"
+                  className={`port-name-label input side-${inputSide}`}
                   style={{
                     // Shift the label down within its port slot so it visually
                     // groups with its own wire (Gestalt proximity) — more
@@ -1311,7 +1333,7 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
               return (
                 <div
                   key={`output-label-${index}`}
-                  className="port-name-label output"
+                  className={`port-name-label output side-${outputSide}`}
                   style={{
                     // Same rebalancing as input labels; the 2 px extra shift
                     // vs. the input side is preserved from the prior layout.
@@ -1371,17 +1393,17 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           />
         )}
 
-        {/* Input Handles (left edge data ports, including integrator x(0) when shown) */}
+        {/* Input Handles (left edge data ports, or right edge when flipped; including integrator x(0) when shown) */}
         {Array.from({ length: inputCount }).map((_, index) => (
           <Handle
             key={`input-${index}`}
             type="target"
-            position={Position.Left}
+            position={sidePosition(inputSide)}
             id={`input-${index}`}
             style={{
               ...handleStyle,
               top: calculatePortPosition(index, inputCount, minHeight),
-              left: -6,
+              ...sideOffset(inputSide),
             }}
             title={
               data.type === 'sum' && sumSigns && sumSigns[index]
@@ -1401,17 +1423,17 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           />
         ))}
 
-        {/* Output Handles */}
+        {/* Output Handles (right edge, or left edge when flipped) */}
         {Array.from({ length: outputCount }).map((_, index) => (
           <Handle
             key={`output-${index}`}
             type="source"
-            position={Position.Right}
+            position={sidePosition(outputSide)}
             id={`output-${index}`}
             style={{
               ...handleStyle,
               top: calculatePortPosition(index, outputCount, minHeight),
-              right: -6,
+              ...sideOffset(outputSide),
             }}
             onMouseEnter={(e) => {
               const target = e.target as HTMLElement

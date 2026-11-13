@@ -56,6 +56,14 @@ const SubsystemParametersSchema = z
     codeGenStrategy: CodeGenStrategySchema.optional().default('flatten'),
     // Subsystem-level parameters (schema+defaults on definition; instance values on references)
     parameters: z.array(ModelParameterSchema).optional().default([]),
+    /**
+     * Function of the subsystem in a control loop. The layout uses it for the
+     * left-to-right order (src/lib/layout/subsystemRole.ts). It has no effect
+     * on simulation or code generation. Absent means "not set".
+     */
+    subsystemFunction: z.enum(['controller', 'actuator', 'plant', 'sensor', 'compensator', 'other']).optional(),
+    /** Drawn mirrored: inputs on the right, outputs on the left. Diagram only. */
+    flipped: z.boolean().optional(),
     // Optional visual size overrides for the block on the diagram
     width: z.number().positive('Subsystem width must be positive').optional(),
     height: z.number().positive('Subsystem height must be positive').optional(),
@@ -104,6 +112,17 @@ const SubsystemParametersSchema = z
 const BlockParametersSchema = z.record(z.any()).optional().superRefine((params, ctx) => {
   if (!params) return
   
+  // `flipped` (optional, any block with data ports): drawn mirrored, inputs on
+  // the right and outputs on the left. It has no effect on simulation or code
+  // generation (layout/blockGeometry.ts).
+  if ('flipped' in params && params.flipped !== undefined && typeof params.flipped !== 'boolean') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'flipped must be a boolean',
+      path: ['flipped']
+    })
+  }
+
   // Validate dataType for blocks that have it
   if ('dataType' in params && params.dataType !== undefined) {
     const result = SignalTypeSchema.safeParse(params.dataType)

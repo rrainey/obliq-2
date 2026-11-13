@@ -235,3 +235,202 @@ export function portFraction(index: number, count: number): number {
 export function portOffsetY(index: number, count: number, blockHeight: number): number {
   return blockHeight * portFraction(index, count)
 }
+
+// --- Mirrored blocks and data port sides ---------------------------------
+//
+// A block with `parameters.flipped === true` is drawn mirrored: its input
+// ports are on the right edge and its output ports on the left edge. The y of
+// each port does not change. Enable and reset ports stay at the top and the
+// bottom centre. The text and the icon of the block are not mirrored. The
+// flag has no effect on simulation or code generation.
+
+/** True when the block is drawn mirrored (inputs right, outputs left). */
+export function isFlipped(data: GeomBlock | null | undefined): boolean {
+  return data?.parameters?.flipped === true
+}
+
+export type PortSide = 'left' | 'right'
+
+/** Where a data port is on a block, relative to the block's top left corner. */
+export interface DataPortGeometry {
+  side: PortSide
+  /** Direction that a wire leaves (or enters) the port: -1 to the left, +1 to the right. */
+  dir: -1 | 1
+  /** x of the block edge that holds the port. */
+  edgeX: number
+  /** x of the wire end: HANDLE_OUTSET px outside the block edge. */
+  endX: number
+  /** y of the port (and of the wire end). */
+  y: number
+}
+
+/**
+ * Side and position of one data port of a block. This is the one function
+ * that knows which side a data port is on: BlockNode, pdfRenderer.ts, the
+ * wire paths, the layout engines and the layout score all use it.
+ * `kind` 'input': inputs are on the left, or on the right when the block is
+ * flipped. 'output': the other side. `count` is the effective port count of
+ * that kind, as for portOffsetY().
+ */
+export function dataPortGeometry(
+  data: GeomBlock,
+  kind: 'input' | 'output',
+  index: number,
+  count: number,
+  width: number,
+  height: number,
+): DataPortGeometry {
+  const right = (kind === 'output') !== isFlipped(data)
+  const y = portOffsetY(Math.max(0, index), count, height)
+  return right
+    ? { side: 'right', dir: 1, edgeX: width, endX: width + HANDLE_OUTSET, y }
+    : { side: 'left', dir: -1, edgeX: 0, endX: -HANDLE_OUTSET, y }
+}
+
+/** The side of the inputs ('input') or the outputs ('output') of a block. */
+export function dataPortSide(data: GeomBlock, kind: 'input' | 'output'): PortSide {
+  return (kind === 'output') !== isFlipped(data) ? 'right' : 'left'
+}
+
+// --- Default wire path ----------------------------------------------------
+
+export interface WirePoint { x: number; y: number }
+
+/** One end of a wire: the point HANDLE_OUTSET px outside the port, and the port direction. */
+export interface WireEnd extends WirePoint {
+  /** -1: the port faces left; +1: the port faces right. */
+  dir: -1 | 1
+}
+
+export interface WireRect { x: number; y: number; w: number; h: number }
+
+/**
+ * Length of the straight run out of a port (beyond the wire end) before a
+ * default wire path turns, when the path cannot turn between the two ports.
+ */
+export const WIRE_STUB = 10
+
+/** Shape of a default wire path. */
+export type DefaultWireShape =
+  /** Three segments, turning at a vertical run. `midpointOffset` moves the run. */
+  | 'step'
+  /** Five segments around the blocks: out of each port, then a horizontal run. `midpointOffset` has no effect. */
+  | 'loop'
+
+/**
+ * The wire path that the editor draws when a wire has no waypoints. All of
+ * the canvas (CustomEdge.tsx), the PDF export, the layout score and the
+ * layout engines use this function, so they draw the same path.
+ *
+ * `source` and `target` are the wire ends with the directions of their ports.
+ * A wire always leaves its source port, and enters its target port, in the
+ * direction that the port faces.
+ *   - Ports that face each other (an output on the right and an input on the
+ *     left with the target to the right, or the mirror of this): three
+ *     segments that turn at the middle x plus `midpointOffset`. This is the
+ *     shape of earlier versions, unchanged. A backward wire with the usual
+ *     sides and a stored offset (from the classic layout engine or an earlier
+ *     version) also keeps this shape.
+ *   - Ports that face the same way (for example a plant output on the right
+ *     that feeds the input of a mirrored sensor, also on the right): three
+ *     segments that turn WIRE_STUB px past the outer port, plus
+ *     `midpointOffset`.
+ *   - Other cases (a target behind its source, or a same-way wire whose
+ *     straight run would go through the other block): five segments. The
+ *     wire leaves each port by WIRE_STUB px, and a horizontal run joins the
+ *     two stubs above, between or below the blocks.
+ * `rects` (the source and target block rectangles) select the row of the
+ * horizontal run of a five-segment path, and find a same-way wire that must go
+ * around a block. Without them, the run is at the middle y.
+ */
+export function defaultWirePath(
+  source: WireEnd,
+  target: WireEnd,
+  midpointOffset = 0,
+  rects: { source?: WireRect; target?: WireRect } = {},
+): WirePoint[] {
+  return defaultWireRoute(source, target, midpointOffset, rects).points
+}
+
+/** defaultWirePath() with its shape. */
+export function defaultWireRoute(
+  source: WireEnd,
+  target: WireEnd,
+  midpointOffset = 0,
+  rects: { source?: WireRect; target?: WireRect } = {},
+): { shape: DefaultWireShape; points: WirePoint[] } {
+  const s = { x: source.x, y: source.y }
+  const t = { x: target.x, y: target.y }
+  // Ports that face each other, target in front of the source: the classic
+  // step. A backward wire between blocks with the usual sides (output right,
+  // input left) that has a stored turn offset keeps the step too: this is the
+  // shape that the classic layout engine writes and that earlier versions drew.
+  const usualSides = source.dir === 1 && target.dir === -1
+  if (source.dir !== target.dir && ((target.x - source.x) * source.dir >= 0 || (usualSides && midpointOffset !== 0))) {
+    const midX = source.x + (target.x - source.x) / 2 + midpointOffset
+    return { shape: 'step', points: [s, { x: midX, y: source.y }, { x: midX, y: target.y }, t] }
+  }
+  if (source.dir === target.dir && Math.abs(source.y - target.y) >= 1) {
+    const outer = source.dir > 0 ? Math.max(source.x, target.x) : Math.min(source.x, target.x)
+    const x = outer + source.dir * WIRE_STUB + midpointOffset
+    const points = [s, { x, y: source.y }, { x, y: target.y }, t]
+    const blocked = (rects.target && runHitsRect(source.y, source.x, x, rects.target))
+      || (rects.source && runHitsRect(target.y, x, target.x, rects.source))
+    if (!blocked) return { shape: 'step', points }
+  }
+  // Around: out of each port, then a horizontal run at y
+  const sx = source.x + source.dir * WIRE_STUB
+  const tx = target.x + target.dir * WIRE_STUB
+  const y = loopRunY(source, target, rects)
+  return {
+    shape: 'loop',
+    points: [s, { x: sx, y: source.y }, { x: sx, y }, { x: tx, y }, { x: tx, y: target.y }, t],
+  }
+}
+
+/** True when the horizontal run at y from x1 to x2 goes through the inside of the rectangle. */
+function runHitsRect(y: number, x1: number, x2: number, r: WireRect): boolean {
+  if (y <= r.y || y >= r.y + r.h) return false
+  return Math.max(x1, x2) > r.x && Math.min(x1, x2) < r.x + r.w
+}
+
+/** The row of the horizontal run of a five-segment default path. */
+function loopRunY(source: WireEnd, target: WireEnd, rects: { source?: WireRect; target?: WireRect }): number {
+  const a = rects.source, b = rects.target
+  if (a && b) {
+    // Between the blocks when one is above the other
+    if (a.y + a.h <= b.y) return (a.y + a.h + b.y) / 2
+    if (b.y + b.h <= a.y) return (b.y + b.h + a.y) / 2
+    // Else above or below both, on the side nearer to the ports
+    const top = Math.min(a.y, b.y) - 2 * WIRE_STUB
+    const bottom = Math.max(a.y + a.h, b.y + b.h) + 2 * WIRE_STUB
+    const mid = (source.y + target.y) / 2
+    return mid - top < bottom - mid ? top : bottom
+  }
+  const r = a ?? b
+  if (r) {
+    const top = r.y - 2 * WIRE_STUB, bottom = r.y + r.h + 2 * WIRE_STUB
+    const mid = (source.y + target.y) / 2
+    if (mid > r.y && mid < r.y + r.h) return mid - top < bottom - mid ? top : bottom
+    return mid
+  }
+  if (Math.abs(source.y - target.y) >= 1) return (source.y + target.y) / 2
+  return source.y + 4 * WIRE_STUB
+}
+
+/**
+ * The wire end of a data port in sheet coordinates, for a block at `position`
+ * with size `width` x `height`.
+ */
+export function wireEndAt(
+  data: GeomBlock,
+  position: { x: number; y: number },
+  kind: 'input' | 'output',
+  index: number,
+  count: number,
+  width: number,
+  height: number,
+): WireEnd {
+  const g = dataPortGeometry(data, kind, index, count, width, height)
+  return { x: position.x + g.endX, y: position.y + g.y, dir: g.dir }
+}

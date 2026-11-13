@@ -93,36 +93,167 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 | `inertia_diag_pack` | Packs principal-axis inertia and its derivative into `[Ixx, Iyy, Izz, İxx, İyy, İzz]` for aerolib mass properties |
 
 ### Diagram Layout
-Right-click empty canvas and choose **Tune Model Layout...** to open a dialog of
-independent adjustments, each of which can be left alone:
 
-| Adjustment | Effect |
-|------------|--------|
-| **Clean up block layout** | Arranges blocks so data flows left to right and routes the turns of the wires between them |
-| **Resize Subsystems** | Sizes subsystem blocks so their ports sit closer to what they connect to, spreading ports at most **Maximum port spacing** apart (default 40 px; natural spacing is 20 px) |
-| **Subsystem Ports Labeling** | Shows or hides port-name labels on subsystem blocks |
-| **Hide unnecessary block names** | Hides names on everything except subsystems |
-| **Scope** | Current sheet (default), current subsystem, or the entire model |
+To lay out a model, right-click the empty canvas and choose **Tune Model Layout...**. The dialog has independent adjustments. You can leave each one as it is.
 
-**Block placement**
-- Blocks are ranked into columns by signal flow, so data runs left to right. Feedback loops are detected and do not disturb the ordering.
-- Only a sheet's **boundary** blocks are pinned to the edges: Input Ports on the left, and Output Ports, displays and loggers on the right.
-- **Gotos** and data-store writes sit just after the block that drives them. **Froms**, data-store reads, constants and clocks sit just before the block they feed. Their wires stay short instead of fanning across the whole sheet.
-- Layout is **port-aware**. Each block is pulled toward the ports it connects to, over wires of *any* length, not just to the neighboring column. The column is then ordered by those targets, so a block lands vertically close to the output that feeds it, and wires run straight wherever the geometry allows.
+| Adjustment | Default | Effect |
+|------------|---------|--------|
+| **Clean up block layout** | Yes | Puts the blocks in signal-flow order from left to right, and routes each wire around the blocks |
+| **Layout engine** | ELK Layered | **ELK Layered** (`elkjs`) or **Classic**, the engine of earlier releases. The adjustments below that say "ELK only" have no effect with Classic |
+| **Use subsystem functions for signal flow order** | On | ELK only. Puts each control loop in the order controller, actuator, plant, with sensors and compensators on the return path. See **Subsystem Function** |
+| **Mirror feedback-path blocks** | On | ELK only, with subsystem functions. Puts the return path of a loop on a flipped row below the forward path. See **Return row** |
+| **Tidy signal labels (changes the model)** | Off | ELK only. Replaces long wires that cross many other wires with Sheet Label pairs. See **Tidy signal labels** |
+| **Resize Subsystems** | No | Sizes subsystem blocks so that their ports align with the blocks they connect to. Adjacent ports are at most **Maximum port spacing** apart (default 40 px; the natural spacing is 20 px) |
+| **Subsystem Ports Labeling** | Leave as-is | Shows or hides the port names on subsystem blocks |
+| **Hide unnecessary block names** | No | Hides the names of all blocks except subsystems |
+| **Scope** | Current sheet | The current sheet, the current subsystem, or the entire model |
 
-**Wire routing**
-- The editor draws each wire as across, down, across. Cleaning up the layout also decides where each wire turns, instead of always turning midway between its ports.
-- Each turn is placed in the gap between block columns where it causes the fewest crossings, overlaps with other wires, and runs through blocks.
-- Within a gap, every net (all wires from one output port) gets its own vertical track, ordered to avoid crossings. Wires from one output share a track, which reads as a junction.
-- Gaps that need many tracks are widened so tracks stay 8 px apart.
-- **Feedback wires** (running right to left, back to an earlier block) turn in the gap just in front of the block they feed, each on its own track. They come into their port on a short, staggered horizontal run instead of crossing the block from behind, which makes them easy to follow.
-- Turn positions are saved with each wire. Straight wires and enable/reset connections keep the default midpoint, which also clears turns dragged by hand before the blocks moved.
-- To adjust a wire yourself, hover its vertical segment and drag it left or right from anywhere along its length.
+A scope can include sheets in subsystems that are not open. The dialog shows how many sheets a scope covers, and it warns when that is more than one. You cannot undo a layout, but each Save keeps a version snapshot.
 
-**Other notes**
-- Resizing fits each subsystem's height to where the blocks it connects to sit, then caps it so adjacent ports are at most **Maximum port spacing** apart. Lining every port up exactly with a separate neighbour would need ports as far apart as those neighbours are, many times the natural size. Wires to neighbours that another subsystem also feeds (a mux fed by four motors, say) are ignored, because no size could align them all. Each resize starts from the subsystem's natural size, so the result does not depend on earlier sizes (including sizes set by hand), and resizing twice gives the same result. The result is written into the model as `width` / `height`.
-- A scope may reach sheets nested inside subsystems that are not currently open, so the dialog reports how many sheets a scope covers and warns when that is more than one. Tuning cannot be undone, but every Save keeps a version snapshot.
-- Subsystem blocks can also be resized by hand: right-click the block, choose **Resize...**, and drag any corner handle.
+**Block placement (ELK Layered)**
+- Blocks go into layers by signal flow, so data goes from left to right. Input Ports go in the first layer and Output Ports in the last layer.
+- In a feedback loop, the feedback wires are the wires that go back to an earlier block in the signal-flow order.
+- **Satellite blocks** are leaf blocks with one wire: Sheet Label Sinks and Sources, constants, clocks, data store reads and writes, No Connection blocks, displays and loggers. The layout puts a satellite beside the block that it connects to (its host), on the row of the host port, so that its wire is straight:
+  - a Sheet Label Sink, a data store write, a display or a logger goes to the right of the host's output port;
+  - a Sheet Label Source, a constant or a data store read goes to the left of the host's input port.
+- When adjacent satellites do not fit in one column, the layout **staggers** them across two or more sub-columns. The wire to a farther satellite goes past the nearer satellites and their names.
+- When the ports of a host are too near each other for its satellites, each satellite wire turns one time. These wires do not cross. To make more of these wires straight, also select **Resize Subsystems**.
+- When a host port also feeds other blocks, its satellite stays beside the port. The wire to the other blocks leaves the satellite's wire at a junction in front of the satellite.
+- On a sheet with satellites that are not Sheet Labels (for example constants), the layout also lays out the sheet with only the Sheet Labels as satellites. It keeps the result with fewer crossings. If the crossings are equal, it keeps the result with fewer bends, then the shorter total wire length, then the smaller sheet area. If all of these are equal, it keeps the result with all satellites.
+- A **pass-through sheet** (a sheet with only small independent parts, for example Sheet Label Source and Output Port pairs) becomes a grid. The parts are in model order, from top to bottom and then in the next column.
+- **Minimum subsystem height.** A subsystem whose ports are nearer than 20 px to each other grows to its natural height. The layout does not make a block smaller. The dialog counts these blocks as resized.
+- **Port names.** When a block shows its port names outside its edges, the layout keeps that space free. The first bend of a wire comes after the widest port name of that side.
+- Comment blocks do not move.
+- The layout does not use the current block positions. Thus a second layout of a laid-out sheet changes nothing.
+
+**Wire routing (ELK Layered)**
+- Each wire goes around the blocks with horizontal and vertical segments. No wire goes through a block. On the shipped reference models, no wire overlaps a wire of a different net.
+- A wire is straight, or its bends are at least 2 px apart. Block positions are whole px, except where a straight wire needs a fractional position to stay exactly straight.
+- A wire with two bends gets a turn position, which you can drag as before. A wire with more bends gets waypoints.
+- To adjust a wire, hover its vertical segment and drag it to the left or to the right.
+- When you move or resize a block, the editor moves the waypoints of its wires to the new port positions. If a wire cannot keep its shape, the editor removes its waypoints and draws the default shape.
+
+**Subsystem Function**
+
+A subsystem (and a model reference) has the property **Subsystem Function** in its properties dialog. Select one of these values:
+
+| Value | Use it for |
+|-------|-----------|
+| Controller | The part that calculates the command from the error, for example a flight controller or a PID |
+| Actuator | The part that changes the command into a physical action, for example a motor or a valve |
+| Plant | The physical system that the loop controls, for example the airframe or a battery |
+| Sensor | The part that measures the plant output, for example an IMU or a GNSS receiver |
+| Compensator | An element on the feedback path, for example a filter or an estimator |
+| Other | A part that is not in a control loop, for example a pilot input or test conditions |
+
+When the value is **Not set**, the dialog shows a suggested value. The rules for the suggestion are in `src/lib/layout/subsystemRole.ts`. They use the words in the subsystem name, the blocks in the subsystem (for example integrators, noise, quantisers, filters, an error sum and a saturation), and the position of the subsystem in the loop. The layout uses a suggestion only when its confidence is 0.6 or more. Your value always replaces the suggestion. Simulation and code generation do not use this property. The parameter name is `subsystemFunction`.
+
+With **Use subsystem functions for signal flow order**, the forward path of a loop reads from left to right: summing junction (or reference), controller, actuator, plant. The wires from the return path into the controller side are the feedback wires. This applies to a loop that has subsystems with two or more different functions. The other blocks of the loop get their position from the wiring. A summing junction stays on the forward path.
+
+**Return row**
+
+With **Mirror feedback-path blocks**, the return path goes on a row below the forward path, between the controller and the plant. Its blocks are flipped, so the row reads from right to left: the plant output comes down into the right side of the sensor, and the sensor output goes to the left and up into the controller. The row holds:
+- the return-path blocks that a plant feeds, directly or through other return-path blocks;
+- their satellite blocks;
+- blocks with no input wire that feed only the row, for example an Input Port of sensor data.
+
+The wires between the two rows go in their own lanes, through a channel between the rows. A return path without a plant before it (for example estimators in a loop with mode logic) stays on the forward rows and is not flipped. When the row gives a wire through a block, an overlap or a wire end against its port direction, the layout uses the order without the row.
+
+With this option, the layout owns the flip: it flips the blocks on the return row and unflips all other blocks that it lays out. The dialog counts these changes. Without this option, the layout does not change the flip of a block.
+
+**Flipped blocks**
+- To flip a block, right-click it and choose **Flip Block**. To undo this, choose **Unflip Block**. A flipped block has its inputs on the right edge and its outputs on the left edge. The port names and the arrowheads move with the ports. The text and the icon of the block do not change. Enable and reset ports stay at the top and the bottom.
+- When you flip a block, the editor removes the turn positions of its wires and the waypoints that no longer fit.
+- The flip has no effect on simulation or code generation. The parameter name is `flipped` (`true` or absent). It applies to all block types except comments. An earlier version of the editor ignores the parameter and draws the block unflipped.
+- **Default wire shape.** A wire without waypoints leaves its source port, and enters its target port, in the direction that the port faces. When the ports face each other, the wire has three segments. When both ports face the same way, the wire turns past the outer port. When the target is behind the source, the wire leaves each port with a short stub and goes around the blocks. A backward wire with a stored turn position (from the Classic engine or an earlier release) keeps its three-segment shape.
+
+**Classic engine**
+- The Classic engine puts blocks in columns and gives each wire one turn, in the gap between columns where the turn causes the fewest crossings. A wire can go through a block.
+- Feedback wires turn in the gap in front of the block that they feed.
+- The Classic engine has no return row and does not change the flip of a block. It places a flipped block as if it was not flipped, and its wires get the default shape.
+- The Classic engine starts the order in each column from the current block positions.
+
+**Resize Subsystems**
+- Resizing fits the height of each subsystem to the positions of the blocks that it connects to. Then it limits the height, so that adjacent ports are at most **Maximum port spacing** apart. The resize ignores wires to blocks that another subsystem also feeds (for example a mux fed by four motors), because no size can align them all.
+- Each resize starts from the natural size of the subsystem. Thus the result does not depend on earlier sizes, also sizes set by hand, and a second resize gives the same result.
+- The result goes into the model as `width` and `height`. With ELK Layered, the layout uses the Classic fit for the sizes, then lays out the sheet with these sizes.
+- To resize a subsystem by hand, right-click the block, choose **Resize...**, and drag a corner handle.
+
+**Tidy signal labels**
+
+This adjustment changes the model. It adds, removes or moves Sheet Label Sinks and Sources, and it adds or removes wires. The simulation and the generated code do not change: code generation resolves a Sheet Label pair to the same connection as a wire. After the edits, the normal layout runs on the result. The rules are in `src/lib/layout/tidyLabels.ts`.
+
+- **Wire to label pair (on).** A wire that is long and crosses many other nets, or a backward wire that goes around much of the sheet, becomes a Sheet Label Sink beside its driver and a Sheet Label Source beside its consumer. When the net already drives a Sheet Label Sink on the sheet, the edit adds only a Source with that name.
+- **Label pair to wire (off).** A Sheet Label Sink and Source with the same name on one sheet become a wire, when the wire is short. The sink stays when a source on another sheet uses it.
+- **Split a source (off).** A Sheet Label Source whose consumers are far apart becomes one source for each group of near consumers.
+- **The score decides.** The adjustment keeps an edit only when the crossings of the sheet decrease by at least 2 (and by at least 3 %), no wire goes through a block or overlaps another wire, and the sheet area increases by 10 % or less. It repeats this until no edit is kept, so a second run makes no edit.
+- **Wires that stay drawn.** The adjustment does not change:
+  - the wires of the forward path of a loop, and the wires between two subsystems that have a function other than Other;
+  - the wires between the return row and the forward path;
+  - the last drawn wire from one subsystem to another (MAB guideline jc_0171);
+  - a wire into an Output Port, and a Sheet Label Source that feeds an Output Port (for example, the Telemetry sheet of the FPV vehicle).
+- **Names.** A new signal name comes from the output port name of a subsystem, the port name of an Input Port, or the block name. A unit suffix stays at the end of the name. When the name is already in the model, the adjustment adds a number before the unit suffix (`rate_2_dps`). The adjustment does not add a unit, and it does not rename an existing Sheet Label or port.
+- **End points.** After the layout, each Sheet Label Sink is at the right end of its wire and each Source at the left end (on a flipped block, the opposite). The summary counts the labels that do not obey this rule.
+- The summary counts the edits of each kind. The command line lists each edit with `--report`.
+- The adjustment is slow on large models: about 30 s for all 29 sheets of the FPV vehicle, against about 3 s without it.
+
+**Wire crossings and junctions**
+
+The canvas and the PDF export show where wires cross and where a net divides. These marks are drawing only. They do not change the model, the layout or the layout score.
+- **Hop.** Where wires of two different nets cross, the more horizontal wire jumps over the other wire with a small semicircle (a line hop, as in MAB guideline jc_0903). Hops that are near each other on one segment join into one wider hop.
+- **No hop.** A crossing has no hop when a corner, a wire end or a junction is too near it. A hop is at least 10 px from a wire end, so it cannot touch an arrowhead. Wires of one net do not hop over each other.
+- **Junction dot.** A dot shows each point where three or more branches of one net meet. A corner or a port end has no dot.
+- Vector and matrix wires get larger hops and dots, so that the hop clears all lines of the wire.
+- While you drag a block, the hops and dots of the wires on that block are not shown. They come back when you release the block.
+- Enable and reset wires get no hops and no dots. The rules are in `src/lib/wireDecorations.ts`.
+
+**Command-line layout**
+
+The `obliq:layout` script applies the same layout to a model file, and gives a layout score for each sheet. It reads the same files as `obliq:cgen`: a bare model with `sheets`, or a `{ name, data }` file from the model store. The output file has the same shape as the input file.
+
+- To apply the layout and write the result to a new file, run `npm run obliq:layout -- model.json -o out.json`.
+- To write the result to the input file, add `--in-place`. The script does not write to the input file without `--in-place`, or an `-o` that names the input file.
+- To see the score before and after the layout, run `npm run obliq:layout -- model.json --report`. This writes no file.
+- To see all options, run `npm run obliq:layout -- --help`.
+
+| Option | Effect |
+|--------|--------|
+| `-o, --out <file>` | Write the model with the layout applied to this file |
+| `--in-place` | Write the result to the input file |
+| `--report` | Print the score of each sheet before and after the layout. Write no file. |
+| `--json` | With `--report`, print JSON instead of a table |
+| `--engine elk\|classic` | The layout engine. The default is `elk` (ELK Layered). See `docs/layout-engine-comparison.md`. |
+| `--elk-option <key=value>` | Replace or add one ELK option. Use it again for more options. Only with `--engine elk`. |
+| `--elk-order flow\|list` | The block order that ELK receives: signal-flow order (the default) or the order of the block list. Only with `--engine elk`. |
+| `--no-roles` | Do not use the subsystem functions for the signal-flow order. Only with `--engine elk`. |
+| `--no-port-name-clearance` | Do not keep the space of the port names free. Only with `--engine elk`. |
+| `--no-mirror` | No return row. The flip of each block does not change. Only with `--engine elk`. |
+| `--tidy-labels` | Tidy the signal labels. This changes the model. Only with `--engine elk`. With `--report`, the script lists each edit. |
+| `--tidy-option <key=value>` | Replace one option of the tidy, for example `pairToWire=true` or `wireMinCrossings=8`. The options and their defaults are `DEFAULT_TIDY_OPTIONS` in `src/lib/layout/tidyLabels.ts`. Use it again for more options. |
+| `--scope model\|subsystem\|sheet` | The sheets to lay out. The default is `model`. |
+| `--sheet <name, id or path>` | The active sheet for the `subsystem` and `sheet` scopes. The default is the first top-level sheet. A path is the breadcrumb joined with `/`, as in the report. |
+| `--resize-subsystems` | Resize subsystem blocks |
+| `--max-port-spacing <px>` | The maximum port spacing for a resize. The default is 40. |
+| `--hide-block-names` | Hide the names of all blocks, except subsystems |
+| `--port-labels show\|hide\|asis` | Show or hide the port names on subsystem blocks. The default is `asis`. |
+| `--no-clean-up` | Do not move blocks or route wires |
+| `-h, --help` | Show the help |
+
+**Layout score**
+
+The score comes from `src/lib/layout/layoutMetrics.ts`. It uses the wire shapes that the editor draws, with the stored wire turns and waypoints. A net is all wires from one output port. The score has these values for each sheet:
+- `Thru`: the number of (net, block) pairs where a wire of the net goes through a block. The source and target blocks of that wire are not included.
+- `Ovlp`: the number of overlaps between parallel segments of different nets.
+- `Cross`: the number of crossings between different nets.
+- `BlkOvl`: the number of block pairs that overlap.
+- `Bends`, `Strt`: the number of bends, and the number of wires with no bend.
+- `Back`, `BackLen`: the number and the length of the wires whose target is behind the source port.
+- `Length`, `Width`, `Height`, `Aspect`: the total wire length and the size of the sheet, in px.
+- `Diag`: the number of wire segments that are not horizontal or vertical.
+- `PortDir`: the number of wires that leave a port, or enter a port, against the direction of the port. Such a wire goes back through its own block.
+- `Jogs`: the number of wire segments shorter than 2 px with a bend at one end (a small visible step). A step that the port pitches of two blocks make necessary is not counted: two wires between the same two blocks, one of them straight, with ports less than 2 px apart on the other.
+
+The hard metrics are `Thru`, `Ovlp`, `Cross`, `BlkOvl`, `Diag`, `PortDir` and `Jogs`. The test `__tests__/layout-metrics.test.ts` lays out the FPV vehicle reference model with each engine, and compares the hard metrics of each sheet with the values in `__tests__/layout-metrics.golden.json`. If a value increases, the test fails. If the values decrease, refresh the file with `UPDATE_LAYOUT_GOLDEN=1 npx jest __tests__/layout-metrics.test.ts`.
 
 ### Block Name Visibility
 - A newly added block **hides its name**; a Subsystem is the exception and shows it, since the name is what distinguishes one subsystem from another

@@ -15,8 +15,13 @@ jest.setTimeout(600000)
 const DIR = path.join(__dirname, '..', '..', 'test-models', 'fpv')
 
 describe('FPV validation suite (test-models/fpv)', () => {
+  // The models with their final ELK layout, as the builder writes them
+  let expected: Awaited<ReturnType<typeof TEST_FPV_MODELS>>
+  beforeAll(async () => {
+    expected = await TEST_FPV_MODELS()
+  })
+
   test('the committed files are what the builder writes', () => {
-    const expected = TEST_FPV_MODELS()
     const onDisk = fs.readdirSync(DIR).filter(f => f.endsWith('.json')).sort()
     expect(onDisk).toEqual(expected.map(([file]) => file).sort())
     for (const [file, model] of expected) {
@@ -27,7 +32,7 @@ describe('FPV validation suite (test-models/fpv)', () => {
   test('every test model passes all of its Asserts, resolving the vehicle from the folder', () => {
     // tNN- and tNNa- (T12a, T13c, ...)
     const files = fs.readdirSync(DIR).filter(f => /^t\d\d[a-z]?-.*\.json$/.test(f)).sort()
-    expect(files).toHaveLength(TEST_FPV_MODELS().filter(([f]) => f.startsWith('t')).length)
+    expect(files).toHaveLength(expected.filter(([f]) => f.startsWith('t')).length)
     const { targets, errors } = resolveTestTargets(files.map(f => path.join(DIR, f)))
     expect(errors).toEqual([])
     expect(targets).toHaveLength(files.length)

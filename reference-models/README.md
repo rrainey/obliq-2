@@ -19,7 +19,7 @@ Set `OBLIQ_REFERENCE_MODELS_DIR` to seed from a different folder. Set it to an e
 
 The test models reference FPV Vehicle by name, so they find it after they are seeded or imported. The full validation suite is in [`test-models/fpv/`](../test-models/fpv/), which is not seeded: run it with `npm run obliq:test -- test-models/fpv/t*.json` (see [docs/fpv-hud-gnss-test-plan.md](../docs/fpv-hud-gnss-test-plan.md)). Run their Asserts from this folder with `npm run obliq:test -- reference-models/fpv-demo-flight.json reference-models/fpv-acro-rate-step.json`.
 
-These files are generated: edit `scripts/build-fpv-reference-model.ts`, then run `npx tsx --tsconfig tsconfig.json scripts/build-fpv-reference-model.ts`. A test fails if a committed file drifts from the builder.
+These files are generated: edit `scripts/build-fpv-reference-model.ts`, then run `npx tsx --tsconfig tsconfig.json scripts/build-fpv-reference-model.ts`. A test fails if a committed file drifts from the builder. The builder lays out these three files with the default layout of **Tune Model Layout** (ELK Layered, with subsystem functions and the mirrored return row). The builder gives the files in `test-models/fpv/` the same layout. A test compares each file with the builder output, byte for byte.
 
 ## Sources and licensing
 

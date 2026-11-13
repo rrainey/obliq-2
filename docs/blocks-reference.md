@@ -13,6 +13,10 @@
 - [Sheet Organization](#sheet-organization)
 - [Hierarchical Modeling](#hierarchical-modeling)
 
+## Parameters of All Blocks
+
+- `flipped` (optional, boolean): When it is `true`, the editor draws the block mirrored. The inputs are on the right edge and the outputs are on the left edge. The y of each port does not change. Enable and reset ports stay at the top and the bottom. The text and the icon of the block do not change. Comment blocks do not have this parameter. It has no effect on simulation or code generation. To set it on the canvas, right-click the block and choose **Flip Block**. The layout sets it on the return row of a control loop (see [Diagram Layout](../README.md#diagram-layout)).
+
 ## Mathematical Operations
 
 ### Sum Block
@@ -741,6 +745,7 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 - `inputPorts` (array): Names of input port blocks in the subsystem
 - `outputPorts` (array): Names of output port blocks in the subsystem
 - `showEnableInput` (boolean): Shows an enable input port
+- `subsystemFunction` (optional): The function of the subsystem in a control loop: `controller`, `actuator`, `plant`, `sensor`, `compensator` or `other`. No value means "not set". Only the diagram layout uses it (see [Diagram Layout](../README.md#diagram-layout)). It has no effect on simulation or code generation. A Model Reference Block can also have it.
 
 **Signal Compatibility**:
 - Inputs: Determined by Input Port blocks within the subsystem

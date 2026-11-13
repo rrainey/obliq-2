@@ -6,6 +6,9 @@ import { IconExternalLink, IconInfoCircle, IconAlertTriangle } from '@tabler/ico
 import { BlockData } from './BlockNode'
 import { modelApi, type ModelListItem } from '@/lib/modelApi'
 import { modelInterface, type ModelInterface } from '@/lib/modelReferences'
+import type { WireData } from './Wire'
+import SubsystemFunctionSelect from './SubsystemFunctionSelect'
+import { isSubsystemFunction, type SubsystemFunction } from '@/lib/layout/subsystemRole'
 
 interface ModelReferenceConfigProps {
   block: BlockData
@@ -13,6 +16,9 @@ interface ModelReferenceConfigProps {
   currentModelId?: string
   /** Wires on this block, by port side and index, to warn about removed ports */
   connectedPorts: { inputs: number[]; outputs: number[] }
+  /** The blocks and wires of the active sheet (for the suggested subsystem function). */
+  sheetBlocks?: BlockData[]
+  sheetWires?: WireData[]
   onUpdate: (parameters: Record<string, any>, opts: { dropMissingWires: boolean }) => void
   onClose: () => void
 }
@@ -22,8 +28,13 @@ export function modelEditorUrl(modelId: string, version: number | null): string 
   return `/models/${encodeURIComponent(modelId)}${version ? `?version=${version}` : ''}`
 }
 
-export default function ModelReferenceConfig({ block, currentModelId, connectedPorts, onUpdate, onClose }: ModelReferenceConfigProps) {
+export default function ModelReferenceConfig({
+  block, currentModelId, connectedPorts, sheetBlocks = [], sheetWires = [], onUpdate, onClose,
+}: ModelReferenceConfigProps) {
   const p = block.parameters || {}
+  const [subsystemFunction, setSubsystemFunction] = useState<SubsystemFunction | null>(
+    isSubsystemFunction(p.subsystemFunction) ? p.subsystemFunction : null
+  )
   const [models, setModels] = useState<ModelListItem[] | null>(null)
   const [modelId, setModelId] = useState<string | null>(p.modelRef?.modelId || null)
   const [pinned, setPinned] = useState<boolean>(typeof p.modelRef?.version === 'number')
@@ -91,6 +102,7 @@ export default function ModelReferenceConfig({ block, currentModelId, connectedP
         modelRefName: selected.name,
         sheets: [],
         codeGenStrategy: undefined,
+        subsystemFunction: subsystemFunction ?? undefined,
       },
       { dropMissingWires: uniqueMissing.length > 0 }
     )
@@ -184,6 +196,14 @@ export default function ModelReferenceConfig({ block, currentModelId, connectedP
             )}
           </div>
         )}
+
+        <SubsystemFunctionSelect
+          block={block}
+          sheetBlocks={sheetBlocks}
+          sheetWires={sheetWires}
+          value={subsystemFunction}
+          onChange={setSubsystemFunction}
+        />
 
         {uniqueMissing.length > 0 && (
           <Alert color="orange" variant="light" icon={<IconAlertTriangle size={16} />}>

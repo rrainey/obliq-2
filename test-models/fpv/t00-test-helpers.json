@@ -25,7 +25,7 @@
             "name": "Time",
             "position": {
               "x": 100,
-              "y": 508
+              "y": 653
             },
             "parameters": {
               "showName": true
@@ -36,8 +36,8 @@
             "type": "evaluate",
             "name": "After2s",
             "position": {
-              "x": 303,
-              "y": -181
+              "x": 219,
+              "y": 1469
             },
             "parameters": {
               "showName": true,
@@ -50,8 +50,8 @@
             "type": "evaluate",
             "name": "Sine",
             "position": {
-              "x": 285,
-              "y": 590
+              "x": 383,
+              "y": -318
             },
             "parameters": {
               "showName": true,
@@ -64,8 +64,8 @@
             "type": "random_noise",
             "name": "UnitNoise",
             "position": {
-              "x": 100,
-              "y": -816
+              "x": 441,
+              "y": 1824
             },
             "parameters": {
               "showName": true,
@@ -82,8 +82,8 @@
             "type": "evaluate",
             "name": "WholeSeconds",
             "position": {
-              "x": 348,
-              "y": 1701
+              "x": 509,
+              "y": -788
             },
             "parameters": {
               "showName": true,
@@ -96,8 +96,8 @@
             "type": "unit_delay",
             "name": "LatchAfter2sPrev",
             "position": {
-              "x": 1330,
-              "y": -444
+              "x": 997,
+              "y": 1648
             },
             "parameters": {
               "showName": true,
@@ -110,8 +110,8 @@
             "type": "evaluate",
             "name": "LatchAfter2s",
             "position": {
-              "x": 740,
-              "y": -351
+              "x": 665,
+              "y": 1479.6666666666667
             },
             "parameters": {
               "showName": true,
@@ -124,8 +124,8 @@
             "type": "assert",
             "name": "LatchOffBefore",
             "position": {
-              "x": 4316,
-              "y": -407
+              "x": 1007,
+              "y": 1396
             },
             "parameters": {
               "showName": true,
@@ -142,8 +142,8 @@
             "type": "assert",
             "name": "LatchOnAfter",
             "position": {
-              "x": 4316,
-              "y": -263
+              "x": 1007,
+              "y": 1479.6666666666667
             },
             "parameters": {
               "showName": true,
@@ -160,8 +160,8 @@
             "type": "unit_delay",
             "name": "FirstAfter2sPrev",
             "position": {
-              "x": 1330,
-              "y": -12
+              "x": 808,
+              "y": 831
             },
             "parameters": {
               "showName": true,
@@ -174,8 +174,8 @@
             "type": "evaluate",
             "name": "FirstAfter2s",
             "position": {
-              "x": 740,
-              "y": 12
+              "x": 476,
+              "y": 907
             },
             "parameters": {
               "showName": true,
@@ -188,8 +188,8 @@
             "type": "assert",
             "name": "FirstTimeUnsetBefore",
             "position": {
-              "x": 4316,
-              "y": 169
+              "x": 808,
+              "y": 915
             },
             "parameters": {
               "showName": true,
@@ -206,8 +206,8 @@
             "type": "assert",
             "name": "FirstTimeRecorded",
             "position": {
-              "x": 4316,
-              "y": 25
+              "x": 808,
+              "y": 999
             },
             "parameters": {
               "showName": true,
@@ -224,8 +224,8 @@
             "type": "unit_delay",
             "name": "SineMaxPrev",
             "position": {
-              "x": 1330,
-              "y": 868
+              "x": 873,
+              "y": -1
             },
             "parameters": {
               "showName": true,
@@ -238,8 +238,8 @@
             "type": "evaluate",
             "name": "SineMax",
             "position": {
-              "x": 807,
-              "y": 924
+              "x": 675,
+              "y": -1
             },
             "parameters": {
               "showName": true,
@@ -252,8 +252,8 @@
             "type": "assert",
             "name": "RunningMax",
             "position": {
-              "x": 4316,
-              "y": 789
+              "x": 873,
+              "y": 83
             },
             "parameters": {
               "showName": true,
@@ -270,8 +270,8 @@
             "type": "unit_delay",
             "name": "SineMinPrev",
             "position": {
-              "x": 1330,
-              "y": 1172
+              "x": 873,
+              "y": -486
             },
             "parameters": {
               "showName": true,
@@ -284,8 +284,8 @@
             "type": "evaluate",
             "name": "SineMin",
             "position": {
-              "x": 807,
-              "y": 1268
+              "x": 675,
+              "y": -486
             },
             "parameters": {
               "showName": true,
@@ -298,8 +298,8 @@
             "type": "assert",
             "name": "RunningMin",
             "position": {
-              "x": 4316,
-              "y": 1365
+              "x": 873,
+              "y": -402
             },
             "parameters": {
               "showName": true,
@@ -316,8 +316,8 @@
             "type": "unit_delay",
             "name": "ClockAt3sPrev",
             "position": {
-              "x": 850,
-              "y": 1557
+              "x": 490,
+              "y": 737
             },
             "parameters": {
               "showName": true,
@@ -330,8 +330,8 @@
             "type": "evaluate",
             "name": "ClockAt3s",
             "position": {
-              "x": 292,
-              "y": 1162
+              "x": 222,
+              "y": 645
             },
             "parameters": {
               "showName": true,
@@ -344,8 +344,8 @@
             "type": "assert",
             "name": "HeldAt3s",
             "position": {
-              "x": 4316,
-              "y": 933
+              "x": 490,
+              "y": 653
             },
             "parameters": {
               "showName": true,
@@ -362,8 +362,8 @@
             "type": "evaluate",
             "name": "SineMSWindow",
             "position": {
-              "x": 261,
-              "y": -351
+              "x": 212,
+              "y": 176
             },
             "parameters": {
               "showName": true,
@@ -376,8 +376,8 @@
             "type": "unit_delay",
             "name": "SineMSSumPrev",
             "position": {
-              "x": 1330,
-              "y": -156
+              "x": 997,
+              "y": 176
             },
             "parameters": {
               "showName": true,
@@ -390,8 +390,8 @@
             "type": "evaluate",
             "name": "SineMSSum",
             "position": {
-              "x": 740,
-              "y": -207
+              "x": 665,
+              "y": 168
             },
             "parameters": {
               "showName": true,
@@ -404,8 +404,8 @@
             "type": "source",
             "name": "SineMSOne",
             "position": {
-              "x": 370,
-              "y": -523
+              "x": 553,
+              "y": 280
             },
             "parameters": {
               "showName": true,
@@ -419,8 +419,8 @@
             "type": "unit_delay",
             "name": "SineMSCountPrev",
             "position": {
-              "x": 1330,
-              "y": -588
+              "x": 997,
+              "y": 392
             },
             "parameters": {
               "showName": true,
@@ -433,8 +433,8 @@
             "type": "evaluate",
             "name": "SineMSCount",
             "position": {
-              "x": 740,
-              "y": -511
+              "x": 665,
+              "y": 310
             },
             "parameters": {
               "showName": true,
@@ -447,8 +447,8 @@
             "type": "evaluate",
             "name": "SineMS",
             "position": {
-              "x": 1228,
-              "y": -300
+              "x": 997,
+              "y": 307.3333333333333
             },
             "parameters": {
               "showName": true,
@@ -461,8 +461,8 @@
             "type": "assert",
             "name": "SineMeanSquare",
             "position": {
-              "x": 4316,
-              "y": -119
+              "x": 1314,
+              "y": 307.3333333333333
             },
             "parameters": {
               "showName": true,
@@ -479,8 +479,8 @@
             "type": "evaluate",
             "name": "NoiseMSWindow",
             "position": {
-              "x": 261,
-              "y": -862
+              "x": 212,
+              "y": 1740
             },
             "parameters": {
               "showName": true,
@@ -493,8 +493,8 @@
             "type": "unit_delay",
             "name": "NoiseMSSumPrev",
             "position": {
-              "x": 1330,
-              "y": -732
+              "x": 895,
+              "y": 1740
             },
             "parameters": {
               "showName": true,
@@ -507,8 +507,8 @@
             "type": "evaluate",
             "name": "NoiseMSSum",
             "position": {
-              "x": 740,
-              "y": -804
+              "x": 563,
+              "y": 1732
             },
             "parameters": {
               "showName": true,
@@ -521,8 +521,8 @@
             "type": "source",
             "name": "NoiseMSOne",
             "position": {
-              "x": 370,
-              "y": -1006
+              "x": 563,
+              "y": 1274
             },
             "parameters": {
               "showName": true,
@@ -536,8 +536,8 @@
             "type": "unit_delay",
             "name": "NoiseMSCountPrev",
             "position": {
-              "x": 1330,
-              "y": -1020
+              "x": 1007,
+              "y": 1312
             },
             "parameters": {
               "showName": true,
@@ -550,8 +550,8 @@
             "type": "evaluate",
             "name": "NoiseMSCount",
             "position": {
-              "x": 740,
-              "y": -964
+              "x": 675,
+              "y": 1304
             },
             "parameters": {
               "showName": true,
@@ -564,8 +564,8 @@
             "type": "evaluate",
             "name": "NoiseMS",
             "position": {
-              "x": 1228,
-              "y": -876
+              "x": 1007,
+              "y": 1564
             },
             "parameters": {
               "showName": true,
@@ -578,8 +578,8 @@
             "type": "assert",
             "name": "NoiseMeanSquare",
             "position": {
-              "x": 4316,
-              "y": -796
+              "x": 1324,
+              "y": 1564
             },
             "parameters": {
               "showName": true,
@@ -596,8 +596,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sLag1",
             "position": {
-              "x": 850,
-              "y": 636
+              "x": 1090,
+              "y": -233
             },
             "parameters": {
               "showName": true,
@@ -610,8 +610,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sLag2",
             "position": {
-              "x": 1330,
-              "y": 724
+              "x": 1202,
+              "y": -233
             },
             "parameters": {
               "showName": true,
@@ -624,8 +624,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sLag3",
             "position": {
-              "x": 1722,
-              "y": 576
+              "x": 1314,
+              "y": -233
             },
             "parameters": {
               "showName": true,
@@ -638,8 +638,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sLag4",
             "position": {
-              "x": 1992,
-              "y": 602
+              "x": 1850,
+              "y": -233
             },
             "parameters": {
               "showName": true,
@@ -652,8 +652,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sLag5",
             "position": {
-              "x": 2152,
-              "y": 602
+              "x": 1962,
+              "y": -410
             },
             "parameters": {
               "showName": true,
@@ -666,8 +666,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sLag6",
             "position": {
-              "x": 2422,
-              "y": 602
+              "x": 2074,
+              "y": -410
             },
             "parameters": {
               "showName": true,
@@ -680,8 +680,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sLag7",
             "position": {
-              "x": 2802,
-              "y": 497
+              "x": 2416,
+              "y": -410
             },
             "parameters": {
               "showName": true,
@@ -694,8 +694,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sLag8",
             "position": {
-              "x": 3072,
-              "y": 495
+              "x": 2528,
+              "y": -410
             },
             "parameters": {
               "showName": true,
@@ -708,8 +708,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sLag9",
             "position": {
-              "x": 3232,
-              "y": 495
+              "x": 2640,
+              "y": -410
             },
             "parameters": {
               "showName": true,
@@ -722,8 +722,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sLag10",
             "position": {
-              "x": 3392,
-              "y": 495
+              "x": 2752,
+              "y": -410
             },
             "parameters": {
               "showName": true,
@@ -736,8 +736,8 @@
             "type": "evaluate",
             "name": "SineCorr1sWindow",
             "position": {
-              "x": 260,
-              "y": 446
+              "x": 2542,
+              "y": 644
             },
             "parameters": {
               "showName": true,
@@ -750,8 +750,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sSabPrev",
             "position": {
-              "x": 4042,
-              "y": 676
+              "x": 3216,
+              "y": -520
             },
             "parameters": {
               "showName": true,
@@ -764,8 +764,8 @@
             "type": "evaluate",
             "name": "SineCorr1sSab",
             "position": {
-              "x": 3552,
-              "y": 577
+              "x": 2884,
+              "y": -538
             },
             "parameters": {
               "showName": true,
@@ -778,8 +778,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sSaaPrev",
             "position": {
-              "x": 1330,
-              "y": 420
+              "x": 3216,
+              "y": -34
             },
             "parameters": {
               "showName": true,
@@ -792,8 +792,8 @@
             "type": "evaluate",
             "name": "SineCorr1sSaa",
             "position": {
-              "x": 740,
-              "y": 476
+              "x": 2884,
+              "y": -42
             },
             "parameters": {
               "showName": true,
@@ -806,8 +806,8 @@
             "type": "unit_delay",
             "name": "SineCorr1sSbbPrev",
             "position": {
-              "x": 4042,
-              "y": 353
+              "x": 3226,
+              "y": -318
             },
             "parameters": {
               "showName": true,
@@ -820,8 +820,8 @@
             "type": "evaluate",
             "name": "SineCorr1sSbb",
             "position": {
-              "x": 3552,
-              "y": 417
+              "x": 2884,
+              "y": -398
             },
             "parameters": {
               "showName": true,
@@ -834,8 +834,8 @@
             "type": "evaluate",
             "name": "SineCorr1s",
             "position": {
-              "x": 3932,
-              "y": 497
+              "x": 3226,
+              "y": -418
             },
             "parameters": {
               "showName": true,
@@ -848,8 +848,8 @@
             "type": "assert",
             "name": "CorrHalfPeriod",
             "position": {
-              "x": 4316,
-              "y": 501
+              "x": 3558,
+              "y": -410
             },
             "parameters": {
               "showName": true,
@@ -866,8 +866,8 @@
             "type": "unit_delay",
             "name": "SineCorr05sLag1",
             "position": {
-              "x": 850,
-              "y": 332
+              "x": 665,
+              "y": -318
             },
             "parameters": {
               "showName": true,
@@ -880,8 +880,8 @@
             "type": "unit_delay",
             "name": "SineCorr05sLag2",
             "position": {
-              "x": 1330,
-              "y": 276
+              "x": 1626,
+              "y": -318
             },
             "parameters": {
               "showName": true,
@@ -894,8 +894,8 @@
             "type": "unit_delay",
             "name": "SineCorr05sLag3",
             "position": {
-              "x": 1722,
-              "y": 288
+              "x": 1738,
+              "y": -318
             },
             "parameters": {
               "showName": true,
@@ -908,8 +908,8 @@
             "type": "unit_delay",
             "name": "SineCorr05sLag4",
             "position": {
-              "x": 1992,
-              "y": 340
+              "x": 1850,
+              "y": -318
             },
             "parameters": {
               "showName": true,
@@ -922,8 +922,8 @@
             "type": "unit_delay",
             "name": "SineCorr05sLag5",
             "position": {
-              "x": 2152,
-              "y": 340
+              "x": 1962,
+              "y": -318
             },
             "parameters": {
               "showName": true,
@@ -936,8 +936,8 @@
             "type": "evaluate",
             "name": "SineCorr05sWindow",
             "position": {
-              "x": 260,
-              "y": 300
+              "x": 1752,
+              "y": 602
             },
             "parameters": {
               "showName": true,
@@ -950,8 +950,8 @@
             "type": "unit_delay",
             "name": "SineCorr05sSabPrev",
             "position": {
-              "x": 2802,
-              "y": 641
+              "x": 2426,
+              "y": -308
             },
             "parameters": {
               "showName": true,
@@ -964,8 +964,8 @@
             "type": "evaluate",
             "name": "SineCorr05sSab",
             "position": {
-              "x": 2312,
-              "y": 422
+              "x": 2094,
+              "y": -326
             },
             "parameters": {
               "showName": true,
@@ -978,8 +978,8 @@
             "type": "unit_delay",
             "name": "SineCorr05sSaaPrev",
             "position": {
-              "x": 1330,
-              "y": 132
+              "x": 2426,
+              "y": -3
             },
             "parameters": {
               "showName": true,
@@ -992,8 +992,8 @@
             "type": "evaluate",
             "name": "SineCorr05sSaa",
             "position": {
-              "x": 740,
-              "y": 172
+              "x": 2094,
+              "y": -11
             },
             "parameters": {
               "showName": true,
@@ -1006,8 +1006,8 @@
             "type": "unit_delay",
             "name": "SineCorr05sSbbPrev",
             "position": {
-              "x": 2802,
-              "y": 193
+              "x": 2436,
+              "y": -106
             },
             "parameters": {
               "showName": true,
@@ -1020,8 +1020,8 @@
             "type": "evaluate",
             "name": "SineCorr05sSbb",
             "position": {
-              "x": 2312,
-              "y": 262
+              "x": 2094,
+              "y": -186
             },
             "parameters": {
               "showName": true,
@@ -1034,8 +1034,8 @@
             "type": "evaluate",
             "name": "SineCorr05s",
             "position": {
-              "x": 2692,
-              "y": 337
+              "x": 2436,
+              "y": -206
             },
             "parameters": {
               "showName": true,
@@ -1048,8 +1048,8 @@
             "type": "assert",
             "name": "CorrQuarterPeriod",
             "position": {
-              "x": 4316,
-              "y": 357
+              "x": 2768,
+              "y": -198
             },
             "parameters": {
               "showName": true,
@@ -1066,8 +1066,8 @@
             "type": "evaluate",
             "name": "Visited3Now",
             "position": {
-              "x": 748,
-              "y": 1701
+              "x": 665,
+              "y": -788
             },
             "parameters": {
               "showName": true,
@@ -1080,8 +1080,8 @@
             "type": "unit_delay",
             "name": "Visited3Prev",
             "position": {
-              "x": 1722,
-              "y": 1684
+              "x": 1349,
+              "y": -862
             },
             "parameters": {
               "showName": true,
@@ -1094,8 +1094,8 @@
             "type": "evaluate",
             "name": "Visited3",
             "position": {
-              "x": 1220,
-              "y": 1684
+              "x": 1007,
+              "y": -777.3333333333334
             },
             "parameters": {
               "showName": true,
@@ -1108,8 +1108,8 @@
             "type": "assert",
             "name": "PhaseNotYetVisited",
             "position": {
-              "x": 4316,
-              "y": 1612
+              "x": 1349,
+              "y": -694
             },
             "parameters": {
               "showName": true,
@@ -1126,8 +1126,8 @@
             "type": "assert",
             "name": "PhaseVisited",
             "position": {
-              "x": 4316,
-              "y": 1756
+              "x": 1349,
+              "y": -777.3333333333334
             },
             "parameters": {
               "showName": true,
@@ -1144,8 +1144,8 @@
             "type": "evaluate",
             "name": "After2_5s",
             "position": {
-              "x": 299,
-              "y": 1322
+              "x": 212,
+              "y": 1041
             },
             "parameters": {
               "showName": true,
@@ -1158,8 +1158,8 @@
             "type": "unit_delay",
             "name": "SineWhenPast2_5SeenBefore",
             "position": {
-              "x": 1330,
-              "y": 1316
+              "x": 1192,
+              "y": 1178
             },
             "parameters": {
               "showName": true,
@@ -1172,8 +1172,8 @@
             "type": "unit_delay",
             "name": "SineWhenPast2_5SeenPrev",
             "position": {
-              "x": 1330,
-              "y": 1540
+              "x": 1192,
+              "y": 1094
             },
             "parameters": {
               "showName": true,
@@ -1186,8 +1186,8 @@
             "type": "evaluate",
             "name": "SineWhenPast2_5Seen",
             "position": {
-              "x": 740,
-              "y": 1413
+              "x": 860,
+              "y": 1094
             },
             "parameters": {
               "showName": true,
@@ -1200,8 +1200,8 @@
             "type": "unit_delay",
             "name": "SineWhenPast2_5Prev",
             "position": {
-              "x": 1992,
-              "y": 1013
+              "x": 1646,
+              "y": 392
             },
             "parameters": {
               "showName": true,
@@ -1214,8 +1214,8 @@
             "type": "evaluate",
             "name": "SineWhenPast2_5",
             "position": {
-              "x": 1612,
-              "y": 1084
+              "x": 1314,
+              "y": 458
             },
             "parameters": {
               "showName": true,
@@ -1228,8 +1228,8 @@
             "type": "assert",
             "name": "HeldWhenUnsetBefore",
             "position": {
-              "x": 4316,
-              "y": 1221
+              "x": 1646,
+              "y": 476
             },
             "parameters": {
               "showName": true,
@@ -1246,8 +1246,8 @@
             "type": "assert",
             "name": "HeldWhenCaptured",
             "position": {
-              "x": 4316,
-              "y": 1077
+              "x": 1646,
+              "y": 560
             },
             "parameters": {
               "showName": true,
@@ -1264,8 +1264,8 @@
             "type": "evaluate",
             "name": "SinePositive",
             "position": {
-              "x": 740,
-              "y": 780
+              "x": 665,
+              "y": -1038
             },
             "parameters": {
               "showName": true,
@@ -1278,8 +1278,8 @@
             "type": "unit_delay",
             "name": "SineMeanPositiveSumPrev",
             "position": {
-              "x": 1722,
-              "y": 432
+              "x": 1339,
+              "y": -610
             },
             "parameters": {
               "showName": true,
@@ -1292,8 +1292,8 @@
             "type": "evaluate",
             "name": "SineMeanPositiveSum",
             "position": {
-              "x": 1220,
-              "y": 564
+              "x": 1007,
+              "y": -618
             },
             "parameters": {
               "showName": true,
@@ -1306,8 +1306,8 @@
             "type": "source",
             "name": "SineMeanPositiveOne",
             "position": {
-              "x": 850,
-              "y": 1068
+              "x": 1021,
+              "y": -1076
             },
             "parameters": {
               "showName": true,
@@ -1321,8 +1321,8 @@
             "type": "unit_delay",
             "name": "SineMeanPositiveCountPrev",
             "position": {
-              "x": 1722,
-              "y": 1264
+              "x": 1469,
+              "y": -1038
             },
             "parameters": {
               "showName": true,
@@ -1335,8 +1335,8 @@
             "type": "evaluate",
             "name": "SineMeanPositiveCount",
             "position": {
-              "x": 1220,
-              "y": 1012
+              "x": 1137,
+              "y": -1046
             },
             "parameters": {
               "showName": true,
@@ -1349,8 +1349,8 @@
             "type": "evaluate",
             "name": "SineMeanPositive",
             "position": {
-              "x": 1620,
-              "y": 720
+              "x": 1469,
+              "y": -946
             },
             "parameters": {
               "showName": true,
@@ -1363,8 +1363,8 @@
             "type": "assert",
             "name": "MeanWhileGated",
             "position": {
-              "x": 4316,
-              "y": 645
+              "x": 1786,
+              "y": -946
             },
             "parameters": {
               "showName": true,
@@ -1385,7 +1385,7 @@
             "targetBlockId": "tests__After2s",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -25.5
+              "midpointOffset": -3.5
             }
           },
           {
@@ -1395,7 +1395,7 @@
             "targetBlockId": "tests__Sine",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -16.5
+              "midpointOffset": -85.5
             }
           },
           {
@@ -1405,7 +1405,7 @@
             "targetBlockId": "tests__WholeSeconds",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -48
+              "midpointOffset": -148.5
             }
           },
           {
@@ -1413,10 +1413,7 @@
             "sourceBlockId": "tests__After2s",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__LatchAfter2s",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -31
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_5_tests__LatchAfter2sPrev_tests__LatchAfter2s",
@@ -1425,7 +1422,24 @@
             "targetBlockId": "tests__LatchAfter2s",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -357
+              "waypoints": [
+                {
+                  "x": 1093,
+                  "y": 1680
+                },
+                {
+                  "x": 1093,
+                  "y": 1721.5
+                },
+                {
+                  "x": 649,
+                  "y": 1721.5
+                },
+                {
+                  "x": 649,
+                  "y": 1522.3333333333335
+                }
+              ]
             }
           },
           {
@@ -1433,10 +1447,7 @@
             "sourceBlockId": "tests__LatchAfter2s",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__LatchAfter2sPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -75
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_7_tests__LatchAfter2s_tests__LatchOffBefore",
@@ -1445,7 +1456,7 @@
             "targetBlockId": "tests__LatchOffBefore",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -42
+              "midpointOffset": -5
             }
           },
           {
@@ -1453,10 +1464,7 @@
             "sourceBlockId": "tests__LatchAfter2s",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__LatchOnAfter",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -42
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_9_tests__After2s_tests__FirstAfter2s",
@@ -1465,7 +1473,7 @@
             "targetBlockId": "tests__FirstAfter2s",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -31
+              "midpointOffset": -5
             }
           },
           {
@@ -1475,7 +1483,7 @@
             "targetBlockId": "tests__FirstAfter2s",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -244
+              "midpointOffset": -132
             }
           },
           {
@@ -1485,7 +1493,24 @@
             "targetBlockId": "tests__FirstAfter2s",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -381
+              "waypoints": [
+                {
+                  "x": 904,
+                  "y": 863
+                },
+                {
+                  "x": 904,
+                  "y": 820.5
+                },
+                {
+                  "x": 460,
+                  "y": 820.5
+                },
+                {
+                  "x": 460,
+                  "y": 967
+                }
+              ]
             }
           },
           {
@@ -1493,30 +1518,21 @@
             "sourceBlockId": "tests__FirstAfter2s",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstAfter2sPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -59
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_13_tests__FirstAfter2s_tests__FirstTimeUnsetBefore",
             "sourceBlockId": "tests__FirstAfter2s",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstTimeUnsetBefore",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 346
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_14_tests__FirstAfter2s_tests__FirstTimeRecorded",
             "sourceBlockId": "tests__FirstAfter2s",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__FirstTimeRecorded",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -34
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_15_tests__Sine_tests__SineMax",
@@ -1525,7 +1541,7 @@
             "targetBlockId": "tests__SineMax",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -89
+              "midpointOffset": -5
             }
           },
           {
@@ -1535,7 +1551,24 @@
             "targetBlockId": "tests__SineMax",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -422.5
+              "waypoints": [
+                {
+                  "x": 969,
+                  "y": 31
+                },
+                {
+                  "x": 969,
+                  "y": -10.5
+                },
+                {
+                  "x": 659,
+                  "y": -10.5
+                },
+                {
+                  "x": 659,
+                  "y": 41.666666666666664
+                }
+              ]
             }
           },
           {
@@ -1543,20 +1576,14 @@
             "sourceBlockId": "tests__SineMax",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMaxPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 14.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_18_tests__SineMax_tests__RunningMax",
             "sourceBlockId": "tests__SineMax",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__RunningMax",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 23.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_19_tests__Sine_tests__SineMin",
@@ -1565,7 +1592,7 @@
             "targetBlockId": "tests__SineMin",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -89
+              "midpointOffset": -5
             }
           },
           {
@@ -1575,7 +1602,24 @@
             "targetBlockId": "tests__SineMin",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -406.5
+              "waypoints": [
+                {
+                  "x": 969,
+                  "y": -454
+                },
+                {
+                  "x": 969,
+                  "y": -506.5
+                },
+                {
+                  "x": 659,
+                  "y": -506.5
+                },
+                {
+                  "x": 659,
+                  "y": -443.3333333333333
+                }
+              ]
             }
           },
           {
@@ -1583,20 +1627,14 @@
             "sourceBlockId": "tests__SineMin",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMinPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 22.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_22_tests__SineMin_tests__RunningMin",
             "sourceBlockId": "tests__SineMin",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__RunningMin",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -1062.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_23_tests__Time_tests__ClockAt3s",
@@ -1605,7 +1643,7 @@
             "targetBlockId": "tests__ClockAt3s",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -20
+              "midpointOffset": -5
             }
           },
           {
@@ -1613,10 +1651,7 @@
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ClockAt3s",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": -20
-            }
+            "targetPortIndex": 1
           },
           {
             "id": "w_25_tests__ClockAt3sPrev_tests__ClockAt3s",
@@ -1625,7 +1660,24 @@
             "targetBlockId": "tests__ClockAt3s",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -387
+              "waypoints": [
+                {
+                  "x": 586,
+                  "y": 769
+                },
+                {
+                  "x": 586,
+                  "y": 810.5
+                },
+                {
+                  "x": 206,
+                  "y": 810.5
+                },
+                {
+                  "x": 206,
+                  "y": 705
+                }
+              ]
             }
           },
           {
@@ -1633,50 +1685,35 @@
             "sourceBlockId": "tests__ClockAt3s",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__ClockAt3sPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -115
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_27_tests__ClockAt3s_tests__HeldAt3s",
             "sourceBlockId": "tests__ClockAt3s",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeldAt3s",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -1848
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_28_tests__Time_tests__SineMSWindow",
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMSWindow",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -4.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_29_tests__Sine_tests__SineMSSum",
             "sourceBlockId": "tests__Sine",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMSSum",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -55.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_30_tests__SineMSWindow_tests__SineMSSum",
             "sourceBlockId": "tests__SineMSWindow",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMSSum",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": -60
-            }
+            "targetPortIndex": 1
           },
           {
             "id": "w_31_tests__SineMSSumPrev_tests__SineMSSum",
@@ -1685,7 +1722,24 @@
             "targetBlockId": "tests__SineMSSum",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -349
+              "waypoints": [
+                {
+                  "x": 1093,
+                  "y": 208
+                },
+                {
+                  "x": 1093,
+                  "y": 258.5
+                },
+                {
+                  "x": 649,
+                  "y": 258.5
+                },
+                {
+                  "x": 649,
+                  "y": 228
+                }
+              ]
             }
           },
           {
@@ -1693,10 +1747,7 @@
             "sourceBlockId": "tests__SineMSSum",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMSSumPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -67
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_33_tests__SineMSOne_tests__SineMSCount",
@@ -1712,7 +1763,7 @@
             "targetBlockId": "tests__SineMSCount",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -60
+              "midpointOffset": -61
             }
           },
           {
@@ -1722,7 +1773,24 @@
             "targetBlockId": "tests__SineMSCount",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -437
+              "waypoints": [
+                {
+                  "x": 1093,
+                  "y": 424
+                },
+                {
+                  "x": 1093,
+                  "y": 465.5
+                },
+                {
+                  "x": 527,
+                  "y": 465.5
+                },
+                {
+                  "x": 527,
+                  "y": 370
+                }
+              ]
             }
           },
           {
@@ -1730,67 +1798,52 @@
             "sourceBlockId": "tests__SineMSCount",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMSCountPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -83
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_37_tests__SineMSSum_tests__SineMS",
             "sourceBlockId": "tests__SineMSSum",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMS",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -16
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_38_tests__SineMSCount_tests__SineMS",
             "sourceBlockId": "tests__SineMSCount",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMS",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": -32
-            }
+            "targetPortIndex": 1
           },
           {
             "id": "w_39_tests__SineMS_tests__SineMeanSquare",
             "sourceBlockId": "tests__SineMS",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMeanSquare",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -1372.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_40_tests__Time_tests__NoiseMSWindow",
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__NoiseMSWindow",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -4.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_41_tests__UnitNoise_tests__NoiseMSSum",
             "sourceBlockId": "tests__UnitNoise",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__NoiseMSSum",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": -5
+            }
           },
           {
             "id": "w_42_tests__NoiseMSWindow_tests__NoiseMSSum",
             "sourceBlockId": "tests__NoiseMSWindow",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__NoiseMSSum",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": -28
-            }
+            "targetPortIndex": 1
           },
           {
             "id": "w_43_tests__NoiseMSSumPrev_tests__NoiseMSSum",
@@ -1799,7 +1852,24 @@
             "targetBlockId": "tests__NoiseMSSum",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -445
+              "waypoints": [
+                {
+                  "x": 991,
+                  "y": 1772
+                },
+                {
+                  "x": 991,
+                  "y": 1821.5
+                },
+                {
+                  "x": 547,
+                  "y": 1821.5
+                },
+                {
+                  "x": 547,
+                  "y": 1792
+                }
+              ]
             }
           },
           {
@@ -1807,20 +1877,14 @@
             "sourceBlockId": "tests__NoiseMSSum",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__NoiseMSSumPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -91
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_45_tests__NoiseMSOne_tests__NoiseMSCount",
             "sourceBlockId": "tests__NoiseMSOne",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__NoiseMSCount",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 11
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_46_tests__NoiseMSWindow_tests__NoiseMSCount",
@@ -1829,7 +1893,7 @@
             "targetBlockId": "tests__NoiseMSCount",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -28
+              "midpointOffset": -66
             }
           },
           {
@@ -1839,7 +1903,24 @@
             "targetBlockId": "tests__NoiseMSCount",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -461
+              "waypoints": [
+                {
+                  "x": 1103,
+                  "y": 1344
+                },
+                {
+                  "x": 1103,
+                  "y": 1251.5
+                },
+                {
+                  "x": 537,
+                  "y": 1251.5
+                },
+                {
+                  "x": 537,
+                  "y": 1364
+                }
+              ]
             }
           },
           {
@@ -1847,10 +1928,7 @@
             "sourceBlockId": "tests__NoiseMSCount",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__NoiseMSCountPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -99
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_49_tests__NoiseMSSum_tests__NoiseMS",
@@ -1859,7 +1937,7 @@
             "targetBlockId": "tests__NoiseMS",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -40
+              "midpointOffset": -56
             }
           },
           {
@@ -1867,20 +1945,14 @@
             "sourceBlockId": "tests__NoiseMSCount",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__NoiseMS",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": -48
-            }
+            "targetPortIndex": 1
           },
           {
             "id": "w_51_tests__NoiseMS_tests__NoiseMeanSquare",
             "sourceBlockId": "tests__NoiseMS",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__NoiseMeanSquare",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 1343.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_52_tests__Sine_tests__SineCorr1sLag1",
@@ -1889,7 +1961,7 @@
             "targetBlockId": "tests__SineCorr1sLag1",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -110.5
+              "midpointOffset": -212.5
             }
           },
           {
@@ -1897,30 +1969,21 @@
             "sourceBlockId": "tests__SineCorr1sLag1",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr1sLag2",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 20
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_54_tests__SineCorr1sLag2_tests__SineCorr1sLag3",
             "sourceBlockId": "tests__SineCorr1sLag2",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr1sLag3",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 0
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_55_tests__SineCorr1sLag3_tests__SineCorr1sLag4",
             "sourceBlockId": "tests__SineCorr1sLag3",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr1sLag4",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 59
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_56_tests__SineCorr1sLag4_tests__SineCorr1sLag5",
@@ -1941,20 +2004,14 @@
             "sourceBlockId": "tests__SineCorr1sLag6",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr1sLag7",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 8
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_59_tests__SineCorr1sLag7_tests__SineCorr1sLag8",
             "sourceBlockId": "tests__SineCorr1sLag7",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr1sLag8",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 55
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_60_tests__SineCorr1sLag8_tests__SineCorr1sLag9",
@@ -1977,7 +2034,24 @@
             "targetBlockId": "tests__SineCorr1sWindow",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4
+              "waypoints": [
+                {
+                  "x": 196,
+                  "y": 685
+                },
+                {
+                  "x": 196,
+                  "y": 633.5
+                },
+                {
+                  "x": 1736,
+                  "y": 633.5
+                },
+                {
+                  "x": 1736,
+                  "y": 676
+                }
+              ]
             }
           },
           {
@@ -1987,7 +2061,24 @@
             "targetBlockId": "tests__SineCorr1sSab",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -1461.5
+              "waypoints": [
+                {
+                  "x": 649,
+                  "y": -286
+                },
+                {
+                  "x": 649,
+                  "y": -597.5
+                },
+                {
+                  "x": 971,
+                  "y": -597.5
+                },
+                {
+                  "x": 971,
+                  "y": -518
+                }
+              ]
             }
           },
           {
@@ -1997,7 +2088,7 @@
             "targetBlockId": "tests__SineCorr1sSab",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 0
+              "midpointOffset": -10
             }
           },
           {
@@ -2007,7 +2098,7 @@
             "targetBlockId": "tests__SineCorr1sSab",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": 984
+              "midpointOffset": -5
             }
           },
           {
@@ -2017,7 +2108,24 @@
             "targetBlockId": "tests__SineCorr1sSab",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": -317
+              "waypoints": [
+                {
+                  "x": 3312,
+                  "y": -488
+                },
+                {
+                  "x": 3312,
+                  "y": -427.5
+                },
+                {
+                  "x": 2868,
+                  "y": -427.5
+                },
+                {
+                  "x": 2868,
+                  "y": -458
+                }
+              ]
             }
           },
           {
@@ -2025,10 +2133,7 @@
             "sourceBlockId": "tests__SineCorr1sSab",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr1sSabPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -51
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_68_tests__Sine_tests__SineCorr1sSaa",
@@ -2037,7 +2142,24 @@
             "targetBlockId": "tests__SineCorr1sSaa",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -55.5
+              "waypoints": [
+                {
+                  "x": 649,
+                  "y": -286
+                },
+                {
+                  "x": 649,
+                  "y": 157.5
+                },
+                {
+                  "x": 979,
+                  "y": 157.5
+                },
+                {
+                  "x": 979,
+                  "y": -22
+                }
+              ]
             }
           },
           {
@@ -2047,7 +2169,7 @@
             "targetBlockId": "tests__SineCorr1sSaa",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 28
+              "midpointOffset": -5
             }
           },
           {
@@ -2057,7 +2179,24 @@
             "targetBlockId": "tests__SineCorr1sSaa",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -429
+              "waypoints": [
+                {
+                  "x": 3312,
+                  "y": -2
+                },
+                {
+                  "x": 3312,
+                  "y": 48.5
+                },
+                {
+                  "x": 2868,
+                  "y": 48.5
+                },
+                {
+                  "x": 2868,
+                  "y": 18
+                }
+              ]
             }
           },
           {
@@ -2065,20 +2204,14 @@
             "sourceBlockId": "tests__SineCorr1sSaa",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr1sSaaPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -131
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_72_tests__SineCorr1sLag10_tests__SineCorr1sSbb",
             "sourceBlockId": "tests__SineCorr1sLag10",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr1sSbb",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 0
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_73_tests__SineCorr1sWindow_tests__SineCorr1sSbb",
@@ -2087,7 +2220,7 @@
             "targetBlockId": "tests__SineCorr1sSbb",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -1378
+              "midpointOffset": -5
             }
           },
           {
@@ -2097,7 +2230,24 @@
             "targetBlockId": "tests__SineCorr1sSbb",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -333
+              "waypoints": [
+                {
+                  "x": 3322,
+                  "y": -286
+                },
+                {
+                  "x": 3322,
+                  "y": -243.5
+                },
+                {
+                  "x": 2868,
+                  "y": -243.5
+                },
+                {
+                  "x": 2868,
+                  "y": -338
+                }
+              ]
             }
           },
           {
@@ -2107,7 +2257,7 @@
             "targetBlockId": "tests__SineCorr1sSbbPrev",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -59
+              "midpointOffset": 5
             }
           },
           {
@@ -2117,7 +2267,7 @@
             "targetBlockId": "tests__SineCorr1s",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 4
+              "midpointOffset": -5
             }
           },
           {
@@ -2127,7 +2277,7 @@
             "targetBlockId": "tests__SineCorr1s",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -538
+              "midpointOffset": -5
             }
           },
           {
@@ -2135,60 +2285,42 @@
             "sourceBlockId": "tests__SineCorr1sSbb",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr1s",
-            "targetPortIndex": 2,
-            "routing": {
-              "midpointOffset": -4
-            }
+            "targetPortIndex": 2
           },
           {
             "id": "w_79_tests__SineCorr1s_tests__CorrHalfPeriod",
             "sourceBlockId": "tests__SineCorr1s",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__CorrHalfPeriod",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 0
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_80_tests__Sine_tests__SineCorr05sLag1",
             "sourceBlockId": "tests__Sine",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr05sLag1",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -110.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_81_tests__SineCorr05sLag1_tests__SineCorr05sLag2",
             "sourceBlockId": "tests__SineCorr05sLag1",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr05sLag2",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 12
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_82_tests__SineCorr05sLag2_tests__SineCorr05sLag3",
             "sourceBlockId": "tests__SineCorr05sLag2",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr05sLag3",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -16
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_83_tests__SineCorr05sLag3_tests__SineCorr05sLag4",
             "sourceBlockId": "tests__SineCorr05sLag3",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr05sLag4",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 43
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_84_tests__SineCorr05sLag4_tests__SineCorr05sLag5",
@@ -2204,7 +2336,24 @@
             "targetBlockId": "tests__SineCorr05sWindow",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -4
+              "waypoints": [
+                {
+                  "x": 196,
+                  "y": 685
+                },
+                {
+                  "x": 196,
+                  "y": 1897.5
+                },
+                {
+                  "x": 1414,
+                  "y": 1897.5
+                },
+                {
+                  "x": 1414,
+                  "y": 634
+                }
+              ]
             }
           },
           {
@@ -2214,7 +2363,32 @@
             "targetBlockId": "tests__SineCorr05sSab",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -841.5
+              "waypoints": [
+                {
+                  "x": 649,
+                  "y": -286
+                },
+                {
+                  "x": 649,
+                  "y": -496.5
+                },
+                {
+                  "x": 981,
+                  "y": -496.5
+                },
+                {
+                  "x": 981,
+                  "y": -517.5
+                },
+                {
+                  "x": 2058,
+                  "y": -517.5
+                },
+                {
+                  "x": 2058,
+                  "y": -306
+                }
+              ]
             }
           },
           {
@@ -2222,10 +2396,7 @@
             "sourceBlockId": "tests__SineCorr05sLag5",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr05sSab",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": 0
-            }
+            "targetPortIndex": 1
           },
           {
             "id": "w_88_tests__SineCorr05sWindow_tests__SineCorr05sSab",
@@ -2234,7 +2405,7 @@
             "targetBlockId": "tests__SineCorr05sSab",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": 676
+              "midpointOffset": -5
             }
           },
           {
@@ -2244,7 +2415,24 @@
             "targetBlockId": "tests__SineCorr05sSab",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": -317
+              "waypoints": [
+                {
+                  "x": 2522,
+                  "y": -276
+                },
+                {
+                  "x": 2522,
+                  "y": -215.5
+                },
+                {
+                  "x": 2078,
+                  "y": -215.5
+                },
+                {
+                  "x": 2078,
+                  "y": -246
+                }
+              ]
             }
           },
           {
@@ -2252,10 +2440,7 @@
             "sourceBlockId": "tests__SineCorr05sSab",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr05sSabPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -55
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_91_tests__Sine_tests__SineCorr05sSaa",
@@ -2264,7 +2449,24 @@
             "targetBlockId": "tests__SineCorr05sSaa",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -55.5
+              "waypoints": [
+                {
+                  "x": 649,
+                  "y": -286
+                },
+                {
+                  "x": 649,
+                  "y": -21.5
+                },
+                {
+                  "x": 2078,
+                  "y": -21.5
+                },
+                {
+                  "x": 2078,
+                  "y": 9
+                }
+              ]
             }
           },
           {
@@ -2274,7 +2476,7 @@
             "targetBlockId": "tests__SineCorr05sSaa",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 20
+              "midpointOffset": -5
             }
           },
           {
@@ -2284,7 +2486,24 @@
             "targetBlockId": "tests__SineCorr05sSaa",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -413
+              "waypoints": [
+                {
+                  "x": 2522,
+                  "y": 29
+                },
+                {
+                  "x": 2522,
+                  "y": 79.5
+                },
+                {
+                  "x": 2078,
+                  "y": 79.5
+                },
+                {
+                  "x": 2078,
+                  "y": 49
+                }
+              ]
             }
           },
           {
@@ -2292,10 +2511,7 @@
             "sourceBlockId": "tests__SineCorr05sSaa",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr05sSaaPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -51
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_95_tests__SineCorr05sLag5_tests__SineCorr05sSbb",
@@ -2304,7 +2520,7 @@
             "targetBlockId": "tests__SineCorr05sSbb",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 0
+              "midpointOffset": -10
             }
           },
           {
@@ -2314,7 +2530,7 @@
             "targetBlockId": "tests__SineCorr05sSbb",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -766
+              "midpointOffset": -5
             }
           },
           {
@@ -2324,7 +2540,24 @@
             "targetBlockId": "tests__SineCorr05sSbb",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -333
+              "waypoints": [
+                {
+                  "x": 2532,
+                  "y": -74
+                },
+                {
+                  "x": 2532,
+                  "y": -31.5
+                },
+                {
+                  "x": 2078,
+                  "y": -31.5
+                },
+                {
+                  "x": 2078,
+                  "y": -126
+                }
+              ]
             }
           },
           {
@@ -2334,7 +2567,7 @@
             "targetBlockId": "tests__SineCorr05sSbbPrev",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -79
+              "midpointOffset": 5
             }
           },
           {
@@ -2344,7 +2577,7 @@
             "targetBlockId": "tests__SineCorr05s",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 0
+              "midpointOffset": -5
             }
           },
           {
@@ -2354,7 +2587,7 @@
             "targetBlockId": "tests__SineCorr05s",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 810
+              "midpointOffset": -5
             }
           },
           {
@@ -2362,20 +2595,14 @@
             "sourceBlockId": "tests__SineCorr05sSbb",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineCorr05s",
-            "targetPortIndex": 2,
-            "routing": {
-              "midpointOffset": -24
-            }
+            "targetPortIndex": 2
           },
           {
             "id": "w_102_tests__SineCorr05s_tests__CorrQuarterPeriod",
             "sourceBlockId": "tests__SineCorr05s",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__CorrQuarterPeriod",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 612
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_103_tests__WholeSeconds_tests__Visited3Now",
@@ -2389,10 +2616,7 @@
             "sourceBlockId": "tests__Visited3Now",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__Visited3",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -48.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_105_tests__Visited3Prev_tests__Visited3",
@@ -2401,7 +2625,24 @@
             "targetBlockId": "tests__Visited3",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -305
+              "waypoints": [
+                {
+                  "x": 1445,
+                  "y": -830
+                },
+                {
+                  "x": 1445,
+                  "y": -871.5
+                },
+                {
+                  "x": 991,
+                  "y": -871.5
+                },
+                {
+                  "x": 991,
+                  "y": -734.6666666666667
+                }
+              ]
             }
           },
           {
@@ -2409,7 +2650,10 @@
             "sourceBlockId": "tests__Visited3",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__Visited3Prev",
-            "targetPortIndex": 0
+            "targetPortIndex": 0,
+            "routing": {
+              "midpointOffset": 5
+            }
           },
           {
             "id": "w_107_tests__Visited3_tests__PhaseNotYetVisited",
@@ -2418,7 +2662,7 @@
             "targetBlockId": "tests__PhaseNotYetVisited",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -1328
+              "midpointOffset": 5
             }
           },
           {
@@ -2426,20 +2670,14 @@
             "sourceBlockId": "tests__Visited3",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__PhaseVisited",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -1328
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_109_tests__Time_tests__After2_5s",
             "sourceBlockId": "tests__Time",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__After2_5s",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -23.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_110_tests__After2_5s_tests__SineWhenPast2_5Seen",
@@ -2448,7 +2686,7 @@
             "targetBlockId": "tests__SineWhenPast2_5Seen",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": 23.5
+              "midpointOffset": 197
             }
           },
           {
@@ -2458,7 +2696,24 @@
             "targetBlockId": "tests__SineWhenPast2_5Seen",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -365
+              "waypoints": [
+                {
+                  "x": 1288,
+                  "y": 1126
+                },
+                {
+                  "x": 1288,
+                  "y": 1083.5
+                },
+                {
+                  "x": 834,
+                  "y": 1083.5
+                },
+                {
+                  "x": 834,
+                  "y": 1136.6666666666667
+                }
+              ]
             }
           },
           {
@@ -2466,20 +2721,14 @@
             "sourceBlockId": "tests__SineWhenPast2_5Seen",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineWhenPast2_5SeenPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 13
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_113_tests__SineWhenPast2_5Seen_tests__SineWhenPast2_5SeenBefore",
             "sourceBlockId": "tests__SineWhenPast2_5Seen",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineWhenPast2_5SeenBefore",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 13
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_114_tests__Sine_tests__SineWhenPast2_5",
@@ -2488,7 +2737,24 @@
             "targetBlockId": "tests__SineWhenPast2_5",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -491.5
+              "waypoints": [
+                {
+                  "x": 649,
+                  "y": -286
+                },
+                {
+                  "x": 649,
+                  "y": -243.5
+                },
+                {
+                  "x": 1298,
+                  "y": -243.5
+                },
+                {
+                  "x": 1298,
+                  "y": 478
+                }
+              ]
             }
           },
           {
@@ -2498,7 +2764,7 @@
             "targetBlockId": "tests__SineWhenPast2_5",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 3.5
+              "midpointOffset": 40
             }
           },
           {
@@ -2508,7 +2774,7 @@
             "targetBlockId": "tests__SineWhenPast2_5",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": 63
+              "midpointOffset": 5
             }
           },
           {
@@ -2518,7 +2784,24 @@
             "targetBlockId": "tests__SineWhenPast2_5",
             "targetPortIndex": 3,
             "routing": {
-              "midpointOffset": -244
+              "waypoints": [
+                {
+                  "x": 1742,
+                  "y": 424
+                },
+                {
+                  "x": 1742,
+                  "y": 381.5
+                },
+                {
+                  "x": 1288,
+                  "y": 381.5
+                },
+                {
+                  "x": 1288,
+                  "y": 538
+                }
+              ]
             }
           },
           {
@@ -2526,40 +2809,28 @@
             "sourceBlockId": "tests__SineWhenPast2_5",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineWhenPast2_5Prev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 12
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_119_tests__SineWhenPast2_5_tests__HeldWhenUnsetBefore",
             "sourceBlockId": "tests__SineWhenPast2_5",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeldWhenUnsetBefore",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 1176
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_120_tests__SineWhenPast2_5_tests__HeldWhenCaptured",
             "sourceBlockId": "tests__SineWhenPast2_5",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__HeldWhenCaptured",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 1176
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_121_tests__Sine_tests__SinePositive",
             "sourceBlockId": "tests__Sine",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SinePositive",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -55.5
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_122_tests__Time_tests__SinePositive",
@@ -2568,7 +2839,7 @@
             "targetBlockId": "tests__SinePositive",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": -244
+              "midpointOffset": -226.5
             }
           },
           {
@@ -2578,7 +2849,7 @@
             "targetBlockId": "tests__SineMeanPositiveSum",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -295.5
+              "midpointOffset": -171
             }
           },
           {
@@ -2588,7 +2859,7 @@
             "targetBlockId": "tests__SineMeanPositiveSum",
             "targetPortIndex": 1,
             "routing": {
-              "midpointOffset": 28
+              "midpointOffset": -5
             }
           },
           {
@@ -2598,7 +2869,24 @@
             "targetBlockId": "tests__SineMeanPositiveSum",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -329
+              "waypoints": [
+                {
+                  "x": 1435,
+                  "y": -578
+                },
+                {
+                  "x": 1435,
+                  "y": -527.5
+                },
+                {
+                  "x": 991,
+                  "y": -527.5
+                },
+                {
+                  "x": 991,
+                  "y": -558
+                }
+              ]
             }
           },
           {
@@ -2606,10 +2894,7 @@
             "sourceBlockId": "tests__SineMeanPositiveSum",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMeanPositiveSumPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -63
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_127_tests__SineMeanPositiveOne_tests__SineMeanPositiveCount",
@@ -2618,7 +2903,7 @@
             "targetBlockId": "tests__SineMeanPositiveCount",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -13
+              "midpointOffset": 2
             }
           },
           {
@@ -2626,10 +2911,7 @@
             "sourceBlockId": "tests__SinePositive",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMeanPositiveCount",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": 28
-            }
+            "targetPortIndex": 1
           },
           {
             "id": "w_129_tests__SineMeanPositiveCountPrev_tests__SineMeanPositiveCount",
@@ -2638,7 +2920,24 @@
             "targetBlockId": "tests__SineMeanPositiveCount",
             "targetPortIndex": 2,
             "routing": {
-              "midpointOffset": -321
+              "waypoints": [
+                {
+                  "x": 1565,
+                  "y": -1006
+                },
+                {
+                  "x": 1565,
+                  "y": -955.5
+                },
+                {
+                  "x": 991,
+                  "y": -955.5
+                },
+                {
+                  "x": 991,
+                  "y": -986
+                }
+              ]
             }
           },
           {
@@ -2646,10 +2945,7 @@
             "sourceBlockId": "tests__SineMeanPositiveCount",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMeanPositiveCountPrev",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": -87
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_131_tests__SineMeanPositiveSum_tests__SineMeanPositive",
@@ -2658,7 +2954,7 @@
             "targetBlockId": "tests__SineMeanPositive",
             "targetPortIndex": 0,
             "routing": {
-              "midpointOffset": -12
+              "midpointOffset": -65
             }
           },
           {
@@ -2666,25 +2962,19 @@
             "sourceBlockId": "tests__SineMeanPositiveCount",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__SineMeanPositive",
-            "targetPortIndex": 1,
-            "routing": {
-              "midpointOffset": -36
-            }
+            "targetPortIndex": 1
           },
           {
             "id": "w_133_tests__SineMeanPositive_tests__MeanWhileGated",
             "sourceBlockId": "tests__SineMeanPositive",
             "sourcePortIndex": 0,
             "targetBlockId": "tests__MeanWhileGated",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 1171.5
-            }
+            "targetPortIndex": 0
           }
         ],
         "extents": {
-          "width": 4616,
-          "height": 1956
+          "width": 3858,
+          "height": 2024
         }
       }
     ]

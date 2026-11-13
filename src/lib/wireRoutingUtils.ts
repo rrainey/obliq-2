@@ -1,6 +1,7 @@
 // lib/wireRoutingUtils.ts - Utilities for wire routing and path calculation
 
 import { Wire, Position, Block } from './modelSchema'
+import { defaultWirePath } from './layout/blockGeometry'
 
 /**
  * Configuration for routing reset detection
@@ -52,29 +53,35 @@ export function calculateMidpointX(
 }
 
 /**
- * Generate path segments for a step edge with optional custom routing
+ * Generate path segments for a step edge with optional custom routing.
+ * Without waypoints this is the editor's default wire path
+ * (defaultWirePath() in layout/blockGeometry.ts). `sourceDir` and
+ * `targetDir` are the directions that the ports face: by default an output on
+ * the right (+1) and an input on the left (-1); a flipped block has the
+ * opposite sides.
  */
 export function generateStepPathSegments(
   sourcePos: Position,
   targetPos: Position,
-  routing?: Wire['routing']
+  routing?: Wire['routing'],
+  sourceDir: -1 | 1 = 1,
+  targetDir: -1 | 1 = -1,
 ): PathSegment[] {
   // If we have explicit waypoints, use them
   if (routing?.waypoints && routing.waypoints.length > 0) {
     return generateWaypointPathSegments(sourcePos, targetPos, routing.waypoints)
   }
 
-  // Otherwise, use simple step routing with optional midpoint offset
-  const midX = calculateMidpointX(sourcePos.x, targetPos.x, routing?.midpointOffset)
-
-  return [
-    // Horizontal segment from source to midpoint X
-    { start: sourcePos, end: { x: midX, y: sourcePos.y }, orientation: 'horizontal' },
-    // Vertical segment at midpoint X
-    { start: { x: midX, y: sourcePos.y }, end: { x: midX, y: targetPos.y }, orientation: 'vertical' },
-    // Horizontal segment from midpoint to target
-    { start: { x: midX, y: targetPos.y }, end: targetPos, orientation: 'horizontal' },
-  ]
+  const points = defaultWirePath(
+    { ...sourcePos, dir: sourceDir },
+    { ...targetPos, dir: targetDir },
+    routing?.midpointOffset ?? 0,
+  )
+  const segments: PathSegment[] = []
+  for (let i = 0; i + 1 < points.length; i++) {
+    segments.push({ start: points[i], end: points[i + 1], orientation: i % 2 === 0 ? 'horizontal' : 'vertical' })
+  }
+  return segments
 }
 
 /**

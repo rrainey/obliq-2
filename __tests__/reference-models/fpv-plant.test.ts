@@ -96,8 +96,8 @@ describe('FPV reference model: plant', () => {
 
   const at = (name: string, t: number) => runs[name]!.reduce((best, r) => (Math.abs(r.t - t) < Math.abs(best.t - t) ? r : best))
 
-  it('the committed reference models match the builder', () => {
-    for (const [file, model] of SHIPPED_FPV_MODELS()) {
+  it('the committed reference models match the builder', async () => {
+    for (const [file, model] of await SHIPPED_FPV_MODELS()) {
       const committed = JSON.parse(fs.readFileSync(path.join(MODEL_DIR, file), 'utf8'))
       expect(committed).toEqual(JSON.parse(JSON.stringify(model)))
     }

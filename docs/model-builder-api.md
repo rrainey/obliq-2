@@ -334,6 +334,41 @@ Content-Type: application/json
 }
 ```
 
+A subsystem block has the optional parameter `subsystemFunction`: the function of the subsystem in a control loop. Use one of these values:
+
+- `controller`
+- `actuator`
+- `plant`
+- `sensor`
+- `compensator` (an element on the feedback path)
+- `other`
+
+Send `null` to remove the value. A different value gives a `VALIDATION_FAILED` error. Only the diagram layout uses this parameter. It has no effect on simulation or code generation.
+
+```json
+{
+  "action": "updateBlockParameters",
+  "modelId": "123e4567-e89b-12d3-a456-426614174000",
+  "sheetId": "main",
+  "blockId": "block_frame",
+  "parameters": { "subsystemFunction": "plant" }
+}
+```
+
+Each block type, except a comment, has the optional parameter `flipped`. When it is `true`, the editor draws the block mirrored: the inputs are on the right edge and the outputs on the left edge. Send `false` or `null` to remove the flip. A value that is not a boolean gives a `VALIDATION_FAILED` error. Only the diagram uses this parameter. It has no effect on simulation or code generation. The **Tune Model Layout** adjustment **Mirror feedback-path blocks** sets and removes it (see [Diagram Layout](../README.md#diagram-layout)).
+
+For a block that is not a subsystem, `updateBlockParameters` replaces all of the parameters. Send the other parameters of the block with `flipped`:
+
+```json
+{
+  "action": "updateBlockParameters",
+  "modelId": "123e4567-e89b-12d3-a456-426614174000",
+  "sheetId": "main",
+  "blockId": "block_gain",
+  "parameters": { "gain": 2.5, "flipped": true }
+}
+```
+
 #### Delete Block
 Remove a block and its connections.
 

@@ -3,6 +3,7 @@
 
 import { tuneModelLayout, isNoOp, DEFAULT_TUNE_OPTIONS, type TuneLayoutOptions } from '@/lib/layout/tuneModelLayout'
 import { computeAutoLayout } from '@/lib/layout/autoLayout'
+import { computeElkLayout } from '@/lib/layout/elkLayout'
 import { countSheetsInScope } from '@/lib/layout/tuneModelLayout'
 import type { Sheet } from '@/lib/modelStore'
 import type { BlockData } from '@/components/BlockNode'
@@ -68,61 +69,61 @@ const blockIn = (sheets: Sheet[], sheetId: string, blockId: string) =>
   sheetById(sheets, sheetId)!.blocks.find(x => x.id === blockId)!
 
 describe('no-op handling', () => {
-  test('all three adjustments off is a no-op', () => {
+  test('all three adjustments off is a no-op', async () => {
     const o = opts({ cleanUpLayout: false, resizeSubsystems: false, hideBlockNames: false, subsystemPortLabels: 'asis' })
     expect(isNoOp(o)).toBe(true)
     const before = model()
-    const { sheets, summary } = tuneModelLayout(before, 'main', o)
+    const { sheets, summary } = await tuneModelLayout(before, 'main', o)
     expect(sheets).toBe(before)
     expect(summary.sheetsAffected).toBe(0)
   })
 })
 
 describe('scope', () => {
-  test('current sheet leaves nested subsystem sheets untouched', () => {
+  test('current sheet leaves nested subsystem sheets untouched', async () => {
     const before = model()
     const innerBefore = sheetById(before, 'sub_main')!
-    const { sheets } = tuneModelLayout(before, 'main', opts({ scope: 'sheet' }))
+    const { sheets } = await tuneModelLayout(before, 'main', opts({ scope: 'sheet' }))
     // Untouched sheets are returned by identity, protecting downstream memoisation.
     expect(sheetById(sheets, 'sub_main')).toBe(innerBefore)
   })
 
-  test('entire model reaches sheets nested inside subsystems', () => {
+  test('entire model reaches sheets nested inside subsystems', async () => {
     const before = model()
     const innerBefore = sheetById(before, 'sub_main')!
-    const { sheets, summary } = tuneModelLayout(before, 'main', opts({ scope: 'model' }))
+    const { sheets, summary } = await tuneModelLayout(before, 'main', opts({ scope: 'model' }))
     expect(sheetById(sheets, 'sub_main')).not.toBe(innerBefore)
     expect(summary.sheetsAffected).toBe(2)
   })
 
-  test('current subsystem tunes only that subsystem\'s sheets', () => {
+  test('current subsystem tunes only that subsystem\'s sheets', async () => {
     const before = model()
     const topBefore = sheetById(before, 'main')!
-    const { sheets } = tuneModelLayout(before, 'sub_main', opts({ scope: 'subsystem' }))
+    const { sheets } = await tuneModelLayout(before, 'sub_main', opts({ scope: 'subsystem' }))
     expect(sheetById(sheets, 'sub_main')!.blocks).not.toBe(topBefore.blocks)
     // The top sheet's own blocks are not re-laid-out, only rebuilt to carry the
     // updated subsystem; its non-subsystem blocks keep their positions.
     expect(blockIn(sheets, 'main', 't_src').position).toEqual({ x: 500, y: 400 })
   })
 
-  test('current subsystem from a top-level sheet falls back to the whole model', () => {
-    const { summary } = tuneModelLayout(model(), 'main', opts({ scope: 'subsystem' }))
+  test('current subsystem from a top-level sheet falls back to the whole model', async () => {
+    const { summary } = await tuneModelLayout(model(), 'main', opts({ scope: 'subsystem' }))
     expect(summary.sheetsAffected).toBe(2)
   })
 })
 
 describe('adjustments are independent', () => {
-  test('layout only moves blocks, and does not resize or rename', () => {
-    const { summary } = tuneModelLayout(model(), 'main',
+  test('layout only moves blocks, and does not resize or rename', async () => {
+    const { summary } = await tuneModelLayout(model(), 'main',
       opts({ cleanUpLayout: true, resizeSubsystems: false, hideBlockNames: false }))
     expect(summary.blocksMoved).toBeGreaterThan(0)
     expect(summary.blocksResized).toBe(0)
     expect(summary.namesHidden).toBe(0)
   })
 
-  test('resize only changes sizes, leaving positions alone', () => {
+  test('resize only changes sizes, leaving positions alone', async () => {
     const before = model()
-    const { sheets, summary } = tuneModelLayout(before, 'main',
+    const { sheets, summary } = await tuneModelLayout(before, 'main',
       opts({ cleanUpLayout: false, resizeSubsystems: true, hideBlockNames: false }))
     expect(summary.blocksMoved).toBe(0)
     expect(summary.blocksResized).toBeGreaterThan(0)
@@ -131,16 +132,16 @@ describe('adjustments are independent', () => {
     expect(typeof sub.parameters?.height).toBe('number')
   })
 
-  test('resizing a subsystem preserves its sheets', () => {
-    const { sheets } = tuneModelLayout(model(), 'main',
+  test('resizing a subsystem preserves its sheets', async () => {
+    const { sheets } = await tuneModelLayout(model(), 'main',
       opts({ cleanUpLayout: false, resizeSubsystems: true }))
     const sub = blockIn(sheets, 'main', 'sub')
     expect(sub.parameters?.sheets).toHaveLength(1)
     expect(sub.parameters?.inputPorts).toEqual(['a', 'b', 'c'])
   })
 
-  test('hiding names spares subsystems and moves nothing', () => {
-    const { sheets, summary } = tuneModelLayout(model(), 'main',
+  test('hiding names spares subsystems and moves nothing', async () => {
+    const { sheets, summary } = await tuneModelLayout(model(), 'main',
       opts({ cleanUpLayout: false, resizeSubsystems: false, hideBlockNames: true }))
     expect(summary.blocksMoved).toBe(0)
     expect(blockIn(sheets, 'main', 't_src').parameters?.showName).toBe(false)
@@ -148,8 +149,8 @@ describe('adjustments are independent', () => {
     expect(blockIn(sheets, 'main', 'sub').parameters?.showName).toBe(true)
   })
 
-  test('all three together apply at once', () => {
-    const { summary } = tuneModelLayout(model(), 'main',
+  test('all three together apply at once', async () => {
+    const { summary } = await tuneModelLayout(model(), 'main',
       opts({ cleanUpLayout: true, resizeSubsystems: true, hideBlockNames: true, scope: 'model' }))
     expect(summary.blocksMoved).toBeGreaterThan(0)
     expect(summary.blocksResized).toBeGreaterThan(0)
@@ -160,50 +161,50 @@ describe('adjustments are independent', () => {
 describe('subsystem port labels', () => {
   const labelOf = (sheets: Sheet[]) => blockIn(sheets, 'main', 'sub').parameters?.showPortNames
 
-  test('show turns them on', () => {
-    const { sheets, summary } = tuneModelLayout(model(), 'main',
+  test('show turns them on', async () => {
+    const { sheets, summary } = await tuneModelLayout(model(), 'main',
       opts({ cleanUpLayout: false, subsystemPortLabels: 'show' }))
     expect(labelOf(sheets)).toBe(true)
     expect(summary.portLabelsChanged).toBe(1)
   })
 
-  test('hide turns off a subsystem that was showing them', () => {
-    const shown = tuneModelLayout(model(), 'main',
-      opts({ cleanUpLayout: false, subsystemPortLabels: 'show' })).sheets
-    const { sheets, summary } = tuneModelLayout(shown, 'main',
+  test('hide turns off a subsystem that was showing them', async () => {
+    const shown = (await tuneModelLayout(model(), 'main',
+      opts({ cleanUpLayout: false, subsystemPortLabels: 'show' }))).sheets
+    const { sheets, summary } = await tuneModelLayout(shown, 'main',
       opts({ cleanUpLayout: false, subsystemPortLabels: 'hide' }))
     expect(labelOf(sheets)).toBe(false)
     expect(summary.portLabelsChanged).toBe(1)
   })
 
-  test('hide on an already-hidden subsystem writes nothing', () => {
+  test('hide on an already-hidden subsystem writes nothing', async () => {
     // showPortNames is opt-in on the canvas, so an absent value already reads
     // as hidden; comparing effective state avoids pointless churn.
     const before = model()
-    const { sheets, summary } = tuneModelLayout(before, 'main',
+    const { sheets, summary } = await tuneModelLayout(before, 'main',
       opts({ cleanUpLayout: false, subsystemPortLabels: 'hide' }))
     expect(summary.portLabelsChanged).toBe(0)
     expect(sheetById(sheets, 'main')).toBe(sheetById(before, 'main'))
   })
 
-  test('leave as-is touches nothing', () => {
+  test('leave as-is touches nothing', async () => {
     const before = model()
-    const { sheets, summary } = tuneModelLayout(before, 'main',
+    const { sheets, summary } = await tuneModelLayout(before, 'main',
       opts({ cleanUpLayout: false, subsystemPortLabels: 'asis' }))
     expect(sheets).toBe(before)
     expect(summary.portLabelsChanged).toBe(0)
   })
 
-  test('only subsystems are affected', () => {
-    const { sheets } = tuneModelLayout(model(), 'main',
+  test('only subsystems are affected', async () => {
+    const { sheets } = await tuneModelLayout(model(), 'main',
       opts({ cleanUpLayout: false, subsystemPortLabels: 'show' }))
     expect(blockIn(sheets, 'main', 't_src').parameters?.showPortNames).toBeUndefined()
   })
 
-  test('a subsystem already in the wanted state is not counted', () => {
-    const first = tuneModelLayout(model(), 'main',
+  test('a subsystem already in the wanted state is not counted', async () => {
+    const first = await tuneModelLayout(model(), 'main',
       opts({ cleanUpLayout: false, subsystemPortLabels: 'show' }))
-    const second = tuneModelLayout(first.sheets, 'main',
+    const second = await tuneModelLayout(first.sheets, 'main',
       opts({ cleanUpLayout: false, subsystemPortLabels: 'show' }))
     expect(second.summary.portLabelsChanged).toBe(0)
     // The outer array is always rebuilt; what must be preserved is each sheet,
@@ -211,15 +212,15 @@ describe('subsystem port labels', () => {
     expect(sheetById(second.sheets, 'main')).toBe(sheetById(first.sheets, 'main'))
   })
 
-  test('port labels alone is not a no-op', () => {
+  test('port labels alone is not a no-op', async () => {
     expect(isNoOp(opts({
       cleanUpLayout: false, resizeSubsystems: false,
       hideBlockNames: false, subsystemPortLabels: 'show',
     }))).toBe(false)
   })
 
-  test('changing labels preserves the subsystem\'s sheets', () => {
-    const { sheets } = tuneModelLayout(model(), 'main',
+  test('changing labels preserves the subsystem\'s sheets', async () => {
+    const { sheets } = await tuneModelLayout(model(), 'main',
       opts({ cleanUpLayout: false, subsystemPortLabels: 'show' }))
     expect(blockIn(sheets, 'main', 'sub').parameters?.sheets).toHaveLength(1)
   })
@@ -227,11 +228,11 @@ describe('subsystem port labels', () => {
 
 describe('mounting the sheet changes nothing', () => {
   // Tuning an off-screen sheet must match tuning it while it is the active
-  // sheet on the canvas. computeAutoLayout reads block geometry from
+  // sheet on the canvas. Both engines read block geometry from
   // blockGeometry, never from React Flow's measured DOM, so there is nothing
   // for mounting to contribute -- this pins that down.
-  test('a nested sheet tuned via scope matches laying it out directly', () => {
-    const tuned = tuneModelLayout(model(), 'main', opts({ scope: 'model' })).sheets
+  test('a nested sheet tuned via scope matches laying it out directly (classic)', async () => {
+    const tuned = (await tuneModelLayout(model(), 'main', opts({ scope: 'model', engine: 'classic' }))).sheets
     const nested = sheetById(tuned, 'sub_main')!
 
     const original = sheetById(model(), 'sub_main')!
@@ -243,9 +244,22 @@ describe('mounting the sheet changes nothing', () => {
     }
   })
 
-  test('the same holds with resizing enabled', () => {
+  test('a nested sheet tuned via scope matches laying it out directly (ELK, the default)', async () => {
+    const tuned = (await tuneModelLayout(model(), 'main', opts({ scope: 'model' }))).sheets
+    const nested = sheetById(tuned, 'sub_main')!
+
+    const original = sheetById(model(), 'sub_main')!
+    const direct = await computeElkLayout(original.blocks, original.connections)
+    const directById = new Map(direct.moves.map(m => [m.id, m.position]))
+
+    for (const block of nested.blocks) {
+      expect(block.position).toEqual(directById.get(block.id))
+    }
+  })
+
+  test('the same holds with resizing enabled', async () => {
     const o = opts({ scope: 'model', resizeSubsystems: true })
-    const tuned = tuneModelLayout(model(), 'main', o).sheets
+    const tuned = (await tuneModelLayout(model(), 'main', o)).sheets
     const top = sheetById(tuned, 'main')!
 
     const original = sheetById(model(), 'main')!
@@ -260,27 +274,27 @@ describe('mounting the sheet changes nothing', () => {
 })
 
 describe('defaults', () => {
-  test('the dialog opens on current sheet, layout only', () => {
+  test('the dialog opens on current sheet, layout only', async () => {
     expect(DEFAULT_TUNE_OPTIONS).toEqual({
       cleanUpLayout: true, resizeSubsystems: false, maxPortSpacing: 40, subsystemPortLabels: 'asis',
-      hideBlockNames: false, scope: 'sheet',
+      hideBlockNames: false, scope: 'sheet', engine: 'elk', useSubsystemFunctions: true, mirrorReturnPath: true,
     })
   })
 })
 
 describe('scope counting', () => {
-  test('reports what each scope will touch', () => {
+  test('reports what each scope will touch', async () => {
     const m = model()
     expect(countSheetsInScope(m, 'main', 'sheet')).toBe(1)
     expect(countSheetsInScope(m, 'main', 'model')).toBe(2)
   })
 
-  test('the count matches what tuning actually changes', () => {
+  test('the count matches what tuning actually changes', async () => {
     // The dialog's warning must not be able to disagree with the outcome.
     for (const scope of ['sheet', 'subsystem', 'model'] as const) {
       const m = model()
       const predicted = countSheetsInScope(m, 'main', scope)
-      const { summary } = tuneModelLayout(m, 'main', opts({ scope, cleanUpLayout: true }))
+      const { summary } = await tuneModelLayout(m, 'main', opts({ scope, cleanUpLayout: true }))
       expect(summary.sheetsAffected).toBe(predicted)
     }
   })

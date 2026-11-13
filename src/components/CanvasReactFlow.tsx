@@ -44,6 +44,7 @@ import PaneContextMenu from './PaneContextMenu'
 import TuneLayoutDialog from './TuneLayoutDialog'
 import { expandNetViaSheetLabels } from '@/lib/sheetLabelUtils'
 import { countSheetsInScope, type TuneLayoutOptions, type TuneScope } from '@/lib/layout/tuneModelLayout'
+import { computeWireDecorations, sheetDecorationWires, wireLineCount } from '@/lib/wireDecorations'
 
 interface CanvasReactFlowProps {
   blocks?: BlockData[]
@@ -57,7 +58,8 @@ interface CanvasReactFlowProps {
   onBlockMove?: (id: string, position: { x: number; y: number }) => void
   onBlocksMove?: (moves: Array<{ id: string; position: { x: number; y: number } }>) => void  // Feature 4: Multi-block move
   onBlocksResize?: (resizes: Array<{ id: string; width: number; height: number }>) => void   // Auto-layout subsystem resizing
-  onTuneLayout?: (options: TuneLayoutOptions) => void   // Tune Model Layout dialog
+  /** Tune Model Layout dialog. The dialog shows work in progress until the returned promise settles. */
+  onTuneLayout?: (options: TuneLayoutOptions) => void | Promise<void>
   /** True when the active sheet sits inside a subsystem. */
   insideSubsystem?: boolean
   onBlockSelect?: (id: string | null) => void
@@ -162,6 +164,7 @@ function CanvasReactFlowInner({
   const setResizingBlockId = useModelStore(state => state.setResizingBlockId)
   const updateBlock = useModelStore(state => state.updateBlock)
   const saveCurrentSheetData = useModelStore(state => state.saveCurrentSheetData)
+  const setBlocksFlipped = useModelStore(state => state.setBlocksFlipped)
 
   // Focus request: pan the viewport to a specific block or wire when the
   // validation modal (or anything else) pushes a request.
@@ -215,6 +218,17 @@ function CanvasReactFlowInner({
     return propagateSignalTypesMultiSheet(sheetsForPropagation)
   }, [blocks, wires, modelSheets])
 
+  // Hop marks and junction dots of the sheet (wireDecorations.ts), computed
+  // once for all wires from the model geometry. The blocks and wires props
+  // change on a drop, not while a block moves, so a drag does not recompute
+  // this; see `draggingNodeIds` for what the drag hides.
+  const sheetDecorations = useMemo(() => computeWireDecorations(
+    sheetDecorationWires(blocks, wires, id => wireLineCount(propagationResult.signalTypes.get(id)?.type)),
+  ), [blocks, wires, propagationResult])
+
+  // Blocks that the user is dragging now (null when no drag is in progress).
+  const [draggingNodeIds, setDraggingNodeIds] = useState<Set<string> | null>(null)
+
   // Wire endpoints in the shape BlockNode needs for port-name labels.
   const wiresForNodes = useMemo(() => wires.map(w => ({
     id: w.id,
@@ -265,6 +279,7 @@ function CanvasReactFlowInner({
         // Drag started
         isDraggingRef.current = true
         draggedNodePositionsRef.current.clear()
+        setDraggingNodeIds(new Set(positionChanges.filter((c: any) => c.dragging === true).map((c: any) => c.id)))
       }
 
       // Track positions during drag
@@ -294,6 +309,7 @@ function CanvasReactFlowInner({
         }
 
         draggedNodePositionsRef.current.clear()
+        setDraggingNodeIds(null)
       }
     }
   }, [onNodesChangeInternal, onBlockMove, onBlocksMove])
@@ -333,6 +349,17 @@ function CanvasReactFlowInner({
       if (e.wireId && !errorByWireId.has(e.wireId)) errorByWireId.set(e.wireId, e)
     }
     const blockById = new Map(blocks.map(b => [b.id, b]))
+
+    // While blocks move, hide the hops and dots of the nets that touch them:
+    // the decorations are recomputed on the drop.
+    const movingNets = new Set<string>()
+    if (draggingNodeIds) {
+      for (const w of wires) {
+        if (draggingNodeIds.has(w.sourceBlockId) || draggingNodeIds.has(w.targetBlockId)) {
+          movingNets.add(`${w.sourceBlockId}:${w.sourcePortIndex}`)
+        }
+      }
+    }
 
     const newEdges = wires.map(wire => {
       const signalType = propagationResult.signalTypes.get(wire.id)
@@ -393,6 +420,14 @@ function CanvasReactFlowInner({
       edgeData.routing = wire.routing
       edgeData.onRoutingChange = handleWireRoutingChange
 
+      // Hop marks and junction dots (none for a net that moves now)
+      const net = `${wire.sourceBlockId}:${wire.sourcePortIndex}`
+      if (!movingNets.has(net)) {
+        const hops = sheetDecorations.hops.get(wire.id)
+        edgeData.hops = movingNets.size === 0 ? hops : hops?.filter(h => !(h.nets ?? []).some(n => movingNets.has(n)))
+        edgeData.junctionDots = sheetDecorations.dots.get(wire.id)
+      }
+
       // Highlight the wire if its source port is in the extended net (which
       // may span multiple ports via Sheet Label sink/source pairs).
       if (highlightedNet &&
@@ -412,7 +447,7 @@ function CanvasReactFlowInner({
     // other wires keep their order.
     newEdges.sort((a, b) => Number(!!a.data?.isHighlighted) - Number(!!b.data?.isHighlighted))
     setEdges(newEdges)
-  }, [wires, blocks, propagationResult, setEdges, handleWireRoutingChange, highlightedNet])
+  }, [wires, blocks, propagationResult, setEdges, handleWireRoutingChange, highlightedNet, sheetDecorations, draggingNodeIds])
 
   // Handle connection validation
   const isValidConnection = useCallback((connection: Connection) => {
@@ -651,6 +686,7 @@ const handleEdgesChange = useCallback((changes: any[]) => {
   // the store mutation because the chosen scope can reach sheets that are not
   // currently mounted on the canvas.
   const [tuneDialogOpen, setTuneDialogOpen] = useState(false)
+  const [tuning, setTuning] = useState(false)
 
   // Close context menu when clicking on the pane - Feature 4: Clear all selection
   const onPaneClick = useCallback(() => {
@@ -1059,6 +1095,14 @@ const handleEdgesChange = useCallback((changes: any[]) => {
             }
             setContextMenu(null)
           }}
+          onToggleFlip={(blockId) => {
+            const target = blocks.find(b => b.id === blockId)
+            if (target) {
+              setBlocksFlipped([blockId], target.parameters?.flipped !== true)
+              saveCurrentSheetData()
+            }
+            setContextMenu(null)
+          }}
           onSheetNavigate={(sheetId) => {
             if (onSheetNavigate) {
               onSheetNavigate(sheetId)
@@ -1124,10 +1168,20 @@ const handleEdgesChange = useCallback((changes: any[]) => {
         <TuneLayoutDialog
           opened={tuneDialogOpen}
           insideSubsystem={insideSubsystem}
-          onClose={() => setTuneDialogOpen(false)}
-          onTune={(tuneOptions) => {
-            setTuneDialogOpen(false)
-            onTuneLayout?.(tuneOptions)
+          tuning={tuning}
+          onClose={() => { if (!tuning) setTuneDialogOpen(false) }}
+          onTune={async (tuneOptions) => {
+            if (tuning) return
+            setTuning(true)
+            try {
+              // The layout can hold the main thread. Let the browser draw the
+              // progress state before the layout starts.
+              await new Promise<void>(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)))
+              await onTuneLayout?.(tuneOptions)
+            } finally {
+              setTuning(false)
+              setTuneDialogOpen(false)
+            }
           }}
         />
       )}

@@ -2,7 +2,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Modal, Radio, Button, Stack, Group, Text, Divider, Alert, NumberInput } from '@mantine/core'
+import { Modal, Radio, Button, Stack, Group, Text, Divider, Alert, NumberInput, Checkbox, Loader } from '@mantine/core'
 import { IconInfoCircle, IconWand, IconAlertTriangle } from '@tabler/icons-react'
 import {
   DEFAULT_TUNE_OPTIONS,
@@ -10,6 +10,7 @@ import {
   type TuneLayoutOptions,
   type TuneScope,
   type PortLabelChoice,
+  type LayoutEngine,
 } from '@/lib/layout/tuneModelLayout'
 
 interface TuneLayoutDialogProps {
@@ -44,16 +45,37 @@ export default function TuneLayoutDialog({
     useState<PortLabelChoice>(DEFAULT_TUNE_OPTIONS.subsystemPortLabels)
   const [hideBlockNames, setHideBlockNames] = useState(DEFAULT_TUNE_OPTIONS.hideBlockNames)
   const [scope, setScope] = useState<TuneScope>(DEFAULT_TUNE_OPTIONS.scope)
+  const [engine, setEngine] = useState<LayoutEngine>(DEFAULT_TUNE_OPTIONS.engine ?? 'elk')
+  const [useSubsystemFunctions, setUseSubsystemFunctions] = useState(DEFAULT_TUNE_OPTIONS.useSubsystemFunctions ?? true)
+  const [mirrorReturnPath, setMirrorReturnPath] = useState(DEFAULT_TUNE_OPTIONS.mirrorReturnPath ?? true)
+  const [tidySignalLabels, setTidySignalLabels] = useState(DEFAULT_TUNE_OPTIONS.tidySignalLabels ?? false)
 
   const options: TuneLayoutOptions = {
     cleanUpLayout, resizeSubsystems, maxPortSpacing, subsystemPortLabels, hideBlockNames, scope,
+    // The engine applies only to the clean-up
+    engine: cleanUpLayout ? engine : 'classic',
+    useSubsystemFunctions,
+    mirrorReturnPath,
+    // The tidy needs the ELK clean-up
+    tidySignalLabels: cleanUpLayout && engine === 'elk' && tidySignalLabels,
   }
   const nothingSelected = isNoOp(options)
   const affected = sheetsInScope?.(scope) ?? 1
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Tune Model Layout" size="lg" centered>
-      <Stack gap="lg">
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title="Tune Model Layout"
+      size="lg"
+      centered
+      // The dialog stays open, and cannot be closed, until the tuning is complete
+      closeOnClickOutside={!tuning}
+      closeOnEscape={!tuning}
+      withCloseButton={!tuning}
+    >
+      {/* No option can change while the tuning runs */}
+      <Stack gap="lg" style={tuning ? { pointerEvents: 'none' } : undefined} aria-busy={tuning}>
         <Radio.Group
           label="Clean up block layout"
           value={asChoice(cleanUpLayout)}
@@ -64,6 +86,50 @@ export default function TuneLayoutDialog({
             <Radio value={NO} label="No, leave the layout as-is" />
           </Stack>
         </Radio.Group>
+
+        {cleanUpLayout && (
+          <Radio.Group
+            label="Layout engine"
+            value={engine}
+            onChange={v => setEngine(v as LayoutEngine)}
+          >
+            <Stack gap="xs" mt="xs">
+              <Radio
+                value="elk"
+                label="ELK Layered"
+                description="Routes wires around blocks. Puts Sheet Labels, constants and displays next to the block that they connect to."
+              />
+              <Radio value="classic" label="Classic" description="The layout engine of earlier releases. It does not route wires around blocks." />
+            </Stack>
+          </Radio.Group>
+        )}
+
+        {cleanUpLayout && engine === 'elk' && (
+          <Checkbox
+            label="Use subsystem functions for signal flow order"
+            description="Puts each control loop in the order controller, actuator, plant, from left to right. Sensors and compensators go on the return path. Uses the Subsystem Function of each subsystem, or the suggested function."
+            checked={useSubsystemFunctions}
+            onChange={e => setUseSubsystemFunctions(e.currentTarget.checked)}
+          />
+        )}
+
+        {cleanUpLayout && engine === 'elk' && useSubsystemFunctions && (
+          <Checkbox
+            label="Mirror feedback-path blocks"
+            description="Puts the return path of each control loop on a row below the forward path. Flips its blocks, so that the inputs are on the right and the outputs on the left. The layout sets or removes the flip on each block in scope."
+            checked={mirrorReturnPath}
+            onChange={e => setMirrorReturnPath(e.currentTarget.checked)}
+          />
+        )}
+
+        {cleanUpLayout && engine === 'elk' && (
+          <Checkbox
+            label="Tidy signal labels (changes the model)"
+            description="Replaces a long wire that crosses many other wires with a Sheet Label Sink and Source. Keeps an edit only when the sheet has fewer crossings. Keeps the drawn wires of the forward path and of the return row, and one wire between two connected subsystems. The simulation does not change. This can take some seconds for each large sheet."
+            checked={tidySignalLabels}
+            onChange={e => setTidySignalLabels(e.currentTarget.checked)}
+          />
+        )}
 
         <Radio.Group
           label="Resize Subsystems"
@@ -153,13 +219,23 @@ export default function TuneLayoutDialog({
         )}
 
         <Group justify="flex-end" gap="sm">
+          {tuning && (
+            <Group gap="xs" mr="auto" role="status" aria-live="polite">
+              <Loader size="xs" />
+              <Text size="sm" c="dimmed">
+                {options.tidySignalLabels
+                  ? 'Tuning the layout. This can take up to a minute.'
+                  : 'Tuning the layout. Wait until it is complete.'}
+              </Text>
+            </Group>
+          )}
           <Button variant="default" onClick={onClose} disabled={tuning}>
             Cancel
           </Button>
           <Button
             onClick={() => onTune(options)}
             loading={tuning}
-            disabled={nothingSelected}
+            disabled={nothingSelected && !tuning}
             leftSection={<IconWand size={16} />}
           >
             Tune Now

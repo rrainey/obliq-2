@@ -47,7 +47,7 @@ describe('routeWires', () => {
     x1: 100 + HANDLE_OUTSET, y1, x2: 300 - HANDLE_OUTSET, y2: 120 + 100 * i,
   }))
 
-  it('gives each net its own track instead of stacking turns at the midpoint', () => {
+  it('gives each net its own track instead of stacking turns at the midpoint', async () => {
     const wires = fan([50, 100, 150])
     const { turnX, tracksPerGap } = routeWires(columns, rects, wires)
     const xs = wires.map(w => turnX.get(w.id)!)
@@ -59,14 +59,14 @@ describe('routeWires', () => {
     for (const x of xs) expect(x > 100 && x < 300).toBe(true)
   })
 
-  it('orders tracks so parallel downward wires do not cross', () => {
+  it('orders tracks so parallel downward wires do not cross', async () => {
     const wires = fan([50, 100, 150])
     const { turnX } = routeWires(columns, rects, wires)
     expect(crossings(wires, turnX)).toBe(0)
     // With all turns at the shared midpoint they would overlap instead.
   })
 
-  it('lets wires of one net share a single track', () => {
+  it('lets wires of one net share a single track', async () => {
     const wires: RoutableWire[] = [0, 1, 2].map(i => ({
       id: `b${i}`, net: 'src:0', src: 'src', tgt: `t${i}`, srcCol: 0, tgtCol: 1,
       x1: 106, y1: 100, x2: 294, y2: 120 + 100 * i,
@@ -75,7 +75,7 @@ describe('routeWires', () => {
     expect(new Set(wires.map(w => turnX.get(w.id))).size).toBe(1)
   })
 
-  it('leaves straight, backward, and same-column wires alone', () => {
+  it('leaves straight, backward, and same-column wires alone', async () => {
     const wires: RoutableWire[] = [
       { id: 'straight', net: 'a', src: 'src', tgt: 't0', srcCol: 0, tgtCol: 1, x1: 106, y1: 120, x2: 294, y2: 120 },
       { id: 'back', net: 'b', src: 't0', tgt: 'src', srcCol: 1, tgtCol: 0, x1: 406, y1: 120, x2: -6, y2: 50 },
@@ -97,7 +97,7 @@ describe('computeAutoLayout routes', () => {
     block('o3', 'output_port'),
   ]
 
-  it('returns a route for every wire, offsets only where a wire turns', () => {
+  it('returns a route for every wire, offsets only where a wire turns', async () => {
     const blocks2 = [block('src', 'source'), block('g', 'scale'), block('out', 'output_port')]
     const wires = [wire('a', 'src', 0, 'g', 0), wire('b', 'g', 0, 'out', 0)]
     const r = computeAutoLayout(blocks2, wires)
@@ -106,19 +106,19 @@ describe('computeAutoLayout routes', () => {
     for (const x of r.routes) expect(x.midpointOffset).toBeUndefined()
   })
 
-  it('can be switched off', () => {
+  it('can be switched off', async () => {
     const blocks2 = [block('src', 'source'), block('g', 'scale')]
     expect(computeAutoLayout(blocks2, [wire('a', 'src', 0, 'g', 0)], { routeWires: false }).routes).toEqual([])
   })
 
-  it('does not route enable/reset wires (they attach top/bottom)', () => {
+  it('does not route enable/reset wires (they attach top/bottom)', async () => {
     const blocks2 = [block('src', 'source'), block('en', 'source', {}, 300), block('i', 'integrator')]
     const wires = [wire('a', 'src', 0, 'i', 0), wire('ctl', 'en', 0, 'i', -1)]
     const ctl = computeAutoLayout(blocks2, wires).routes.find(r => r.id === 'ctl')!
     expect(ctl.midpointOffset).toBeUndefined()
   })
 
-  it('widens a crowded gap so every track fits', () => {
+  it('widens a crowded gap so every track fits', async () => {
     // 12 outputs of one block, each to its own far Output Port with a vertical offset.
     const n = 12
     const bs = [block('big', 'subsystem', { inputPorts: [], outputPorts: Array.from({ length: n }, (_, i) => `o${i}`), sheets: [] })]
@@ -141,19 +141,19 @@ describe('tuneModelLayout writes wire routes', () => {
     id: 'main', name: 'Main', blocks, connections: wires, extents: { width: 1000, height: 800 },
   })
 
-  it('clears a stale hand-dragged turn when the wire no longer needs one', () => {
+  it('clears a stale hand-dragged turn when the wire no longer needs one', async () => {
     const blocks = [block('src', 'source'), block('g', 'scale'), block('out', 'output_port')]
     const wires = [wire('a', 'src', 0, 'g', 0, { midpointOffset: 120 }), wire('b', 'g', 0, 'out', 0)]
-    const { sheets, summary } = tuneModelLayout([sheet(wires, blocks)], 'main', DEFAULT_TUNE_OPTIONS)
+    const { sheets, summary } = await tuneModelLayout([sheet(wires, blocks)], 'main', DEFAULT_TUNE_OPTIONS)
     const a = sheets[0].connections.find(w => w.id === 'a')!
     expect(a.routing).toBeUndefined()
     expect(summary.wiresRouted).toBe(1)
   })
 
-  it('leaves wires untouched when the layout is not being cleaned up', () => {
+  it('leaves wires untouched when the layout is not being cleaned up', async () => {
     const blocks = [block('src', 'source'), block('g', 'scale')]
     const wires = [wire('a', 'src', 0, 'g', 0, { midpointOffset: 120 })]
-    const { sheets } = tuneModelLayout([sheet(wires, blocks)], 'main', {
+    const { sheets } = await tuneModelLayout([sheet(wires, blocks)], 'main', {
       ...DEFAULT_TUNE_OPTIONS, cleanUpLayout: false, hideBlockNames: true,
     })
     expect(sheets[0].connections[0].routing).toEqual({ midpointOffset: 120 })
@@ -176,7 +176,7 @@ describe('feedback wires', () => {
     ...[0, 1, 2, 3].map(i => wire(`f${i}`, 'sens', i, 'ctrl', i + 1)),
   ]
 
-  it('turn in front of their target, on staggered tracks, instead of crossing it from behind', () => {
+  it('turn in front of their target, on staggered tracks, instead of crossing it from behind', async () => {
     const { moves, routes } = computeAutoLayout(blocks, wires)
     const at = (id: string) => moves.find(m => m.id === id)!.position
     const ctrlLeft = at('ctrl').x

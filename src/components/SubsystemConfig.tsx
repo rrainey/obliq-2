@@ -1,10 +1,13 @@
 // components/SubsystemConfig.tsx
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Modal, TextInput, Select, Button, Stack, Group, Alert, Text, Table, ActionIcon, Checkbox, Divider, Collapse, Paper } from '@mantine/core'
 import { IconInfoCircle, IconPlus, IconPencil, IconTrash, IconExternalLink, IconCheck, IconX, IconChevronDown } from '@tabler/icons-react'
 import { BlockData } from './BlockNode'
+import type { WireData } from './Wire'
+import SubsystemFunctionSelect from './SubsystemFunctionSelect'
+import { isSubsystemFunction, modelBlockLookup, type SubsystemFunction } from '@/lib/layout/subsystemRole'
 import { Sheet } from '@/lib/modelStore'
 import { ModelParameter } from '@/lib/modelSchema'
 import { isValidType, getTypeValidationError } from '@/lib/typeValidator'
@@ -14,12 +17,15 @@ import {
   isSubsystemReference,
   resolveSubsystemDefinition
 } from '@/lib/subsystemReference'
+import { withPreviousParameters } from '@/lib/blocks/dialogParameters'
 
 interface SubsystemConfigProps {
   block: BlockData
   availableSheets?: Sheet[]
   /** All blocks on the active sheet (for resolving reference definitions). */
   allBlocks?: BlockData[]
+  /** All wires on the active sheet (for the suggested subsystem function). */
+  allWires?: WireData[]
   onUpdate: (parameters: Record<string, any>) => void
   onRename?: (newName: string) => void
   onClose: () => void
@@ -48,6 +54,7 @@ export default function SubsystemConfig({
   block,
   availableSheets = [],
   allBlocks = [],
+  allWires = [],
   onUpdate,
   onRename,
   onClose,
@@ -77,6 +84,14 @@ export default function SubsystemConfig({
   const [paramFormData, setParamFormData] = useState<ParameterFormData>({ name: '', dataType: 'double', defaultValue: '0' })
   const [paramFormError, setParamFormError] = useState<string | null>(null)
   const [showParameters, setShowParameters] = useState(isReference)
+  const [subsystemFunction, setSubsystemFunction] = useState<SubsystemFunction | null>(
+    isSubsystemFunction(block.parameters?.subsystemFunction) ? block.parameters!.subsystemFunction : null
+  )
+  // Definitions of subsystem references: on this sheet first, then on the other sheets
+  const lookupDefinition = useMemo(() => {
+    const others = modelBlockLookup(availableSheets)
+    return (id: string) => allBlocks.find(b => b.id === id) ?? others(id)
+  }, [allBlocks, availableSheets])
 
   const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -115,7 +130,8 @@ export default function SubsystemConfig({
         outputPorts: block.parameters?.outputPorts || outputPorts,
         showEnableInput: block.parameters?.showEnableInput || false,
         showPortNames,
-        parameters
+        parameters,
+        subsystemFunction: subsystemFunction ?? undefined,
       })
       if (blockName !== block.name && onRename) onRename(blockName)
       onClose()
@@ -274,7 +290,10 @@ export default function SubsystemConfig({
       }
     }
 
-    const blockParams = {
+    // Merge into the existing parameters: a rebuilt object would drop the
+    // parameters that this dialog does not show (the size of a resized block,
+    // showName, flipped, sampleTimeSec)
+    const blockParams = withPreviousParameters(block.parameters, {
       sheets: updatedSheets,
       inputPorts: cleanedInputs,
       outputPorts: cleanedOutputs,
@@ -282,8 +301,9 @@ export default function SubsystemConfig({
       showPortNames,
       codeGenStrategy,
       parameters: (codeGenStrategy === 'segregated' || codeGenStrategy === 'segregated_atomic') ? parameters : [],
-      isReference: false
-    }
+      isReference: false,
+      subsystemFunction: subsystemFunction ?? undefined,
+    })
     onUpdate(blockParams)
 
     // Keep reference instance parameter lists aligned with this definition's schema
@@ -641,6 +661,15 @@ export default function SubsystemConfig({
           description="Displays the names of connected Input/Output Port blocks next to each port"
           checked={showPortNames}
           onChange={(e) => setShowPortNames(e.currentTarget.checked)}
+        />
+
+        <SubsystemFunctionSelect
+          block={block}
+          sheetBlocks={allBlocks}
+          sheetWires={allWires}
+          lookup={lookupDefinition}
+          value={subsystemFunction}
+          onChange={setSubsystemFunction}
         />
 
         {/* Subsystem Parameters */}

@@ -965,6 +965,16 @@ const blockTypeSchemas: BlockTypeInfo[] = [
         description: 'Display port names next to each port on the subsystem block',
         default: false
       },
+      subsystemFunction: {
+        type: 'string',
+        description: 'Function of the subsystem in a control loop. Only the diagram layout uses it (left to right: controller, actuator, plant; sensors and compensators on the return path). No effect on simulation or code generation. Omit it, or send null, for "not set".',
+        enum: ['controller', 'actuator', 'plant', 'sensor', 'compensator', 'other']
+      },
+      flipped: {
+        type: 'boolean',
+        description: 'Draw the block mirrored: inputs on the right, outputs on the left. Only the diagram uses it (the layout sets it on the return row of a control loop). No effect on simulation or code generation. Every block type except comments can have it.',
+        default: false
+      },
       parameters: {
         type: 'array',
         description: 'Subsystem-scoped parameters (only valid for segregated or segregated_atomic codeGenStrategy). Each parameter becomes a #define in generated code. Array of objects with name, signalType, and value.',

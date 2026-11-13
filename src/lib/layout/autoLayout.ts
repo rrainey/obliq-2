@@ -42,7 +42,9 @@ import {
   getIntrinsicBlockHeight,
   portOffsetY,
   portFraction,
+  isFlipped,
 } from './blockGeometry'
+import type { SubsystemFunction } from './subsystemRole'
 
 export interface AutoLayoutOptions {
   columnSpacing?: number   // horizontal gap between columns (px)
@@ -100,6 +102,19 @@ export interface LayoutResize {
 export interface WireRoute {
   id: string
   midpointOffset: number | undefined
+  /**
+   * Bend points of an orthogonal route, as the editor's `routing.waypoints`
+   * (absolute, end points excluded: the first is at the source port's y, the
+   * last at the target port's y). Only the ELK engine (elkLayout.ts) sets it.
+   * When it is present, `midpointOffset` is ignored.
+   */
+  waypoints?: Array<{ x: number; y: number }>
+}
+
+/** A block whose `flipped` flag the layout sets (the ELK return row, returnRow.ts). */
+export interface LayoutFlip {
+  id: string
+  flipped: boolean
 }
 
 export interface AutoLayoutResult {
@@ -108,6 +123,19 @@ export interface AutoLayoutResult {
   resizes: LayoutResize[]
   /** Empty unless `routeWires` is enabled (the default). */
   routes: WireRoute[]
+  /**
+   * ELK engine only: the blocks on the return path of the loops that have
+   * subsystem functions (`signalFlowAnalysis()`), in block-list order. The
+   * layout places them as ordinary blocks, or, with `mirrorReturnPath`, on a
+   * mirrored row below the forward path (returnRow.ts).
+   */
+  returnPath?: string[]
+  /**
+   * ELK engine with `mirrorReturnPath` only: the blocks whose `flipped` flag
+   * changes. The layout then owns the flag of every block it lays out:
+   * return-path blocks (and their satellites) are flipped, all others not.
+   */
+  flips?: LayoutFlip[]
 }
 
 // --- Block classification -------------------------------------------------
@@ -146,11 +174,12 @@ const ANNOTATION_TYPES = new Set<string>(['comment'])
 
 function isSource(type: string) { return SOURCE_TYPES.has(type) }
 function isSink(type: string) { return SINK_TYPES.has(type) }
-function isAnnotation(type: string) { return ANNOTATION_TYPES.has(type) }
+export function isAnnotation(type: string) { return ANNOTATION_TYPES.has(type) }
 
 // --- Geometry -------------------------------------------------------------
 
-interface Metrics {
+/** Size and port counts of a block, as the canvas draws it. Shared with elkLayout.ts. */
+export interface Metrics {
   width: number
   height: number
   inputs: number       // effective input port count
@@ -158,9 +187,11 @@ interface Metrics {
   minHeight: number    // natural height; a resize may not go below this
   naturalWidth: number // width without a stored resize; a resize starts here
   resizable: boolean
+  /** Drawn mirrored: inputs on the right, outputs on the left (blockGeometry.isFlipped). */
+  flipped: boolean
 }
 
-function measure(block: BlockData): Metrics {
+export function measure(block: BlockData): Metrics {
   const counts = PortCountAdapter.getPortCounts(block)
   // Mirror BlockNode: an Output Port block reports an output it does not draw.
   const outputs = block.type === 'output_port' ? 0 : counts.outputCount
@@ -173,6 +204,7 @@ function measure(block: BlockData): Metrics {
     minHeight: getIntrinsicBlockHeight(block, inputs, outputs),
     naturalWidth: getBlockWidth({ ...block, parameters: { ...block.parameters, width: undefined, height: undefined } }),
     resizable: isResizable(block.type),
+    flipped: isFlipped(block),
   }
 }
 
@@ -253,7 +285,8 @@ function stronglyConnectedComponents(nodes: string[], adjOut: Map<string, Set<st
 function buildGraph(
   blocks: BlockData[],
   wires: WireData[],
-): { graph: Graph; laidOut: BlockData[] } {
+  roles?: ReadonlyMap<string, SubsystemFunction>,
+): { graph: Graph; laidOut: BlockData[]; flowPosition: Map<string, number>; returnPath: Set<string>; feedbackWires: Set<string> } {
   const laidOut = blocks.filter(b => !isAnnotation(b.type))
   const nodes = laidOut.map(b => b.id)
   const nodeSet = new Set(nodes)
@@ -299,6 +332,8 @@ function buildGraph(
   // guarantee. Ties, and blocks no source reaches, follow sources-first
   // model order, so the result is deterministic.
   const backEdges = new Set<string>() // key: "src->tgt"
+  let flowPosition = new Map<string, number>()
+  let returnPath = new Set<string>()
   {
     const preference = [
       ...nodes.filter(id => isSource(typeOf.get(id)!)),
@@ -333,10 +368,24 @@ function buildGraph(
     // Only an edge inside a loop can be backward: one between strongly
     // connected components never closes a cycle, however the distances fall
     // (a From feeding a block directly makes that block "near" the sources)
+    flowPosition = position
     const component = stronglyConnectedComponents(nodes, adjOut)
+    // With subsystem functions (the ELK engine only): in a loop with two or
+    // more functions, the stage of each block on the loop comes first (see
+    // roleStages), then the breadth-first position. Other loops, and the
+    // classic engine, use the position only.
+    const stages = roles && roles.size > 0
+      ? roleStages(nodes, adjOut, component, roles, typeOf)
+      : { stage: new Map<string, number>(), returnPath: new Set<string>() }
+    returnPath = stages.returnPath
+    const later = (u: string, v: string) => {
+      const su = stages.stage.get(u), sv = stages.stage.get(v)
+      if (su !== undefined && sv !== undefined && su !== sv) return su > sv
+      return position.get(u)! > position.get(v)!
+    }
     for (const [u, outs] of adjOut) {
       for (const v of outs) {
-        if (component.get(u) === component.get(v) && position.get(u)! > position.get(v)!) {
+        if (component.get(u) === component.get(v) && later(u, v)) {
           backEdges.add(`${u}->${v}`)
         }
       }
@@ -357,7 +406,187 @@ function buildGraph(
     }
   }
 
-  return { graph: { nodes, edges, outEdges, inEdges, fwdOut, fwdIn }, laidOut }
+  const feedbackWires = new Set(edges.filter(e => backEdges.has(`${e.u}->${e.v}`)).map(e => e.wireId))
+  return { graph: { nodes, edges, outEdges, inEdges, fwdOut, fwdIn }, laidOut, flowPosition, returnPath, feedbackWires }
+}
+
+/**
+ * The stage of each subsystem function on the forward path: controller,
+ * actuator, plant. `sensor` and `compensator` are on the return path, after
+ * the plant. `other` has no stage.
+ */
+export const ROLE_STAGE: Partial<Record<SubsystemFunction, number>> = {
+  controller: 1,
+  actuator: 2,
+  plant: 3,
+  sensor: 4,
+  compensator: 4,
+}
+const PLANT_STAGE = 3
+
+/**
+ * Stages of the blocks of each loop (strongly connected component) that has
+ * subsystems of two or more stages. A block with a function has the stage of
+ * its function. Another block ("plain") gets a stage from the nearest blocks
+ * with a function before it (`up`, through plain blocks only) and after it
+ * (`down`):
+ *   - When a stage after it is larger than the largest stage before it, the
+ *     block is on the forward path between the two: the mean of the two.
+ *   - Otherwise its path goes back from a later stage to an earlier one. When
+ *     it comes from a plant, a sensor or a compensator, it is on the return
+ *     path (just after the stage before it), unless it is a `sum` block or
+ *     after one: a summing junction belongs to the controller side (just
+ *     before the stage after it).
+ *   - Otherwise (such as a side loop of an actuator) it is just after the
+ *     stage before it.
+ * The return path is the sensors and compensators of these loops, and the
+ * plain blocks of the second case.
+ */
+function roleStages(
+  nodes: string[],
+  adjOut: Map<string, Set<string>>,
+  component: Map<string, number>,
+  roles: ReadonlyMap<string, SubsystemFunction>,
+  typeOf: Map<string, string>,
+): { stage: Map<string, number>; returnPath: Set<string> } {
+  const stage = new Map<string, number>()
+  const returnPath = new Set<string>()
+  const rankOf = (id: string) => { const r = roles.get(id); return r ? ROLE_STAGE[r] : undefined }
+  const adjIn = new Map<string, string[]>(nodes.map(id => [id, []]))
+  for (const [u, outs] of adjOut) for (const v of outs) adjIn.get(v)!.push(u)
+
+  const members = new Map<number, string[]>()
+  for (const id of nodes) {
+    const c = component.get(id)!
+    if (!members.has(c)) members.set(c, [])
+    members.get(c)!.push(id)
+  }
+  for (const list of members.values()) {
+    const ranks = new Set(list.map(rankOf).filter((r): r is number => r !== undefined))
+    if (ranks.size < 2) continue
+    const inLoop = new Set(list)
+    const plain = (id: string) => rankOf(id) === undefined
+    // Stages of the nearest blocks with a function, before and after each plain block
+    const reach = (next: (id: string) => Iterable<string>) => {
+      const found = new Map<string, Set<number>>()
+      for (const r of list) {
+        if (plain(r)) continue
+        const seen = new Set<string>()
+        const queue = [r]
+        while (queue.length) {
+          const u = queue.shift()!
+          for (const v of next(u)) {
+            if (!inLoop.has(v) || !plain(v) || seen.has(v)) continue
+            seen.add(v)
+            if (!found.has(v)) found.set(v, new Set())
+            found.get(v)!.add(rankOf(r)!)
+            queue.push(v)
+          }
+        }
+      }
+      return found
+    }
+    const up = reach(id => adjOut.get(id)!)
+    const down = reach(id => adjIn.get(id)!)
+    const wraps = (id: string) => {
+      const a = Math.max(...(up.get(id) ?? [0]))
+      return ![...(down.get(id) ?? [])].some(d => d > a) && a >= PLANT_STAGE
+    }
+    // Summing junctions on the way back, and the plain blocks after them
+    const controllerSide = new Set<string>()
+    const queue = list.filter(id => plain(id) && typeOf.get(id) === 'sum' && wraps(id))
+    for (const id of queue) controllerSide.add(id)
+    while (queue.length) {
+      const u = queue.shift()!
+      for (const v of adjOut.get(u)!) {
+        if (!inLoop.has(v) || !plain(v) || controllerSide.has(v) || !wraps(v)) continue
+        controllerSide.add(v)
+        queue.push(v)
+      }
+    }
+    for (const id of list) {
+      const r = rankOf(id)
+      if (r !== undefined) {
+        stage.set(id, r)
+        if (r > PLANT_STAGE) returnPath.add(id)
+        continue
+      }
+      const before = [...(up.get(id) ?? [])]
+      const after = [...(down.get(id) ?? [])]
+      const a = before.length ? Math.max(...before) : 0
+      const forward = after.filter(d => d > a)
+      if (forward.length) {
+        stage.set(id, (a + Math.min(...forward)) / 2)
+      } else if (a >= PLANT_STAGE && controllerSide.has(id)) {
+        stage.set(id, (after.length ? Math.min(...after) : 1) - 0.5)
+      } else {
+        stage.set(id, a + 0.5)
+        if (a >= PLANT_STAGE) returnPath.add(id)
+      }
+    }
+  }
+  return { stage, returnPath }
+}
+
+/** The result of `signalFlowAnalysis()`. */
+export interface SignalFlow {
+  /** The blocks (comments excluded) in signal-flow order. */
+  order: string[]
+  /** The wires that close a loop, from a later block in `order` to an earlier one. */
+  feedbackWires: Set<string>
+  /**
+   * The blocks on the return path of a loop: sensors and compensators, and
+   * the blocks from a plant back to the controller side. Empty without
+   * subsystem functions.
+   */
+  returnPath: Set<string>
+}
+
+/**
+ * The blocks (comments excluded) in signal-flow order: a topological order of
+ * the graph without the feedback edges that `buildGraph` selects, with ties
+ * in breadth-first order from the sources. Every wire that is not a feedback
+ * wire goes from an earlier block to a later one. The order depends only on
+ * the wiring, the block list and `roles`, not on block positions. The ELK
+ * engine (elkLayout.ts) uses it as the model order.
+ *
+ * `roles` (the effective subsystem functions, subsystemRole.ts) changes the
+ * feedback edges of the loops that have subsystems of two or more stages
+ * (see roleStages): the forward path reads controller, actuator, plant, and
+ * the wires from the return path into the controller side are the feedback
+ * wires. Without `roles`, or on a sheet without such a loop, the result is
+ * the same as without roles.
+ */
+export function signalFlowAnalysis(
+  blocks: BlockData[],
+  wires: WireData[],
+  roles?: ReadonlyMap<string, SubsystemFunction>,
+): SignalFlow {
+  const { graph, flowPosition, returnPath, feedbackWires } = buildGraph(blocks, wires, roles)
+  const indeg = new Map(graph.nodes.map(id => [id, graph.fwdIn.get(id)!.size]))
+  const byPosition = (a: string, b: string) => flowPosition.get(a)! - flowPosition.get(b)!
+  const ready = graph.nodes.filter(id => indeg.get(id) === 0).sort(byPosition)
+  const order: string[] = []
+  while (ready.length) {
+    const u = ready.shift()!
+    order.push(u)
+    let added = false
+    for (const v of graph.fwdOut.get(u)!) {
+      indeg.set(v, indeg.get(v)! - 1)
+      if (indeg.get(v) === 0) { ready.push(v); added = true }
+    }
+    if (added) ready.sort(byPosition)
+  }
+  return { order, feedbackWires, returnPath }
+}
+
+/** The signal-flow order of `signalFlowAnalysis()`. */
+export function signalFlowOrder(
+  blocks: BlockData[],
+  wires: WireData[],
+  roles?: ReadonlyMap<string, SubsystemFunction>,
+): string[] {
+  return signalFlowAnalysis(blocks, wires, roles).order
 }
 
 // --- Ranking (column assignment) -----------------------------------------
@@ -961,23 +1190,28 @@ function routeLaidOutWires(
 
   const wires: RoutableWire[] = []
   const defaultMid = new Map<string, number>()
+  // A wire to or from a flipped block has no turn offset: this engine places
+  // blocks for the usual port sides, and the editor's default path joins
+  // the flipped ports correctly (defaultWirePath() in blockGeometry.ts).
+  const unrouted = new Set<string>()
   for (const e of graph.edges) {
     const a = rects.get(e.u)!, b = rects.get(e.v)!
     const mu = metrics.get(e.u)!, mv = metrics.get(e.v)!
+    if (mu.flipped || mv.flipped) unrouted.add(e.wireId)
     const w: RoutableWire = {
       id: e.wireId,
       net: `${e.u}:${e.uPort}`,
       src: e.u,
       tgt: e.v,
       srcCol: colIndex.get(e.u)!,
-      // Control wires are excluded by giving them no forward span.
-      tgtCol: e.control ? colIndex.get(e.u)! : colIndex.get(e.v)!,
+      // Control wires (and wires of flipped blocks) are excluded by giving them no forward span.
+      tgtCol: e.control || unrouted.has(e.wireId) ? colIndex.get(e.u)! : colIndex.get(e.v)!,
       x1: a.x + a.w + HANDLE_OUTSET,
       y1: a.y + portOffsetY(e.uPort, mu.outputs, a.h),
       x2: b.x - HANDLE_OUTSET,
       y2: b.y + portOffsetY(e.vPort, mv.inputs, b.h),
       // Runs right to left: turn in front of the target, not behind it
-      feedback: !e.control && colIndex.get(e.v)! <= colIndex.get(e.u)!,
+      feedback: !e.control && !unrouted.has(e.wireId) && colIndex.get(e.v)! <= colIndex.get(e.u)!,
     }
     wires.push(w)
     defaultMid.set(w.id, (w.x1 + w.x2) / 2)
@@ -985,7 +1219,7 @@ function routeLaidOutWires(
 
   const { turnX, tracksPerGap } = routeWires(routingColumns, rects, wires, { trackSpacing: opts.trackSpacing })
   const routes = wires.map(w => {
-    const turn = turnX.get(w.id)
+    const turn = unrouted.has(w.id) ? undefined : turnX.get(w.id)
     return {
       id: w.id,
       midpointOffset: turn === undefined ? undefined : Math.round((turn - defaultMid.get(w.id)!) * 2) / 2,

@@ -21,7 +21,7 @@ import * as path from 'path'
 import type { BlockData } from '@/components/BlockNode'
 import type { WireData } from '@/components/Wire'
 import type { Sheet } from '@/lib/simulationTypes'
-import { tuneModelLayout, DEFAULT_TUNE_OPTIONS } from '@/lib/layout/tuneModelLayout'
+import { tuneModelLayoutSync, tuneModelLayout as tuneModelLayoutElk, DEFAULT_TUNE_OPTIONS } from '@/lib/layout/tuneModelLayout'
 import { ussa1976, USSA1976 } from '@/lib/atmosphere/ussa1976'
 import { loadWmm2025, wmmField } from './lib/wmm'
 import { modelInterface } from '@/lib/modelReferences'
@@ -3930,7 +3930,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     !!fc && !opts.vehicleOnly && opts.sticks === undefined && !opts.initialAltitude && !opts.initialEuler && !opts.initialOmega
   let sheets: Sheet[] = [main.sheet(), telemetry.sheet()]
   if (isDefaultDemo) sheets.push(buildTestsSheet().sheet())
-  sheets = tuneModelLayout(sheets as any, null, {
+  sheets = tuneModelLayoutSync(sheets as any, null, {
     ...DEFAULT_TUNE_OPTIONS,
     cleanUpLayout: true,
     resizeSubsystems: false,
@@ -4062,7 +4062,7 @@ export function buildFpvTestModel(spec: FpvTestSpec): { name: string; data: Reco
   if (missing.length) throw new Error(`${spec.name}: the vehicle has no output ${missing.join(', ')}`)
 
   let sheets: Sheet[] = [main.sheet(), telemetry.sheet(), tests.sheet()]
-  sheets = tuneModelLayout(sheets as any, null, {
+  sheets = tuneModelLayoutSync(sheets as any, null, {
     ...DEFAULT_TUNE_OPTIONS,
     cleanUpLayout: true,
     resizeSubsystems: false,
@@ -4191,13 +4191,39 @@ export function buildFpvAcroRateStepModel() {
   })
 }
 
-/** The FPV files shipped in reference-models/: [file name, model]. */
-export function SHIPPED_FPV_MODELS(): Array<[string, { name: string; data: Record<string, unknown> }]> {
-  return [
+/**
+ * The FPV files shipped in reference-models/: [file name, model]. Each model
+ * gets the default layout of the editor (ELK Layered, subsystem functions,
+ * mirrored return row, minimum subsystem height; not Resize Subsystems and
+ * not Tidy signal labels), so that the shipped files look as the editor lays
+ * them out. ELK is asynchronous, so this is a final pass over the built
+ * models. The builders themselves stay synchronous with the classic engine
+ * (tuneModelLayoutSync), because the tests build many variants and do not
+ * read their layout. The ELK layout does not read the stored positions.
+ * TEST_FPV_MODELS() gives the files in test-models/fpv/ the same pass.
+ */
+export async function SHIPPED_FPV_MODELS(): Promise<Array<[string, { name: string; data: Record<string, unknown> }]>> {
+  const models: Array<[string, { name: string; data: Record<string, unknown> }]> = [
     ['fpv-vehicle.json', buildFpvModel({ vehicleOnly: true })],
     ['fpv-demo-flight.json', buildFpvDemoFlightModel()],
     ['fpv-acro-rate-step.json', buildFpvAcroRateStepModel()],
   ]
+  for (const [, model] of models) await layOutShipped(model)
+  return models
+}
+
+/** Lay out a built model again with the editor's default layout (ELK), in place. Used for reference-models/ and test-models/fpv/. */
+async function layOutShipped(model: { name: string; data: Record<string, unknown> }): Promise<void> {
+  const result = await tuneModelLayoutElk(model.data.sheets as any, null, {
+    ...DEFAULT_TUNE_OPTIONS,
+    cleanUpLayout: true,
+    resizeSubsystems: false,
+    tidySignalLabels: false,
+    scope: 'model',
+  })
+  const sheets = result.sheets as unknown as Sheet[]
+  fitExtents(sheets)
+  model.data.sheets = sheets
 }
 
 /**
@@ -4253,7 +4279,7 @@ export function buildFpvHelpersTestModel(): { name: string; data: Record<string,
   check('MeanWhileGated', h.meanWhile('SineMeanPositive', sine, positive), 2 / Math.PI - 0.001, 2 / Math.PI + 0.001, 4.01)
 
   let sheets: Sheet[] = [s.sheet()]
-  sheets = tuneModelLayout(sheets as any, null, { ...DEFAULT_TUNE_OPTIONS, cleanUpLayout: true, resizeSubsystems: false, scope: 'model' }).sheets as unknown as Sheet[]
+  sheets = tuneModelLayoutSync(sheets as any, null, { ...DEFAULT_TUNE_OPTIONS, cleanUpLayout: true, resizeSubsystems: false, scope: 'model' }).sheets as unknown as Sheet[]
   fitExtents(sheets)
   return {
     name: 'FPV T00 Test Helpers',
@@ -5565,8 +5591,17 @@ const renamed = (model: { name: string; data: Record<string, unknown> }, name: s
  * The validation suite written to test-models/fpv/ (docs/fpv-hud-gnss-test-plan.md):
  * its own copy of the vehicle, so the folder runs on its own with
  * `npm run obliq:test -- test-models/fpv/*.json`, and the Tnn test models.
+ * Each model gets the same final layout pass as the shipped models
+ * (layOutShipped(), ELK), so the files look as the editor lays them out.
  */
-export function TEST_FPV_MODELS(): Array<[string, { name: string; data: Record<string, unknown> }]> {
+export async function TEST_FPV_MODELS(): Promise<Array<[string, { name: string; data: Record<string, unknown> }]>> {
+  const models = builtTestFpvModels()
+  for (const [, model] of models) await layOutShipped(model)
+  return models
+}
+
+/** The models of TEST_FPV_MODELS() as the builders make them (classic layout). */
+function builtTestFpvModels(): Array<[string, { name: string; data: Record<string, unknown> }]> {
   return [
     ['fpv-vehicle.json', buildFpvModel({ vehicleOnly: true })],
     ['fpv-vehicle-no-mag.json', buildFpvNoMagVehicle()],
@@ -5706,7 +5741,12 @@ if (require.main === module) {
       console.log(`Wrote ${path.join(dir, file)}`)
     }
   }
-  write(process.argv[2] || path.join(__dirname, '..', 'reference-models'), SHIPPED_FPV_MODELS())
-  write(process.argv[3] || path.join(__dirname, '..', 'test-models', 'fpv'), TEST_FPV_MODELS())
-  console.log(`(hover command ${HOVER_COMMAND.toFixed(4)}, omega_max ${OMEGA_MAX.toFixed(1)} rad/s)`)
+  ;(async () => {
+    write(process.argv[2] || path.join(__dirname, '..', 'reference-models'), await SHIPPED_FPV_MODELS())
+    write(process.argv[3] || path.join(__dirname, '..', 'test-models', 'fpv'), await TEST_FPV_MODELS())
+    console.log(`(hover command ${HOVER_COMMAND.toFixed(4)}, omega_max ${OMEGA_MAX.toFixed(1)} rad/s)`)
+  })().catch(e => {
+    console.error(e)
+    process.exit(1)
+  })
 }

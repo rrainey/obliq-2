@@ -746,3 +746,69 @@ describe('lookup-table plots', () => {
     expect(lookup2.length).toBeGreaterThan(lookup1.length)
   })
 })
+
+describe('wire hops and junction dots', () => {
+  // s1 feeds g1 (straight) and g2 (a step down): a T junction at the turn.
+  // s2 to g3 climbs across both wires of s1, so each gets a hop.
+  const hopSheet = () => ({
+    id: 'main', name: 'Main',
+    blocks: [
+      block('s1', 'source', { value: 1 }, 0, 0),
+      block('g1', 'scale', { gain: 2 }, 300, 0),
+      block('g2', 'scale', { gain: 2 }, 300, 200),
+      block('s2', 'source', { value: 1 }, -60, 400),
+      block('g3', 'scale', { gain: 2 }, 400, -150),
+    ],
+    connections: [
+      wire('w1', 's1', 0, 'g1', 0),
+      wire('w2', 's1', 0, 'g2', 0),
+      wire('w3', 's2', 0, 'g3', 0),
+    ],
+  })
+
+  const render = async (sheet: any) => {
+    const { PDFPage } = await import('pdf-lib')
+    const circles = jest.spyOn(PDFPage.prototype, 'drawCircle')
+    const paths = jest.spyOn(PDFPage.prototype, 'drawSvgPath')
+    try {
+      const bytes = await renderModelToPdf(buildFullPlan([sheet]), opts(), ctx)
+      return {
+        bytes,
+        circles: circles.mock.calls.length,
+        // Wire lines are stroked paths of straight pieces; a hop adds many pieces
+        hopLines: paths.mock.calls.filter(([d]) => (String(d).match(/L/g) ?? []).length > 10).length,
+      }
+    } finally {
+      circles.mockRestore()
+      paths.mockRestore()
+    }
+  }
+
+  test('draws one dot at the junction and a hop on each crossed wire', async () => {
+    const r = await render(hopSheet())
+    expect(r.circles).toBe(1)
+    expect(r.hopLines).toBe(2)
+    expect((await PDFDocument.load(r.bytes)).getPageCount()).toBe(1)
+  })
+
+  test('a sheet without crossings or branches has no hops and no dots', async () => {
+    const r = await render(simpleSheet())
+    expect(r.circles).toBe(0)
+    expect(r.hopLines).toBe(0)
+  })
+
+  test('a vector wire hop is drawn on each of its lines', async () => {
+    const r0 = await render(hopSheet())
+    const { PDFPage } = await import('pdf-lib')
+    const paths = jest.spyOn(PDFPage.prototype, 'drawSvgPath')
+    try {
+      await renderModelToPdf(buildFullPlan([hopSheet()]), opts(), {
+        ...ctx, signalTypes: new Map([['w1', { type: 'double[3]' }], ['w2', { type: 'double[3]' }]]) as any,
+      })
+      const hopLines = paths.mock.calls.filter(([d]) => (String(d).match(/L/g) ?? []).length > 10).length
+      expect(hopLines).toBe(2 * r0.hopLines)
+    } finally {
+      paths.mockRestore()
+    }
+  })
+})

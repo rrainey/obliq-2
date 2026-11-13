@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { repairWiresAfterBlockChange } from '@/lib/layout/waypointRepair'
 import { subscribeWithSelector } from 'zustand/middleware'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
@@ -168,6 +169,18 @@ export interface ModelActions {
   addWire: (wire: WireData) => void
   deleteWire: (wireId: string) => void
   updateWireRouting: (wireId: string, routing: WireData['routing']) => void
+  /**
+   * After a block move or resize: repair or clear the waypoints of the wires
+   * of the blocks that changed since `blocksBefore` (waypointRepair.ts).
+   */
+  repairWireRoutingAfterBlockChange: (blocksBefore: BlockData[]) => void
+  /**
+   * Flip (mirror) or unflip blocks: set `parameters.flipped`. A flipped block
+   * has its inputs on the right and its outputs on the left. The waypoints
+   * and turn offsets of the affected wires are repaired or removed
+   * (waypointRepair.ts).
+   */
+  setBlocksFlipped: (blockIds: string[], flipped: boolean) => void
   // Feature 7: Block rename
   renameBlock: (blockId: string, newName: string) => { success: boolean; error?: string }
   validateBlockName: (name: string, excludeBlockId?: string) => { valid: boolean; error?: string }
@@ -806,6 +819,28 @@ export const useModelStore = create<ModelStore>()(
       ),
       isDirty: true
     })),
+
+    repairWireRoutingAfterBlockChange: (blocksBefore) => set((state) => {
+      const wires = repairWiresAfterBlockChange(state.wires, blocksBefore, state.blocks)
+      return wires === state.wires ? {} : { wires, isDirty: true }
+    }),
+
+    setBlocksFlipped: (blockIds, flipped) => set((state) => {
+      const ids = new Set(blockIds)
+      let changed = false
+      const blocks = state.blocks.map(block => {
+        if (!ids.has(block.id) || block.type === 'comment') return block
+        if ((block.parameters?.flipped === true) === flipped) return block
+        changed = true
+        // Merge, so the flag cannot drop a subsystem's sheets or other parameters.
+        // Unflip removes the key: a block without it is not flipped.
+        const { flipped: _old, ...rest } = block.parameters || {}
+        return { ...block, parameters: flipped ? { ...rest, flipped: true } : rest }
+      })
+      if (!changed) return {}
+      const wires = repairWiresAfterBlockChange(state.wires, state.blocks, blocks)
+      return { blocks, wires, isDirty: true }
+    }),
 
     // Feature 7: Block name validation
     validateBlockName: (name: string, excludeBlockId?: string) => {

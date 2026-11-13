@@ -2,6 +2,7 @@
 
 import { BlockType, BlockTypes, getBlockType } from './blockTypeRegistry';
 import { isValidType, getTypeValidationError } from './typeValidator';
+import { isSubsystemFunction, SUBSYSTEM_FUNCTIONS } from './layout/subsystemRole';
 
 export interface ValidationResult {
   valid: boolean;
@@ -531,6 +532,18 @@ export function validateBlockParameters(
           errors.push('showPortNames must be a boolean');
         } else {
           sanitized.showPortNames = parameters.showPortNames;
+        }
+      }
+
+      // Validate subsystemFunction (optional): the function in a control loop,
+      // for the layout only (subsystemRole.ts). null or '' clears it.
+      if (parameters.subsystemFunction !== undefined) {
+        if (parameters.subsystemFunction === null || parameters.subsystemFunction === '') {
+          sanitized.subsystemFunction = undefined;
+        } else if (!isSubsystemFunction(parameters.subsystemFunction)) {
+          errors.push(`subsystemFunction must be one of: ${SUBSYSTEM_FUNCTIONS.join(', ')}`);
+        } else {
+          sanitized.subsystemFunction = parameters.subsystemFunction;
         }
       }
 
@@ -1108,6 +1121,21 @@ export function validateBlockParameters(
       errors.push(`No validation rules defined for block type: ${blockType}`);
   }
   
+  // `flipped` (optional, every block type except comments): drawn mirrored,
+  // inputs on the right and outputs on the left. Diagram only: no effect on
+  // simulation or code generation. null clears it.
+  if (parameters.flipped !== undefined) {
+    if (parameters.flipped === null) {
+      sanitized.flipped = undefined;
+    } else if (typeof parameters.flipped !== 'boolean') {
+      errors.push('flipped must be a boolean');
+    } else if (blockType === BlockTypes.COMMENT) {
+      errors.push('flipped is not available on comment blocks');
+    } else {
+      sanitized.flipped = parameters.flipped;
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors,

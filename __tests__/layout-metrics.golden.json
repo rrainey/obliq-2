@@ -1,0 +1,586 @@
+{
+  "fpv-vehicle": {
+    "Main": {
+      "wires": 91,
+      "throughBlock": 13,
+      "overlaps": 60,
+      "crossings": 174,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 7,
+      "microJogs": 3
+    },
+    "Main/FlightController/FlightController": {
+      "wires": 154,
+      "throughBlock": 56,
+      "overlaps": 23,
+      "crossings": 755,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 6,
+      "microJogs": 4
+    },
+    "Main/FlightController/FlightController/Failsafe/Failsafe": {
+      "wires": 62,
+      "throughBlock": 12,
+      "overlaps": 7,
+      "crossings": 76,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 9,
+      "microJogs": 2
+    },
+    "Main/FlightController/FlightController/AttitudeEstimator/AttitudeEstimator": {
+      "wires": 115,
+      "throughBlock": 40,
+      "overlaps": 13,
+      "crossings": 212,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 17,
+      "microJogs": 9
+    },
+    "Main/FlightController/FlightController/Rates/Rates": {
+      "wires": 9,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 2,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 2
+    },
+    "Main/FlightController/FlightController/AngleMode/AngleMode": {
+      "wires": 27,
+      "throughBlock": 1,
+      "overlaps": 1,
+      "crossings": 26,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 1
+    },
+    "Main/FlightController/FlightController/GyroFilters/GyroFilters": {
+      "wires": 7,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 0,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 1
+    },
+    "Main/FlightController/FlightController/GyroFilters/GyroFilters/RpmFilter/RpmFilter": {
+      "wires": 64,
+      "throughBlock": 11,
+      "overlaps": 2,
+      "crossings": 44,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 3
+    },
+    "Main/FlightController/FlightController/GyroFilters/GyroFilters/DynamicNotch/DynamicNotch": {
+      "wires": 38,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 27,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 3
+    },
+    "Main/FlightController/FlightController/Arming/Arming": {
+      "wires": 29,
+      "throughBlock": 4,
+      "overlaps": 6,
+      "crossings": 21,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 4,
+      "microJogs": 1
+    },
+    "Main/FlightController/FlightController/AltitudeEstimator/AltitudeEstimator": {
+      "wires": 48,
+      "throughBlock": 13,
+      "overlaps": 8,
+      "crossings": 41,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 7,
+      "microJogs": 3
+    },
+    "Main/FlightController/FlightController/AltHold/AltHold": {
+      "wires": 53,
+      "throughBlock": 22,
+      "overlaps": 10,
+      "crossings": 89,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 4,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/GpsRescue/GpsRescue": {
+      "wires": 384,
+      "throughBlock": 211,
+      "overlaps": 93,
+      "crossings": 2225,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 60,
+      "microJogs": 4
+    },
+    "Main/FlightController/FlightController/PosHold/PosHold": {
+      "wires": 79,
+      "throughBlock": 21,
+      "overlaps": 11,
+      "crossings": 136,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 10,
+      "microJogs": 1
+    },
+    "Main/FlightController/FlightController/PosHold/PosHold/PositionControl/PositionControl": {
+      "wires": 203,
+      "throughBlock": 74,
+      "overlaps": 41,
+      "crossings": 659,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 39,
+      "microJogs": 9
+    },
+    "Main/FlightController/FlightController/RatePID/RatePID": {
+      "wires": 45,
+      "throughBlock": 2,
+      "overlaps": 1,
+      "crossings": 23,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 1,
+      "microJogs": 5
+    },
+    "Main/FlightController/FlightController/Mixer/Mixer": {
+      "wires": 28,
+      "throughBlock": 3,
+      "overlaps": 0,
+      "crossings": 21,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 2
+    },
+    "Main/FlightController/FlightController/Home/Home": {
+      "wires": 28,
+      "throughBlock": 4,
+      "overlaps": 4,
+      "crossings": 26,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 3,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/Home/Home/HomeVector/HomeVector": {
+      "wires": 15,
+      "throughBlock": 0,
+      "overlaps": 1,
+      "crossings": 22,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 2
+    },
+    "Main/Motor_RR/Motor": {
+      "wires": 17,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 1,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 3
+    },
+    "Main/Battery/Battery": {
+      "wires": 12,
+      "throughBlock": 3,
+      "overlaps": 2,
+      "crossings": 3,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 2,
+      "microJogs": 3
+    },
+    "Main/Frame/Frame": {
+      "wires": 83,
+      "throughBlock": 24,
+      "overlaps": 17,
+      "crossings": 105,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 15,
+      "microJogs": 10
+    },
+    "Main/Sensors/Sensors": {
+      "wires": 20,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 1,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 4
+    },
+    "Main/Sensors/Sensors/IMU/IMU": {
+      "wires": 10,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 0,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 2
+    },
+    "Main/Sensors/Sensors/ImuFrontEnd/ImuFrontEnd": {
+      "wires": 55,
+      "throughBlock": 9,
+      "overlaps": 0,
+      "crossings": 116,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 9
+    },
+    "Main/Sensors/Sensors/Magnetometer/Magnetometer": {
+      "wires": 18,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 9,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 2
+    },
+    "Main/Sensors/Sensors/Barometer/Barometer": {
+      "wires": 9,
+      "throughBlock": 1,
+      "overlaps": 2,
+      "crossings": 0,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 1,
+      "microJogs": 3
+    },
+    "Main/Sensors/Sensors/GNSS/GNSS": {
+      "wires": 137,
+      "throughBlock": 33,
+      "overlaps": 18,
+      "crossings": 212,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 12,
+      "microJogs": 4
+    },
+    "Telemetry": {
+      "wires": 41,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 0,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 41
+    }
+  },
+  "fpv-vehicle:elk": {
+    "Main": {
+      "wires": 91,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 84,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController": {
+      "wires": 154,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 616,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/Failsafe/Failsafe": {
+      "wires": 62,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 54,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/AttitudeEstimator/AttitudeEstimator": {
+      "wires": 115,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 87,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/Rates/Rates": {
+      "wires": 9,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 0,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/AngleMode/AngleMode": {
+      "wires": 27,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 21,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/GyroFilters/GyroFilters": {
+      "wires": 7,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 0,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/GyroFilters/GyroFilters/RpmFilter/RpmFilter": {
+      "wires": 64,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 0,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/GyroFilters/GyroFilters/DynamicNotch/DynamicNotch": {
+      "wires": 38,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 12,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/Arming/Arming": {
+      "wires": 29,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 12,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/AltitudeEstimator/AltitudeEstimator": {
+      "wires": 48,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 22,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/AltHold/AltHold": {
+      "wires": 53,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 37,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/GpsRescue/GpsRescue": {
+      "wires": 384,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 1530,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/PosHold/PosHold": {
+      "wires": 79,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 93,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/PosHold/PosHold/PositionControl/PositionControl": {
+      "wires": 203,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 686,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/RatePID/RatePID": {
+      "wires": 45,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 12,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/Mixer/Mixer": {
+      "wires": 28,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 11,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/Home/Home": {
+      "wires": 28,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 6,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/FlightController/FlightController/Home/Home/HomeVector/HomeVector": {
+      "wires": 15,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 10,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/Motor_RR/Motor": {
+      "wires": 17,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 0,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/Battery/Battery": {
+      "wires": 12,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 1,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/Frame/Frame": {
+      "wires": 83,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 37,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/Sensors/Sensors": {
+      "wires": 20,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 1,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/Sensors/Sensors/IMU/IMU": {
+      "wires": 10,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 0,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/Sensors/Sensors/ImuFrontEnd/ImuFrontEnd": {
+      "wires": 55,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 75,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/Sensors/Sensors/Magnetometer/Magnetometer": {
+      "wires": 18,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 4,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/Sensors/Sensors/Barometer/Barometer": {
+      "wires": 9,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 0,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Main/Sensors/Sensors/GNSS/GNSS": {
+      "wires": 137,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 133,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    },
+    "Telemetry": {
+      "wires": 41,
+      "throughBlock": 0,
+      "overlaps": 0,
+      "crossings": 0,
+      "blockOverlaps": 0,
+      "diagonalSegments": 0,
+      "portDirection": 0,
+      "microJogs": 0
+    }
+  }
+}

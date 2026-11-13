@@ -15,12 +15,17 @@ import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
 import {
   getBlockWidth,
   getBlockHeight,
-  portOffsetY,
+  dataPortGeometry,
+  wireEndAt,
+  defaultWirePath,
+  HANDLE_OUTSET,
   hasSubsystemName,
   SUBSYSTEM_NAME_LABEL,
 } from '@/lib/layout/blockGeometry'
 import { getGlyphSpec, needsRaster } from './blockGlyphs'
-import { parseType } from '@/lib/typeValidator'
+import {
+  computeWireDecorations, polylineWithHops, wireLineCount, type DecorationWire,
+} from '@/lib/wireDecorations'
 import { resolvePageSize, type PageOrientation } from './pageSizes'
 import type { ExportPlan, ExportSheet, ExportSubsystem, PrintScope } from './sheetTree'
 import { drawPdfPlotColumn, plotsPerColumn, type PdfPlot } from './pdfPlot'
@@ -113,22 +118,8 @@ const WIRE_WIDTH = 2           // CustomEdge default strokeWidth
  */
 const WIRE_BUNDLE_SPACING = 1.75
 
-/**
- * How many parallel lines a wire's data type gets on the page. Anything not
- * matched -- unknown type, error type, control ports -- degrades to a single
- * scalar line so failure never blocks the export.
- */
-export function wireLineCount(rawType: string | undefined): 1 | 2 | 3 {
-  if (!rawType) return 1
-  try {
-    const t = parseType(rawType)
-    if (t.isMatrix) return 3
-    if (t.isArray) return 2
-    return 1
-  } catch {
-    return 1
-  }
-}
+/** How many parallel lines a wire's data type gets on the page (wireDecorations.ts). */
+export { wireLineCount }
 const PORT_LABEL_GAP = 12      // canvas margin between block edge and label
 const NAME_FONT_SIZE = 8       // canvas block name is 0.5rem
 const PORT_LABEL_FONT_SIZE = 8 // canvas .port-name-label is 0.5rem
@@ -487,7 +478,40 @@ interface Bounds { minX: number; minY: number; maxX: number; maxY: number }
 /** Room reserved either side of a block that prints port-name labels. */
 const PORT_LABEL_RESERVE = 60
 
-function sheetBounds(blocks: BlockData[], metrics: Map<string, Metrics>): Bounds {
+/**
+ * The drawn polyline of a wire, from the source block edge to the target
+ * block edge. Without waypoints this is the canvas' default path
+ * (defaultWirePath() in blockGeometry.ts), with the port sides of
+ * dataPortGeometry(): a flipped block has its inputs on the right edge and its
+ * outputs on the left edge. The wire ends at the block edge; the port stub
+ * covers the HANDLE_OUTSET px between the edge and the canvas wire end.
+ */
+export function wirePoints(
+  wire: WireData,
+  src: BlockData,
+  tgt: BlockData,
+  metrics: Map<string, Metrics>,
+): Array<{ x: number; y: number }> {
+  const sm = metrics.get(src.id)!
+  const tm = metrics.get(tgt.id)!
+  const sp = { x: src.position?.x ?? 0, y: src.position?.y ?? 0 }
+  const tp = { x: tgt.position?.x ?? 0, y: tgt.position?.y ?? 0 }
+  const s = wireEndAt(src, sp, 'output', Math.max(0, wire.sourcePortIndex), sm.outputs, sm.width, sm.height)
+  const t = wireEndAt(tgt, tp, 'input', Math.max(0, wire.targetPortIndex), tm.inputs, tm.width, tm.height)
+  const waypoints = wire.routing?.waypoints
+  const pts = waypoints && waypoints.length > 0
+    ? [{ x: s.x, y: s.y }, ...waypoints.map(q => ({ x: q.x, y: q.y })), { x: t.x, y: t.y }]
+    : defaultWirePath(s, t, wire.routing?.midpointOffset ?? 0, {
+        source: { ...sp, w: sm.width, h: sm.height },
+        target: { ...tp, w: tm.width, h: tm.height },
+      }).map(q => ({ x: q.x, y: q.y }))
+  // From the block edges
+  pts[0] = { x: s.x - s.dir * HANDLE_OUTSET, y: s.y }
+  pts[pts.length - 1] = { x: t.x - t.dir * HANDLE_OUTSET, y: t.y }
+  return pts
+}
+
+function sheetBounds(blocks: BlockData[], metrics: Map<string, Metrics>, wires: WireData[] = []): Bounds {
   const b: Bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
   for (const block of blocks) {
     const m = metrics.get(block.id)!
@@ -499,6 +523,18 @@ function sheetBounds(blocks: BlockData[], metrics: Map<string, Metrics>): Bounds
     b.minY = Math.min(b.minY, y - 14) // block name renders above the body
     b.maxX = Math.max(b.maxX, x + m.width + pad)
     b.maxY = Math.max(b.maxY, y + m.height)
+  }
+  // Wires that go outside the blocks (around a block, or a feedback path)
+  const byId = new Map(blocks.map(block => [block.id, block]))
+  for (const wire of wires) {
+    const src = byId.get(wire.sourceBlockId), tgt = byId.get(wire.targetBlockId)
+    if (!src || !tgt || src.type === 'comment' || tgt.type === 'comment' || wire.targetPortIndex < 0) continue
+    for (const q of wirePoints(wire, src, tgt, metrics)) {
+      b.minX = Math.min(b.minX, q.x - 4)
+      b.maxX = Math.max(b.maxX, q.x + 4)
+      b.minY = Math.min(b.minY, q.y - 4)
+      b.maxY = Math.max(b.maxY, q.y + 4)
+    }
   }
   if (!Number.isFinite(b.minX)) return { minX: 0, minY: 0, maxX: 1, maxY: 1 }
   return b
@@ -789,7 +825,7 @@ export async function renderModelToPdf(
     printable: { x: number; y: number; width: number; height: number }
   ) => {
     const metrics = new Map(sheet.blocks.map(b => [b.id, measure(b)]))
-    const bounds = sheetBounds(sheet.blocks, metrics)
+    const bounds = sheetBounds(sheet.blocks, metrics, sheet.connections)
     const contentW = Math.max(1, bounds.maxX - bounds.minX)
     const contentH = Math.max(1, bounds.maxY - bounds.minY)
 
@@ -811,34 +847,29 @@ export async function renderModelToPdf(
     const tx = (mx: number) => offsetX + (mx - bounds.minX) * scale
     const ty = (my: number) => offsetTop - (my - bounds.minY) * scale
 
+    // Hop marks where wires of different nets cross, and junction dots, from
+    // the same module as the canvas (wireDecorations.ts). Enable and reset
+    // wires and wires to a comment are not part of the decorations.
+    const blockById = new Map(sheet.blocks.map(b => [b.id, b]))
+    const decorationWires: DecorationWire[] = []
+    for (const wire of sheet.connections) {
+      const src = blockById.get(wire.sourceBlockId), tgt = blockById.get(wire.targetBlockId)
+      if (!src || !tgt || wire.targetPortIndex < 0 || src.type === 'comment' || tgt.type === 'comment') continue
+      decorationWires.push({
+        id: wire.id,
+        net: `${wire.sourceBlockId}:${wire.sourcePortIndex}`,
+        points: wirePoints(wire, src, tgt, metrics),
+        lines: wireLineCount(ctx.signalTypes?.get(wire.id)?.type),
+      })
+    }
+    const decorations = computeWireDecorations(decorationWires)
+
     // Wires first so blocks sit on top of them.
     for (const wire of sheet.connections) {
-      const src = sheet.blocks.find(b => b.id === wire.sourceBlockId)
-      const tgt = sheet.blocks.find(b => b.id === wire.targetBlockId)
+      const src = blockById.get(wire.sourceBlockId)
+      const tgt = blockById.get(wire.targetBlockId)
       if (!src || !tgt) continue
-      const sm = metrics.get(src.id)!
-      const tm = metrics.get(tgt.id)!
-
-      const sx = (src.position?.x ?? 0) + sm.width
-      const sy = (src.position?.y ?? 0) +
-        portOffsetY(Math.max(0, wire.sourcePortIndex), sm.outputs, sm.height)
-      const txx = tgt.position?.x ?? 0
-      const tyy = (tgt.position?.y ?? 0) +
-        portOffsetY(Math.max(0, wire.targetPortIndex), tm.inputs, tm.height)
-
-      // Orthogonal step route, mirroring the canvas' default edge shape.
-      const waypoints = wire.routing?.waypoints
-      const pts: Array<{ x: number; y: number }> = waypoints && waypoints.length > 0
-        ? [{ x: sx, y: sy }, ...waypoints, { x: txx, y: tyy }]
-        : (() => {
-            const midX = sx + (txx - sx) / 2 + (wire.routing?.midpointOffset ?? 0)
-            return [
-              { x: sx, y: sy },
-              { x: midX, y: sy },
-              { x: midX, y: tyy },
-              { x: txx, y: tyy },
-            ]
-          })()
+      const pts = polylineWithHops(wirePoints(wire, src, tgt, metrics), decorations.hops.get(wire.id))
 
       const wireThickness = Math.max(0.5, WIRE_WIDTH * scale)
       // The arrowhead occupies the last stretch, so stop the final segment
@@ -872,42 +903,48 @@ export async function renderModelToPdf(
       }
 
       /**
-       * Offset a polyline by d perpendicular to itself. At a corner both incident
-       * perpendiculars are summed rather than averaged: for orthogonal turns that
-       * places the meeting point exactly at the intersection of the two shifted
-       * segments, so the offset polyline stays parallel to the original throughout.
+       * Offset a polyline by d perpendicular to itself. At a corner the point
+       * moves along the miter (n1 + n2) / (1 + n1 . n2): this is the
+       * intersection of the two shifted segments, so the offset polyline stays
+       * parallel to the original throughout. For an orthogonal turn it is
+       * n1 + n2; for collinear segments (the pieces of a hop arc, or a waypoint
+       * on a straight run) it is n.
        */
       const offsetPolyline = (pts: typeof page, d: number) => pts.map((pt, i) => {
         const prevPt = i > 0 ? pts[i - 1] : null
         const nextPt = i < pts.length - 1 ? pts[i + 1] : null
+        const n1 = prevPt ? perp(prevPt, pt) : null
+        const n2 = nextPt ? perp(pt, nextPt) : null
         let nx = 0, ny = 0
-        if (prevPt) { const q = perp(prevPt, pt); nx += q.x; ny += q.y }
-        if (nextPt) { const q = perp(pt, nextPt); nx += q.x; ny += q.y }
+        if (n1 && n2) {
+          const k = 1 + n1.x * n2.x + n1.y * n2.y
+          if (k < 1e-6) { nx = n1.x; ny = n1.y } else { nx = (n1.x + n2.x) / k; ny = (n1.y + n2.y) / k }
+        } else if (n1 ?? n2) {
+          nx = (n1 ?? n2)!.x; ny = (n1 ?? n2)!.y
+        }
         return { x: pt.x + d * nx, y: pt.y + d * ny }
       })
 
       for (const d of offsets) {
         const line = offsetPolyline(page, d)
-        for (let i = 0; i < line.length - 1; i++) {
-          const from = line[i]
-          const to = line[i + 1]
-          const isLast = i === line.length - 2
-
-          let end = to
-          if (isLast) {
-            const dx = to.x - from.x
-            const dy = to.y - from.y
-            const len = Math.hypot(dx, dy)
-            if (len > headLength) {
-              end = {
-                x: to.x - (dx / len) * headLength,
-                y: to.y - (dy / len) * headLength,
-              }
+        if (line.length >= 2) {
+          const from = line[line.length - 2]
+          const to = line[line.length - 1]
+          const dx = to.x - from.x
+          const dy = to.y - from.y
+          const len = Math.hypot(dx, dy)
+          if (len > headLength) {
+            line[line.length - 1] = {
+              x: to.x - (dx / len) * headLength,
+              y: to.y - (dy / len) * headLength,
             }
           }
-
-          p.drawLine({ start: from, end, thickness: wireThickness, color: WIRE })
         }
+        // One stroked path for each line, so that corners and the pieces of
+        // a hop arc join without notches. drawSvgPath measures y downward
+        // from its origin, so the page y is negated.
+        const d0 = line.map((q, i) => `${i === 0 ? 'M' : 'L'} ${q.x.toFixed(3)} ${(-q.y).toFixed(3)}`).join(' ')
+        p.drawSvgPath(d0, { x: 0, y: 0, borderColor: WIRE, borderWidth: wireThickness })
       }
 
       // Arrowhead at the destination, oriented along the incoming segment.
@@ -925,6 +962,11 @@ export async function renderModelToPdf(
         borderWidth: 0,
         rotate: { type: 'radians', angle: -angle } as any,
       })
+    }
+
+    // Junction dots, on top of the wires, in the wire colour
+    for (const j of decorations.junctions) {
+      p.drawCircle({ x: tx(j.x), y: ty(j.y), size: Math.max(0.75, j.radius * scale), color: WIRE, borderWidth: 0 })
     }
 
     for (const block of sheet.blocks) {
@@ -1052,23 +1094,20 @@ export async function renderModelToPdf(
         }
       }
 
-      // Port stubs.
+      // Port stubs, on the edge that holds each port (dataPortGeometry: the
+      // sides are swapped on a flipped block).
       const stub = 6 * scale
       const stubWidth = Math.max(0.3, 1.2 * scale)
-      for (let i = 0; i < m.inputs; i++) {
-        const py = ty(by + portOffsetY(i, m.inputs, m.height))
+      const drawStub = (g: ReturnType<typeof dataPortGeometry>) => {
+        const py = ty(by + g.y)
+        const ex = x + g.edgeX * scale
         p.drawLine({
-          start: { x: x - stub, y: py }, end: { x, y: py },
+          start: { x: g.dir < 0 ? ex - stub : ex, y: py }, end: { x: g.dir < 0 ? ex : ex + stub, y: py },
           thickness: stubWidth, color: WIRE,
         })
       }
-      for (let i = 0; i < m.outputs; i++) {
-        const py = ty(by + portOffsetY(i, m.outputs, m.height))
-        p.drawLine({
-          start: { x: x + w, y: py }, end: { x: x + w + stub, y: py },
-          thickness: stubWidth, color: WIRE,
-        })
-      }
+      for (let i = 0; i < m.inputs; i++) drawStub(dataPortGeometry(block, 'input', i, m.inputs, m.width, m.height))
+      for (let i = 0; i < m.outputs; i++) drawStub(dataPortGeometry(block, 'output', i, m.outputs, m.width, m.height))
 
       // Port-name labels, for blocks that request them (notably subsystems).
       if (showsPortNames(block)) {
@@ -1077,34 +1116,32 @@ export async function renderModelToPdf(
           const gap = PORT_LABEL_GAP * scale
           const maxLabelWidth = PORT_LABEL_RESERVE * scale
 
+          // Each name is outside the edge that holds its port: on the left
+          // it is right-aligned, ending a gap short of the edge; on the right
+          // it is left-aligned, starting a gap past the edge. It is lifted
+          // clear of the wire the way the canvas offsets it.
+          const drawName = (raw: string, g: ReturnType<typeof dataPortGeometry>, rise: number) => {
+            const text = fitInBlock(
+              needsRaster(raw) ? transliterate(raw) : raw, helv, labelSize, maxLabelWidth)
+            const py = ty(by + g.y)
+            const tw = helv.widthOfTextAtSize(text, labelSize)
+            p.drawText(text, {
+              x: g.side === 'left' ? x - gap - tw : x + w + gap,
+              y: py + rise * scale - labelSize * 0.35,
+              size: labelSize, font: helv, color: LABEL,
+            })
+          }
+
           for (let i = 0; i < m.inputs; i++) {
             const raw = portLabel(block, i, true, sheet.blocks, sheet.connections)
             if (!raw) continue
-            const text = fitInBlock(
-              needsRaster(raw) ? transliterate(raw) : raw, helv, labelSize, maxLabelWidth)
-            const tw = helv.widthOfTextAtSize(text, labelSize)
-            const py = ty(by + portOffsetY(i, m.inputs, m.height))
-            // Right-aligned, ending a gap short of the block's left edge, and
-            // lifted clear of the wire the way the canvas offsets it.
-            p.drawText(text, {
-              x: x - gap - tw,
-              y: py + PORT_LABEL_RISE * scale - labelSize * 0.35,
-              size: labelSize, font: helv, color: LABEL,
-            })
+            drawName(raw, dataPortGeometry(block, 'input', i, m.inputs, m.width, m.height), PORT_LABEL_RISE)
           }
 
           for (let i = 0; i < m.outputs; i++) {
             const raw = portLabel(block, i, false, sheet.blocks, sheet.connections)
             if (!raw) continue
-            const text = fitInBlock(
-              needsRaster(raw) ? transliterate(raw) : raw, helv, labelSize, maxLabelWidth)
-            const py = ty(by + portOffsetY(i, m.outputs, m.height))
-            // Left-aligned, starting a gap past the block's right edge.
-            p.drawText(text, {
-              x: x + w + gap,
-              y: py + PORT_LABEL_RISE_OUT * scale - labelSize * 0.35,
-              size: labelSize, font: helv, color: LABEL,
-            })
+            drawName(raw, dataPortGeometry(block, 'output', i, m.outputs, m.width, m.height), PORT_LABEL_RISE_OUT)
           }
         }
       }

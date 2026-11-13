@@ -22,6 +22,8 @@ interface BlockContextMenuProps {
   onRenameClick?: (blockId: string) => void
   onResizeClick?: (blockId: string) => void
   onToggleShowName?: (blockId: string) => void
+  /** Flip or unflip the block (inputs on the right, outputs on the left). */
+  onToggleFlip?: (blockId: string) => void
   onSheetNavigate: (sheetId: string) => void
 }
 
@@ -38,6 +40,7 @@ export default function BlockContextMenu({
   onRenameClick,
   onResizeClick,
   onToggleShowName,
+  onToggleFlip,
   onSheetNavigate,
   ...props
 }: BlockContextMenuProps) {
@@ -120,6 +123,17 @@ export default function BlockContextMenu({
           onClick={() => onToggleShowName(block.id)}
         >
           {block.parameters?.showName !== false ? 'Hide Name' : 'Show Name'}
+        </button>
+      )}
+
+      {/* Flip: inputs on the right and outputs on the left. Only the port
+          sides change; text and icons stay as they are. */}
+      {onToggleFlip && block.type !== 'comment' && (
+        <button
+          className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+          onClick={() => onToggleFlip(block.id)}
+        >
+          {block.parameters?.flipped === true ? 'Unflip Block' : 'Flip Block'}
         </button>
       )}
 

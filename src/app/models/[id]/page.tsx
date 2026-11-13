@@ -147,6 +147,7 @@ import {
   IconCopy
 } from '@tabler/icons-react'
 import { notifications } from '@mantine/notifications'
+import { mergeDialogParameters } from '@/lib/blocks/dialogParameters'
 
 interface ModelEditorPageProps {
   params: Promise<{
@@ -723,7 +724,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
   }
 
   const handleBlockMove = (blockId: string, position: { x: number; y: number }) => {
+    const blocksBefore = useModelStore.getState().blocks
     updateBlock(blockId, { position })
+    // Waypoints are absolute: repair or clear those of the moved block's wires
+    useModelStore.getState().repairWireRoutingAfterBlockChange(blocksBefore)
     saveCurrentSheetData()
     // Position changes should also mark as dirty
     setIsDirty(true)
@@ -742,7 +746,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       return [{ id, updates: { parameters: { ...(block.parameters || {}), width, height } } }]
     })
     if (updates.length === 0) return
+    const blocksBefore = useModelStore.getState().blocks
     updateBlocks(updates)
+    useModelStore.getState().repairWireRoutingAfterBlockChange(blocksBefore)
     saveCurrentSheetData()
   }
 
@@ -752,7 +758,10 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
 
     // Use batch update to update all positions in a single state update
     const updates = moves.map(({ id, position }) => ({ id, updates: { position } }))
+    const blocksBefore = useModelStore.getState().blocks
     updateBlocks(updates)
+    // Waypoints are absolute: repair or clear those of the moved blocks' wires
+    useModelStore.getState().repairWireRoutingAfterBlockChange(blocksBefore)
 
     // Check what the store has after update
     const storeBlocks = useModelStore.getState().blocks
@@ -1701,7 +1710,9 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     if (configBlock) {
       console.log('[handleBlockConfigUpdate] Updating block:', configBlock.id, 'with parameters:', parameters)
       console.log('[handleBlockConfigUpdate] isDirty before update:', isDirty)
-      updateBlock(configBlock.id, { parameters })
+      // Keep the parameters that the canvas sets and the dialogs do not show
+      // (flipped, showName, a subsystem's size and sample time)
+      updateBlock(configBlock.id, { parameters: mergeDialogParameters(configBlock.type, configBlock.parameters, parameters) })
       saveCurrentSheetData()
       // updateBlock already sets isDirty, but ensure it's set
       setIsDirty(true)
@@ -1826,14 +1837,36 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     return !isRootSheet
   }
 
-  const handleTuneLayout = (options: TuneLayoutOptions) => {
+  const handleTuneLayout = async (options: TuneLayoutOptions) => {
     // Flush the sheet on screen first: tuning reads the sheet tree, and the
     // active sheet's edits live in `blocks`/`wires` until they are written back.
     saveCurrentSheetData()
     const store = useModelStore.getState()
 
-    const { sheets: tuned, summary } = tuneModelLayout(
-      store.sheets, store.activeSheetId, options)
+    // The ELK engine is asynchronous (and loads elkjs on first use)
+    let result: Awaited<ReturnType<typeof tuneModelLayout>>
+    try {
+      result = await tuneModelLayout(store.sheets, store.activeSheetId, options)
+    } catch (e) {
+      notifications.show({
+        title: 'Layout failed',
+        message: e instanceof Error ? e.message : String(e),
+        color: 'red',
+      })
+      return
+    }
+    // Do not write over an edit that the user made during the layout
+    const now = useModelStore.getState()
+    if (now.sheets !== store.sheets || now.blocks !== store.blocks || now.wires !== store.wires
+      || now.activeSheetId !== store.activeSheetId) {
+      notifications.show({
+        title: 'Layout not applied',
+        message: 'The model changed during the layout. Tune the layout again.',
+        color: 'yellow',
+      })
+      return
+    }
+    const { sheets: tuned, summary } = result
 
     if (summary.sheetsAffected === 0) {
       notifications.show({
@@ -1870,8 +1903,21 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
     if (summary.blocksMoved) parts.push(`${summary.blocksMoved} moved`)
     if (summary.wiresRouted) parts.push(`${summary.wiresRouted} wire${summary.wiresRouted === 1 ? '' : 's'} routed`)
     if (summary.blocksResized) parts.push(`${summary.blocksResized} resized`)
+    if (summary.blocksFlipped) parts.push(`${summary.blocksFlipped} flipped or unflipped`)
     if (summary.namesHidden) parts.push(`${summary.namesHidden} name${summary.namesHidden === 1 ? '' : 's'} hidden`)
     if (summary.portLabelsChanged) parts.push(`${summary.portLabelsChanged} port label${summary.portLabelsChanged === 1 ? '' : 's'} updated`)
+    if (result.labelTidy) {
+      const c = result.labelTidy.counts
+      const kinds = [
+        c['wire-to-pair'] ? `${c['wire-to-pair']} wire${c['wire-to-pair'] === 1 ? '' : 's'} replaced with Sheet Labels` : '',
+        c['pair-to-wire'] ? `${c['pair-to-wire']} Sheet Label pair${c['pair-to-wire'] === 1 ? '' : 's'} replaced with wires` : '',
+        c['split-source'] ? `${c['split-source']} Sheet Label Source${c['split-source'] === 1 ? '' : 's'} split` : '',
+      ].filter(Boolean)
+      parts.push(kinds.length ? kinds.join(', ') : 'no signal label edits')
+      if (result.labelTidy.endpointFaults.length) {
+        parts.push(`${result.labelTidy.endpointFaults.length} Sheet Label${result.labelTidy.endpointFaults.length === 1 ? ' is' : 's are'} not at the end of its wire`)
+      }
+    }
     notifications.show({
       title: 'Layout tuned',
       message: `${parts.join(', ')} across ${summary.sheetsAffected} sheet${summary.sheetsAffected === 1 ? '' : 's'}.`,
@@ -2756,6 +2802,8 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
                 inputs: wires.filter(w => w.targetBlockId === configBlock.id).map(w => w.targetPortIndex),
                 outputs: wires.filter(w => w.sourceBlockId === configBlock.id).map(w => w.sourcePortIndex),
               }}
+              sheetBlocks={blocks}
+              sheetWires={wires}
               onUpdate={handleModelReferenceUpdate}
               onClose={() => setConfigBlock(null)}
             />
@@ -2765,6 +2813,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
               block={configBlock}
               availableSheets={sheets.filter(s => s.id !== activeSheetId)}
               allBlocks={blocks}
+              allWires={wires}
               onUpdate={handleBlockConfigUpdate}
               onRename={(newName) => renameBlock(configBlock.id, newName)}
               onClose={() => setConfigBlock(null)}

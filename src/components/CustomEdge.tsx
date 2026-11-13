@@ -10,9 +10,14 @@ import {
   BaseEdge,
   MarkerType,
   getStraightPath,
+  Position,
   useStore,
 } from 'reactflow'
 import { TypeCompatibilityError } from '@/lib/typeCompatibilityValidator'
+import { defaultWirePath, type WireRect } from '@/lib/layout/blockGeometry'
+import {
+  hopsOnSegment, pointOnPolyline, segmentPathWithHops, type JunctionDot, type WireHop,
+} from '@/lib/wireDecorations'
 
 // Wire routing type (matches modelSchema)
 export interface WireRouting {
@@ -34,6 +39,11 @@ export interface CustomEdgeData {
   onRoutingChange?: (wireId: string, routing: WireRouting | undefined) => void
   // Net highlighting - true if this wire is part of the highlighted net
   isHighlighted?: boolean
+  // Hop marks where this wire crosses a wire of another net, and the junction
+  // dots that this wire draws (wireDecorations.ts). The canvas computes them
+  // once for the sheet; see CanvasReactFlow.tsx.
+  hops?: WireHop[]
+  junctionDots?: JunctionDot[]
 }
 
 // Helper to extract matrix dimensions from type string
@@ -277,14 +287,22 @@ export const AnimatedEdge: FC<EdgeProps<CustomEdgeData & { signalValue?: number 
   )
 }
 
+/** Direction a handle faces: -1 for a handle on the left edge, +1 for one on the right edge. */
+const handleDir = (position: Position | string | undefined, fallback: -1 | 1): -1 | 1 =>
+  position === Position.Left ? -1 : position === Position.Right ? 1 : fallback
+
 // Step edge for orthogonal routing
 export const StepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
-  const { sourceX, sourceY, targetX, targetY, id, data, selected, style = {} } = props
+  const { sourceX, sourceY, targetX, targetY, id, data, selected, style = {}, sourcePosition, targetPosition } = props
   const [isHovered, setIsHovered] = useState(false)
-  
-  // Calculate step path
-  const midX = sourceX + (targetX - sourceX) / 2
-  const path = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`
+
+  // The default wire path (blockGeometry.ts), with the sides of the handles
+  const stepPoints = defaultWirePath(
+    { x: sourceX, y: sourceY, dir: handleDir(sourcePosition, 1) },
+    { x: targetX, y: targetY, dir: handleDir(targetPosition, -1) },
+  )
+  const midX = stepPoints[1].x
+  const path = `M ${stepPoints.map(p => `${p.x} ${p.y}`).join(' L ')}`
   
   const hasError = !!data?.typeError
   const isMatrix = !!extractMatrixDimensions(data?.sourceType)
@@ -380,18 +398,26 @@ interface PathSegment {
   path: string
 }
 
-// Calculate default midpoint X for step edge
-const calculateDefaultMidpointX = (sourceX: number, targetX: number): number => {
-  return sourceX + (targetX - sourceX) / 2
+/** Port directions and block rectangles for the default wire path (blockGeometry.ts). */
+export interface WireEndGeometry {
+  /** -1: the source handle is on the left edge (a flipped block); +1: on the right edge. */
+  sourceDir: -1 | 1
+  /** -1: the target handle is on the left edge; +1: on the right edge (a flipped block). */
+  targetDir: -1 | 1
+  sourceRect?: WireRect
+  targetRect?: WireRect
 }
 
+const USUAL_ENDS: WireEndGeometry = { sourceDir: 1, targetDir: -1 }
+
 // Generate path segments for step edge with optional routing
-const generatePathSegments = (
+export const generatePathSegments = (
   sourceX: number,
   sourceY: number,
   targetX: number,
   targetY: number,
-  routing?: WireRouting
+  routing?: WireRouting,
+  ends: WireEndGeometry = USUAL_ENDS,
 ): PathSegment[] => {
   // If we have explicit waypoints, use them
   if (routing?.waypoints && routing.waypoints.length > 0) {
@@ -417,33 +443,30 @@ const generatePathSegments = (
     return segments
   }
 
-  // Standard 3-segment step path with optional midpoint offset
-  const defaultMidX = calculateDefaultMidpointX(sourceX, targetX)
-  const midX = defaultMidX + (routing?.midpointOffset ?? 0)
-
-  return [
-    {
-      index: 0,
-      start: { x: sourceX, y: sourceY },
-      end: { x: midX, y: sourceY },
-      orientation: 'horizontal',
-      path: `M ${sourceX} ${sourceY} L ${midX} ${sourceY}`
-    },
-    {
-      index: 1,
-      start: { x: midX, y: sourceY },
-      end: { x: midX, y: targetY },
-      orientation: 'vertical',
-      path: `M ${midX} ${sourceY} L ${midX} ${targetY}`
-    },
-    {
-      index: 2,
-      start: { x: midX, y: targetY },
-      end: { x: targetX, y: targetY },
-      orientation: 'horizontal',
-      path: `M ${midX} ${targetY} L ${targetX} ${targetY}`
-    }
-  ]
+  // The default path (blockGeometry.ts). For ports that face each other this
+  // is the three-segment step that turns at the midpoint plus the offset; the
+  // middle (vertical) segment is the one the user drags. Other port sides
+  // give a step past the outer port, or five segments around the blocks.
+  const points = defaultWirePath(
+    { x: sourceX, y: sourceY, dir: ends.sourceDir },
+    { x: targetX, y: targetY, dir: ends.targetDir },
+    routing?.midpointOffset ?? 0,
+    { source: ends.sourceRect, target: ends.targetRect },
+  )
+  const segments: PathSegment[] = []
+  for (let i = 0; i + 1 < points.length; i++) {
+    const start = points[i]
+    const end = points[i + 1]
+    segments.push({
+      index: i,
+      start,
+      end,
+      // Default paths alternate: horizontal out of the port, then vertical, ...
+      orientation: i % 2 === 0 ? 'horizontal' : 'vertical',
+      path: `M ${start.x} ${start.y} L ${end.x} ${end.y}`
+    })
+  }
+  return segments
 }
 
 // Generate full SVG path string from segments
@@ -470,10 +493,41 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
     targetY,
     data,
     selected,
+    source,
+    target,
+    sourcePosition,
+    targetPosition,
   } = props
 
   // Get viewport zoom to correctly scale mouse movement
   const zoom = useStore((state) => state.transform[2])
+
+  // Block rectangles of the two ends, for a default path that goes around
+  // them (a wire to a block behind its source, or to a flipped block). A
+  // string key keeps the selector result stable between renders.
+  const rectKey = useStore(useCallback((state: any) => {
+    const key = (nodeId: string) => {
+      const n = state.nodeInternals?.get(nodeId)
+      if (!n) return ''
+      const p = n.positionAbsolute ?? n.position
+      return `${p.x},${p.y},${n.width ?? 0},${n.height ?? 0}`
+    }
+    return `${key(source)}|${key(target)}`
+  }, [source, target]))
+  const ends = useMemo<WireEndGeometry>(() => {
+    const parse = (text: string): WireRect | undefined => {
+      if (!text) return undefined
+      const [x, y, w, h] = text.split(',').map(Number)
+      return w > 0 && h > 0 ? { x, y, w, h } : undefined
+    }
+    const [s, t] = rectKey.split('|')
+    return {
+      sourceDir: handleDir(sourcePosition, 1),
+      targetDir: handleDir(targetPosition, -1),
+      sourceRect: parse(s),
+      targetRect: parse(t),
+    }
+  }, [rectKey, sourcePosition, targetPosition])
 
   const [isHovered, setIsHovered] = useState(false)
   const [hoveredSegmentIndex, setHoveredSegmentIndex] = useState<number | null>(null)
@@ -553,18 +607,37 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
       sourceY,
       targetX,
       targetY,
-      { ...data?.routing, midpointOffset: effectiveOffset }
+      { ...data?.routing, midpointOffset: effectiveOffset },
+      ends,
     )
-  }, [sourceX, sourceY, targetX, targetY, data?.routing, isDragging, currentOffset])
+  }, [sourceX, sourceY, targetX, targetY, data?.routing, isDragging, currentOffset, ends])
 
   const fullPath = segmentsToPath(segments)
+
+  // Drawn path of each segment, with the hop marks that are still on it. A
+  // segment that has moved since the sheet's decorations were computed (while
+  // its offset is dragged) keeps only the hops that still fit it. The hit
+  // areas below stay straight (segment.path).
+  const hops = data?.hops
+  const drawnPaths = useMemo(() => segments.map((segment, i) => {
+    const on = hopsOnSegment(segment.start, segment.end, hops, i)
+    return on.length > 0 ? segmentPathWithHops(segment.start, segment.end, on) : segment.path
+  }), [segments, hops])
+  const dotsData = data?.junctionDots
+  const junctionDots = useMemo(() => {
+    if (!dotsData || dotsData.length === 0) return []
+    const points = segments.length > 0 ? [segments[0].start, ...segments.map(s => s.end)] : []
+    return dotsData.filter(d => pointOnPolyline(d, points))
+  }, [segments, dotsData])
+
   const hasError = !!data?.typeError
   const isMatrix = !!extractMatrixDimensions(data?.sourceType)
   const isHighlighted = !!data?.isHighlighted
 
   // Determine which segment can be dragged (middle vertical segment for simple step)
   const canDragSegment = useCallback((segmentIndex: number): boolean => {
-    // For simple 3-segment step path, only the middle vertical segment is draggable
+    // For a three-segment step path, only the middle vertical segment is
+    // draggable. A five-segment default path (around blocks) has no offset.
     if (!data?.routing?.waypoints && segments.length === 3) {
       return segmentIndex === 1 // Middle vertical segment
     }
@@ -717,10 +790,22 @@ export const EditableStepEdge: FC<EdgeProps<CustomEdgeData>> = (props) => {
       {segments.map((segment, index) => (
         <path
           key={`${id}-segment-${index}`}
-          d={segment.path}
+          d={drawnPaths[index]}
           fill="none"
           style={{ ...getSegmentStyle(index), pointerEvents: 'none' }}
           markerEnd={index === segments.length - 1 ? customMarkerEnd : undefined}
+        />
+      ))}
+
+      {/* Junction dots of the net, in the wire colour */}
+      {junctionDots.map((d, index) => (
+        <circle
+          key={`${id}-junction-${index}`}
+          cx={d.x}
+          cy={d.y}
+          r={d.radius}
+          fill={getSegmentStyle(-1).stroke}
+          style={{ pointerEvents: 'none' }}
         />
       ))}
 
