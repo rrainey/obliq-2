@@ -1,5 +1,37 @@
 # obliq-2 Change Log
 
+## What's New in 3.8.2
+
+You can now make a PDF of a model from the command line. The PDF has the same pages as **Export as PDF…** in the editor. Each shipped reference model now has a PDF beside it.
+
+- **New command: `npm run obliq:pdf -- model.json`.** It writes `model.pdf` beside the model. Give more than one model to write more than one PDF. The command reads a bare model or a `{ name, data }` file, as `obliq:cgen` and `obliq:layout` do.
+  - The options are the options of the editor dialog: `--page-size`, `--orientation`, `--scaling 100|50|fit`, `--fit-large-sheets`, `--scope model|subsystem|sheet` with `--sheet <name, id or path>`, `--summaries`, `--truncate-block-names` and `--truncate-in-block-text`. The defaults are the defaults of the dialog.
+  - `-o` names the PDF file. With more than one model, `-o` names an existing folder.
+  - The editor and the command use the same code, `src/lib/export/modelPdf.ts`. The wire types come from the same type propagation, so vector and matrix wires have two or three lines.
+  - A model reference resolves as for `obliq:test` and `obliq:cgen`: the model files in the same folder, by name, then the store. The PDF shows the reference as its block, as in the editor. If the command cannot find the referenced model, it stops with exit code 1.
+  - The command prints diagrams only. The plot results of the editor come from a simulation run in the browser, and the command does not simulate.
+  - The command prints text in place of the symbols that Helvetica does not have (`SUM` for `∑`, `INT` for `∫`). The editor draws these symbols as small images.
+  - `npm run obliq:pdf -- --help` lists the options. README.md, "Command-line PDF export", has the table and examples.
+- **Reproducible PDFs.** `--date <ISO 8601>`, or the `SOURCE_DATE_EPOCH` environment variable, sets the footer date and the PDF creation and modification dates. The footer then shows the date in UTC. Two runs with the same date give the same bytes, in each time zone and locale. Node 18, 20 and 22 gave the same bytes. A PDF from pdf-lib has no document ID, and the standard fonts are not embedded, so nothing else in the file changes from run to run. Without a date, the command uses the current time, as the editor does.
+- **Shipped PDFs.** `reference-models/` has a PDF of each model:
+
+  | File | Pages | Page size | Size |
+  |---|---|---|---|
+  | `fpv-vehicle.pdf` | 28 | ARCH E (36 × 48 in), landscape | 514 KiB |
+  | `fpv-demo-flight.pdf` | 5 | Tabloid (11 × 17 in), landscape | 21 KiB |
+  | `fpv-acro-rate-step.pdf` | 5 | Tabloid (11 × 17 in), landscape | 13 KiB |
+
+  Each sheet prints at 100 %. A sheet that is larger than the page is scaled to fit (**Scale large sheets to fit the printing area**). On ARCH E, the smallest scale is 36 % (`GpsRescue`), and Main prints at 100 %. On Letter, the default page, "fit" scales `GpsRescue` to 8 %, and 100 % cuts most vehicle sheets.
+  - The builder (`scripts/build-fpv-reference-model.ts`) writes the PDFs after it writes the models. Their options and date are `SHIPPED_PDF_OPTIONS` and `SHIPPED_PDF_DATE` (12 Nov 2026). The date is a constant, so a build that does not change a model does not change its PDF.
+  - `__tests__/reference-models/fpv-pdfs.test.ts` fails if a PDF is missing or stale. It makes each PDF again from the committed model and compares the bytes.
+  - Seeding imports only the `*.json` files of the folder. A new test shows that a PDF in the folder is not imported and does not cause an error.
+- **PDF export fixes (editor and command):**
+  - Long in-block text stays inside its block. An Evaluate expression breaks onto more lines. A number, such as a Gain of `1.3333333333333333`, gets a smaller font. The text is not shortened, so a search of the PDF still finds it. Before, the text went across the blocks and wires near it. This is more important now that the shipped models hide most block names. **Allow Text Truncation** still shortens the text to one line.
+  - A sheet that is larger than the print area is cut at the edge of the area. Before, at 100 % it went over the footer and the page margins.
+  - An Assert block prints `Assert`. Before, it printed `?`.
+  - The PDF creation and modification dates are the print date. Before, pdf-lib set them from the clock.
+- **Tests.** `__tests__/pdf-command.test.ts` covers the command: the page count for each scope, `--date`, the output paths, model references and the errors. `__tests__/pdf-export.test.ts` has tests for the fixes above.
+
 ## What's New in 3.8.1
 
 The FPV Vehicle has no Telemetry sheet now. Its 41 Output Ports are on Main, each with a direct wire from the block output that computes it. **The ports, their order and the generated code do not change.** You do not have to export the model again.
