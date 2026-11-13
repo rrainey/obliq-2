@@ -1,5 +1,50 @@
 # obliq-2 Change Log
 
+## What's New in 3.8.1
+
+The FPV Vehicle has no Telemetry sheet now. Its 41 Output Ports are on Main, each with a direct wire from the block output that computes it. **The ports, their order and the generated code do not change.** You do not have to export the model again.
+
+- **The Telemetry sheet is removed.** Before, each vehicle output went from a Sheet Label Sink on Main to a Sheet Label Source on Telemetry, and from there to its Output Port. MAB guideline na_0011 advises against a Sheet Label Source that feeds an Output Port.
+  - Removed: the Telemetry sheet, its 41 Sheet Label Sources, the 41 Sheet Label Sinks (`Tag_*`) on Main, and 82 wires. No other block, sheet or model read these labels.
+  - Added: 41 Output Ports on Main and 41 wires. Each wire comes from the output that fed the `Tag_` sink of that signal.
+  - The same change applies to FPV Vehicle No Mag in `test-models/fpv/`.
+  - The single-file model of the builder (`buildFpvModel()`, for the native tests) also has its Output Ports and scopes on Main. The Battery scope is `BatteryVoltage`, because Battery is the name of the battery subsystem. A Sheet Label Sink stays on Main only for each of the 13 signals that its Tests sheet reads.
+  - The FPV Demo Flight, FPV Acro Rate Step and the Tnn test models do not change: they keep their own Telemetry sheets of scopes.
+- **What does not change, with the proof:**
+  - The Input Ports and the Output Ports: the same names, order, data types and dimensions. The order comes from the order of the Output Port blocks in the model (`modelInterface()`). The builder adds them in the same order as before.
+  - The generated code. `npm run obliq:cgen -- reference-models/fpv-vehicle.json --name fpv` gives the same files as for 3.8.0. Only the time stamps and the source path in `cgen-manifest.json` are different. This applies to `fpv.h`, `fpv.c` and `Motor_RR.c/h`, and also to FPV Vehicle No Mag. The flattener removed the label pairs before, so the Output Ports read the same signals.
+  - Behaviour. FPV Demo Flight and FPV Acro Rate Step give the same values at each step (a hash of the inputs, outputs, signals, states and data stores after each of 10000 and 6000 steps). All Asserts pass as before: 19 and 6 in the shipped models, and the 27 test models in `test-models/fpv/`.
+  - The test models need no change to their wiring.
+- **The shipped and test models have new layout options.** The builder lays out `reference-models/` and `test-models/fpv/` with `SHIPPED_LAYOUT_OPTIONS`:
+  - the defaults: ELK Layered, subsystem functions, mirrored return row;
+  - also **Resize Subsystems** (maximum port spacing 40 px), subsystem port labels shown, and **Hide unnecessary block names** (the names of all blocks except subsystems are hidden);
+  - not Tidy signal labels.
+
+  The tests compare the files with the builder output, byte for byte, so the files always have this layout. Input Ports, Output Ports and Sheet Labels show their names inside the block, so they stay readable. Other blocks show only their symbol or their parameter, for example `INT` or `SUM`. To see the name of such a block, open it.
+- **New layout rule: Output Ports beside their hosts.** On each sheet that has an Output Port, the layout also tries each Output Port beside the block output that drives it, as a satellite. On a mirrored return-row block, the Output Port is on its left. The layout keeps this result only when it has fewer crossings and no hard fault. Else the Output Ports stay in the right column. MAB guideline db_0042 permits this: Outports go on the right, but you can move them to prevent wire crossings. The command line has `--output-ports auto|column|beside` (default `auto`).
+- **Fixed: a second tune changed the layout.**
+  - The tune applied **Hide unnecessary block names** and **Subsystem Ports Labeling** after the layout. Thus the layout kept space for names that it then hid. The tune now applies them first.
+  - With ELK, **Resize Subsystems** started from the current block positions. The fit now starts from the order of the block list. Thus the sizes do not depend on the positions.
+
+  `npm run obliq:layout -- <file> --report` with the options of the builder now changes nothing on each shipped file.
+- **Results.** FPV vehicle:
+
+  | Value | 3.8.0 (29 sheets) | 3.8.1 (28 sheets) |
+  |---|---|---|
+  | Wires through blocks, overlaps, small steps | 0 | 0 |
+  | Crossings | 3544 | 3257 |
+  | Bends | 3570 | 3566 |
+  | Straight wires | 561 | 582 |
+  | Total sheet area | 139.5 Mpx | 133.4 Mpx |
+  | Main sheet | 84 crossings, 2562 × 2514 px | 84 crossings, 2627 × 2088 px |
+
+  Without the new rule, Main has 161 crossings and is 2569 × 3760 px, because 41 long wires go to the right column.
+- **Costs:**
+  - The rule puts crossings first. On FlightController, GpsRescue, Frame and Battery, fewer crossings come with more bends (+90, +38, +12 and +4). Five sheets are wider and less high. PosHold (+3.5 %) and Frame (+1.5 %) have a larger area.
+  - The Main sheets of FPV Demo Flight and FPV Acro Rate Step are larger, because Resize Subsystems makes the Vehicle block taller. In `test-models/fpv/`, T11 and T20 have 68 crossings; they had 67.
+  - Slower layout: about 5.8 s for the whole FPV vehicle; it was 3.3 s. Tidy signal labels takes about 60 s.
+- **`docs/layout-engine-comparison.md`, "3.8.1 results"** gives all measurements, with the maximum port spacing (40, 50 and 60 px) and the sheets that change.
+
 ## What's New in 3.8.0
 
 **Tune Model Layout** has a new default engine, ELK Layered. No wire goes through a block, and control loops read controller, actuator, plant, with the sensors on a mirrored row below. **The shipped FPV models have a new layout, but their blocks, wires, parameters and behaviour do not change.** Simulation and generated code are the same.
