@@ -1,10 +1,17 @@
 /**
- * Finite-difference derivative: y = (u - u_prev) / dt
+ * Finite-difference derivative: y = (u - u_prev) / (t - t_prev)
  * (Simulink Derivative → Obliq mapping option B).
  *
  * Supports scalar, vector, and matrix inputs (element-wise).
- * u_prev is latched in generateDeferredStateUpdate after algebra producers run
- * (same two-phase pattern as unit_delay).
+ * u_prev and t_prev are latched in generateDeferredStateUpdate after algebra
+ * producers run (same two-phase pattern as unit_delay). The RK4 stages restore
+ * the model struct after each stage, so the latch holds the last major step.
+ *
+ * The divisor is the time since the last latch, not model->dt. In an RK4
+ * stage at t0 + h/2 the divisor is h/2. With model->dt, the stages saw about
+ * half the derivative and an integrator of the output gained only 2/3 of the
+ * input change. When the time difference is below 1e-15 s (the first step
+ * after init or seed_from_inputs), the divisor is model->dt.
  */
 
 import { BlockData } from '@/components/BlockNode'
@@ -29,7 +36,8 @@ export class DerivativeBlockModule implements IBlockModule {
     }
     const u = inputs[0]
     code += `    {\n`
-    code += `        double __dt = model->dt;\n`
+    code += `        double __dt = model->time - model->states.${name}_tprev;\n`
+    code += `        if (__dt < 1e-15) __dt = model->dt;\n`
     code += `        if (__dt < 1e-15) __dt = 1e-15;\n`
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
       code += `        for (int i = 0; i < ${typeInfo.rows}; i++) {\n`
@@ -79,6 +87,7 @@ export class DerivativeBlockModule implements IBlockModule {
     } else {
       code += `${indent}model->states.${name}_prev = ${u};\n`
     }
+    code += `${indent}model->states.${name}_tprev = model->time;\n`
     if (enableExpr) code += `    }\n`
     return code
   }
@@ -98,13 +107,14 @@ export class DerivativeBlockModule implements IBlockModule {
   generateStateStructMembers(block: BlockData, outputType?: string): string[] {
     const name = BlockModuleUtils.sanitizeIdentifier(block.name)
     const typeInfo = BlockModuleUtils.parseType(outputType || 'double')
+    const tprev = `    double ${name}_tprev;`
     if (typeInfo.isMatrix && typeInfo.rows && typeInfo.cols) {
-      return [`    double ${name}_prev[${typeInfo.rows}][${typeInfo.cols}];`]
+      return [`    double ${name}_prev[${typeInfo.rows}][${typeInfo.cols}];`, tprev]
     }
     if (typeInfo.isArray && typeInfo.arraySize) {
-      return [`    double ${name}_prev[${typeInfo.arraySize}];`]
+      return [`    double ${name}_prev[${typeInfo.arraySize}];`, tprev]
     }
-    return [`    double ${name}_prev;`]
+    return [`    double ${name}_prev;`, tprev]
   }
 
   generateInitialization(block: BlockData, outputType?: string): string {
@@ -124,6 +134,7 @@ export class DerivativeBlockModule implements IBlockModule {
     } else {
       code += `    model->states.${name}_prev = ${ic};\n`
     }
+    code += `    model->states.${name}_tprev = model->time;\n`
     return code
   }
 

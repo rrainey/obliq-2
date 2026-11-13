@@ -1,13 +1,28 @@
 // lib/blocks/IterationIndexBlockModule.ts
 // Source of the current for-iterator index (set by parent before each body call).
+//
+// The parent For Iterator Subsystem sets the index range (its indexBase and
+// iterationLimit). The block's own `indexBase` parameter has no effect.
+// The block must be in the body of a For Iterator Subsystem, also in a
+// flattened subsystem in the body. In another place the module struct has no
+// `iteration_index` member, and the block gives a C #error with its name.
 
 import { BlockData } from '@/components/BlockNode'
 import { BlockState, SimulationState } from '@/lib/simulationTypes'
-import { IBlockModule, BlockModuleUtils } from './BlockModule'
+import { IBlockModule, BlockModuleUtils, CodeGenContext } from './BlockModule'
 
 export class IterationIndexBlockModule implements IBlockModule {
-  generateComputation(block: BlockData, _inputs: string[]): string {
+  generateComputation(
+    block: BlockData,
+    _inputs: string[],
+    _inputTypes?: string[],
+    context?: CodeGenContext
+  ): string {
     const outputName = `model->signals.${BlockModuleUtils.sanitizeIdentifier(block.name)}`
+    if (!context?.forIteratorBody) {
+      const name = String(block.name).replace(/"/g, "'")
+      return `#error "Iteration Index block '${name}' is not in the body of a For Iterator Subsystem"\n`
+    }
     // Parent sets model->iteration_index each pass of the for-loop.
     return `    ${outputName} = (double)model->iteration_index;\n`
   }

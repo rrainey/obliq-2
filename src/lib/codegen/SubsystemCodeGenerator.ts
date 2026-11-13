@@ -1041,7 +1041,8 @@ export class SubsystemCodeGenerator {
       // Use subsystem-level parameters (this.info.parameters) which scope to this subsystem
       const subsystemParams = this.info.parameters || []
       const context: CodeGenContext = {
-        parameterNames: subsystemParams.map(p => p.name)
+        parameterNames: subsystemParams.map(p => p.name),
+        forIteratorBody: !!this.info.forIterator
       }
 
       // Handle transfer functions specially (need state access)

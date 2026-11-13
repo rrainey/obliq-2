@@ -15,6 +15,7 @@ import ModelReferenceBadge from './ModelReferenceBadge'
 import { isModelReference } from '@/lib/modelReferences'
 import { isResizable, RESIZE_MIN_WIDTH, RESIZE_SNAP } from '@/lib/blocks/resizableBlocks'
 import * as BlockGeometry from '@/lib/layout/blockGeometry'
+import { SATURATION_DYNAMIC_INPUTS, SATURATION_DYNAMIC_PORT_NAME_PX, SATURATION_DYNAMIC_SYMBOL } from '@/lib/blocks/SaturationDynamicBlockModule'
 
 export interface BlockData {
   id: string
@@ -270,6 +271,18 @@ const getBlockSymbol = (data: BlockNodeData) => {
   // Handle limit block with Tabler icon
   if (data.type === 'limit') {
     return <IconMathMaxMin size={24} stroke={1.5} />
+  }
+
+  // Saturation Dynamic: a saturation characteristic on two axes. The port
+  // names (up, u, lo) are inside the block, next to the input ports.
+  if (data.type === 'saturation_dynamic') {
+    const S = SATURATION_DYNAMIC_SYMBOL
+    return (
+      <svg width={S.width} height={S.height} viewBox={`0 0 ${S.width} ${S.height}`} fill="none" stroke="currentColor" aria-label="Saturation Dynamic">
+        {S.axes.map(d => <path key={d} d={d} strokeWidth={0.75} opacity={0.5} />)}
+        <path d={S.curve} strokeWidth={1.5} strokeLinejoin="round" />
+      </svg>
+    )
   }
 
   // Handle clock block with Tabler icon
@@ -1269,6 +1282,24 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           </div>
         ))}
 
+        {/* Saturation Dynamic: the names of its input ports, inside the block
+            next to each port, so that the signal and the two limits are
+            clear. They are inside the body, so the layout reserves no space. */}
+        {data.type === 'saturation_dynamic' && SATURATION_DYNAMIC_INPUTS.slice(0, inputCount).map((port, index) => (
+          <div
+            key={`sat-port-${index}`}
+            className={`absolute pointer-events-none font-mono ${isDark ? 'text-gray-300' : 'text-gray-600'}`}
+            style={{
+              top: calculatePortPosition(index, inputCount, minHeight) - SATURATION_DYNAMIC_PORT_NAME_PX / 2 - 1,
+              fontSize: SATURATION_DYNAMIC_PORT_NAME_PX,
+              lineHeight: `${SATURATION_DYNAMIC_PORT_NAME_PX + 2}px`,
+              ...(inputSide === 'left' ? { left: 4 } : { right: 4 }),
+            }}
+          >
+            {port.label}
+          </div>
+        ))}
+
         {/* Port Name Labels - shown when showPortNames is enabled or for blocks that always show port names */}
         {/* Skip multiply blocks entirely, skip enable/reset ports */}
         {data.type !== 'multiply' && (data.parameters?.showPortNames || data.type === 'body2quaternion_rates') && (
@@ -1410,6 +1441,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
                 ? `Input ${index + 1} (${sumSigns[index] === '+' ? 'Add' : 'Subtract'})`
                 : data.type === 'integrator' && data.parameters?.showInitPort && index === 1
                 ? 'x(0) initial condition'
+                : data.type === 'saturation_dynamic' && SATURATION_DYNAMIC_INPUTS[index]
+                ? `${SATURATION_DYNAMIC_INPUTS[index].label}: ${SATURATION_DYNAMIC_INPUTS[index].description}`
                 : `Input ${index + 1}`
             }
             onMouseEnter={(e) => {

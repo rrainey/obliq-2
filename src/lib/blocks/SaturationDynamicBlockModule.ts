@@ -1,9 +1,34 @@
 // lib/blocks/SaturationDynamicBlockModule.ts
 // Simulink Saturation Dynamic: y = clamp(u, lo, up) with signal limits.
 // Ports: in0=up, in1=u, in2=lo. Element-wise when u (or limits) are vectors.
+// The C is y = fmax(lo, fmin(up, u)), so y = lo when lo > up.
 
 import { BlockData } from '@/components/BlockNode'
 import { IBlockModule, BlockModuleUtils } from './BlockModule'
+
+/**
+ * The input ports, in port order. Shipped models are wired to this order
+ * (it is also Simulink's order), so do not change it.
+ */
+export const SATURATION_DYNAMIC_INPUTS = [
+  { label: 'up', description: 'upper limit' },
+  { label: 'u', description: 'input signal' },
+  { label: 'lo', description: 'lower limit' },
+] as const
+
+/**
+ * The block symbol: a saturation characteristic on two axes, in a 28 x 24
+ * unit box. The canvas (BlockNode) and the PDF (pdfRenderer) draw these paths.
+ */
+export const SATURATION_DYNAMIC_SYMBOL = {
+  width: 28,
+  height: 24,
+  axes: ['M14 2V22', 'M1 12H27'],
+  curve: 'M2 20H9L19 4H26',
+} as const
+
+/** Font size, in canvas px, of the port names inside the block. */
+export const SATURATION_DYNAMIC_PORT_NAME_PX = 8
 
 function preferSignalType(inputTypes: string[]): string {
   // Prefer u (in1); fall back to first vector among ports; else scalar.
@@ -98,7 +123,7 @@ export class SaturationDynamicBlockModule implements IBlockModule {
   }
 
   getInputPortLabels(_block: BlockData): string[] | undefined {
-    return ['up', 'u', 'lo']
+    return SATURATION_DYNAMIC_INPUTS.map(p => p.label)
   }
 
   getOutputPortLabels(_block: BlockData): string[] | undefined {

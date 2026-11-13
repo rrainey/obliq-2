@@ -3,6 +3,7 @@
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { propagateSignalTypesMultiSheet, validateSignalTypes } from './signalTypePropagation'
+import { iteratorAndDelayErrorsMultiSheet, saturationDynamicErrorsMultiSheet } from './typeCompatibilityValidator'
 
 export interface MultiSheetValidationResult {
   errors: Array<{
@@ -98,6 +99,20 @@ export function validateMultiSheetTypeCompatibility(sheets: SheetData[]): MultiS
     }
   }
   
+  // Saturation Dynamic: the dimensions of up, u and lo must agree. Else the
+  // generated C does not compile, or reads past the end of an array.
+  for (const error of saturationDynamicErrorsMultiSheet(sheets, propagationResult.signalTypes)) {
+    const sheet = sheets.find(s => s.blocks.some(b => b.id === error.blockId))
+    errors.push({ sheetId: sheet?.id, blockId: error.blockId, message: error.message })
+  }
+
+  // Variable Transport Delay: scalar inputs. Iteration Index: in the body of
+  // a For Iterator Subsystem. Else the generated C does not compile.
+  for (const error of iteratorAndDelayErrorsMultiSheet(sheets, propagationResult.signalTypes)) {
+    const sheet = sheets.find(s => s.blocks.some(b => b.id === error.blockId))
+    errors.push({ sheetId: sheet?.id, blockId: error.blockId, message: error.message })
+  }
+
   // Check for unconnected required inputs (per sheet)
   for (const sheet of sheets) {
     for (const block of sheet.blocks) {
@@ -141,6 +156,8 @@ function getRequiredInputCount(block: { type: string; parameters?: Record<string
       return configuredArithmeticArity(block)
     case 'lookup_2d':
       return 2
+    case 'saturation_dynamic':
+      return 3
     case 'assert':
       return block.parameters?.mode === 'near' ? 2 : 1
     case 'scale':

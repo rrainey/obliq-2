@@ -269,7 +269,7 @@ From initial testing:
 
 This infrastructure enables the following roadmap items:
 
-- **Task 0.2**: WASM caching with Supabase Storage
+- **Task 0.2**: WASM module cache
 - **Task 0.3**: Update C code generator for WASM exports
 - **Task 0.4**: Create `/api/compile-wasm` endpoint
 - **Task 1.1**: `WasmSimulationEngine` class
@@ -293,7 +293,6 @@ This infrastructure enables the following roadmap items:
 - **WASM Implementation Roadmap**: `docs/wasm-implementation-roadmap.md`
 - **WASM Architecture**: `docs/wasm-simulation-architecture_1.md`
 - **C Code Generation**: `docs/wasm-c-code-generation.md`
-- **Testing Strategy**: `docs/wasm-testing-strategy.md`
 
 ## Support
 

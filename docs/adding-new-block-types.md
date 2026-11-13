@@ -430,6 +430,13 @@ Add comprehensive documentation in the `BLOCK_TYPES` array (around line 715):
 | 14 | `src/lib/signalTypePropagation.ts` | Location 4: getBlockInputPortCount() |
 | 15 | `src/lib/signalTypePropagation.ts` | Location 5: getMultiSheetBlockOutputType() |
 | 16 | `mcp-server/src/tools/block-types.ts` | Add MCP documentation |
+| 17 | `src/lib/blockParameterValidator.ts` | Add a case, also for a block without parameters. Without it, the Model Builder API rejects the block |
+| 18 | `src/lib/blockFactory.ts` | Add default parameters in `getTypeSpecificDefaultParameters()` (optional: the registry defaults apply) |
+| 19 | `src/lib/modelSchema.ts` | Add the type to the block type enum |
+| 20 | `src/lib/typeCompatibilityValidator.ts`, `src/lib/multiSheetTypeValidator.ts` | Add input checks and the number of required inputs (optional) |
+| 21 | `src/lib/export/blockGlyphs.ts`, `src/lib/export/pdfRenderer.ts` | Add the PDF symbol. `blockGlyphs.ts` contains a NUL byte: edit it with a byte-safe tool |
+| 22 | `docs/blocks-reference.md`, `README.md`, `docs/model-builder-api.md` | Document the block |
+| 23 | `__tests__/block-type-consistency.test.ts` | Run it. It finds a type that is missing from the registry, the palette or the MCP list |
 
 ### Quick Reference: Block Type Categories
 

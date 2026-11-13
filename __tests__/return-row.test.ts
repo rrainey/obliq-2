@@ -165,7 +165,8 @@ describe('return row on the FPV vehicle', () => {
   beforeAll(async () => {
     tuned = (await tuneModelLayout(sheets, null, ELK)).sheets
     flat = (await tuneModelLayout(sheets, null, { ...ELK, mirrorReturnPath: false })).sheets
-  })
+    // Two layouts of the whole vehicle: about 12 s alone, more in a full run
+  }, 120000)
 
   it('puts Sensors, flipped, below the forward path of Main', () => {
     const main = buildFullPlan(tuned).sheets.find(s => s.path.join('/') === 'Main')!

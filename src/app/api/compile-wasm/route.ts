@@ -123,11 +123,14 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
   }
 
   const sheets = modelData.sheets
+  // Model parameters change the generated code, so they are part of the
+  // cache key and go to the generator (as in compile-wasm-stream)
+  const parameters = modelData.parameters || []
   const debugMath = !!modelData.globalSettings?.debugMath
 
   // Generate cache key (debugMath changes codegen → separate cache entry)
   const integrationAlgorithm = modelData.globalSettings?.integrationAlgorithm === 'euler' ? 'euler' : 'rk4'
-  const cacheKey = generateCacheKey(modelId, { sheets }, {
+  const cacheKey = generateCacheKey(modelId, { sheets, parameters }, {
     optimizationLevel,
     includeDebugInfo: debugMath,
     integrationAlgorithm
@@ -194,7 +197,7 @@ async function compileWasmHandler(request: NextRequest): Promise<NextResponse> {
       integrationAlgorithm
     })
 
-    generatedCode = generator.generateWasm(sheets)
+    generatedCode = generator.generateWasm(sheets, parameters)
     console.log(`[compile-wasm] Code generated (${Date.now() - startTime}ms)`)
   } catch (error) {
     throw new AppError(

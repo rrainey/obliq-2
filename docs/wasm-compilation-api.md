@@ -2,6 +2,8 @@
 
 REST API endpoint for compiling models to WebAssembly.
 
+The source is `src/app/api/compile-wasm/route.ts`. The browser editor uses the streamed variant, `POST /api/compile-wasm-stream`. `ServerWasmExecutor` (automations and MCP) and `WasmSimulationEngine` use this endpoint.
+
 ## Endpoint
 
 ```
@@ -14,23 +16,32 @@ POST /api/compile-wasm
 
 ```
 Content-Type: application/json
+Authorization: Bearer <api_token>
 ```
+
+The request must have authentication. Use one of these:
+- An API token from the `/tokens` page, in the `Authorization` header.
+- The local session cookie that `GET /api/session` sets. A same-origin `fetch` in the browser sends it.
 
 ### Body
 
 ```typescript
 {
-  modelId: string          // Required: UUID of the model to compile
-  version?: number         // Optional: Model version (defaults to latest)
+  modelId: string             // Required: UUID of the model to compile
+  version?: number            // Optional: saved version. 0 = the autosave. If you omit it, the current model file is used.
   optimizationLevel?: string  // Optional: 'O0' | 'O1' | 'O2' | 'O3' (default: 'O2')
+  noCache?: boolean           // Optional: skip the cache lookup and compile again (default: false)
 }
 ```
+
+Model references in the model are expanded from the local store before code generation.
 
 ### Example Request
 
 ```bash
 curl -X POST http://localhost:3000/api/compile-wasm \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{
     "modelId": "550e8400-e29b-41d4-a716-446655440000",
     "optimizationLevel": "O2"
@@ -41,6 +52,8 @@ curl -X POST http://localhost:3000/api/compile-wasm \
 
 ### Success Response (200 OK)
 
+After a compilation (`cacheHit: false`):
+
 ```typescript
 {
   wasmData: string         // Base64-encoded WASM binary
@@ -49,9 +62,8 @@ curl -X POST http://localhost:3000/api/compile-wasm \
     modelName: string      // Name of the compiled model
     version: number        // Model version used
     cacheKey: string       // Cache key for this compilation
-    cacheHit: boolean      // Whether result was from cache
-    compilationTime?: number  // Time taken to compile (if not cached)
-    retrievalTime?: number    // Time taken to retrieve from cache
+    cacheHit: false
+    compilationTime: number   // Time taken to compile, in milliseconds
     wasmSize: number       // Size of WASM binary in bytes
     jsSize: number         // Size of JS glue code in bytes
     optimizationLevel: string  // Optimization level used
@@ -62,6 +74,8 @@ curl -X POST http://localhost:3000/api/compile-wasm \
 }
 ```
 
+From the cache (`cacheHit: true`), `metadata` contains the stored cache metadata (`modelHash`, `compilationTime`, `optimizationLevel`, `wasmSize`, `jsSize`, `blockCount`), and also `cacheHit`, `retrievalTime` (milliseconds), `modelName` and `cacheKey`. It does not contain `version`, `inputMap` or `outputMap`.
+
 ### Example Response
 
 ```json
@@ -71,7 +85,7 @@ curl -X POST http://localhost:3000/api/compile-wasm \
   "metadata": {
     "modelName": "SimpleModel",
     "version": 1,
-    "cacheKey": "550e8400-e29b-41d4-a716-446655440000-a1b2c3d4e5f67890-O2",
+    "cacheKey": "v38-550e8400-e29b-41d4-a716-446655440000-a1b2c3d4e5f67890-O2",
     "cacheHit": false,
     "compilationTime": 2450,
     "wasmSize": 25600,
@@ -86,83 +100,59 @@ curl -X POST http://localhost:3000/api/compile-wasm \
 
 ## Error Responses
 
+All errors have this body (`src/lib/apiErrorHandler.ts`):
+
+```typescript
+{
+  success: false
+  error: string        // Message
+  code: string         // For example 'VALIDATION_ERROR', 'NOT_FOUND', 'INTERNAL_ERROR'
+  details?: object
+  timestamp: string    // ISO 8601
+}
+```
+
 ### 400 Bad Request
 
 **Missing Required Fields**:
 ```json
 {
+  "success": false,
   "error": "Missing required fields: modelId",
-  "type": "validation_error",
+  "code": "VALIDATION_ERROR",
   "timestamp": "2025-01-15T10:30:00.000Z"
 }
 ```
 
-**Invalid Model ID Format**:
-```json
-{
-  "error": "Invalid model ID format",
-  "type": "validation_error",
-  "details": {
-    "providedModelId": "not-a-uuid"
-  }
-}
-```
+Other 400 errors:
+- `Invalid JSON in request body`
+- `Invalid model ID format` (`details.providedModelId`)
+- `Invalid optimization level. Must be O0, O1, O2, or O3` (`details.providedLevel`)
+- `Invalid model structure: missing or invalid sheets data` (`details.modelId`, `details.modelName`)
 
-**Invalid Optimization Level**:
-```json
-{
-  "error": "Invalid optimization level. Must be O0, O1, O2, or O3",
-  "type": "validation_error",
-  "details": {
-    "providedLevel": "O4"
-  }
-}
-```
+### 401 Unauthorized
 
-**Invalid Model Structure**:
-```json
-{
-  "error": "Invalid model structure: missing or invalid sheets data",
-  "type": "validation_error",
-  "details": {
-    "modelId": "...",
-    "modelName": "..."
-  }
-}
-```
+The request has no valid API token and no valid session cookie.
 
 ### 404 Not Found
 
-**Model Not Found**:
-```json
-{
-  "error": "Model not found",
-  "type": "not_found",
-  "details": {
-    "modelId": "550e8400-e29b-41d4-a716-446655440000"
-  }
-}
-```
+- `Model not found` (`details.modelId`)
+- `Version 5 not found for this model` (`details.modelId`, `details.requestedVersion`)
+- The model file of a linked model is missing (`details.filePath`)
 
-**Version Not Found**:
-```json
-{
-  "error": "Version 5 not found for this model",
-  "type": "not_found",
-  "details": {
-    "modelId": "...",
-    "requestedVersion": 5
-  }
-}
-```
+### 422 Unprocessable Entity
+
+- The model file is not a valid model.
+- A model reference in the model cannot be resolved.
 
 ### 500 Internal Server Error
 
 **Code Generation Failed**:
 ```json
 {
+  "success": false,
   "error": "Failed to generate C code",
-  "type": "internal_error",
+  "code": "INTERNAL_ERROR",
   "details": {
     "modelId": "...",
     "originalError": "..."
@@ -173,8 +163,9 @@ curl -X POST http://localhost:3000/api/compile-wasm \
 **Compilation Failed**:
 ```json
 {
+  "success": false,
   "error": "WASM compilation failed: /workspace/model.c:42:5: error: ...",
-  "type": "internal_error",
+  "code": "INTERNAL_ERROR",
   "details": {
     "modelId": "...",
     "modelName": "...",
@@ -197,36 +188,38 @@ curl -X POST http://localhost:3000/api/compile-wasm \
 
 ## Caching
 
-The API automatically caches compiled WASM modules using:
-- **Cache Key Format**: `{modelId}-{modelHash}-{optimizationLevel}[-debug]`
-- **Storage**: Supabase Storage (`wasm-cache` bucket)
-- **Metadata**: PostgreSQL (`wasm_cache_metadata` table)
+The API caches compiled WASM modules with `FileCacheManager` (`src/lib/wasm/cache/`):
+- **Cache Key Format**: `{CODEGEN_VERSION}-{modelId}-{modelHash}-{optimizationLevel}[-euler][-debug]`. `-euler` is added when the model uses Euler integration. `-debug` is added when `debugMath` is on.
+- **Files**: `<OBLIQ_HOME>/cache/wasm/<cacheKey>/module.wasm` and `module.js`. `OBLIQ_HOME` is `~/.config/obliq-2` by default.
+- **Metadata**: the `wasm_cache` table in `<OBLIQ_HOME>/obliq.db` (SQLite).
+
+For more information, see `src/lib/wasm/cache/README.md`.
 
 ### Cache Hit Behavior
 
 When a cache hit occurs:
-1. WASM and JS files retrieved from Supabase Storage (typically <200ms)
-2. Metadata returned with `cacheHit: true`
-3. No compilation performed
-4. Speedup: 10-60x faster than compiling
+1. The WASM and JS files are read from the cache folder.
+2. The response has `cacheHit: true`.
+3. No compilation occurs.
 
 ### Cache Miss Behavior
 
 When a cache miss occurs:
-1. C code generated from model
-2. Files written to temporary directory
-3. Emscripten compilation via Docker (typically 1-3 seconds)
-4. Result stored in cache for future requests
-5. Metadata returned with `cacheHit: false`
+1. C code is generated from the model.
+2. The files are written to a temporary directory.
+3. Emscripten compiles them in the `obliq-emscripten:latest` Docker container.
+4. The result is stored in the cache.
+5. The response has `cacheHit: false`.
 
 ### Cache Invalidation
 
-Cache is invalidated when:
-- Model structure changes (blocks, connections, parameters)
-- Different optimization level requested
-- Model version changes
+A different cache key, and thus a new compilation, occurs when:
+- The model structure changes (blocks, block names, parameters, connections).
+- A different optimization level is requested.
+- The integration algorithm or the `debugMath` setting changes.
+- `CODEGEN_VERSION` in `cacheKey.ts` changes.
 
-**Note**: UI properties (positions, colors) don't affect cache key.
+**Note**: UI properties (positions, colors) do not affect the cache key.
 
 ## Usage Example
 
@@ -310,75 +303,30 @@ console.log('Time:', time)
 URL.revokeObjectURL(jsUrl)
 ```
 
-## Performance Characteristics
+The full list of exported functions is in `src/lib/wasm/wasmExports.ts`.
 
-### Compilation Time
+## Timeout
 
-| Model Size | Optimization | Time (First) | Time (Cached) |
-|------------|--------------|--------------|---------------|
-| Small (5-10 blocks) | O0 | ~0.8s | ~100ms |
-| Small (5-10 blocks) | O2 | ~1.5s | ~100ms |
-| Medium (20-50 blocks) | O0 | ~1.2s | ~150ms |
-| Medium (20-50 blocks) | O2 | ~2.5s | ~150ms |
-| Large (100+ blocks) | O0 | ~2.0s | ~200ms |
-| Large (100+ blocks) | O2 | ~4.0s | ~200ms |
-
-### Timeout
-
-- Maximum compilation time: **30 seconds**
-- If exceeded, returns 500 error
-- Recommend using `O0` for very large models during development
-
-## Rate Limiting
-
-Currently no rate limiting implemented. Future versions may add:
-- Per-user limits
-- IP-based throttling
-- Authenticated API keys
+- Maximum compilation time: **30 seconds**.
+- If the compilation takes longer, the API returns a 500 error.
 
 ## Security Considerations
 
-1. **Model Access**: API uses Supabase RLS policies to ensure users can only compile models they have access to
-2. **Sandboxing**: Emscripten runs in Docker container with limited resources
-3. **Temp File Cleanup**: Temporary files deleted after compilation
-4. **Timeout Protection**: 30-second timeout prevents long-running compilations
-5. **Input Validation**: All inputs validated before processing
+1. **Authentication**: The API accepts only an API token or the local session cookie.
+2. **Sandboxing**: Emscripten runs in a Docker container (`docker run --rm`).
+3. **Temp File Cleanup**: The temporary directory is deleted after compilation, also after an error.
+4. **Timeout Protection**: A 30-second timeout stops long compilations.
+5. **Input Validation**: The API validates the model ID, the optimization level and the model structure before it compiles.
 
-## Monitoring & Analytics
+## Metrics
 
-The API logs metrics to `wasm_compilation_metrics` table:
-- Cache hit rate
-- Compilation times
-- Model sizes
-- Error rates
-- User activity
-
-Access via Supabase dashboard or query directly:
-
-```sql
-SELECT
-  DATE(created_at) as date,
-  COUNT(*) as total_compilations,
-  SUM(CASE WHEN cache_hit THEN 1 ELSE 0 END) as cache_hits,
-  AVG(compilation_time_ms) FILTER (WHERE NOT cache_hit) as avg_compile_time
-FROM wasm_compilation_metrics
-WHERE created_at > NOW() - INTERVAL '7 days'
-GROUP BY DATE(created_at)
-ORDER BY date DESC;
-```
+The API writes one row to the `wasm_compilation_metrics` table in `<OBLIQ_HOME>/obliq.db` for each cache hit and each successful compilation. The row contains the model ID, cache hit, compilation time, block count and optimization level. `FileCacheManager.getCacheStats()` gives the entry count, total size, average compilation time and 24-hour hit rate. `POST /api/cache-maintenance` runs cleanup and LRU eviction.
 
 ## Troubleshooting
 
 ### "Docker image not found"
 ```bash
 docker build -t obliq-emscripten:latest -f __tests__/wasm/docker/Dockerfile.emscripten __tests__/wasm/docker
-```
-
-### "Supabase connection failed"
-Check environment variables:
-```bash
-echo $NEXT_PUBLIC_SUPABASE_URL
-echo $SUPABASE_SERVICE_ROLE_KEY
 ```
 
 ### "Compilation timeout"
@@ -391,12 +339,3 @@ Increase Docker memory limit:
 ```bash
 # Docker Desktop: Settings → Resources → Memory
 ```
-
-## Future Enhancements
-
-- [ ] Streaming compilation progress (Server-Sent Events)
-- [ ] Pre-warming (compile when model editor opens)
-- [ ] CDN integration for cached modules
-- [ ] Custom Emscripten flags support
-- [ ] Multi-threaded WASM support
-- [ ] Source map generation for debugging

@@ -38,7 +38,7 @@ function collectAllSheets(
 
     // Look for subsystem blocks that have embedded sheets
     for (const block of sheet.blocks || []) {
-      if (block.type === 'subsystem' && block.parameters?.sheets) {
+      if ((block.type === 'subsystem' || block.type === 'for_iterator_subsystem') && block.parameters?.sheets) {
         const subsystemPath = `${sheetPath}/${block.name}`;
         const embeddedSheets = collectAllSheets(block.parameters.sheets, subsystemPath);
         for (const embeddedSheet of embeddedSheets) {

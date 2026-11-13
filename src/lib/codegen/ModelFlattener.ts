@@ -331,7 +331,9 @@ export class ModelFlattener {
           // Nested enables inside a segregated/atomic module belong to that
           // module's own flatten — do not register them on the parent.
           const childStrategy =
-            (block.parameters?.codeGenStrategy as string) || 'flatten'
+            block.type === 'for_iterator_subsystem'
+              ? 'segregated_atomic' // always segregated (see flattenSheets)
+              : (block.parameters?.codeGenStrategy as string) || 'flatten'
           const childIsSegregated =
             childStrategy === 'segregated' ||
             childStrategy === 'segregated_atomic' ||
@@ -661,9 +663,13 @@ export class ModelFlattener {
 
           // Check code generation strategy. For-iterator bodies must stay
           // segregated so the parent can wrap compute_outputs in a C for-loop.
+          // 'flatten' on a For Iterator is replaced by 'segregated_atomic':
+          // a flattened body would run only once in each step.
           const codeGenStrategy =
             block.type === 'for_iterator_subsystem'
-              ? (block.parameters?.codeGenStrategy || 'segregated_atomic')
+              ? (block.parameters?.codeGenStrategy && block.parameters.codeGenStrategy !== 'flatten'
+                  ? block.parameters.codeGenStrategy
+                  : 'segregated_atomic')
               : (block.parameters?.codeGenStrategy || 'flatten')
 
           // Create port mapping for this subsystem (key = how parents address it)

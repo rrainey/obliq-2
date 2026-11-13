@@ -1,5 +1,5 @@
 #!/usr/bin/env npx tsx
-/** Deprecated location — delegates to peer package ~/src/mdl2obliq. */
+/** Deprecated location — delegates to peer package ../mdl2obliq. */
 import { spawnSync } from "child_process"
 import path from "path"
 

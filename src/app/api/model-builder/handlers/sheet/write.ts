@@ -19,7 +19,7 @@ function findBlockRecursively(
         return { block, parentSheet: sheet };
       }
       // If this is a subsystem, search its nested sheets
-      if (block.type === 'subsystem' && block.parameters?.sheets) {
+      if ((block.type === 'subsystem' || block.type === 'for_iterator_subsystem') && block.parameters?.sheets) {
         const found = findBlockRecursively(block.parameters.sheets, blockId);
         if (found) return found;
       }
@@ -69,7 +69,7 @@ export async function handleCreateSheet(ctx: HandlerContext): Promise<NextRespon
 
     subsystemBlock = found.block;
 
-    if (subsystemBlock.type !== 'subsystem') {
+    if (subsystemBlock.type !== 'subsystem' && subsystemBlock.type !== 'for_iterator_subsystem') {
       return errorResponse(`Block ${subsystemBlockId} is not a subsystem`, 'NOT_A_SUBSYSTEM', 400);
     }
 

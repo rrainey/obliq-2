@@ -86,8 +86,6 @@ Navigate to: **http://localhost:8000/hello.html**
 
 With Task 0.1 complete, you're ready for **Task 0.2: WASM Cache Infrastructure**
 
-See [docs/wasm-task-0.1-completion-summary.md](docs/wasm-task-0.1-completion-summary.md) for full details.
-
 ## Need Help?
 
 - **Quick Start Guide**: [`__tests__/wasm/QUICKSTART.md`](__tests__/wasm/QUICKSTART.md)

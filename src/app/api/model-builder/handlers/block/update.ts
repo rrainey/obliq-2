@@ -331,7 +331,7 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
   // Normalize parameters for subsystem blocks when caller sends an array directly
   // This handles the case where MCP clients send updates.parameters as an array of
   // subsystem parameter definitions instead of { parameters: [...] }
-  if (blockType === BlockTypes.SUBSYSTEM && rawParametersIsArray) {
+  if ((blockType === BlockTypes.SUBSYSTEM || blockType === BlockTypes.FOR_ITERATOR_SUBSYSTEM) && rawParametersIsArray) {
     console.log('[UPDATE_BLOCK_PARAMETERS] Normalizing array parameters for subsystem');
     parameters = { parameters: parameters };
   }
@@ -341,7 +341,7 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
   // codeGenStrategy) when validating partial updates. Without this, updating just the
   // 'parameters' array would fail validation because the validator wouldn't know the
   // existing codeGenStrategy is 'segregated'.
-  if (blockType === BlockTypes.SUBSYSTEM) {
+  if (blockType === BlockTypes.SUBSYSTEM || blockType === BlockTypes.FOR_ITERATOR_SUBSYSTEM) {
     parameters = {
       ...block.parameters,  // Existing values (codeGenStrategy, inputPorts, etc.)
       ...parameters         // Incoming updates override existing
@@ -352,7 +352,7 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
   }
 
   // DEBUG: Log incoming request for subsystems
-  if (blockType === BlockTypes.SUBSYSTEM) {
+  if (blockType === BlockTypes.SUBSYSTEM || blockType === BlockTypes.FOR_ITERATOR_SUBSYSTEM) {
     console.log('[UPDATE_BLOCK_PARAMETERS] ========== SUBSYSTEM UPDATE ==========');
     console.log('[UPDATE_BLOCK_PARAMETERS] Block ID:', blockId);
     console.log('[UPDATE_BLOCK_PARAMETERS] Block Name:', block.name);
@@ -384,7 +384,7 @@ export async function handleUpdateBlockParameters(ctx: HandlerContext): Promise<
 
   // For subsystem blocks, MERGE parameters to preserve sheets and internal data
   // that shouldn't be modified via UPDATE_BLOCK_PARAMETERS
-  if (blockType === BlockTypes.SUBSYSTEM) {
+  if (blockType === BlockTypes.SUBSYSTEM || blockType === BlockTypes.FOR_ITERATOR_SUBSYSTEM) {
     // DEBUG: Log detailed merge information
     console.log('[UPDATE_BLOCK_PARAMETERS] Validation passed. Sanitized parameters:');
     console.log('[UPDATE_BLOCK_PARAMETERS]   - sanitizedParameters keys:', Object.keys(validation.sanitizedParameters || {}));

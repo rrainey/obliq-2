@@ -1,7 +1,7 @@
 // mcp-server/src/tools/block-types.ts
 // Provides block type information and parameter schemas for MCP clients
 
-import { ToolWithHandler } from '../types.js';
+import type { ToolWithHandler } from '../types.js';
 
 /**
  * Block parameter schema definition for MCP clients
@@ -37,7 +37,7 @@ interface BlockTypeInfo {
  * Complete block type definitions with parameter schemas
  * This is the authoritative source for MCP clients to understand block configuration
  */
-const blockTypeSchemas: BlockTypeInfo[] = [
+export const blockTypeSchemas: BlockTypeInfo[] = [
   // === Sources ===
   {
     type: 'source',
@@ -351,6 +351,18 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     outputs: ['out']
   },
   {
+    type: 'saturation_dynamic',
+    displayName: 'Saturation Dynamic',
+    category: 'Discontinuities',
+    description: 'Clamps the input u between a lower limit lo and an upper limit up that are input signals: y = fmax(lo, fmin(up, u)), element-wise. ' +
+      'Port order: 0 = up (upper limit), 1 = u (input signal), 2 = lo (lower limit). ' +
+      'A scalar input is applied to all elements; the other inputs must have the same dimensions. ' +
+      'When lo > up, y = lo. No parameters.',
+    parameters: {},
+    inputs: ['up', 'u', 'lo'],
+    outputs: ['y']
+  },
+  {
     type: 'relay',
     displayName: 'Relay',
     category: 'Discontinuities',
@@ -598,6 +610,60 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     },
     inputs: ['in'],
     outputs: ['out']
+  },
+  {
+    type: 'derivative',
+    displayName: 'Derivative',
+    category: 'Dynamic',
+    description: 'Backward-difference derivative, element-wise: du_dt = (u - u_prev) / (t - t_prev). ' +
+      'u_prev and t_prev are the input and the time of the last major step (once per step, after the algebra). ' +
+      'In an RK4 stage the divisor is the time from the major step to the stage. ' +
+      'There is no filter: the output amplifies noise by 1/dt, and a step in u gives a pulse of height step/dt for one step. ' +
+      'The output lags the true derivative by about dt/2. ' +
+      'First step: du_dt = (u - initialCondition) / dt; when the host calls seed_from_inputs (the editor simulation and obliq:test do), u_prev = u(0) and the first output is 0. ' +
+      'Scalar, vector or matrix input; the output has the shape of the input. ' +
+      'To get a derivative that is not noisy, use a transfer_function such as s / (tau*s + 1).',
+    parameters: {
+      initialCondition: {
+        type: 'number',
+        description: 'Value of u_prev before the first step (the units of u). It has an effect only when the host does not call seed_from_inputs. One value for all elements.',
+        default: 0
+      }
+    },
+    inputs: ['u'],
+    outputs: ['du_dt']
+  },
+  {
+    type: 'variable_transport_delay',
+    displayName: 'Variable Transport Delay',
+    category: 'Dynamic',
+    description: 'Delays the scalar input u by the time on the second input: y(t) = u(t - d), with linear interpolation between samples. ' +
+      'Port order: 0 = u (signal), 1 = delay_sec (delay in seconds). d = delay_sec limited to the range 0 to maximumDelay; a NaN delay gives 0. ' +
+      'The block keeps one sample of u for each simulation step (dt) in a ring buffer of maximumPoints samples, so the largest delay is also limited to maximumPoints * dt. ' +
+      'Set maximumPoints to at least maximumDelay / dt. ' +
+      'For t < d the output is initialInput. A delay of 0 gives y = u (direct feedthrough). ' +
+      'u and delay_sec must be scalars (a vector or a matrix is an error). The output is double.',
+    parameters: {
+      maximumDelay: {
+        type: 'number',
+        description: 'Largest delay in seconds. A larger delay_sec is limited to this value. Must be greater than 0.',
+        default: 1
+      },
+      maximumPoints: {
+        type: 'number',
+        description: 'Length of the ring buffer in samples (one sample for each simulation step). Integer from 2 to 1000000. The largest delay is maximumPoints * dt. Each sample is 8 bytes of model state.',
+        default: 1024,
+        minimum: 2,
+        maximum: 1000000
+      },
+      initialInput: {
+        type: 'number',
+        description: 'Output before the input history covers the delay (the value of u before t = 0).',
+        default: 0
+      }
+    },
+    inputs: ['u', 'delay_sec'],
+    outputs: ['y']
   },
   {
     type: 'discrete_transform',
@@ -992,6 +1058,101 @@ const blockTypeSchemas: BlockTypeInfo[] = [
     outputs: [],
     dynamicPorts: 'Inputs/outputs match inputPorts/outputPorts arrays. A main sheet with default ports is auto-created.'
   },
+  {
+    type: 'for_iterator_subsystem',
+    displayName: 'For Iterator Subsystem',
+    category: 'Hierarchical',
+    description: 'Runs its body sheet iterationLimit times in each simulation step (Simulink For Iterator Subsystem). ' +
+      'The body is a sheet in parameters.sheets, the same as for a subsystem: add_block creates it with the ports Input1 and Output1, and the response gives its sheet ID (subsystemSheet.id). Add blocks and wires to that sheet. ' +
+      'Put an iteration_index block in the body to get the pass number (indexBase to indexBase + iterationLimit - 1). ' +
+      'The inputs are read once before the first pass. The outputs are those of the last pass, or the sum of all passes when accumulateOutputs is true. ' +
+      'Discrete states in the body (unit_delay) update on each pass and are kept from pass to pass and from step to step, unless resetStates is "reset". ' +
+      'Do not put a derivative or a variable_transport_delay in the body: they also update on each pass, so their time base is wrong. ' +
+      'Integrators in the body advance once per simulation step, with the input of the last pass. ' +
+      'Code generation: the body is always a separate C module (codeGenStrategy segregated_atomic or segregated; flatten is not accepted), and the parent calls it in a C for loop. ' +
+      'Limits: the iteration count is a parameter, not a signal; a For Iterator or segregated subsystem inside the body is not supported (the C does not compile); the editor canvas does not open the body sheet.',
+    parameters: {
+      iterationLimit: {
+        type: 'number',
+        description: 'Number of passes of the body in each simulation step. Integer, 1 or more.',
+        default: 5,
+        minimum: 1
+      },
+      indexBase: {
+        type: 'number',
+        description: 'Value of iteration_index on the first pass: 0 (zero-based) or 1 (one-based, the Simulink default).',
+        default: 1,
+        minimum: 0,
+        maximum: 1
+      },
+      resetStates: {
+        type: 'string',
+        description: '"held": body states keep their values from pass to pass. "reset": body states (unit_delay, discrete states) go back to their initial values before each pass.',
+        default: 'held',
+        enum: ['held', 'reset']
+      },
+      accumulateOutputs: {
+        type: 'boolean',
+        description: 'false: each output is the value of the last pass. true: each output is the sum of the values of all passes (element-wise for a vector or a matrix).',
+        default: false
+      },
+      codeGenStrategy: {
+        type: 'string',
+        description: 'The body is always a separate C module. "segregated_atomic" (default) or "segregated". "flatten" is not accepted.',
+        default: 'segregated_atomic',
+        enum: ['segregated', 'segregated_atomic']
+      },
+      inputPorts: {
+        type: 'array',
+        description: 'Names of the input ports. The input_port blocks in the body set them (add_block of an input_port in the body updates this list).',
+        default: ['Input1'],
+        items: { type: 'string' }
+      },
+      outputPorts: {
+        type: 'array',
+        description: 'Names of the output ports. The output_port blocks in the body set them.',
+        default: ['Output1'],
+        items: { type: 'string' }
+      },
+      showEnableInput: {
+        type: 'boolean',
+        description: 'Show an enable input. When the enable is 0.5 or less, the body does not run and the outputs hold their values.',
+        default: false
+      },
+      showPortNames: {
+        type: 'boolean',
+        description: 'Display port names next to each port on the block',
+        default: true
+      },
+      flipped: {
+        type: 'boolean',
+        description: 'Draw the block mirrored: inputs on the right, outputs on the left. Diagram only.',
+        default: false
+      }
+    },
+    inputs: [],
+    outputs: [],
+    dynamicPorts: 'Inputs/outputs match inputPorts/outputPorts arrays. A body sheet with default ports is auto-created.'
+  },
+  {
+    type: 'iteration_index',
+    displayName: 'Iteration Index',
+    category: 'Sources',
+    description: 'Outputs the pass number of the parent for_iterator_subsystem as a double: indexBase on the first pass, then +1 on each pass. ' +
+      'Put it in the body sheet of a for_iterator_subsystem, or in a flattened subsystem in that body. In another place it is an error (the generated C does not compile). ' +
+      'The parent sets the index range: the block has no parameters with an effect.',
+    parameters: {
+      indexBase: {
+        type: 'number',
+        description: 'No effect: the indexBase of the parent for_iterator_subsystem sets the first value. Accepted for compatibility (0 or 1).',
+        default: 1,
+        minimum: 0,
+        maximum: 1
+      }
+    },
+    inputs: [],
+    outputs: ['i']
+  },
 
   // === Aerospace ===
   {
@@ -1188,7 +1349,7 @@ You can filter by category to see related blocks together.`,
     properties: {
       category: {
         type: 'string',
-        description: 'Filter by category (optional). Available categories: Sources, Ports, Math, Dynamic, Lookup, Matrix, Vector, Control, Sinks, Sheet Labels, Hierarchical, Aerospace, Annotation'
+        description: 'Filter by category (optional). Available categories: Sources, Ports, Math, Discontinuities, Data, Dynamic, Lookup, Matrix, Vector, Control, Sinks, Sheet Labels, Hierarchical, Aerospace, Annotation'
       },
       blockType: {
         type: 'string',

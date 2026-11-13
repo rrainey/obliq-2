@@ -22,6 +22,12 @@ export interface CodeGenContext {
    * IcNeedsLoading). Omit or `'1'` when the block is always enabled.
    */
   enableExpr?: string
+  /**
+   * True when the code is for the body of a For Iterator Subsystem: the
+   * module struct then has the member `iteration_index`. The Iteration Index
+   * block gives a C #error when this is not true.
+   */
+  forIteratorBody?: boolean
 }
 
 /**

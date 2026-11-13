@@ -880,7 +880,6 @@ it('P1-H1 unit_delay lags one step', async () => {
 - `docs/blocks-reference.md` — user-facing block docs
 - `__tests__/harness/README.md` — WASM verification harness
 - `AS205_presettings.m` — guidance parameters for Phase 8
-- `design/11-Unifying-simulation-with-Wasm.md` — execution backend assumptions
 
 ---
 

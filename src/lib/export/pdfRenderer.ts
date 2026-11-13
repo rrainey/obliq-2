@@ -27,6 +27,9 @@ import {
 } from '@/lib/layout/blockGeometry'
 import { getGlyphSpec, needsRaster } from './blockGlyphs'
 import {
+  SATURATION_DYNAMIC_INPUTS, SATURATION_DYNAMIC_PORT_NAME_PX, SATURATION_DYNAMIC_SYMBOL,
+} from '@/lib/blocks/SaturationDynamicBlockModule'
+import {
   computeWireDecorations, polylineWithHops, wireLineCount, type DecorationWire,
 } from '@/lib/wireDecorations'
 import { resolvePageSize, type PageOrientation } from './pageSizes'
@@ -354,6 +357,40 @@ export function polynomialChunks(
 
   if (chunks.length === 0) chunks.push({ text: '0', size, rise: 0 })
   return chunks
+}
+
+/**
+ * Renders a Saturation Dynamic block as the canvas does: the saturation
+ * characteristic on two axes in the centre (vector paths), and the names of
+ * the input ports (up, u, lo) inside the body, next to each input port. On a
+ * flipped block the inputs, and thus the names, are on the right edge.
+ */
+export function drawSaturationDynamic(
+  p: PDFPage, block: BlockData, font: PDFFont,
+  x: number, yTop: number, bodyWidth: number, bodyHeight: number, inputs: number, scale: number,
+): void {
+  const S = SATURATION_DYNAMIC_SYMBOL
+  const origin = {
+    x: x + (bodyWidth * scale) / 2 - (S.width / 2) * scale,
+    y: yTop - (bodyHeight * scale) / 2 + (S.height / 2) * scale,
+  }
+  for (const d of S.axes) {
+    p.drawSvgPath(d, { ...origin, scale, borderColor: BLACK, borderWidth: 0.75, borderOpacity: 0.5 })
+  }
+  p.drawSvgPath(S.curve, { ...origin, scale, borderColor: BLACK, borderWidth: 1.5 })
+
+  const size = SATURATION_DYNAMIC_PORT_NAME_PX * scale
+  if (size < 3) return
+  for (let i = 0; i < Math.min(inputs, SATURATION_DYNAMIC_INPUTS.length); i++) {
+    const g = dataPortGeometry(block, 'input', i, inputs, bodyWidth, bodyHeight)
+    const text = SATURATION_DYNAMIC_INPUTS[i].label
+    const tw = font.widthOfTextAtSize(text, size)
+    p.drawText(text, {
+      x: g.side === 'left' ? x + 4 * scale : x + (bodyWidth - 4) * scale - tw,
+      y: yTop - g.y * scale - size * 0.35,
+      size, font, color: LABEL,
+    })
+  }
 }
 
 /**
@@ -1117,6 +1154,8 @@ export async function renderModelToPdf(
           drawLookupPlot(p, block, x, yTop, m.width, m.height, scale)
         } else if (block.type === 'transfer_function' || block.type === 'discrete_transform') {
           drawTransferFunction(p, block, helv, x, yTop, m.width, m.height, scale)
+        } else if (block.type === 'saturation_dynamic') {
+          drawSaturationDynamic(p, block, mono, x, yTop, m.width, m.height, m.inputs, scale)
         }
       }
       const symSize = Math.max(3, (spec.fontSize ?? 10) * scale)

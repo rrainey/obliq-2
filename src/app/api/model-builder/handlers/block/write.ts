@@ -82,7 +82,7 @@ export async function handleAddBlock(ctx: HandlerContext): Promise<NextResponse>
   // For subsystem blocks, MERGE to preserve sheets created by createBlock()
   // The validator only includes 'sheets' in sanitizedParameters if explicitly provided,
   // but createBlock() auto-generates embedded sheets that we must preserve.
-  if (blockType === 'subsystem') {
+  if (blockType === 'subsystem' || blockType === 'for_iterator_subsystem') {
     newBlock.parameters = {
       ...newBlock.parameters,           // Keep sheets from createBlock()
       ...validation.sanitizedParameters! // Apply validated/sanitized values
@@ -93,7 +93,7 @@ export async function handleAddBlock(ctx: HandlerContext): Promise<NextResponse>
 
   // For subsystem blocks, extract sheet info for the response
   let createdSheet = null;
-  if (blockType === 'subsystem' && newBlock.parameters?.sheets?.[0]) {
+  if ((blockType === 'subsystem' || blockType === 'for_iterator_subsystem') && newBlock.parameters?.sheets?.[0]) {
     const subsystemSheet = newBlock.parameters.sheets[0];
     const inputPort = subsystemSheet.blocks?.find((b: any) => b.type === 'input_port');
     const outputPort = subsystemSheet.blocks?.find((b: any) => b.type === 'output_port');

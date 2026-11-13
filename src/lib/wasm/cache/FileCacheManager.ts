@@ -2,8 +2,8 @@
  * File Cache Manager for WASM Modules
  *
  * Stores compiled modules under <OBLIQ_HOME>/cache/wasm/<cacheKey>/ with
- * metadata and metrics in SQLite. Drop-in replacement for the former
- * SupabaseCacheManager (same public methods, minus signed URLs).
+ * metadata and metrics in SQLite. Provides get/store/exists, age and LRU
+ * eviction, cache statistics, and compilation and simulation metrics.
  */
 
 import * as fs from 'fs'

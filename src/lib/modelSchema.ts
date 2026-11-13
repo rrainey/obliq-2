@@ -1,5 +1,6 @@
 // lib/modelSchema.ts
 import { z } from 'zod'
+import { BlockTypes, type BlockType } from './blockTypeRegistry'
 
 /**
  * SignalValue defines valid types for signals in the interactive simulation subsystem
@@ -136,18 +137,24 @@ const BlockParametersSchema = z.record(z.any()).optional().superRefine((params, 
   }
 })
 
+/**
+ * The block types of a regular block: each type of the block type registry,
+ * except the two subsystem types, which have their own schemas below. The
+ * list comes from the registry, thus a new registered type is accepted
+ * without a change here. `inertia_diag_pack` is not in the registry (it has
+ * a code generation module only), thus the schema does not accept it.
+ */
+type RegularBlockType = Exclude<BlockType, 'subsystem' | 'for_iterator_subsystem'>
+export const REGULAR_BLOCK_TYPES = Object.values(BlockTypes).filter(
+  (t): t is RegularBlockType => t !== 'subsystem' && t !== 'for_iterator_subsystem'
+) as [RegularBlockType, ...RegularBlockType[]]
+
 // Block schema
 const BlockSchema = z.discriminatedUnion('type', [
   // Regular blocks
   z.object({
     id: z.string().min(1, 'Block ID cannot be empty'),
-    type: z.enum([
-      'sum', 'multiply', 'transfer_function', 'signal_display', 'signal_logger',
-      'input_port', 'output_port', 'source', 'scale', 'lookup_1d', 'lookup_2d',
-      'sheet_label_sink', 'sheet_label_source', 'trig', 'integrator', 'comment',
-      'iteration_index', 'abs', 'unit_delay', 'derivative', 'variable_transport_delay',
-      'orientation_conversion', 'evaluate', 'limit', 'mux', 'demux'
-    ]),
+    type: z.enum(REGULAR_BLOCK_TYPES),
     name: z.string().min(1, 'Block name cannot be empty'),
     position: PositionSchema,
     parameters: BlockParametersSchema

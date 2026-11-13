@@ -78,6 +78,7 @@ export const BlockTypes = {
 
   // Limit / discontinuities
   LIMIT: 'limit',
+  SATURATION_DYNAMIC: 'saturation_dynamic',
   RELAY: 'relay',
   RATE_LIMITER: 'rate_limiter',
   QUANTIZER: 'quantizer',
@@ -530,8 +531,8 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     inputs: [],
     outputs: [],
     description:
-      'Runs an internal sheet N times (Simulink For Iterator Subsystem). ' +
-      'Index available via iteration_index blocks; optional output accumulation.'
+      'Runs its body sheet iterationLimit times in each step (Simulink For Iterator Subsystem). ' +
+      'Index available via iteration_index blocks; outputs of the last pass, or their sum (accumulateOutputs).'
   },
 
   [BlockTypes.ITERATION_INDEX]: {
@@ -543,7 +544,7 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     },
     inputs: [],
     outputs: [{ name: 'i' }],
-    description: 'Current for-iterator index (set by parent each iteration)'
+    description: 'Current for-iterator index (set by the parent For Iterator Subsystem on each pass; indexBase has no effect)'
   },
 
   [BlockTypes.TRIG]: {
@@ -641,17 +642,17 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
   [BlockTypes.DERIVATIVE]: {
     type: BlockTypes.DERIVATIVE,
     displayName: 'Derivative',
-    category: 'Continuous',
+    category: 'Dynamic',
     defaultParameters: { initialCondition: 0 },
     inputs: [{ name: 'u' }],
     outputs: [{ name: 'du_dt' }],
-    description: 'Finite-difference derivative (u - u_prev) / dt'
+    description: 'Backward-difference derivative (u - u_prev) / (t - t_prev), element-wise, without a filter'
   },
 
   [BlockTypes.VARIABLE_TRANSPORT_DELAY]: {
     type: BlockTypes.VARIABLE_TRANSPORT_DELAY,
     displayName: 'Variable Transport Delay',
-    category: 'Continuous',
+    category: 'Dynamic',
     defaultParameters: {
       maximumDelay: 1,
       maximumPoints: 1024,
@@ -659,7 +660,7 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     },
     inputs: [{ name: 'u' }, { name: 'delay_sec' }],
     outputs: [{ name: 'y' }],
-    description: 'Variable transport delay via sample ring buffer'
+    description: 'Delays u by delay_sec seconds (0 to maximumDelay): ring buffer of one sample per step, with linear interpolation'
   },
 
   [BlockTypes.SQUARE]: {
@@ -705,6 +706,17 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     description: 'Limits (clamps) signal values to specified range'
   },
 
+  [BlockTypes.SATURATION_DYNAMIC]: {
+    type: BlockTypes.SATURATION_DYNAMIC,
+    displayName: 'Saturation Dynamic',
+    category: 'Discontinuities',
+    defaultParameters: {},
+    // Port order of SaturationDynamicBlockModule (as Simulink): upper limit, signal, lower limit
+    inputs: [{ name: 'up' }, { name: 'u' }, { name: 'lo' }],
+    outputs: [{ name: 'y' }],
+    description: 'Clamps u between the lower limit lo and the upper limit up, which are input signals (element-wise)'
+  },
+
   [BlockTypes.RELAY]: {
     type: BlockTypes.RELAY,
     displayName: 'Relay',
@@ -732,7 +744,7 @@ export const blockTypeRegistry: Record<BlockType, BlockTypeDefinition> = {
     },
     inputs: [{ name: 'in' }],
     outputs: [{ name: 'out' }],
-    description: 'Limits rate of change of the output (units/sec) using simulation dt'
+    description: 'Limits rate of change of the output (units/sec), per sample period (the simulation dt when there is no sample time)'
   },
 
   [BlockTypes.QUANTIZER]: {

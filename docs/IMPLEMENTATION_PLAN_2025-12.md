@@ -670,7 +670,7 @@ Add "Duplicate" function to model tile on Models page. Prompt for new name with 
 - Method: POST
 - Body: `{ modelId: string, newName: string }`
 - Steps:
-  1. Authenticate user (Supabase auth)
+  1. Authenticate user
   2. Fetch original model data by ID (check ownership)
   3. Deep clone model data
   4. Update metadata:

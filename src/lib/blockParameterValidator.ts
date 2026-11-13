@@ -479,6 +479,9 @@ export function validateBlockParameters(
       break;
       
     case BlockTypes.SUBSYSTEM:
+    case BlockTypes.FOR_ITERATOR_SUBSYSTEM:
+      // The For Iterator Subsystem has the parameters of a subsystem, and
+      // four parameters of its own (see the end of this case).
       // Validate sheets array - optional for updates, required content checked separately
       if (parameters.sheets !== undefined) {
         if (!Array.isArray(parameters.sheets)) {
@@ -547,8 +550,11 @@ export function validateBlockParameters(
         }
       }
 
-      // Validate codeGenStrategy
-      const validStrategies = ['flatten', 'segregated', 'segregated_atomic'];
+      // Validate codeGenStrategy. A For Iterator body is always a separate
+      // C module (the parent calls it in a loop), thus 'flatten' is not valid.
+      const validStrategies = blockType === BlockTypes.FOR_ITERATOR_SUBSYSTEM
+        ? ['segregated', 'segregated_atomic']
+        : ['flatten', 'segregated', 'segregated_atomic'];
       if (parameters.codeGenStrategy !== undefined) {
         if (typeof parameters.codeGenStrategy !== 'string') {
           errors.push('codeGenStrategy must be a string');
@@ -630,7 +636,109 @@ export function validateBlockParameters(
           }
         }
       }
+
+      if (blockType === BlockTypes.FOR_ITERATOR_SUBSYSTEM) {
+        // iterationLimit: number of passes of the body in each time step
+        if (parameters.iterationLimit !== undefined) {
+          const n = Number(parameters.iterationLimit);
+          if (typeof parameters.iterationLimit === 'boolean' || !Number.isInteger(n) || n < 1) {
+            errors.push('iterationLimit must be an integer of 1 or more');
+          } else {
+            sanitized.iterationLimit = n;
+          }
+        } else {
+          sanitized.iterationLimit = defaults.iterationLimit;
+        }
+        // indexBase: value of the Iteration Index on the first pass
+        if (parameters.indexBase !== undefined) {
+          if (parameters.indexBase !== 0 && parameters.indexBase !== 1) {
+            errors.push('indexBase must be 0 or 1');
+          } else {
+            sanitized.indexBase = parameters.indexBase;
+          }
+        } else {
+          sanitized.indexBase = defaults.indexBase;
+        }
+        // resetStates: 'held' keeps the body states from pass to pass,
+        // 'reset' sets them to their initial values before each pass
+        if (parameters.resetStates !== undefined) {
+          if (parameters.resetStates !== 'held' && parameters.resetStates !== 'reset') {
+            errors.push('resetStates must be "held" or "reset"');
+          } else {
+            sanitized.resetStates = parameters.resetStates;
+          }
+        } else {
+          sanitized.resetStates = defaults.resetStates;
+        }
+        // accumulateOutputs: true sums the outputs of all passes
+        if (parameters.accumulateOutputs !== undefined) {
+          if (typeof parameters.accumulateOutputs !== 'boolean') {
+            errors.push('accumulateOutputs must be a boolean');
+          } else {
+            sanitized.accumulateOutputs = parameters.accumulateOutputs;
+          }
+        } else {
+          sanitized.accumulateOutputs = defaults.accumulateOutputs;
+        }
+      }
       break;
+
+    case BlockTypes.ITERATION_INDEX:
+      // No parameters with an effect: the parent For Iterator Subsystem sets
+      // the index range. indexBase is accepted (0 or 1) and has no effect.
+      if (parameters.indexBase !== undefined) {
+        if (parameters.indexBase !== 0 && parameters.indexBase !== 1) {
+          errors.push('indexBase must be 0 or 1 (it has no effect: the parent For Iterator Subsystem sets the index base)');
+        } else {
+          sanitized.indexBase = parameters.indexBase;
+        }
+      }
+      break;
+
+    case BlockTypes.DERIVATIVE: {
+      // initialCondition: the value of u_prev before the first step
+      const ic = parameters.initialCondition ?? parameters.initialValue;
+      if (ic !== undefined) {
+        const v = Number(ic);
+        if (typeof ic === 'boolean' || ic === null || ic === '' || !Number.isFinite(v)) {
+          errors.push('initialCondition must be a finite number');
+        } else {
+          sanitized.initialCondition = v;
+        }
+      } else {
+        sanitized.initialCondition = defaults.initialCondition ?? 0;
+      }
+      break;
+    }
+
+    case BlockTypes.VARIABLE_TRANSPORT_DELAY: {
+      const num = (key: string): number | undefined => {
+        const raw = parameters[key];
+        if (raw === undefined) return defaults[key];
+        const v = Number(raw);
+        if (typeof raw === 'boolean' || raw === null || raw === '' || !Number.isFinite(v)) {
+          errors.push(`${key} must be a finite number`);
+          return undefined;
+        }
+        return v;
+      };
+      const maximumDelay = num('maximumDelay');
+      if (maximumDelay !== undefined) {
+        if (maximumDelay <= 0) errors.push('maximumDelay must be greater than 0 (seconds)');
+        else sanitized.maximumDelay = maximumDelay;
+      }
+      const maximumPoints = num('maximumPoints');
+      if (maximumPoints !== undefined) {
+        if (!Number.isInteger(maximumPoints) || maximumPoints < 2 || maximumPoints > 1000000) {
+          errors.push('maximumPoints must be an integer from 2 to 1000000');
+        } else {
+          sanitized.maximumPoints = maximumPoints;
+        }
+      }
+      const initialInput = num('initialInput');
+      if (initialInput !== undefined) sanitized.initialInput = initialInput;
+      break;
+    }
 
     case BlockTypes.CONDITION:
       // Validate condition parameter
@@ -844,6 +952,7 @@ export function validateBlockParameters(
     case BlockTypes.UMINUS:
     case BlockTypes.DIVIDE:
     case BlockTypes.SIGN:
+    case BlockTypes.SATURATION_DYNAMIC:
       // These blocks have no configurable parameters
     case BlockTypes.IF:
       // type validation performed at connection time

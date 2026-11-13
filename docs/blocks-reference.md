@@ -2,8 +2,10 @@
 
 ## Table of Contents
 - [Mathematical Operations](#mathematical-operations)
+- [Discontinuities](#discontinuities)
+  - Saturation Dynamic, Relay, Rate Limiter, Quantizer, Edge Detect
 - [Dynamic Systems](#dynamic-systems)
-  - Integrator, Unit Delay, Transfer Function
+  - Transfer Function, Integrator, Unit Delay, Derivative, Variable Transport Delay
 - [Input/Output](#inputoutput)
 - [Signal Display](#signal-display)
 - [Lookup Tables](#lookup-tables)
@@ -12,6 +14,7 @@
 - [Control Flow](#control-flow)
 - [Sheet Organization](#sheet-organization)
 - [Hierarchical Modeling](#hierarchical-modeling)
+  - Subsystem, Model Reference, For Iterator Subsystem, Iteration Index
 
 ## Parameters of All Blocks
 
@@ -205,6 +208,47 @@ Outputs start evenly spaced across the search range, and stay in place while no 
 
 ## Discontinuities
 
+### Saturation Dynamic Block
+
+**Type**: `saturation_dynamic`
+
+**Purpose**: Keeps the input `u` between a lower limit and an upper limit. Two input signals supply the limits, thus the limits can change during the simulation. For limits that do not change, use the Limit block.
+
+**Parameters**: None. The block has no configuration dialog. A double-click on the block does not open a dialog, the same as for the other blocks without parameters.
+
+**Ports** (in this order, the same order as the Simulink Saturation Dynamic block):
+- `up` (input port 0): Upper limit
+- `u` (input port 1): Input signal
+- `lo` (input port 2): Lower limit
+- `y` (output port 0): Limited signal
+
+The block shows the names `up`, `u` and `lo` inside its body, next to the input ports. On a flipped block, the input ports and their names are on the right edge.
+
+**Semantics**: `y = fmax(lo, fmin(up, u))`, for each element.
+- When `lo <= u <= up`, `y = u`.
+- When `u > up`, `y = up`. When `u < lo`, `y = lo`.
+- When `lo > up`, `y = lo` for all values of `u`. The block does not show an error or a warning for this condition.
+- When `u` is NaN and `lo <= up`, `y = up`. When a limit is NaN, the block ignores that limit (the C functions `fmin` and `fmax` return the operand that is not NaN).
+
+**Signal Compatibility**:
+- Scalar: all three inputs are scalars. The output is a scalar.
+- Vector or matrix: when `u` is a vector or a matrix, the output has the dimensions of `u`. Each limit is a scalar, which applies to all elements, or has the same dimensions as `u`.
+- A scalar `u` with vector limits gives a vector output. The block applies `u` to each element.
+- A scalar `u` with a matrix limit is not valid.
+- Inputs that are not scalars must have the same dimensions. For example, `double[3]` and `double[4]` are not valid together, and `double[3]` and `double[3][1]` are not valid together.
+- Data types: `double`, `float` and `long`. A `bool` input is not valid. The calculation is in `double`, and the output has the type of `u`. Use the same base type on all three inputs. When all inputs are scalars, type propagation gives the type of `up` to the output, and the generated C gives the type of `u` to the output.
+- **Validate Model** and the check before a simulation run show an error for the dimensions that are not valid and for a `bool` input. The check before a run shows a warning when an input is not connected.
+
+**State**: None. The block is direct feedthrough.
+
+**Generated C**: `y = fmax(lo, fmin(up, u));`, in a `for` loop over the elements for a vector or a matrix.
+
+**Examples**:
+- Output limit. The FPV reference model (sheet `RatePID`) uses the block `PIDSumLimit`. It limits the sum of the P, I, D and feed-forward terms (`double[3]`, one element for each axis) to the Betaflight `pidsum_limit` and `pidsum_limit_yaw` (±500, ±500, ±400) before the mixer. Two constant `double[3]` sources supply `up` and `lo`. To change the limit during the flight, connect a signal to `up` and its negative to `lo`.
+- Anti-windup clamp with limits from a signal. Limit the integral term to the range that the actuator can still use after the P term. Connect `u_max - P` to `up`, the integral term to `u`, and `u_min - P` to `lo`. The limits change with the P term. The block limits only its output. To stop windup, put the block inside the integrator loop. For a discrete integrator made of a Sum and a Unit Delay, limit the output of the Sum before the Unit Delay.
+
+---
+
 ### Relay Block
 **Purpose**: Hysteresis (Schmitt) switch for rate modulators and bang-bang control.
 
@@ -379,6 +423,91 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 - Useful for IGM history, last χ commands, and discrete feedback
 
 **Example**: Constant input u=1 with initialValue=0 yields y sequence 0, 1, 1, 1, … at successive steps.
+
+---
+
+### Derivative Block
+
+**Type**: `derivative`
+
+**Purpose**: Gives the time derivative of the input as a backward difference. Use it for a rate that you cannot get from the model states. For a derivative with less noise, use a Transfer Function such as `s / (tau*s + 1)`.
+
+**Ports**:
+- `u` (input port 0): Input signal
+- `du_dt` (output port 0): Derivative of `u`, in the units of `u` per second
+
+**Parameters**:
+- `initialCondition` (number, default `0`): The value of `u_prev` before the first step, for all elements. In most uses it has no effect (see **State and first step**).
+
+**Calculation**: `du_dt = (u - u_prev) / (t - t_prev)`, for each element.
+- `u_prev` and `t_prev` are the input and the time at the last major step. The block latches them one time in each step, after the algebra.
+- At a major step, `t - t_prev` is the simulation step `dt`. The output is the backward difference over one step. For `u = t²` the output is `2t - dt`.
+- In an RK4 stage, `t - t_prev` is the time from the major step to the stage (`dt/2` or `dt`). Thus an integrator of `du_dt` gets a correct slope in each stage. With Euler there are no stages.
+- When `t - t_prev` is less than 1e-15 s, the divisor is `dt`.
+- There is no filter.
+
+**State and first step**:
+- The state is `u_prev` (the shape of `u`) and `t_prev`.
+- The editor simulation, `npm run obliq:test` and the C project call `<model>_seed_from_inputs()` after `<model>_init()`. This function runs the algebra, thus `u_prev = u(0)` and the first output is `0`.
+- When a host calls only `<model>_init()`, the first output is `u(0) / dt` on the top-level sheet. In a segregated subsystem module it is `(u(0) - initialCondition) / dt`.
+
+**Signal Compatibility**:
+- Scalar, vector or matrix input. The output has the shape and the data type of the input. The block calculates each element separately.
+- Direct feedthrough: a loop through the block without a state is an algebraic loop.
+
+**Sample time and enable**:
+- In a subsystem with a sample time, the block calculates its output only at the sample hits and holds it between hits. It latches `u` on each simulation step. Thus the output at a hit is the difference over the last simulation step, not over the sample period.
+- In a subsystem that is disabled, the block does not latch. After the subsystem is enabled again, the divisor is the time since the last latch.
+
+**Numerical cautions**:
+- The output amplifies noise. Noise with an amplitude `a` on `u` gives up to `2a / dt` on the output.
+- A step of height `h` in `u` gives a pulse of height `h / dt` for one step.
+- The output lags the true derivative by about `dt/2`.
+- Do not put the block in the body of a For Iterator Subsystem. The block latches on each pass, and from the second pass the divisor is `dt`.
+
+**Generated C**: `y = (u - model->states.<name>_prev) / (model->time - model->states.<name>_tprev);` (in a `for` loop for a vector or a matrix), and the latch `prev = u; tprev = time;` after the algebra.
+
+**Example**: Connect the output of a position integrator to `u`. The output is the velocity, with a lag of about `dt/2`.
+
+---
+
+### Variable Transport Delay Block
+
+**Type**: `variable_transport_delay`
+
+**Purpose**: Delays a scalar signal by a time that an input signal supplies. Use it for a transport lag that changes during the simulation, for example a sensor latency or a fluid transport time.
+
+**Ports** (in this order):
+- `u` (input port 0): Input signal
+- `delay_sec` (input port 1): Delay, in seconds
+- `y` (output port 0): Delayed signal
+
+**Parameters**:
+- `maximumDelay` (number, seconds, default `1`): The largest delay. Must be greater than 0.
+- `maximumPoints` (integer, default `1024`): The length of the ring buffer, in samples. From 2 to 1000000.
+- `initialInput` (number, default `0`): The output before the input history covers the delay. It is the value of `u` before t = 0.
+
+**Calculation**: `y(t) = u(t - d)`, with linear interpolation between samples.
+- `d` is `delay_sec`, limited to the range 0 to `maximumDelay`. A negative delay gives `d = 0`. A NaN delay gives `d = 0`.
+- The buffer keeps one sample of `u` for each simulation step (`dt`). Thus `d` is also limited to `maximumPoints * dt`. Set `maximumPoints` to `maximumDelay / dt` or more.
+- When `d` is less than `dt`, the block interpolates between the current input and the last sample. Thus `d = 0` gives `y = u`.
+- Before the history covers the delay (`t < d`), the output is `initialInput`.
+- When `delay_sec` changes quickly, the output follows the new delay in the same step. The block does not limit the rate of change of the delay. When the delay increases by more than 1 s in each second, `t - d` decreases, and the output shows older samples again.
+
+**State**: The ring buffer of `maximumPoints` samples (8 bytes each) and its write position. The buffer is part of the model state. RK4 copies the model state 3 times in each step, thus a large buffer makes each step slower. The block writes the buffer one time for each value of the time, after the algebra. A second algebra pass at the same time (`seed_from_inputs`, the passes of a For Iterator body) does not add a sample.
+
+**Signal Compatibility**:
+- `u` and `delay_sec` must be scalars. A vector or a matrix on either input is an error in **Validate Model** and in the check before a simulation run. The generated C then has an `#error` with the block name.
+- The output is `double`.
+- Direct feedthrough on both inputs.
+
+**Sample time and integration method**:
+- In a subsystem with a sample time, the block calculates its output only at the sample hits. It writes the buffer on each simulation step. Thus the delay is in seconds, and the output is held between hits.
+- With RK4, the block writes the buffer at the major step only. In an RK4 stage the output uses the stage value of `u` only when `d < dt`.
+
+**Generated C**: a `double <name>_buf[maximumPoints]` ring buffer in the state struct. The output is `y = y0 + f * (y1 - y0)`, with `y0` and `y1` the samples at the ages `floor(d / dt)` and `floor(d / dt) + 1`.
+
+**Example**: Sensor latency that changes with the load. Connect the true signal to `u` and the latency in seconds to `delay_sec`. Set `maximumDelay` to the largest latency, for example `0.05`. With `dt = 0.001`, set `maximumPoints` to `50` or more.
 
 ---
 
@@ -778,6 +907,72 @@ Shared named signals across the entire model hierarchy (not limited to one sheet
 - Assert blocks inside the referenced model are checked and reported.
 
 **APIs**: the Model Builder actions `addModelReference` and `setModelReference`, and the MCP tools `add_model_reference` and `set_model_reference`.
+
+---
+
+### For Iterator Subsystem Block
+
+**Type**: `for_iterator_subsystem`
+
+**Purpose**: Runs its body sheet a fixed number of times in each simulation step, the same as the Simulink For Iterator Subsystem. Use it for a calculation that repeats for each element, for example the forces of each blade of a rotor.
+
+**Body sheet**: The body is a sheet in `parameters.sheets`, the same as for a subsystem. The Input Port and Output Port blocks in the body set the ports of the block. Put an Iteration Index block in the body to get the number of the pass.
+
+**Ports**: One input port for each Input Port block in the body (`inputPorts`), and one output port for each Output Port block (`outputPorts`). An enable input when `showEnableInput` is `true`.
+
+**Parameters**:
+- `iterationLimit` (integer, default `5`): The number of passes in each simulation step. 1 or more. The number is a parameter. A signal cannot set it.
+- `indexBase` (`0` or `1`, default `1`): The value of the Iteration Index on the first pass. On the last pass the value is `indexBase + iterationLimit - 1`.
+- `resetStates` (`held` or `reset`, default `held`): With `held`, the states in the body keep their values from pass to pass and from step to step. With `reset`, the block sets the Integrator and Unit Delay states in the body to their initial values before each pass.
+- `accumulateOutputs` (boolean, default `false`): With `false`, each output is the value of the last pass. With `true`, each output is the sum of the values of all passes (element-wise for a vector or a matrix).
+- `codeGenStrategy` (`segregated_atomic` or `segregated`, default `segregated_atomic`): The body is always a separate C module. The Model Builder API does not accept `flatten`. Code generation uses `segregated_atomic` for an old model with `flatten`.
+- `inputPorts`, `outputPorts`, `showEnableInput`, `showPortNames`, `parameters`: The same as for a Subsystem Block.
+
+**Behavior in one simulation step**:
+1. The block copies its inputs to the body one time, before the first pass. All passes use the same input values.
+2. The block sets the index and runs the body `iterationLimit` times.
+3. The block gives the outputs of the last pass, or the sums.
+
+**States in the body**:
+- A Unit Delay in the body updates on each pass. With `held`, a Unit Delay gives the value of the previous pass, and on the first pass the value of the last pass of the previous step.
+- An Integrator in the body advances one time in each simulation step, with its input from the last pass. Do not use `reset` with an Integrator in the body: the reset occurs before each pass.
+- Do not put a Derivative or a Variable Transport Delay in the body. Their time base is the simulation step, not the pass.
+
+**Enable**: When the enable input is 0.5 or less, no pass of the body runs, and the outputs hold their last values.
+
+**Nesting**: A flattened Subsystem in the body is permitted. A For Iterator Subsystem or a segregated Subsystem in the body is not supported. The generated C does not compile. This limit applies to each segregated module in a segregated module.
+
+**Code generation**: The body is a separate C module `<Name>.c`. The parent calls `<Name>_compute_outputs()` in a C `for` loop:
+`for (int __fi = 1; __fi < 6; ++__fi) { model->Loop.iteration_index = __fi; Loop_compute_outputs(&model->Loop); }`
+
+**Limits**:
+- The editor does not show the block on the palette. The canvas cannot open the body sheet. Create the block through the Model Builder API or the MCP server, or import a model JSON file.
+- The editor type propagation does not look into the body. **Validate Model** shows a warning for each wire from the block, and for the wires after it: "Unable to determine signal type". Code generation finds the types, and the check before a simulation run shows no warning.
+
+**Example**: Sum of `u * i` for `i = 1, 2, 3`. In the body, connect the Input Port `u` and an Iteration Index to a Multiply block, and the Multiply block to the Output Port `y`. Set `iterationLimit` to `3`, `indexBase` to `1` and `accumulateOutputs` to `true`. For `u = 2` the output is `12`. With `accumulateOutputs` set to `false`, the output is `6` (the last pass).
+
+---
+
+### Iteration Index Block
+
+**Type**: `iteration_index`
+
+**Purpose**: Gives the number of the current pass of the parent For Iterator Subsystem.
+
+**Ports**:
+- `i` (output port 0): The index of the pass, `double`
+
+**Parameters**: None with an effect. The `indexBase` and `iterationLimit` of the parent For Iterator Subsystem set the values. The block can have an `indexBase` parameter (`0` or `1`) from the registry defaults. It has no effect.
+
+**Values**: `indexBase` on the first pass, then 1 more on each pass. With the default `indexBase = 1` and `iterationLimit = 5`, the values are 1, 2, 3, 4, 5 (one-based). With `indexBase = 0` they are 0 to 4 (zero-based).
+
+**Placement**: Put the block in the body sheet of a For Iterator Subsystem, or in a flattened Subsystem in that body. In another place, **Validate Model** and the check before a simulation run show an error. The generated C then has an `#error` with the block name.
+
+**State**: None.
+
+**Generated C**: `y = (double)model->iteration_index;`. The parent sets `iteration_index` before each pass.
+
+**Example**: See the For Iterator Subsystem Block.
 
 ---
 

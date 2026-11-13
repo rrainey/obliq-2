@@ -7,7 +7,12 @@
  * - LRU eviction to keep cache size under limits
  * - Cleanup of old entries
  *
- * This endpoint should be called periodically (e.g., via cron job)
+ * Authentication is always necessary. The route accepts one of these:
+ * - `Authorization: Bearer <api token>` or the local session cookie, as the
+ *   other routes do (authenticateRequest)
+ * - `x-api-key: <key>`, when the environment variable
+ *   CACHE_MAINTENANCE_API_KEY is set and the key is the same. This is for a
+ *   scheduled job that has no API token.
  *
  * Request body (optional):
  * {
@@ -18,24 +23,33 @@
  *
  * Response:
  * - 200: { lruEvicted: number, oldEntriesDeleted: number, totalEvicted: number }
- * - 401: Unauthorized (requires valid API key)
+ * - 400: A body value is not a number of zero or more
+ * - 401: Not authenticated
  * - 500: Maintenance failed
  */
 
+import { timingSafeEqual } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { FileCacheManager } from '@/lib/wasm/cache'
+import { authenticateRequest } from '@/lib/apiAuthMiddleware'
 
 export const runtime = 'nodejs'
 
-// Simple API key authentication for cron jobs
-// In production, use a proper secret management system
-const MAINTENANCE_API_KEY = process.env.CACHE_MAINTENANCE_API_KEY
+/** True when the request has the maintenance key of the environment. */
+function hasMaintenanceKey(request: NextRequest): boolean {
+  // Read at request time, so that a test or a restart-free change applies
+  const expected = process.env.CACHE_MAINTENANCE_API_KEY
+  const given = request.headers.get('x-api-key')
+  if (!expected || !given) return false
+  const a = Buffer.from(given)
+  const b = Buffer.from(expected)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify API key for security
-    const apiKey = request.headers.get('x-api-key')
-    if (MAINTENANCE_API_KEY && apiKey !== MAINTENANCE_API_KEY) {
+    // Authentication is always necessary: this route deletes cache entries
+    if (!hasMaintenanceKey(request) && !(await authenticateRequest(request)).authenticated) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -47,13 +61,24 @@ export async function POST(request: NextRequest) {
     let maxSizeMB = 500
     let daysOld = 30
 
+    let body: Record<string, unknown> = {}
     try {
-      const body = await request.json()
-      if (body.maxEntries !== undefined) maxEntries = body.maxEntries
-      if (body.maxSizeMB !== undefined) maxSizeMB = body.maxSizeMB
-      if (body.daysOld !== undefined) daysOld = body.daysOld
+      body = (await request.json()) ?? {}
     } catch {
       // Body is optional, use defaults
+    }
+    for (const key of ['maxEntries', 'maxSizeMB', 'daysOld'] as const) {
+      const value = body[key]
+      if (value === undefined) continue
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        return NextResponse.json(
+          { error: `${key} must be a number of zero or more` },
+          { status: 400 }
+        )
+      }
+      if (key === 'maxEntries') maxEntries = value
+      else if (key === 'maxSizeMB') maxSizeMB = value
+      else daysOld = value
     }
 
     console.log(`[cache-maintenance] Starting maintenance...`)

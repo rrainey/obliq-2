@@ -24,20 +24,13 @@
     "test:wasm:model": "jest __tests__/wasm/model-compilation.test.ts",
     "test:wasm:cache": "jest __tests__/wasm/cache __tests__/storage",
     "wasm:build-docker": "docker build -t obliq-emscripten:latest -f __tests__/wasm/docker/Dockerfile.emscripten __tests__/wasm/docker",
-    "as205:compare": "tsx scripts/compare-as205.ts",
-    "as205:compare-final": "tsx scripts/compare-final-json.ts",
     "obliq:cgen": "tsx scripts/obliq-cgen.ts",
     "obliq:layout": "tsx scripts/obliq-layout.ts",
     "obliq:pdf": "tsx scripts/obliq-pdf.ts",
     "obliq:test": "tsx scripts/obliq-test.ts",
-    "obliq:regen-saturnib-plant": "bash scripts/regen-saturnib-obliq-plant.sh",
     "mdl:ir": "npm --prefix ../mdl2obliq run mdl:ir --",
     "mdl:emit": "npm --prefix ../mdl2obliq run mdl:emit --",
-    "eom:mdl-vs-rhs": "tsx scripts/eom-mdl-vs-rhs.ts",
-    "ic:dual-path": "tsx scripts/ic-dual-path-compare.ts",
-    "onpad:dual-path": "tsx scripts/onpad-dual-path-compare.ts",
     "test:mdl2obliq": "npm --prefix ../mdl2obliq test",
-    "migrate:supabase": "tsx scripts/migrate-from-supabase.ts",
     "obliq:link": "tsx scripts/obliq-link.ts"
   },
   "dependencies": {
@@ -66,7 +59,6 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@jest/globals": "^30.5.2",
-    "@supabase/supabase-js": "^2.49.8",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^9.6.0",
     "@types/jest": "^30.0.0",

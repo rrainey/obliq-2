@@ -404,11 +404,15 @@ export class ModelRepository {
   }
 
   // ---------------------------------------------------------------------------
-  // Migration support (scripts/migrate-from-supabase.ts)
+  // Bulk import
 
   /**
    * Import a model with explicit ids, timestamps and version numbers.
    * The highest version becomes model.json. Idempotent: an existing id is skipped.
+   *
+   * CURRENTLY UNUSED: no code in src/ or scripts/ calls this method. Its one
+   * caller was the one-time import from the 2.x database, which release 3.8.4
+   * removed. It stays for a future bulk import; __tests__/storage covers it.
    */
   importModel(opts: {
     id: string

@@ -16,7 +16,7 @@ import {
 } from '@mantine/core'
 import { IconSearch } from '@tabler/icons-react'
 
-interface BlockType {
+export interface BlockType {
   id: string
   name: string
   category: string
@@ -25,7 +25,8 @@ interface BlockType {
   vectorSupport?: 'full' | 'scalar-only' | 'element-wise' | 'partial'
 }
 
-const blockTypes: BlockType[] = [
+/** The block palette. Exported for the tests that check it against the registry. */
+export const blockTypes: BlockType[] = [
   // Math Operations
   {
     id: 'sum',
@@ -100,13 +101,21 @@ const blockTypes: BlockType[] = [
     vectorSupport: 'full'
   },
 
-  // Signal Processing / Discontinuities
+  // Limit (Math, as in the registry), then the Discontinuities
   {
     id: 'limit',
     name: 'Limit',
-    category: 'Signal',
+    category: 'Math',
     description: 'Clamp signal to range',
     icon: '⊏⊐',
+    vectorSupport: 'full'
+  },
+  {
+    id: 'saturation_dynamic',
+    name: 'Saturation Dynamic',
+    category: 'Discontinuities',
+    description: 'Clamp u between the limit signals lo and up',
+    icon: '⊏u⊐',
     vectorSupport: 'full'
   },
   {

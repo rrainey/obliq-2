@@ -268,11 +268,15 @@ Content-Type: application/json
 ```
 
 **Supported Block Types:**
+
+This list shows only some of the block types. The block type registry (`src/lib/blockTypeRegistry.ts`) has all of them. The MCP tool `list_block_types` also gives all of them, with their parameters and port names.
+
 - `source` - Constant or signal generator
 - `input_port` - External input
 - `sum` - Addition block
 - `multiply` - Multiplication block
 - `scale` - Scalar multiplication
+- `saturation_dynamic` - Limits `u` to the range `lo` to `up`, with the limits from input signals. It has no parameters. Connect the input ports in this order: `targetPortIndex` 0 = `up` (upper limit), 1 = `u` (input signal), 2 = `lo` (lower limit)
 - `transfer_function` - Laplace transfer function
 - `lookup_1d` - 1D lookup table
 - `lookup_2d` - 2D lookup table
@@ -282,6 +286,27 @@ Content-Type: application/json
 - `sheet_label_sink` - Sheet connection sink
 - `sheet_label_source` - Sheet connection source
 - `subsystem` - Nested subsystem
+- `derivative` - Backward-difference derivative of `u`, element-wise. Parameter `initialCondition` (number). Port names `u` and `du_dt`
+- `variable_transport_delay` - Delays the scalar `u` by `delay_sec` seconds. Parameters `maximumDelay` (seconds, greater than 0), `maximumPoints` (integer, 2 to 1000000) and `initialInput`. Connect the input ports in this order: `targetPortIndex` 0 = `u`, 1 = `delay_sec`
+- `for_iterator_subsystem` - Runs its body sheet `iterationLimit` times in each step. See [For Iterator Subsystem](#for-iterator-subsystem)
+- `iteration_index` - Pass number in the body of a For Iterator Subsystem. No parameters with an effect. Port name `i`
+
+#### For Iterator Subsystem
+
+The body of a For Iterator Subsystem is a sheet, the same as for a subsystem.
+
+1. Send `addBlock` with `"blockType": "for_iterator_subsystem"` and the parameters `iterationLimit`, `indexBase` (0 or 1), `resetStates` (`held` or `reset`) and `accumulateOutputs` (boolean). The block gets a body sheet with an Input Port `Input1` and an Output Port `Output1`.
+2. Read the body sheet ID from `data.subsystemSheet.id` in the response.
+3. Send `addBlock` and `addConnection` with this `sheetId` to make the body. Add an `iteration_index` block for the pass number. A new Input Port or Output Port in the body adds a port to the block.
+4. Connect the block on the parent sheet. The port indexes follow the order of the port blocks in the body.
+
+You can also send the full body in `parameters.sheets` in one `addBlock` request.
+
+Limits:
+- `codeGenStrategy` must be `segregated_atomic` (the default) or `segregated`. The API rejects `flatten`.
+- A For Iterator Subsystem or a segregated subsystem in the body is not supported. The generated C does not compile.
+- The block parameter actions (`addBlockParameter`, `updateBlockParameter`, `deleteBlockParameter`, `listBlockParameters`, `getBlockParameter`) accept only a `subsystem` block. To set subsystem-scoped parameters on a For Iterator Subsystem, send `parameters.parameters` in `addBlock` or `updateBlockParameters`.
+- The editor does not show the block on the palette, and the canvas cannot open the body sheet. The editor shows the model, simulates it and generates its code.
 
 #### Update Block Position
 Move a block to a new position.

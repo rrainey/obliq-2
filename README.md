@@ -59,8 +59,11 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 | `discrete_transform` | Discrete Transform | Dynamic | Discrete-time z-transform transfer function |
 | `integrator` | Integrator | Dynamic | Integrator block (1/s) with optional limits and reset |
 | `unit_delay` | Unit Delay | Dynamic | Unit delay (z⁻¹): outputs the previous sample; `sampleInterval` 0 means every step |
+| `derivative` | Derivative | Dynamic | Backward-difference derivative `(u - u_prev) / (t - t_prev)`, element-wise, without a filter. Not on the palette: use the Model Builder API or MCP |
+| `variable_transport_delay` | Variable Transport Delay | Dynamic | Delays the scalar `u` by the input `delay_sec` (seconds, 0 to `maximumDelay`), with linear interpolation. Not on the palette: use the Model Builder API or MCP |
+| `saturation_dynamic` | Saturation Dynamic | Discontinuities | Limits `u` to the range `lo` to `up` (element-wise). Input signals supply the limits. Ports in order: `up`, `u`, `lo` |
 | `relay` | Relay | Discontinuities | Hysteresis switch: on when u ≥ onThreshold, off when u ≤ offThreshold |
-| `rate_limiter` | Rate Limiter | Discontinuities | Limits the output's rate of change (units/sec) using the simulation time step |
+| `rate_limiter` | Rate Limiter | Discontinuities | Limits the output's rate of change (units/sec), per sample period (the simulation time step when there is no sample time) |
 | `quantizer` | Quantizer | Discontinuities | Rounds input to the nearest multiple of a quantum (element-wise) |
 | `edge_detect` | Edge Detect | Discontinuities | Emits a one-step pulse on a rising, falling, or either edge |
 | `lookup_1d` | 1-D Lookup | Lookup | 1-D lookup table with linear interpolation |
@@ -78,6 +81,8 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 | `data_store_write` | Data Store Write | Data | Writes a signal to a model-scoped named store, shared across sheets and subsystems |
 | `data_store_read` | Data Store Read | Data | Reads a model-scoped named data store |
 | `subsystem` | Subsystem | Hierarchical | Encapsulates another sheet as a reusable block |
+| `for_iterator_subsystem` | For Iterator Subsystem | Hierarchical | Runs its body sheet `iterationLimit` times in each step; outputs of the last pass, or their sum. Not on the palette: use the Model Builder API or MCP |
+| `iteration_index` | Iteration Index | Sources | Pass number in a For Iterator body (from `indexBase` of the parent). Not on the palette: use the Model Builder API or MCP |
 | `signal_display` | Signal Display | Sinks | Real-time signal visualization during simulation |
 | `signal_logger` | Signal Logger | Sinks | Logs signal values for CSV export |
 | `assert` | Assert | Sinks | Test check: fails when its input leaves bounds, differs from an expected input, or is false; can stop the run |
@@ -89,8 +94,7 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 | `body2quaternion_rates` | Body2Quat Rates | Aerospace | Converts body angular rates to quaternion rates |
 | `atmosphere` | Atmosphere | Aerospace | U.S. Standard Atmosphere 1976 (COESA) from its layer formulae: T, a, P, ρ versus geometric altitude (m), −5 to 86 km |
 | `comment` | Comment | Annotation | Text annotation with Markdown and LaTeX math support |
-| `saturation_dynamic` | Element-wise `clamp(u, lo, up)`, with the limits supplied as signals rather than parameters |
-| `inertia_diag_pack` | Packs principal-axis inertia and its derivative into `[Ixx, Iyy, Izz, İxx, İyy, İzz]` for aerolib mass properties |
+| `inertia_diag_pack` | Inertia Diag Pack | Aerospace | Packs the diagonals of `I` and `I_dot` into `double[6]` `[Ixx, Iyy, Izz, İxx, İyy, İzz]` for aerolib mass properties. Code generation only: not on the palette, in the registry or in the MCP list |
 
 ### Diagram Layout
 
@@ -320,7 +324,7 @@ Differences from the editor:
 The script exits with code 0 when it writes all the PDFs. It exits with code 1, and writes no PDF for that model, when a model file cannot be read, a sheet or page size is unknown, or a model reference cannot be resolved.
 
 ### Simulation Engine
-- **Client-side simulation** - Models are compiled dynamically and executed as [Web Assemblies](https://webassembly.org/)
+- **Simulation as WebAssembly** - The server compiles each model to a [WebAssembly](https://webassembly.org/) module, and the browser runs it
 - Fast canvas plots of Signal Displays ([uPlot](https://github.com/leeoniya/uPlot)): the values under the cursor in the legend, click legend entries to hide or show lines, and drag to zoom in time
 - **Export as PDF** can print each sheet's plots beside its diagram (**Include plot results on sheets**)
 - Configurable time steps, duration, and integration methods, saved with the model
@@ -482,17 +486,6 @@ The server binds to `127.0.0.1` and refuses requests whose `Host` is not a loopb
   The disk content is always recorded as a version with note `external` before anything overwrites it. A save based on a stale copy is rejected (HTTP 409) rather than silently overwriting.
 - **Linked models.** **My Models → Link File** (or `npm run obliq:link -- /abs/path/model.json [--name "Name"]`, which works without the server running) registers a file that lives elsewhere, such as a generated plant model in another repo. `npm run obliq:link -- --list` lists models and their file locations. The file stays where it is and saves write back to it in the same shape (`{name, data}` or bare ModelData). Its versions and autosave live under `models/<id>/`. Deleting a linked model never deletes the external file. **Copy into Obliq storage** (model menu, or `obliq:link -- --unlink <id>`) detaches it. A linked file that has gone missing is flagged on My Models.
 
-### Migrating from the previous Supabase backend
-
-```bash
-# .env.local must still contain NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
-npm run migrate:supabase -- --dry-run          # preview
-npm run migrate:supabase                       # import all versions, autosaves, API token hashes
-npm run migrate:supabase -- --user you@example.com   # if the instance has several users
-```
-
-The import is idempotent: models already present locally are skipped. API token hashes carry over, so existing MCP tokens keep working. The WASM cache is not migrated and rebuilds on demand. The old SQL schema is archived in [`docs/archive/supabase-database-scripts/`](./docs/archive/supabase-database-scripts/).
-
 ### Loading sample models (Import)
 
 From **My Models** (`/models`), use **Import** to create a new model from JSON. This matches the **Export** format and the fixtures under [`docs/sample-models/`](./docs/sample-models/):
@@ -531,7 +524,7 @@ npm test
 npm run test:watch
 
 # Run tests with coverage
-npm run test:coverage
+npx jest --coverage
 
 # Build for production
 npm run build
@@ -590,7 +583,7 @@ obliq-2/
 │   │   ├── CanvasReactFlow.tsx       # ReactFlow canvas wrapper
 │   │   ├── BlockLibrarySidebar.tsx   # Drag-and-drop block palette
 │   │   ├── SignalDisplay.tsx         # Real-time signal visualization
-│   │   ├── SimulationDisplayPanel.tsx
+│   │   ├── SimulationSettingsPanel.tsx  # Simulation settings
 │   │   ├── *Config.tsx               # Block configuration dialogs
 │   │   └── ...
 │   │
@@ -673,20 +666,21 @@ obliq-2/
 │   └── utils/                        # Test utilities (TestModelBuilder, etc.)
 │
 ├── design/                           # Architecture documentation
-│   └── 00-architecture.md            # Comprehensive system architecture
+│   └── 00-architecture.md            # System architecture: parts, flows, rules
 │
 ├── docs/                             # API documentation
 │   ├── automation-api.md
 │   ├── model-builder-api.md
-│   └── wasm-*.md                     # WASM documentation
+│   ├── blocks-reference.md           # Each block type and its parameters
+│   └── wasm-compilation-api.md       # The WASM compile route
 │
 ├── examples/                         # Example scripts
 │   └── model-builder-api/            # API usage examples
 │
 └── scripts/                          # Command-line tools
     ├── obliq-link.ts                 # npm run obliq:link — link/list/unlink model files
-    ├── migrate-from-supabase.ts      # npm run migrate:supabase — one-time import from 2.x
     ├── obliq-cgen.ts                 # npm run obliq:cgen — C code from a model JSON file
+    ├── obliq-layout.ts               # npm run obliq:layout — lay out a model JSON file, or score its layout
     ├── obliq-pdf.ts                  # npm run obliq:pdf — PDF of a model JSON file
     └── obliq-test.ts                 # npm run obliq:test — run models' Assert blocks
 ```
@@ -706,7 +700,7 @@ npm test
 npm run test:watch
 
 # Run tests with coverage
-npm run test:coverage
+npx jest --coverage
 ```
 
 ### C Code Generation Tests

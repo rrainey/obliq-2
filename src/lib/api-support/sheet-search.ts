@@ -5,7 +5,8 @@ import { SheetSearchResult } from './types';
 
 /**
  * Recursively find a sheet by ID, searching both top-level sheets and
- * sheets nested inside subsystem blocks' parameters.sheets arrays.
+ * sheets nested inside subsystem blocks' parameters.sheets arrays (also the
+ * body sheets of For Iterator Subsystem blocks).
  *
  * @param sheets - Top-level sheets array to search
  * @param sheetId - ID of the sheet to find
@@ -37,7 +38,7 @@ export function findSheetRecursively(
       const block = blocks[j];
 
       // If this is a subsystem with nested sheets, search recursively
-      if (block.type === 'subsystem' && block.parameters?.sheets && Array.isArray(block.parameters.sheets)) {
+      if ((block.type === 'subsystem' || block.type === 'for_iterator_subsystem') && block.parameters?.sheets && Array.isArray(block.parameters.sheets)) {
         const nestedSheets = block.parameters.sheets;
         const nestedPath = [...path, `[${i}].blocks[${j}].parameters.sheets`];
 
@@ -81,7 +82,7 @@ export function findParentSubsystemForSheet(
     if (!sheet.blocks) continue;
 
     for (const block of sheet.blocks) {
-      if (block.type === 'subsystem' && block.parameters?.sheets) {
+      if ((block.type === 'subsystem' || block.type === 'for_iterator_subsystem') && block.parameters?.sheets) {
         // Check if the target sheet is directly in this subsystem
         const foundSheet = block.parameters.sheets.find((s: any) => s.id === sheetId);
         if (foundSheet) {
@@ -133,7 +134,7 @@ export function findBlockRecursively(
 
     // Search in subsystem sheets
     for (const block of blocks) {
-      if (block.type === 'subsystem' && block.parameters?.sheets) {
+      if ((block.type === 'subsystem' || block.type === 'for_iterator_subsystem') && block.parameters?.sheets) {
         const nestedResult = findBlockRecursively(block.parameters.sheets, blockId);
         if (nestedResult) {
           return {
@@ -167,7 +168,7 @@ export function getAllSheets(sheets: any[], result: any[] = []): any[] {
     // Search for nested sheets in subsystem blocks
     const blocks = sheet.blocks || [];
     for (const block of blocks) {
-      if (block.type === 'subsystem' && block.parameters?.sheets) {
+      if ((block.type === 'subsystem' || block.type === 'for_iterator_subsystem') && block.parameters?.sheets) {
         getAllSheets(block.parameters.sheets, result);
       }
     }

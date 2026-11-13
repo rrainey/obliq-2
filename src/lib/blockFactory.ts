@@ -306,6 +306,7 @@ function getTypeSpecificDefaultParameters(blockType: string): Record<string, any
     case BlockTypes.CROSS:
     case BlockTypes.DOT:
     case BlockTypes.MAG:
+    case BlockTypes.SATURATION_DYNAMIC:
       return {};
 
     default:
@@ -486,8 +487,9 @@ export function createBlock(
     outputs: ports.outputs.map(p => p.name)
   };
 
-  // Special handling for subsystem blocks - create embedded sheet if not already provided
-  if (blockType === BlockTypes.SUBSYSTEM) {
+  // Special handling for subsystem blocks - create embedded sheet if not already provided.
+  // A For Iterator Subsystem gets a body sheet in the same way.
+  if (blockType === BlockTypes.SUBSYSTEM || blockType === BlockTypes.FOR_ITERATOR_SUBSYSTEM) {
     const inputPortNames = parameters.inputPorts || ['Input1'];
     const outputPortNames = parameters.outputPorts || ['Output1'];
 
@@ -585,7 +587,10 @@ export function createSubsystemBlock(
  * @param subsystemBlock - The subsystem block to synchronize
  */
 export function syncSubsystemPortsFromSheets(subsystemBlock: BlockData): void {
-  if (subsystemBlock.type !== BlockTypes.SUBSYSTEM || !subsystemBlock.parameters?.sheets) {
+  if (
+    (subsystemBlock.type !== BlockTypes.SUBSYSTEM && subsystemBlock.type !== BlockTypes.FOR_ITERATOR_SUBSYSTEM) ||
+    !subsystemBlock.parameters?.sheets
+  ) {
     return;
   }
   // A model reference's ports come from the referenced model, not its (empty) sheets

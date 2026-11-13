@@ -1,5 +1,6 @@
 // lib/typeCompatibilityValidator.ts
 
+import { variableTransportDelayInputError } from './blocks/VariableTransportDelayBlockModule'
 import { BlockData } from '@/components/BlockNode'
 import { WireData } from '@/components/Wire'
 import { parseType, ParsedType, areTypesCompatible } from './typeValidator'
@@ -193,6 +194,13 @@ export function validateModelTypeCompatibility(
         errors.push(...matrixErrors)
       }
     }
+
+    // Validate saturation dynamic blocks (shapes of u and the two limits)
+    for (const block of blocks) {
+      if (block.type === 'saturation_dynamic') {
+        errors.push(...validateSaturationDynamicBlock(block, wires, propagationResult.signalTypes))
+      }
+    }
     
     return {
       isValid: errors.length === 0,
@@ -214,6 +222,13 @@ export function validateModelTypeCompatibility(
     if (['lookup_1d', 'lookup_2d'].includes(block.type)) {
       const lookupErrors = validateLookupBlock(block, wires, propagationResult)
       errors.push(...lookupErrors)
+    }
+  }
+
+  // Validate saturation dynamic blocks (shapes of u and the two limits)
+  for (const block of blocks) {
+    if (block.type === 'saturation_dynamic') {
+      errors.push(...validateSaturationDynamicBlock(block, wires, propagationResult.signalTypes))
     }
   }
   
@@ -300,6 +315,15 @@ export function validateModelTypeCompatibilityMultiSheet(
         }
       }
     }
+  }
+
+  // Saturation Dynamic: the shapes of u and the two limits
+  for (const e of saturationDynamicErrorsMultiSheet(sheets, typeResult.signalTypes)) {
+    allErrors.push(stampSheetId(e))
+  }
+  // Variable Transport Delay (scalar inputs) and Iteration Index (placement)
+  for (const e of iteratorAndDelayErrorsMultiSheet(sheets, typeResult.signalTypes)) {
+    allErrors.push(stampSheetId(e))
   }
 
   // Validate sheet labels across all sheets
@@ -395,6 +419,7 @@ function validateBlockInputType(
 
     case 'sign':
     case 'quantizer':
+    case 'saturation_dynamic':
       // Accept any numeric type (scalar, vector, or matrix)
       if (parsedInputType.baseType === 'bool') {
         return {
@@ -920,6 +945,18 @@ export function validateBlockOperation(
       }
       break
       
+    case 'saturation_dynamic': {
+      const message = saturationDynamicInputError(block.name, inputTypes)
+      if (message) return { blockId: block.id, message, severity: 'error' }
+      break
+    }
+
+    case 'variable_transport_delay': {
+      const message = variableTransportDelayInputError(block.name, inputTypes)
+      if (message) return { blockId: block.id, message, severity: 'error' }
+      break
+    }
+
     case 'lookup_1d':
     case 'lookup_2d':
       // Must have scalar inputs
@@ -949,6 +986,143 @@ export function validateBlockOperation(
   }
   
   return null
+}
+
+/**
+ * Input shapes that a Saturation Dynamic block (ports up, u, lo) can process.
+ * `types[i]` is the type on input port i, or undefined when it is not known.
+ * Returns an error message, or null when the shapes are valid:
+ * - no input can be bool;
+ * - each input that is not a scalar has the same shape as the others
+ *   (a scalar input is applied to all elements);
+ * - when u is a scalar, a limit cannot be a matrix (the generated C indexes
+ *   u as the matrix).
+ */
+export function saturationDynamicInputError(blockName: string, types: Array<string | undefined>): string | null {
+  const names = ['up', 'u', 'lo']
+  const parsed: Array<ParsedType | null> = []
+  for (let i = 0; i < 3; i++) {
+    const t = types[i]
+    if (!t) { parsed.push(null); continue }
+    try { parsed.push(parseType(t)) } catch { parsed.push(null) }
+  }
+  for (let i = 0; i < 3; i++) {
+    if (parsed[i]?.baseType === 'bool') return `${blockName} cannot process boolean signals (input ${names[i]}: ${types[i]})`
+  }
+  const shape = (p: ParsedType) =>
+    p.isMatrix ? `[${p.rows}][${p.cols}]` : p.isArray ? `[${p.arraySize}]` : ''
+  const shaped = parsed
+    .map((p, i) => ({ p, i }))
+    .filter((e): e is { p: ParsedType; i: number } => !!e.p && (e.p.isArray || !!e.p.isMatrix))
+  for (const e of shaped.slice(1)) {
+    if (shape(e.p) !== shape(shaped[0].p)) {
+      return `${blockName}: inputs ${names[shaped[0].i]} (${types[shaped[0].i]}) and ${names[e.i]} (${types[e.i]}) ` +
+        'must have the same dimensions, or one of them must be a scalar'
+    }
+  }
+  const u = parsed[1]
+  if (u && !u.isArray && !u.isMatrix && shaped.some(e => e.p.isMatrix)) {
+    return `${blockName}: when the input u is a scalar, the limits up and lo cannot be matrices`
+  }
+  return null
+}
+
+/** Saturation Dynamic shape check (saturationDynamicInputError) on a sheet's wires. */
+function validateSaturationDynamicBlock(
+  block: BlockData,
+  wires: WireData[],
+  signalTypes: Map<string, { type: string }>
+): TypeCompatibilityError[] {
+  const types: Array<string | undefined> = []
+  for (const w of wires) {
+    if (w.targetBlockId === block.id && w.targetPortIndex >= 0 && w.targetPortIndex < 3) {
+      types[w.targetPortIndex] = signalTypes.get(w.id)?.type
+    }
+  }
+  const message = saturationDynamicInputError(block.name, types)
+  return message ? [{ blockId: block.id, message, severity: 'error' }] : []
+}
+
+/**
+ * The Saturation Dynamic shape check on every sheet, also the sheets inside
+ * subsystem blocks. Each block is checked one time.
+ */
+export function saturationDynamicErrorsMultiSheet(
+  sheets: Array<{ blocks?: BlockData[], connections?: WireData[] }>,
+  signalTypes: Map<string, { type: string }>
+): TypeCompatibilityError[] {
+  const errors: TypeCompatibilityError[] = []
+  const checked = new Set<string>()
+  const visit = (sh: { blocks?: BlockData[], connections?: WireData[] }) => {
+    for (const b of sh.blocks || []) {
+      if (b.type === 'saturation_dynamic' && !checked.has(b.id)) {
+        checked.add(b.id)
+        errors.push(...validateSaturationDynamicBlock(b, sh.connections || [], signalTypes))
+      }
+      if (b.type === 'subsystem' && Array.isArray(b.parameters?.sheets)) {
+        for (const nested of b.parameters.sheets) visit(nested)
+      }
+    }
+  }
+  for (const s of sheets) visit(s)
+  return errors
+}
+
+/**
+ * Checks of the Variable Transport Delay and the Iteration Index on every
+ * sheet, also the sheets inside subsystem and For Iterator blocks:
+ * - Variable Transport Delay: `u` and `delay_sec` must be scalars (the
+ *   generated C has a scalar ring buffer).
+ * - Iteration Index: must be in the body of a For Iterator Subsystem, or in a
+ *   flattened subsystem in that body. In another place the generated C has no
+ *   iteration index.
+ */
+export function iteratorAndDelayErrorsMultiSheet(
+  sheets: Array<{ blocks?: BlockData[], connections?: WireData[] }>,
+  signalTypes: Map<string, { type: string }>
+): TypeCompatibilityError[] {
+  const errors: TypeCompatibilityError[] = []
+  const checked = new Set<string>()
+  // A caller can give the nested sheets also as top-level sheets. Thus an
+  // Iteration Index is an error only when no path puts it in a body.
+  const indexBlocks = new Map<string, BlockData>()
+  const indexInBody = new Set<string>()
+  const visit = (sh: { blocks?: BlockData[], connections?: WireData[] }, inForIterator: boolean) => {
+    for (const b of sh.blocks || []) {
+      if (b.type === 'variable_transport_delay' && !checked.has(b.id)) {
+        checked.add(b.id)
+        const types: Array<string | undefined> = []
+        for (const w of sh.connections || []) {
+          if (w.targetBlockId === b.id && w.targetPortIndex >= 0 && w.targetPortIndex < 2) {
+            types[w.targetPortIndex] = signalTypes.get(w.id)?.type
+          }
+        }
+        const message = variableTransportDelayInputError(b.name, types)
+        if (message) errors.push({ blockId: b.id, message, severity: 'error' })
+      } else if (b.type === 'iteration_index') {
+        indexBlocks.set(b.id, b)
+        if (inForIterator) indexInBody.add(b.id)
+      }
+      if ((b.type === 'subsystem' || b.type === 'for_iterator_subsystem') && Array.isArray(b.parameters?.sheets)) {
+        // A segregated subsystem is a separate C module without the index.
+        const segregated = b.type === 'subsystem' &&
+          ['segregated', 'segregated_atomic', 'native'].includes(String(b.parameters?.codeGenStrategy))
+        const childInFor = b.type === 'for_iterator_subsystem' ? true : (inForIterator && !segregated)
+        for (const nested of b.parameters.sheets) visit(nested, childInFor)
+      }
+    }
+  }
+  for (const s of sheets) visit(s, false)
+  for (const [id, b] of indexBlocks) {
+    if (!indexInBody.has(id)) {
+      errors.push({
+        blockId: id,
+        message: `Iteration Index "${b.name}" must be in the body of a For Iterator Subsystem`,
+        severity: 'error'
+      })
+    }
+  }
+  return errors
 }
 
 /**

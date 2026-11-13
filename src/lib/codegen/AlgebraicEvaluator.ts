@@ -1056,11 +1056,20 @@ export class AlgebraicEvaluator {
       const base = fi.indexBase
       const end = base === 0 ? lim : lim + 1
       code += `    /* For Iterator: ${lim} pass(es), indexBase=${base}, resetStates=${fi.resetStates}, accumulate=${fi.accumulateOutputs} */\n`
+      // A block scope, thus two For Iterators can have outputs of the same name
+      code += `    {\n`
+      // A vector or matrix output is summed in a local array of the same C
+      // type. The body writes its outputs again on each pass, thus the sum
+      // cannot be kept in the output struct itself.
+      const accDecl = (port: { dataType: string; sanitizedName: string }): string => {
+        const m = port.dataType.match(/^(\w+)((?:\[\d+\])+)$/)
+        return m ? `${m[1]} __fi_acc_${port.sanitizedName}${m[2]}` : `double __fi_acc_${port.sanitizedName}[1]`
+      }
       if (fi.accumulateOutputs) {
         for (const port of subInfo.outputPorts) {
           if (port.dataType.includes('[')) {
-            // Vector/matrix accumulate: zero then add element-wise each pass.
-            code += `    memset(&model->${field}.outputs.${port.sanitizedName}, 0, sizeof(model->${field}.outputs.${port.sanitizedName}));\n`
+            code += `    ${accDecl(port)};\n`
+            code += `    memset(&__fi_acc_${port.sanitizedName}, 0, sizeof(__fi_acc_${port.sanitizedName}));\n`
           } else {
             code += `    double __fi_acc_${port.sanitizedName} = 0.0;\n`
           }
@@ -1084,6 +1093,14 @@ export class AlgebraicEvaluator {
         for (const port of subInfo.outputPorts) {
           if (!port.dataType.includes('[')) {
             code += `        __fi_acc_${port.sanitizedName} += model->${field}.outputs.${port.sanitizedName};\n`
+          } else {
+            const acc = `__fi_acc_${port.sanitizedName}`
+            const bt = port.dataType.match(/^(\w+)/)?.[1] || 'double'
+            code += `        {\n`
+            code += `            ${bt} *__a = (${bt} *)&${acc};\n`
+            code += `            const ${bt} *__o = (const ${bt} *)&model->${field}.outputs.${port.sanitizedName};\n`
+            code += `            for (size_t __k = 0; __k < sizeof(${acc}) / sizeof(${bt}); ++__k) __a[__k] += __o[__k];\n`
+            code += `        }\n`
           }
         }
       }
@@ -1092,9 +1109,12 @@ export class AlgebraicEvaluator {
         for (const port of subInfo.outputPorts) {
           if (!port.dataType.includes('[')) {
             code += `    model->${field}.outputs.${port.sanitizedName} = __fi_acc_${port.sanitizedName};\n`
+          } else {
+            code += `    memcpy(&model->${field}.outputs.${port.sanitizedName}, &__fi_acc_${port.sanitizedName}, sizeof(__fi_acc_${port.sanitizedName}));\n`
           }
         }
       }
+      code += `    }\n`
     } else if (subInfo.hasEnableInput) {
       // Set enable state if subsystem has enable input
       const enableExpr = this.getEnableExpression(block)

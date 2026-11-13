@@ -1,1270 +1,777 @@
-# obliq-2: Architecture Design for a Visual Modeling & Simulation Web Application
-
-## Overview and Technology Stack
-
-This application is a web-based visual modeling and simulation tool, similar in spirit to Scicos or Simulink. It enables users to **construct, test, and simulate block diagram models** in the browser, then generate C code for embedded deployment. The solution is built with **Next.js** as the frontend framework (leveraging its full-stack capabilities) and **Supabase** as the backend-as-a-service (handling database storage and user authentication). The primary data model (the user-created diagrams) is stored as JSON in a Postgres database (via Supabase). Using Supabase simplifies backend infrastructure since it provides authentication and a Postgres database with built-in JSON support (using JSONB columns) and row-level security for multi-user data separation. The system includes both a traditional web interface and a **Model Context Protocol (MCP) server** for programmatic access, enabling efficient testing and automation workflows. The architecture prioritizes clarity, simplicity, and performance, avoiding complex collaborative features and focusing on single-user editing sessions.
-
-## High-Level System Architecture
-
-
-*High-level architecture of the visual modeling application.* The system consists of a **Next.js frontend** (the user interface and client-side logic) and **Next.js API routes** (serverless functions) that together form the application, with **Supabase** providing authentication and database services. The **user's browser** runs the Next.js frontend, including the **visual modeling canvas** and a **WASM-based simulation engine**. The browser communicates directly with Supabase (via Supabase's JavaScript client) for most CRUD operations and authentication flows, and it communicates with Next.js API routes for specialized tasks like WASM compilation, code generation, or automated external triggers. Supabase's database stores persistent data (model documents, user profiles, etc.), and Supabase Auth manages user sign-up/sign-in and session tokens. The **Next.js API backend** (part of the same Next application) handles operations that are better done server-side (e.g. WASM compilation, preparing a downloadable code bundle, or responding to external API calls), and it can securely interact with the Supabase database (using service role credentials or Supabase client on the server) when needed. In summary, the browser is responsible for interactive modeling and WASM-based simulation, Supabase handles data persistence and auth, and Next.js API routes provide auxiliary services (WASM compilation, code export, automation hooks) and integrate all pieces.
-
-Additionally, the system includes an **MCP Server** that provides programmatic access to model manipulation capabilities. The MCP server runs as a separate Node.js process and communicates with the Next.js backend through the existing Automation API. This allows MCP clients (such as AI assistants or automated testing tools) to create, modify, simulate, and validate models without using the web UI. The MCP server maintains no state and acts as a protocol adapter, translating MCP tool calls into appropriate HTTP requests to the backend.
-
-
-## Project Structure and Folder Organization
-
-The project follows a clean, modular folder structure to organize different concerns. Next.js does not enforce a specific organization, so we structure files by feature and functionality for clarity. Below is an outline of the key directories and files, with each part explained:
-
-* **`/app`** (or `pages/` in older Next.js versions): Contains the Next.js pages and route handlers. Using Next.js App Router, we structure pages as React Server Components where appropriate for data fetching.
-
-  * **`app/page.tsx`** – The landing page (e.g. a home or dashboard). If the user is not authenticated, it might show marketing info or a login link; if authenticated, it can redirect to the model list.
-  * **`app/login/page.tsx`** – Login (and sign-up) page for user authentication. It uses Supabase Auth (via the JS client or Supabase Auth UI) to handle user credentials.
-  * **`app/models/page.tsx`** – Models dashboard page, listing the user's saved models. This page fetches model metadata from Supabase (could be done via a React Server Component that uses the Supabase client with the user's session token). It displays a list of models and a button to create a new model.
-  * **`app/models/[id]/page.tsx`** – The **model editor page** for constructing and simulating a specific model. It is the core of the application's UI, loading the model JSON from Supabase (via client-side fetch or server-side prefetch) and then rendering the visual canvas. This page employs a mix of server and client components: for example, the initial model data can be fetched on the server (for faster load) and passed to a client component that manages the interactive editing. It also provides UI controls for actions like *Save*, *Run Simulation*, *Generate C Code*, *Download JSON*, etc.
-  * **`app/api/simulate/route.ts`** – (Optional) API route to run simulation on the server. If the simulation is simple enough, we might *not* need this and instead run simulations in the browser. However, if we choose server-side simulation for consistency or offloading work, this endpoint would accept a model (ID or JSON) and perform the simulation, returning results (e.g. computed signal traces).
-  * **`app/api/generate-code/route.ts`** – API route to handle **C code generation**. When the user requests a PlatformIO C library export, the frontend calls this endpoint (via a POST request containing the model ID or JSON). The route will load the model (if only an ID was sent), then invoke the code generation service to produce a C code bundle (source files). The response could be a file download (e.g. a zip archive of the library) or a JSON with a link to a file in Supabase Storage. This isolates the heavy or sensitive operation of code generation on the server side. For local development, this route uses the Supabase service role key (stored in `SUPABASE_SERVICE_ROLE_KEY` environment variable) to bypass Row Level Security when fetching models. This key must never be exposed to client-side code.
-  The route accepts an optional `version` parameter to generate code from specific versions. If no version is specified, it defaults to the latest version. The generated ZIP filename includes the version number for clarity.
-  * **`app/api/automations/[token]/route.ts`** – API route for the **automation API**. This endpoint allows external systems (like CI/CD pipelines or validation tools) to trigger actions on a model. For example, an external request could hit `POST /api/automations/` with a payload specifying a model ID and an action (simulate, validate, or code-generate). A secure token (or an API key) in the URL or headers is used to authenticate these external requests (to avoid requiring a user session). Internally, this route verifies the token, then performs the requested action by calling the appropriate logic (e.g., running a simulation or generating code) and returns a result (like success status or generated artifacts). By design, this API route decouples external automation from the UI, enabling integration with CI systems without exposing the main app's user session mechanism.
-
-  All automation API actions support an optional `version` parameter, allowing CI/CD pipelines to work with specific versions of a model. This enables reproducible builds and testing against known model states.
-
-* **`/components`**: Reusable **React and ReactFlow components** for the UI, especially those used on the modeling canvas and related UI panels.
-
-  * **`components/CanvasReactFlow.tsx`** – The **visual modeling canvas** component. This component provides a drawing area (using HTML5 Canvas or SVG/React components) where block diagram elements (blocks and connecting wires) are rendered. It handles drag-and-drop placement of blocks, drawing of connection lines between ports, and selection/highlighting of elements. The Canvas component uses internal state or context to track what's being dragged or selected, and it delegates events (like drop or wire connection) to higher-level handlers.
-  * **`components/BlockNode.tsx`** – A component representing an individual **Block** (e.g., a Sum block, Multiplication block, etc.). Each Block knows how to render its icon/symbol and has defined input/output ports. It might be implemented as a draggable item. This component might also include UI for configuring block parameters (for blocks that have parameters, such as a Laplace Transfer Function which has coefficients).
-  * **`components/Port.tsx`** – A sub-component for an input or output port on a block. Ports are anchor points for connections. This component might handle user interactions for starting or ending a wire connection (e.g., click and drag from an output port to an input port).
-  * **`components/Wire.tsx`** – A component (or an SVG path) representing a **wire connection** between blocks. Wires can be drawn as SVG lines or Bezier curves connecting an output port to an input port. It may also handle user interaction (e.g., clicking a wire might highlight it or allow deletion). Includes WireData interface with routing information for custom wire paths.
-  * **`components/WireContextMenu.tsx`** – Context menu component displayed on right-click of a wire, providing options for Highlight Connections (shows all wires from the same source), Remove Custom Routing (resets wire path), and Delete.
-  * **`components/CommentNode.tsx`** – React component for rendering Comment blocks on the canvas. Displays configurable text with background color, font size, and width settings. Double-click opens the configuration dialog.
-  * **`components/CommentConfig.tsx`** – Configuration dialog for Comment blocks, allowing users to edit text content, background color, font size, and width.
-  * **`components/BlockLibrarySidebar.tsx`** – A sidebar component that lists all available primitive blocks (Sum, Multiply, Transfer Function, Signal Display, Logger, Input/Output ports, Comment, etc.) and possibly user-defined Subsystems. Users can drag new blocks from this palette onto the canvas. This component organizes blocks into categories and provides a search or filter for convenience if the library grows.
-  * **`components/AutoSaveRecoveryDialog.tsx`** – Modal dialog shown when opening a model that has an auto-saved version. Displays timestamps of both the auto-save and last saved version, allowing users to choose which to open. When recovering auto-save, the system loads the auto-saved content but maintains the latest version number to ensure proper UI behavior.
-
-  * **`components/AutoSaveStatusIndicator.tsx`** – Small component that displays the auto-save status in the header, showing when auto-save last ran and providing visual feedback when saves complete.
-
-  * **`components/DirtyStateIndicator.tsx`** – Visual indicator that appears next to the model name when there are unsaved changes, helping users understand when their work needs saving.
-
-  * **`components/PropertiesPanel.tsx`** – A panel for editing properties of the currently selected block or subsystem. For instance, if the user selects a Transfer Function block, this panel would show input fields for numerator/denominator coefficients. For an Input/Output port, it may allow naming the signal (which is important because signal names will carry into code generation). The panel writes changes back to the model state.
-
-  * **`components/ParametersDialog.tsx`** – Modal dialog for viewing and editing model-level parameters. Parameters are name/type/value tuples that can be referenced by Source blocks and Evaluate blocks. The dialog allows adding, editing, and deleting parameters with validation for C-style identifier names and type compatibility.
-
-* **`/types`**: TypeScript type definitions for shared data structures.
-
-  * **`types/clipboard.ts`** – Defines the `ClipboardData` interface for block cut/copy/paste operations. Includes versioning, source tracking, block/wire data, and dependency information (referenced parameters and subsystem sheets). Also defines `PasteOptions`, `PasteResult`, and `DependencyCheckResult` types, plus serialization helpers for cross-tab clipboard via localStorage.
-
-* **`/lib`**: Utility modules and services (plain TypeScript/JavaScript modules that contain business logic, helpers, or integrations).
-
-  * **`lib/supabaseClient.ts`** – A module to initialize and export the Supabase client (with the project URL and anon API key). This is used on the client side to interact with Supabase. It might also handle setting up Supabase authentication state listener and refreshing the JWT as needed.
-  * **`lib/auth.tsx`** – (Optional) Utilities for authentication, possibly a React context provider that wraps the Supabase auth functions. This could provide React hooks like `useUser()` or `useSession()` throughout the app. It might also implement route guarding (for example, redirecting to login if no user session).
-
-  * **`lib/modelStore.ts`** – Zustand store managing application state including:
-    - Dirty state tracking with `isDirty` flag and `lastSavedHash`
-    - Auto-save functionality with intelligent change detection
-    - Methods to mark the model as clean after saves
-    - Hash-based comparison to detect actual changes
-    - Model parameters storage (`parameters` array of `ModelParameter` objects with name/type/value)
-    - Multi-selection state (`selectedBlockIds`, `selectedWireIds`) for grouped block operations
-    - Clipboard state (`clipboardData`) for cut/copy/paste with cross-tab localStorage support
-
-  * **`lib/simulation/WasmSimulationEngine.ts`** – The **sole simulation engine** using WebAssembly for high-performance execution. This module loads compiled WASM modules and provides an interface for step-by-step simulation execution. Includes support for circular buffer sample data extraction.
-
-  * **`lib/simulation/SimulationWorker.ts`** – Web Worker implementation for running WASM simulations off the main thread, improving UI responsiveness during long simulations. Includes circular buffer handling for sample data.
-
-  * **`lib/simulation/SimulationEngineFactory.ts`** – Factory for creating WASM simulation engines.
-
-  * **`lib/simulationTypes.ts`** – Type definitions for simulation-related interfaces (`Sheet`, `SimulationConfig`, `SimulationState`, `BlockState`, `SimulationResults`). These types are used throughout the codebase for model representation and simulation configuration.
-
-  * **`lib/wasm/cache/`** – WASM module caching system including cache key generation (`cacheKey.ts`) and Supabase storage management (`SupabaseCacheManager.ts`).
-
-  * **`lib/sheetLabelUtils.ts`** – Utilities for handling sheet label connections, validation, and scoping within subsystems.
-  * **`lib/wireRoutingUtils.ts`** – Utilities for wire routing calculations, including path segment generation, midpoint calculations, and handling of custom waypoints for user-adjusted wire paths.
-  * **`lib/codeGeneration.ts`** – The **C Code generation service**. This module includes functions that transform a model JSON into C code files. It iterates through the blocks and connections to produce C structures and functions. For example, it may generate a `init()` function to initialize all blocks, an `update(step_time)` function to update the simulation each tick, and data structures for each block's state. It uses the preserved signal names from the model for variable and function names to ensure the generated code is understandable. The code generation could use templates for PlatformIO (e.g., generating a library with a `library.properties` if targeting Arduino, or a PlatformIO `src/` folder with code). This module can be used both on the server (for the API route that delivers a file) and potentially on the client (if we wanted to preview code). However, generating a downloadable library (especially if it involves bundling multiple files into a zip) is better done server-side. The output of code generation is not stored in the database; it's generated on-demand and provided to the user (or external caller) for download.
-  * **`lib/modelSchema.ts`** – Definition of the **Model JSON schema** or TypeScript types for the model. This defines how a model is structured as JSON: e.g., a model object containing metadata and an array of **Sheets**, each Sheet containing a list of **Blocks** (with properties like id, type, position, parameters, etc.) and **Connections** (wires linking block outputs to inputs). It also defines how Subsystems are represented (possibly as a special block type that contains a reference to another list of blocks internally or a child sheet). Defining a clear schema (and perhaps using a validation library like Zod for it) helps maintain consistency between the front-end, simulation, and code generation logic so all interpret the model the same way. This module also defines the `ModelParameter` interface for model-level parameters (name, type, value, description) that can be referenced by Source and Evaluate blocks.
-  * **`lib/validation.ts`** – (Optional) If needed, this module could contain functions to validate a model (e.g., to ensure there are no unconnected required ports, no algebraic loops without feedback blocks, etc.). This might be used in the automation API to run model checks.
-  * **`lib/types.ts`** – TypeScript types for models and versions, including `Model`, `ModelVersion`, and `ModelWithVersion` interfaces.
-  * **`lib/useAutoSave.ts`** – React hook managing the auto-save timer with intelligent dirty state checking. The hook:
-    - Monitors the model's dirty state and only saves when changes exist
-    - Calls `saveCurrentSheetData()` before auto-saving to ensure all current edits are included
-    - Handles the `beforeunload` event to attempt saving when the browser closes
-    - Respects the global auto-save setting and current version context
-    - Provides proper cleanup on unmount
-
-* **`/public`**: Static assets such as images or maybe example models.
-
-  * We might include an **embedded block icon library** here. For example, icons or SVGs for each block type (Sum, Multiply, etc.) that the Block components use to visually represent themselves.
-  * If we provide any documentation or offline assets (like a PDF manual, or a default example model JSON), they could reside here as well.
-
-* **`/mcp-server`**: MCP server implementation for programmatic model access
-
-  * **`mcp-server/index.ts`** – Main MCP server entry point that initializes the server and registers all available tools. It handles authentication, request routing, and error handling.
-  * **`mcp-server/tools/`** – Individual tool implementations
-    * **`tools/model-management.ts`** – Tools for creating, listing, and deleting models
-    * **`tools/model-construction.ts`** – Tools for adding blocks, connections, and sheets
-    * **`tools/simulation.ts`** – Tools for running simulations and retrieving results
-    * **`tools/validation.ts`** – Tools for model validation and error analysis
-    * **`tools/code-generation.ts`** – Tools for generating and retrieving C code
-  * **`mcp-server/client.ts`** – HTTP client wrapper for calling the Automation API endpoints
-  * **`mcp-server/types.ts`** – TypeScript types for MCP tool inputs and outputs
-  * **`mcp-server/auth.ts`** – Authentication handling for MCP requests
-  * **`mcp-server/config.ts`** – Configuration for MCP server (port, API endpoints, etc.
-
-* **Configuration & Misc**:
-
-  * **`next.config.js`** – Next.js configuration (if needed for custom webpack config or to set environment variables for Supabase, etc.). Usually minimal for our case.
-  * **`.env.local`** – Environment variables including:
-  - `NEXT_PUBLIC_SUPABASE_URL`: The Supabase project URL (safe for client-side)
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: The anonymous key for client-side Supabase access
-  - `SUPABASE_SERVICE_ROLE_KEY`: Service role key for server-side API routes (bypasses RLS)
-  - `AUTOMATION_API_TOKEN`: Secret token for external automation API access
-  - `MCP_SERVER_PORT`: Port for the MCP server (default: 3001)
-  - `MCP_API_TOKEN`: Authentication token for MCP server access
-  - `MCP_API_BASE_URL`: Base URL for the Next.js API routes (default: http://localhost:3000)
-    
-    For local Supabase development, default keys are provided by the Supabase CLI and are consistent across all local instances.
-  * **`middleware.ts`** – (Optional) Next.js middleware to protect routes. We might use middleware to redirect unauthenticated users trying to access the `/models/...` pages back to `/login`. Alternatively, we handle this in the pages themselves by checking Supabase auth state.
-
-This structure cleanly separates concerns: pages and API routes for routing, components for UI elements, and lib for core logic (simulation, codegen, etc.). It facilitates extensibility; for instance, adding a new block type means updating the block library (UI component + perhaps simulation and codegen handling in lib) without entangling unrelated parts.
-
-## Database Design and Model Storage
-
-All persistent data lives in **Supabase's PostgreSQL** database. The key pieces of data are: **Users**, **Models**, and **Model Versions**. Supabase Auth manages the Users table and authentication, so we primarily focus on the Models and Model Versions tables.
-
-The database uses a two-table design for versioning:
-
-**Models table** (metadata only):
-* `id` (uuid primary key)
-* `user_id` (foreign key to auth.users – the owner of the model)
-* `name` (text, model name)
-* `latest_version` (integer, the highest version number)
-* `created_at` (timestamp)
-* `updated_at` (timestamp)
-
-**Model_versions table** (version data):
-* `id` (uuid primary key)
-* `model_id` (uuid, foreign key to models.id)
-* `version` (integer, version number starting at 1)
-* `data` (jsonb, the model JSON document)
-* `created_at` (timestamp)
-* Unique constraint on (model_id, version)
-
-**Version Management and Auto-save:** Version 0 is reserved for auto-save data, which stores the working state of a model during editing sessions. Auto-save runs every 5 minutes when the model has been modified (tracked via a "dirty" state flag). When opening a model, if an auto-save version exists, users are presented with a recovery dialog showing:
-
-- The timestamp of the auto-saved version
-- The timestamp of the last manually saved version
-- Options to either recover the auto-save or discard it
-
-Upon recovery, the auto-save data is loaded but the UI treats it as continuing work on the latest version (not as editing an older version). The auto-save entry is deleted from the database after successful recovery. Regular versions start at 1 and increment monotonically. Each save operation creates a new version and automatically deletes any existing auto-save, ensuring clean version history.
-
-The model JSON stored in the `data` column contains the full structure of the model (including all sheets, blocks, connections, and any metadata like sheet layouts or signal names). We use a JSONB column type for efficiency in storage and querying. We can query parts of the JSON if needed (e.g., maybe to find all models that use a certain block type, though not a primary requirement). Supabase's row-level security (RLS) is configured such that each user can only select/update their own models (using `user_id = auth.uid()` in policy). This ensures privacy and data integrity.
-
-**Application State vs. Database State:** The application maintains state both on the client and in the database. **Transient UI state** (like the current positions of blocks as the user is dragging, current simulation values, unsaved changes) lives in React state on the frontend. **Persistent state** (the saved model structure) lives in the Supabase DB as JSON. When the user is actively editing a model, changes are reflected in local state immediately for responsiveness, and the app may autosave periodically or allow the user to click "Save" to persist the JSON to Supabase. Because we avoid real-time collaboration, we don't need constant sync; a simple debounce or save-on-demand strategy is sufficient (improving performance by reducing writes).
-
-For simulation, the state of the simulation (values of signals at each time step, etc.) is not stored in the database – it's either kept in memory in the browser or returned from a simulation API call. If the user stops a simulation and closes the model, they could save the final state or any logs they want by embedding them in the model JSON or by downloading a log file, but by default, simulations are ephemeral. Similarly, generated C code isn't stored in the database; it's produced on the fly by code generation logic when requested (keeping the DB focused on core data and not large blobs of code).
-
-**Version Management:** The application tracks both the current version being viewed and whether it's an older version than the latest. When viewing an older version, the UI clearly indicates this state and changes the save behavior to prompt for a new model name (forking). The version number is passed as a query parameter when opening specific versions. Auto-save functionality is disabled when viewing older versions to prevent confusion.
-
-## Model Versioning
-
-The application implements lightweight versioning to track the evolution of models over time. This system provides several key capabilities:
-
-**Version Storage:** Each save operation creates a new version with a monotonically increasing version number. Versions are immutable once created, ensuring a reliable audit trail.
-
-**Version Selection:** Users can browse and open any previous version from the model list page. A dropdown on each model tile shows all available versions, with the latest clearly marked. Opening an older version passes the version number as a query parameter.
-
-**Fork on Save:** When saving changes to an older version, users are prompted to create a new model with a new name. This prevents accidental overwrites and maintains clear lineage while allowing experimentation with historical states.
-
-**Auto-save Recovery:** When opening a model, the system checks for the existence of a version 0 (auto-save) entry. If found, before loading any model data, a recovery dialog is presented allowing users to:
-  - **Recover auto-save**: Loads the auto-saved content as if continuing work on the latest version. The version number remains at the latest version (not 0), and `isOlderVersion` is set to false. The auto-save entry is deleted from the database after successful recovery.
-  - **Discard auto-save**: Deletes the auto-save entry and loads the last manually saved version.
-
-This ensures users never lose work due to unexpected browser closures or crashes while maintaining a clean version history.
-
-**API Version Support:** Both the code generation and automation APIs accept version parameters, enabling:
-- Generation of C code from any version
-- CI/CD pipelines that reference specific versions
-- Automated testing against known model states
-- Reproducible builds from historical versions
-
-**Performance Considerations:** The two-table design keeps the models table lightweight for fast listing operations while storing the potentially large JSON data in the versions table. Version queries use the indexed (model_id, version) pair for efficient lookups.
-
-* **Multi-Sheet Performance**: 
-  - Simulation uses separate engines per sheet to avoid unnecessary global state updates
-  - Code generation flattens only during generation, not during editing
-  - Block execution order is calculated once and reused throughout simulation
-  - Sheet label resolution is O(1) using hash maps for both simulation and code generation
-
-## Basics of the Simulation Model Document
-
-A simulation **Model** is logically composed of one or more **Sheets**. Each Sheet will contain a collection of **Blocks**. We will define multiple block types from which to compose a simulation model.  Blocks have input and output **Ports**. Ports are interconnected by **Signal** wires.  As we'll see, Output Ports will have an associated data type assigned based on the nature of the block type or configuration by the user.  Signals inherit the data type of the source Output Port which they are connected to. We'll enumerate the data types supported by the application in a later section. These closly correspond to C-language data types to make for effective translation to a C-language implementation.
-
-The simulation model is conceived with modularity and component reuse as important consideration.  Based on that idea, a model can be decomposed into **Subsystems** by the user.  As we will see, a Subsystem will have its own unique scope of blocks, names, inputs, outputs, and interconnections. In fact, the main model can be thought of as the root Subsystem to an overall model.  Subsystems may be nested inside a parent Subsystem.  There is no limit to this Subsystem nesting depth.
-
-### Model Parameters
-
-Models support a set of **Model Parameters** - named constants that can be referenced throughout the model. Each parameter has:
-
-* **Name:** A valid C-style identifier (letters, digits, underscores; must start with letter or underscore)
-* **Type:** A C-language data type (e.g., "double", "int", "float", "double[3]", "double[3][4]")
-* **Value:** A constant value matching the declared type
-* **Description:** Optional human-readable description
-
-Parameters are stored at the model level (not per-sheet) and are accessible from any sheet in the model. They can be referenced by:
-
-* **Source Blocks:** A Source block can be configured to output a parameter's value instead of a literal constant. The block displays the parameter name in purple text.
-* **Evaluate Blocks:** Mathematical expressions in Evaluate blocks can reference parameters by name (e.g., `in0 * gain + offset`).
-
-During simulation, parameter values are resolved at initialization time. During code generation, parameters are emitted as C constants in the generated header file, allowing the values to be modified without regenerating code.
-
-The Parameters Dialog (`components/ParametersDialog.tsx`) provides a UI for managing model parameters, with validation ensuring unique names and type-compatible values.
-
-## Visual Modeling Canvas and Block Editor
-
-One of the most critical parts of the app is the **visual modeling canvas** where users build diagrams. This is implemented in the frontend (React) and must be efficient and intuitive. We use a combination of HTML5 Canvas or SVG for drawing connections and perhaps a library for the diagramming foundation. For example, we could leverage an existing JS diagramming library (such as **JointJS, mxGraph, GoJS, or Draw2D**) to handle low-level drag-and-drop and rendering, but we will likely customize it heavily to enforce our specific rules (e.g., **only one wire per input port, multiple wires per output port**, and naming of signals). 
-
-Blocks are interconnected by wires called **Signals**.  Every Signal has an an associated C-style data type.  This data type is inherited from the characteristics of the source block. Valid data types supported will be float, double, long, bool, one-dimensional arrays of these types, and two-dimensional matrices. Where they appear in the user interface or internally in the model JSON document, data types specification will be text strings conforming to C-language syntax; array and matrix dimensions must be explicitly specified (for example, "int", "double[3]", "bool", "double[3][4]" for a 3×4 matrix).
-
-Each primitive block type is defined with specific behavior:
-
-* **Sum Block** – multiple inputs, one output (sums the inputs).
-* **Multiply Block** – multiple inputs, one output (multiplies inputs).
-* **Unary Minus** - one scalar input
-* **Absolute Value** - in input of any type. Output type matches the input.
-* **Laplace Transfer Function Block** – represents a dynamic system; it has a mathematical transfer function (one input, one output with internal state representing the differential equation). The transfer function is specified by numerator and denominator polynomial coefficients ordered from highest to lowest power of s (e.g., for H(s) = (s + 2)/(s² + 3s + 1), numerator = [1, 2] and denominator = [1, 3, 1]). Internal integration of this block shall be performed by a Runge-Kutta Fourth Order Integration algorithm. The generated C code shall include a separate `_derivatives` function to support proper RK4 implementation.
-* **Integrator Block** – integrates the input signal over time (equivalent to a 1/s transfer function). The block supports several configuration options:
-  - `initialValue`: Initial state value at simulation start (default: 0)
-  - `showInitPort`: When enabled, adds an x(0) initialization port that accepts an external signal to set the initial state value. The signal type must match the integrator's input type. Uses port index -3.
-  - `showEnableInput`: Adds an enable port (top edge, port index -1). When the enable input is false/0, integration is paused and the output holds its current value.
-  - `showResetInput`: Adds a reset port (bottom edge, port index -2). On rising edge, the integrator state resets to the initial value.
-  - `useLimits`: Enables output saturation with configurable `lowerLimit` and `upperLimit` bounds.
-  The integrator uses Euler integration for state updates and supports scalar, vector, and matrix input types.
-* **Discrete Transform Block** – implements a discrete-time transfer function (z-transform) using difference equations. Updates at specified sample intervals. Configuration includes:
-  - `numerator`: Z-domain numerator polynomial coefficients [highest power first] (e.g., [1, 0.5] for z + 0.5)
-  - `denominator`: Z-domain denominator polynomial coefficients [highest power first] (e.g., [1, -0.8] for z - 0.8)
-  - `sampleTime`: Sample period in seconds (default: 0.01)
-  The block maintains internal state for previous inputs and outputs to implement the difference equation. Useful for digital filters, discrete controllers, and sampled-data systems.
-* **Clock Block** – outputs the current simulation time in seconds as a double scalar value. No input ports, one output port. Requires no configuration. Useful for time-dependent calculations, ramp generation, or triggering time-based events in models.
-* **Signal Display Block** – an output-only block that graphically displays a signal (for simulation visualization purposes; no outputs). The Signal display block should be capable of storing a fixed number of input Signal samples from each time step of the simulation.  The number of samples should be configurable for each block. The default number of stored samples should be 1000.  Signal Display blocks are only important to the interactive simulation.  These will be ignored when generating C-code. Recorded signals will be plotted as line charts using a popular charting package such as **Recharts**.
-* **Signal Logger Block** – an output-only block that logs a signal's values during simulation (could be used to export data later; no outputs).
-* **Input Port Block** – a source block representing an external input (no inputs, one output). This would be where external signals enter a subsystem or top-level model.
-* **Source Block** - a source block providing either a constant, a signal-generator-style signal source, or a **model parameter reference** (no inputs, one output). Where the Source is a constant, a C-syntax constant expression sets the implied data type - examples  would include "0" - an int, 0.0f - a float, "false" - a bool, "[0.0, 0.0, 0.0]" a C-style double vector. Alternatively, the Source can reference a model-level parameter by name, inheriting both its type and value. When referencing a parameter, the block displays the parameter name in purple text on the canvas.
-* **Output Port Block** – a sink block representing an external output (one input, no outputs) to mark signals that leave a subsystem or top-level model.
-* **Subsystem Block** – a special block that contains a nested diagram (hierarchical composition). A Subsystem has its own internal sheet with blocks and can have defined input/output interface ports. In the parent sheet, the Subsystem block appears as a block with those ports. Subsystems can be nested to an arbitrary depth.
-* **1-D Lookup Block** - a block which estimates the value of a 1-D function from an array of samples and their associated output values. The input must be a scalar int, float, or double. The output will be the same type as the input. Lookup is performed using linear interpolation. Values for inputs outside of the range of the lookup table can be either clamped to the smallest or largest lookup value or extrapolated.  Lookup is driven by similarly sized vectors: the input values (supplied in order sorted from smalled to largest value) and the corresponding output value for each. 
-* **2-D Lookup Block** - this block is almost identical in function to a **1-D Lookup Block** excepts that it takes two inputs. The types of the two inputs must match and the output will be that same type. Lookup is performed using linear interpolation. Values for inputs outside of the range of the lookup table can be either clamped to the smallest or largest lookup value or extrapolated.  Lookup is driven by two vectors, an N-sized input1, an M-sized input 2, and a N by M table of corresponding output values.
-* **Scale Block** - this block multiplies the input signal by a sclalar constant. It has one input port and one output port.
-* **Trig Block** - this block supports any one of several common trigonometry functions: sin(), cos(), tan(), atan(), atan2(), and sincos(). Inputs and outputs are "double" scalar data types.
-* **Evaluate Block** - a block that evaluates a mathematical expression combining its inputs with model parameters. Inputs are referenced as `in0`, `in1`, etc., and model parameters are referenced by name. Supports standard math functions (sin, cos, sqrt, abs, pow, exp, log, etc.) and arithmetic operators. The number of input ports is configurable. Output type is inferred from the expression and input types. Example expression: `in0 * gain + offset` where `gain` and `offset` are model parameters.
-
-### Annotation Blocks
-
-* **Comment Block** – a special block type for adding notes and documentation directly on the canvas. Comment blocks have no input or output ports and do not participate in simulation or code generation. They are purely for annotation purposes. Features include:
-  - Configurable text content with multi-line support
-  - Adjustable font size (small, medium, large)
-  - Background color options (yellow, blue, green, pink, gray, white)
-  - Configurable width to fit content
-  - Double-click to edit the comment text
-  - Visual styling with rounded corners and subtle shadow
-
-  Comment blocks are stored in the model JSON with their text content and display settings, but are ignored during model flattening, simulation, and C code generation.
-
-### Matrix Operation Blocks
-
-* **Matrix Multiply Block** – performs matrix multiplication following standard linear algebra rules. It has two inputs and one output. The block supports:
-  - Scalar × Matrix (element-wise scaling)
-  - Vector × Matrix (1×n × n×m = 1×m)
-  - Matrix × Vector (m×n × n×1 = m×1)  
-  - Matrix × Matrix (m×n × n×p = m×p)
-  The block validates dimension compatibility at connection time and displays the operation symbol ⊗.
-
-* **Transpose** - performs a transpose operation on matrices or vectors.
-
-* **Mux Block** – multiplexer that combines multiple scalar inputs into a vector or matrix output. The block configuration specifies the output dimensions (rows × columns), which determines the number of input ports dynamically. Inputs are arranged in row-major order. For example, a 2×3 mux creates 6 input ports and produces a double[2][3] output.
-
-* **Demux Block** – demultiplexer that splits a vector or matrix input into multiple scalar outputs. The number of output ports is determined dynamically based on the connected input signal's dimensions. Outputs are extracted in row-major order. Port labels indicate position (e.g., "row1_col2" for matrices).
-
-### Matrix Support in Other Blocks
-
-Several existing blocks have been enhanced to support matrix operations:
-
-* **Sum, Multiply, and Scale Blocks** – perform element-wise operations on matrices. All matrix inputs must have matching dimensions. For example, multiplying two 3×4 matrices produces a 3×4 matrix where each element is the product of corresponding elements.
-
-* **Transfer Function Block** – applies the transfer function independently to each element of a matrix input, maintaining separate state variables for each element. A 2×3 matrix input results in 6 parallel transfer function computations.
-
-* **Source Block** – can generate constant matrix values using C-style syntax (e.g., "[[1.0, 2.0], [3.0, 4.0]]" for a 2×2 matrix). The block configuration UI includes validation to ensure the entered values match the declared matrix dimensions.
-
-* **Signal Display and Logger Blocks** – do not accept matrix inputs. Attempting to connect a matrix signal results in a clear validation error.
-
-The **CanvasReactFlow** and related components manage user interactions: Users can drag blocks from the library sidebar onto the canvas (creating a new instance of that block type in the model state), drag blocks around to reposition them, and drag from an output port to an input port to create a connection (wire). The UI provides visual feedback (highlighting compatible ports, etc.) and prevents invalid connections (for example, the app should stop the user from connecting two outputs directly or connecting an output to multiple inputs on the same port). These rules of connectivity are enforced in the Canvas component logic or the underlying diagram library, reflecting the single-source per input constraint of signal flow models.
-
-### Visual Elements of the Block Diagram Canvas
-
-The visual design of blocks on the canvas follows established conventions from flowcharting and control system diagrams while incorporating modern UI patterns for clarity and usability.
-
-#### Block Visual Representations
-
-Each block type has a distinct visual appearance designed to convey its function at a glance:
-
-**Basic Mathematical Blocks:**
-- **Sum Block** – Rectangular block displaying the "∑" (sigma) symbol. Standard 80px width with white background and gray border.
-- **Multiply Block** – Rectangular block displaying the "×" (multiplication) symbol. Same dimensions as Sum block.
-- **Scale Block** – Rectangular block displaying the gain value (default "K"). Updates dynamically to show the actual scaling factor.
-
-**Dynamic System Blocks:**
-- **Transfer Function Block** – Rectangular block displaying the transfer function as a fraction with numerator and denominator polynomials. Width adjusts dynamically based on polynomial length. Polynomials are formatted with proper superscripts for powers of s (e.g., s², s³).
-- **Integrator Block** – Rectangular block displaying "∫" (integral) symbol. Supports special ports on top (enable) and bottom (reset, init x(0)) edges when configured. Port colors: enable (blue), reset (red), init (green). The init port displays "x(0)" label below the block.
-- **Discrete Transform Block** – Rectangular block displaying the z-domain transfer function as a fraction with numerator and denominator polynomials. Similar to Transfer Function but with powers of z instead of s. Includes sample time indicator.
-- **Clock Block** – Rectangular block displaying a clock icon "⏱" (stopwatch/timer symbol). Single output port on the right edge. No input ports.
-
-**Data Lookup Blocks:**
-- **1-D Lookup Block** – Rectangular block containing a 60x40px SVG diagram showing the actual lookup curve. The diagram displays:
-  - Light gray axes (#9ca3af)
-  - Medium gray curve (#6b7280) 
-  - Automatic scaling to fit the defined data points
-  - Linear interpolation visualization between points
-- **2-D Lookup Block** – Similar to 1-D but displays multiple curves (one for each second input value) with slight transparency (0.7 opacity) to show overlapping curves clearly.
-
-**Input/Output Interface Blocks:**
-- **Input Port Block** – Terminator shape (stadium/pill shape with semicircular ends) displaying the port name centered within. Height is 45px (30% flatter than standard blocks) with dynamic width based on port name length (100-200px range).
-- **Output Port Block** – Identical terminator shape to Input Port, visually indicating interface boundaries.
-- **Source Block** – Rectangular block displaying either:
-  - "~" symbol for signal generators
-  - The actual constant value in monospace font (e.g., "3.14", "[1.0, 0.0, 0.0]")
-  - Width adjusts to accommodate longer constant expressions
-
-**Signal Monitoring Blocks:**
-- **Signal Display Block** – Rectangular block with "📊" (chart) emoji indicating graphical display capability.
-- **Signal Logger Block** – Rectangular block with "📝" (memo) emoji indicating data logging function.
-
-**Structural Blocks:**
-- **Subsystem Block** – Rectangular block with "□" (square) symbol. Contains multiple input/output ports based on subsystem definition.
-
-**Sheet Connection Blocks:**
-- **Sheet Label Sink** – Rectangular block with downward arrow "↓" and the signal name displayed below in smaller text (truncated to 8 characters if needed).
-- **Sheet Label Source** – Rectangular block with upward arrow "↑" and matching signal name display format.
-
-**Matrix Operation Blocks:**
-- **Matrix Multiply Block** – Rectangular block displaying the "⊗" symbol. Width adjusts to accommodate dimension preview.
-- **Mux Block** – Rectangular block with a grid icon indicating the multiplexing function. Shows configured dimensions (e.g., "2×3").
-- **Demux Block** – Rectangular block with an inverse grid icon. Dynamically shows output configuration based on input.
-
-**Matrix Signal Visualization:**
-- Matrix connections display dimension information (e.g., "double[3][4]") on hover
-- Type mismatches show specific dimension errors (e.g., "3×4 → 2×3 ✗")
-- Matrix-capable blocks show a small matrix indicator icon
-
-**Vector Operations:**
-- **Cross Product** - 3-dimensional cross product of two input vectors
-- **Dot Product** - Dot (inner) product of two input vectors (a scalar value)
-- **Vector Magnitude** - The scalar magnitude of an N-dimenional input vector
-
-#### Visual Design Principles
-
-**Color Scheme:**
-- All blocks use a consistent monochrome gray color palette
-- White backgrounds with #9ca3af (gray-400) borders
-- Selected blocks show a blue ring (#3b82f6) with 2px offset
-- Text uses #374151 (gray-900) for maximum contrast
-
-**Block Dimensions:**
-- Minimum height: 64px (45px for terminator shapes)
-- Default width: 80px
-- Dynamic width adjustment for:
-  - Transfer functions (based on polynomial length)
-  - Source blocks (based on constant value length)
-  - Input/Output ports (based on port name length)
-  - Sheet labels (based on signal name length)
-
-**Port Indicators:**
-- Circular handles (12px diameter) on block edges
-- Dark gray (#374151) with white border in default state
-- Blue (#3b82f6) with shadow effect on hover
-- Minimum 20px vertical spacing between multiple ports
-- Positioned 6px outside the block boundary
-
-**Block Names:**
-- Displayed above each block in small gray text (0.5rem)
-- Automatically generated following pattern: BlockType + Number (e.g., "Sum1", "TransferFunction2")
-- Sheet label blocks show signal name in purple below the block name
-
-**Connection Wires:**
-- Rendered as paths between output and input ports
-- Single connection allowed per input port
-- Multiple connections allowed from output ports
-- Visual feedback during connection dragging
-- **Connection Storage**: Connections are stored using port indices (`sourcePortIndex`, `targetPortIndex`) as the canonical format. Port names are computed from block metadata when needed for display. This approach:
-  - Ensures consistency regardless of port naming changes
-  - Simplifies serialization and storage
-  - Makes the wire data self-contained without requiring block lookups for validation
-
-**Wire Routing Adjustments:**
-Users can adjust the routing of connection wires to improve diagram clarity:
-- **Draggable Segments**: The middle vertical segment of step-edge wires can be dragged horizontally to adjust the routing path
-- **Visual Feedback**: A drag handle appears when hovering over draggable segments, with bidirectional arrows indicating the drag direction
-- **Persistent Storage**: Custom routing is stored in the wire's `routing` property with `midpointOffset` (relative offset from auto-calculated midpoint) and optional `waypoints` (absolute coordinates for complex paths)
-- **Zoom-Aware**: Drag operations correctly account for canvas zoom level
-- The routing can be reset via the wire context menu
-
-**Wire Context Menu:**
-Right-clicking on a wire displays a context menu with the following options:
-- **Highlight Connections**: Highlights the selected wire and all other wires sharing the same source port (same origination block and port) in **magenta**. This helps users visualize signal nets - all connections driven by the same output. Selecting the option again (or highlighting a different net) clears the previous highlight. Only one net can be highlighted at a time.
-- **Remove Custom Routing**: Clears any user-adjusted routing on the wire, returning it to the default auto-calculated path. This option is disabled if the wire has no custom routing.
-- **Delete**: Removes the connection from the model.
-
-The context menu closes automatically when clicking elsewhere on the canvas or pressing Escape.
-
-#### Responsive Behavior
-
-- Blocks maintain relative cursor position during dragging to prevent visual "jumping"
-- Port highlights provide immediate feedback for valid connection targets
-- Dynamic resizing ensures content is never clipped or overlapped
-- Consistent hover states across all interactive elements
-
-This visual design system ensures that block diagrams are both functional and aesthetically consistent, making it easy for users to understand signal flow and system structure at a glance.
-
-**Scope of names** - The scope of a named signal or block name is the Subsystem in which the parent block appears. Outside this region, we cannot access the named signal or block and it is treated as undefined or undeclared.  For our purposes, the model document can be considered the root Subsystem. When a new block is instantiated, it shall be automatically assigned a unique name.  This name should follow the form <block-type-name><integer-id-number>. The expected next <integer-id-number> to be assigned should be tracked at the parent Subsystem level (e.g., at either the main model or a parent Subsystem). So, for example, the first new Sum block created in a Sunsystem would be assigned the name "Sum1", the next, "Sum2", and so on.
-
-**Block Naming Implementation:** The automatic naming system shall maintain a per-sheet counter for each block type. When a block is created, it receives a name in the format `<BlockType><Number>` where BlockType is the capitalized, space-removed version of the block type (e.g., "Sum", "TransferFunction", "SignalDisplay") and Number starts at 1 for each type on each sheet. This counter is maintained at the sheet level, not globally, allowing "Sum1" to exist on multiple sheets.
-
-**Visual Design Considerations:**
-* **Port Spacing:** Input and output ports on blocks shall be spaced at least 20 pixels apart vertically to ensure clear visual distinction and prevent connection errors. Blocks with multiple ports shall dynamically adjust their height to accommodate proper port spacing.
-* **Block Dragging:** When initiating a drag operation on a block, the relative position between the mouse cursor and the block's origin shall be maintained throughout the drag to prevent visual "jumping."
-* **Connection Feedback:** Ports shall provide clear visual feedback (color change, ring effect) on hover to indicate they are valid connection targets.
-
-**Multi-Block Selection:**
-
-The canvas supports selecting multiple blocks simultaneously for group operations:
-
-* **Rectangle Selection:** Hold Alt and drag to draw a selection rectangle. All blocks intersecting the rectangle are selected when the drag ends.
-* **Shift-Click Selection:** Shift+click on a block adds it to or removes it from the current selection.
-* **Ctrl/Cmd-Click Selection:** Ctrl+click (or Cmd+click on Mac) also toggles block selection.
-* **Auto Wire Selection:** When multiple blocks are selected, any wires connecting selected blocks are automatically included in the selection and visually highlighted.
-* **Group Movement:** Dragging any selected block moves all selected blocks together, maintaining their relative positions.
-* **Group Deletion:** Pressing Delete or Backspace removes all selected blocks and their connections.
-
-The selection state is managed in the Zustand store via `selectedBlockIds` (array of block IDs) and `selectedWireIds` (automatically computed from selected blocks). The legacy `selectedBlockId` is maintained for backward compatibility with single-selection scenarios.
-
-**Clipboard Operations (Cut/Copy/Paste):**
-
-The canvas supports standard clipboard operations for duplicating and moving blocks:
-
-* **Copy (Ctrl+C):** Copies selected blocks and their interconnecting wires to the clipboard. Parameter dependencies (referenced by Source or Evaluate blocks) are tracked in the clipboard data.
-* **Cut (Ctrl+X):** Copies selected blocks to clipboard and removes them from the canvas.
-* **Paste (Ctrl+V):** Inserts clipboard contents at an offset position (same sheet) or original position (different sheet). New unique IDs are generated for pasted blocks and wires. Block names are auto-renamed if conflicts exist (e.g., "Source1" becomes "Source2").
-* **Cross-Tab Support:** Clipboard data is serialized to localStorage, allowing copy/paste between different browser tabs or windows viewing the same or different models.
-* **Dependency Handling:** When pasting blocks that reference parameters not present in the target model, the system can optionally import the missing parameters.
-
-Under the hood, when a new connection (wire) is made, the application updates the model's JSON structure – by adding an entry to a connections list that references the source block's output and target block's input. Conversely, deleting a wire or block updates the JSON state accordingly. Because these operations happen in the client state first, the UI is responsive; periodic saves propagate those changes to the database. The canvas uses a **React context or state management library** (like Zustand or Redux, if needed) to manages the current model graph in memory while editing. Given the moderate complexity, a dedicated state management solution could be beneficial to avoid prop drilling and to allow multiple components (canvas, panels) to sync up. However, we can also leverage React's built-in context to provide the current model and a dispatcher for updates.
-
-**Multi-Sheet Support:** The model supports multiple **Sheets** (think of these as separate canvases or pages in the same model, akin to having multiple tabs or layers in a model). The Canvas displays one Sheet at a time. This is useful for organizing large models or representing subsystems on separate pages. In the UI, this could be presented as tabbed views or a dropdown to switch sheets. Each sheet has its own canvas extent (dimensions, perhaps used to set an appropriate zoom/scale or coordinate system for the blocks on that sheet) and its own set of block instances that belong to that sheet. Connections typically exist within a sheet, except for special cases where an output port in a Subsystem might connect to an input in the parent sheet via the Subsystem block interface (we handle that via the Subsystem block definition). The data model JSON would have a structure like: `"sheets": [ { "id": 1, "name": "Main", "blocks": [...], "connections": [...] }, { "id": 2, "name": "Controller Subsystem", "blocks": [...], ... } ]`. Each sheet knows its extents (e.g., a coordinate system range for the canvas) and the layout of blocks. The **block positions** (x, y coordinates) are stored so that on loading the model, we can place each block where it was saved.
-
-We introduce the concept of **Sheet Labels** to provide connections across sheets of a Subsystem (as with name scoping, we treat the top level model as the root Subsystem for Sheet Labeling). **Sheet Labels** referencing the same Signal name may also appear on the same sheet. Two extra Block types support the concept of **Sheet Labels**:
-
-* **Sheet Label Sink** - A block with one input that captures a signal and makes it available by name within the current subsystem scope. The signal name is distinct from the block name and can be selected via autocomplete showing available signals.
-
-* **Sheet Label Source** - A block with one output that retrieves a signal by name from a Sheet Label Sink within the same subsystem scope. A dropdown shows all available sink signal names in the current scope.
-
-**Sheet Label Implementation Details**:
-- Sheet labels are scoped to their containing subsystem (or root model)
-- The Signal name associated with any Sheet Label block is distinct from the (unique) name assigned to the block.  This is true for both Sheet Label Sink and Sheet Label Source blocks.
-- During simulation, values are stored in a scoped map within each SimulationEngine
-- During code generation, sheet label connections are replaced with direct wire connections
-- The `sheetLabelUtils.ts` module provides validation to ensure unique sink names and matched source/sink pairs
-
-Because each block (and subsystem) can have a user-defined name (especially signals going into output ports or coming from input ports), we preserve these names. Names must comply with C-style identifier naming conventions. They will be important when generating code, as they become identifier names or part of function names to make the generated code more traceable to the source model.
-
-### Type System and Matrix Support
-
-The type validation system (`lib/typeValidator.ts`) has been extended to support two-dimensional matrices:
-
-* **Type Syntax**: Matrix types follow C array syntax: `baseType[rows][cols]` (e.g., `double[3][4]`)
-* **Type Propagation**: The signal type propagation system tracks matrix dimensions through the model
-* **Compatibility Rules**: Matrix operations enforce strict dimension compatibility:
-  - Element-wise operations require exact dimension matches
-  - Matrix multiplication requires inner dimension agreement (m×n × n×p)
-  - Connections validate dimension compatibility at design time
-
-## Simulation Engine Design
-
-The simulation capability allows users to run their model and see how signals change over time.
-
-### WebAssembly Simulation Engine
-
-The application uses **WebAssembly (WASM)** as the sole simulation engine. Models are compiled to C code, then compiled to WASM using Emscripten, providing significant performance improvements over interpreted JavaScript.
-
-The WASM simulation pipeline:
-1. **Code Generation**: Model JSON is transformed into C code via the code generation layer (`lib/codegen/`)
-2. **Compilation**: C code is compiled to WASM using Emscripten in a Docker container
-3. **Caching**: Compiled WASM modules are cached in Supabase Storage for fast subsequent loads
-4. **Execution**: WASM modules run in the browser with near-native performance, or on the server via Node.js
-
-Key components:
-- `lib/simulation/WasmSimulationEngine.ts` - Browser-based WASM simulation engine
-- `lib/simulation/SimulationWorker.ts` - Web Worker for off-main-thread execution
-- `lib/simulation/SimulationEngineFactory.ts` - Factory for creating WASM engines
-- `lib/wasm/cache/` - WASM module caching system
-- `lib/wasm/ServerWasmExecutor.ts` - Server-side WASM execution for API/MCP clients
-- `app/api/compile-wasm-stream/` - SSE-based compilation API
-
-#### Server-Side WASM Execution
-
-For programmatic access via the Automation API or MCP server, simulations run server-side using `ServerWasmExecutor`. This module:
-
-1. **Fetches model data** from Supabase using the service role key
-2. **Compiles to WASM** or retrieves from cache via the `/api/compile-wasm` endpoint
-3. **Loads the WASM module** using Node.js Buffer for base64 decoding
-4. **Executes the simulation** step-by-step, collecting outputs and signal data
-5. **Returns comprehensive results** including performance metrics
-
-The server-side executor supports all simulation parameters:
-- `timeStep`: Simulation time step in seconds (default: 0.01)
-- `duration`: Simulation duration in seconds (default: 10.0)
-- `inputs`: Input port values as name-value pairs
-- `optimizationLevel`: WASM compilation level (O0, O1, O2, O3; default: O2)
-- `includeTimeSeries`: Whether to include full time series data (default: false)
-- `timeSeriesSampleRate`: Sample every N steps when collecting time series (default: 1)
-
-This enables MCP clients and CI/CD pipelines to run simulations without a browser, making automated testing and validation workflows practical.
-
-#### Circular Buffer Sample Collection
-
-Signal Display and Signal Logger blocks use circular buffers to store sample data efficiently:
-- **Buffer wrapping**: When the sample buffer is full, new samples overwrite the oldest samples
-- **Configurable size**: Default buffer size is 1000 samples, configurable per block
-- **Chronological extraction**: The extraction logic correctly unwraps circular buffers to return samples in chronological order
-- **Time point generation**: Time points are computed based on actual sample count and simulation end time
-
-For detailed WASM architecture documentation, see `design/11-Unifying-simulation-with-Wasm.md`.
-
-### Simulation Concepts
-
-The simulation engine implements the following concepts:
-
-1. It takes a model and a simulation configuration (time step, total simulation time, integration algorithm). The model is flattened into a single logical structure for simulation purposes.
-2. It initializes all blocks, including state variables for blocks with internal state (e.g., Transfer Functions with state for their differential equations).
-3. It executes simulation steps, computing block outputs in dependency order. The computation order respects data dependencies, forming a directed acyclic graph (DAG).
-4. At each block, outputs are computed based on block type: Sum adds inputs, Multiply multiplies them, Transfer Functions use RK4 integration to update internal state, etc.
-5. Signal Display and Logger blocks collect input values each step into circular buffers. When the buffer fills, oldest samples are overwritten.
-6. The loop continues until the simulation end time. Results are displayed in real-time via chart components.
-7. Simulations can run in a Web Worker to avoid blocking the UI during long runs.
-
-### Algebraic/Integration Layer Architecture
-
-The application uses a two-layer architecture for both simulation execution and C code generation, separating algebraic computations from time-based integration. This design pattern, common in professional simulation tools, provides better modularity, testability, and support for advanced integration methods.
-
-#### Conceptual Design
-
-The simulation engine is split into two distinct layers:
-
-```
-┌─────────────────────────────────────────────┐
-│          Integration Layer                  │
-│  - Manages time advancement                 │
-│  - Orchestrates RK4/other integrators       │
-│  - Handles enable state transitions         │
-│  - Calls algebraic layer as needed          │
-└─────────────────┬───────────────────────────┘
-                  │ calls
-                  ▼
-┌─────────────────────────────────────────────┐
-│          Algebraic Layer                    │
-│  - Computes all block outputs               │
-│  - No state changes                         │
-│  - No time advancement                      │
-│  - Pure function: (inputs, states) → outputs│
-└─────────────────────────────────────────────┘
+# obliq-2 architecture
+
+This document tells an engineer or a coding agent how obliq-2 is built, so that they can change it safely. It describes the parts and the flow of data and control between them. It also tells where each concern is in the tree, and which rules a change must keep.
+
+It is not a user guide and not a block catalogue. For those, read:
+
+- [README.md](../README.md): features, installation, commands and use.
+- [docs/blocks-reference.md](../docs/blocks-reference.md): each block type and its parameters.
+
+All statements here are true of the code on the date of the last edit. Section 17 tells you which sections to update when the code changes.
+
+## Contents
+
+1. [Purpose and scope](#1-purpose-and-scope)
+2. [System context](#2-system-context)
+3. [Central design decisions](#3-central-design-decisions)
+4. [The model document](#4-the-model-document)
+5. [Layers and directories](#5-layers-and-directories)
+6. [Main flows](#6-main-flows)
+7. [Code generation pipeline](#7-code-generation-pipeline)
+8. [HTTP API and authentication](#8-http-api-and-authentication)
+9. [Storage on disk](#9-storage-on-disk)
+10. [Command-line tools](#10-command-line-tools)
+11. [Extension points](#11-extension-points)
+12. [Invariants and rules](#12-invariants-and-rules)
+13. [Testing strategy](#13-testing-strategy)
+14. [Known limits and technical debt](#14-known-limits-and-technical-debt)
+15. [Glossary](#15-glossary)
+16. [Related documents](#16-related-documents)
+17. [How to keep this document correct](#17-how-to-keep-this-document-correct)
+
+## 1. Purpose and scope
+
+obliq-2 is a block-diagram modelling tool in the style of Simulink. A user draws a model of blocks and wires on sheets and simulates it. The user checks the model with Assert blocks, and exports it as a C library or a PDF.
+
+obliq-2 is local and single-user by decision. One person runs the server on their own computer, as their own OS user, on `127.0.0.1`. There is no account, no hosted database and no shared model store.
+
+The scope of this document is the obliq-2 repository. It also tells you where obliq-2 touches three external parts:
+
+- The sibling package `mdl2obliq` (Simulink `.mdl` import), which is a file dependency.
+- The Emscripten Docker image `obliq-emscripten:latest`, which compiles C to WebAssembly.
+- Hosts that embed generated C, for example the obliq-fpv-unity simulator. Their code is not in this repository.
+
+## 2. System context
+
+```mermaid
+flowchart LR
+  user([User]) --> browser
+  subgraph browser [Browser]
+    ui[Editor UI<br/>React Flow, Zustand, Mantine]
+    worker[Simulation Web Worker<br/>runs the WASM module]
+  end
+  subgraph server [Next.js server on 127.0.0.1]
+    pages[App Router pages]
+    api[API routes<br/>src/app/api]
+    lib[Library code<br/>src/lib]
+  end
+  store[(OBLIQ_HOME<br/>SQLite + JSON files)]
+  docker[[Docker:<br/>obliq-emscripten emcc]]
+  extfiles[(Linked model files<br/>anywhere on disk)]
+  mcp[MCP server<br/>mcp-server/]
+  agent([MCP client<br/>for example an AI agent])
+  cli[Commands<br/>scripts/*.ts via tsx]
+  cc[[Host C compiler<br/>cc, gcc, cmake]]
+
+  ui -- HTTP + session cookie --> api
+  api --> lib
+  lib --> store
+  lib --> extfiles
+  api -- docker run --> docker
+  api -- WASM bytes --> ui
+  ui --> worker
+  agent -- stdio or HTTP --> mcp
+  mcp -- HTTP + API token --> api
+  cli --> lib
+  cli --> store
+  cli --> cc
 ```
 
-#### Rationale for the Two-Layer Approach
+The parts:
 
-**1. Separation of Concerns**
-- **Algebraic Layer**: Focuses solely on computing outputs from current inputs and states. This is a pure function with no side effects, making it easy to test and reason about.
-- **Integration Layer**: Manages the complexity of time advancement, state updates, and integration algorithms. It orchestrates multiple calls to the algebraic layer as needed.
+| Part | What it does | Where |
+|---|---|---|
+| Editor UI | Draws and edits a model, runs simulations, shows plots and test results | `src/app/models/[id]/page.tsx`, `src/components/`, `src/lib/modelStore.ts` |
+| API routes | Load and save models, compile to WASM, generate C, Model Builder API, automation API, tokens | `src/app/api/` |
+| Library code | All model logic: block modules, type propagation, code generation, layout, PDF, storage | `src/lib/` |
+| Local store | Model files, versions, autosaves, SQLite index, WASM cache | `$OBLIQ_HOME`, see section 9 |
+| Emscripten image | Compiles generated C to a `.wasm` module and its `.js` loader | Built by `npm run wasm:build-docker` from `__tests__/wasm/docker/Dockerfile.emscripten` |
+| MCP server | Gives MCP tools that call the Model Builder and automation APIs | `mcp-server/` (a separate npm package) |
+| Commands | Code generation, test runs, layout, PDF and file links without the browser | `scripts/`, see section 10 |
 
-**2. Proper RK4 Implementation**
-Traditional Runge-Kutta 4th order integration requires evaluating the system at multiple intermediate points:
-- k₁ at time t with state y
-- k₂ at time t+h/2 with state y+h/2·k₁
-- k₃ at time t+h/2 with state y+h/2·k₂
-- k₄ at time t+h with state y+h·k₃
+## 3. Central design decisions
 
-With the two-layer architecture, each evaluation is a simple call to the algebraic layer with different states, making the implementation straightforward and correct.
+Each decision below has a reason. Do not reverse a decision without a new reason that is stronger.
 
-**3. Support for Advanced Features**
-- **Algebraic Loop Detection**: The algebraic layer can iterate to solve implicit equations
-- **Event Detection**: Can efficiently search for zero-crossings by calling the algebraic layer with interpolated states
-- **Variable Step Size**: Integration layer can adapt step size based on error estimates
-- **Mixed Integration Methods**: Different blocks can use different integration schemes
+### 3.1 Local and single-user
 
-### Implementation in Code Generation
+The server binds to `127.0.0.1` (`npm run dev` and `npm start` pass `-H 127.0.0.1`). `src/middleware.ts` refuses a request whose `Host` is not a loopback name, which stops DNS-rebinding attacks. `OBLIQ_ALLOWED_HOSTS` can add other host names.
 
-The C code generator produces two main functions:
+Reason: models are engineering files of one person. A local design needs no account system and no network service, and the files stay under the user's control.
 
-**1. Algebraic Evaluation Function**
-```c
-void model_evaluate_algebraic(
-    const model_inputs_t* inputs,
-    const model_states_t* states,
-    model_signals_t* signals,
-    model_outputs_t* outputs,
-    const enable_states_t* enable_states
-);
+### 3.2 The JSON model is the one source of truth
+
+A model is one JSON document (section 4). The canvas, the code generator, the layout engine, the PDF renderer and the commands all read the same document. Nothing else holds model state that persists. The SQLite database is an index: it records where files are and which versions exist, not the model content.
+
+Reason: one representation means that a diagram, its C code and its PDF cannot disagree. A JSON file is also easy to inspect, compare and keep in git.
+
+### 3.3 One generated-C path for simulation, test and export
+
+Simulation runs only generated C. The code generator in `src/lib/codegen/` makes C from the model. The same C is used in three ways:
+
+- Simulation in the editor: compiled to WebAssembly by Emscripten and run in the browser.
+- Test runs (`npm run obliq:test`): compiled natively with `OBLIQ_ASSERTS` and run on the host.
+- Export: a C project for a host program or an embedded target (editor download and `npm run obliq:cgen`).
+
+Reason: the behaviour that a user simulates and tests is the behaviour that they ship. A second engine would be a second implementation that can disagree.
+
+### 3.4 Block modules are the unit of extension
+
+Each block type that takes part in simulation has a block module in `src/lib/blocks/` that implements `IBlockModule` (`src/lib/blocks/BlockModule.ts`). The `comment` type is an annotation and has no module. A module gives the port counts, the output type for given input types, the C struct members and the C computation. Optional methods give state, derivatives and data collection. `BlockModuleFactory.getBlockModule()` returns the module for a type.
+
+Reason: the knowledge about one block is in one file, and the code generator stays generic.
+
+### 3.5 One block geometry for canvas, layout and PDF
+
+`src/lib/layout/blockGeometry.ts` holds the block sizes and port positions. The canvas (`src/components/BlockNode.tsx`, `src/components/CustomEdge.tsx`), the layout engines, the layout score and the PDF renderer all import it.
+
+Reason: the layout engine calculates wire end points from this geometry. If the drawn geometry and the calculated geometry are different, wires attach at the wrong place.
+
+### 3.6 Pure library code, reused by UI, routes and commands
+
+Most of `src/lib/` has no React and no browser API. The editor, the API routes and the commands in `scripts/` call the same functions. Examples:
+
+- `buildCProject()` in `src/lib/codegen/cProject.ts`: the editor download and `obliq:cgen`.
+- `tuneModelLayout()` in `src/lib/layout/tuneModelLayout.ts`: the editor dialog and `obliq:layout`.
+- `planModelPdf()` and `renderModelPdf()` in `src/lib/export/modelPdf.ts`: the editor export and `obliq:pdf`.
+
+Reason: a command gives the same result as the editor, and Jest can test the logic without a browser.
+
+Server-only code is in `src/lib/server/`. Do not import it from a client component: it uses the file system and a native SQLite binding.
+
+## 4. The model document
+
+### 4.1 File shapes
+
+A model file has one of two shapes. `parseModelDocument()` in `src/lib/server/storage/ModelRepository.ts` accepts both:
+
+- Wrapper: `{ "name": ..., "data": ModelData }`. Managed models, versions and exports use this shape.
+- Bare: a `ModelData` object with a `sheets` array. A linked file can have this shape, and a save keeps it.
+
+### 4.2 Structure
+
+The TypeScript types come from the Zod schema in `src/lib/modelSchema.ts` (`ModelData`, `Sheet`, `Block`, `Wire`, `ModelParameter`, `GlobalSettings`).
+
+```mermaid
+classDiagram
+  class ModelData {
+    version
+    metadata
+    globalSettings
+    parameters[]
+    dataStores[]
+    sheets[]
+  }
+  class Sheet {
+    id
+    name
+    blocks[]
+    connections[]
+    extents
+  }
+  class Block {
+    id
+    type
+    name
+    position
+    parameters
+  }
+  class Wire {
+    id
+    sourceBlockId, sourcePortIndex
+    targetBlockId, targetPortIndex
+    routing
+  }
+  ModelData "1" --> "1..*" Sheet : top-level sheets
+  Sheet "1" --> "*" Block
+  Sheet "1" --> "*" Wire
+  Block "1" --> "*" Sheet : subsystem parameters.sheets
 ```
 
-**2. Time Step Function**
-```c
-void model_step(model_t* model) {
-    // Evaluate algebraic relationships
-    model_evaluate_algebraic(&model->inputs, &model->states, 
-                           &model->signals, &model->outputs,
-                           &model->enable_states);
-    
-    // Perform integration (Euler, RK4, etc.)
-    integrate_states(model);
-    
-    // Update time
-    model->time += model->dt;
-}
+Main fields:
+
+- `globalSettings`: `simulationTimeStep`, `simulationDuration`, `integrationAlgorithm` (`rk4` or `euler`) and `debugMath`. Simulation, tests and export all use these values.
+- `parameters`: model parameters. Each has a `name` that is a C identifier, a `dataType` and a C99 initializer in `defaultValue`. Blocks can refer to them by name.
+- `dataStores`: model-scoped data stores for the Data Store Read and Write blocks.
+- `Wire.routing`: an optional `midpointOffset` or absolute `waypoints`. It changes only the drawing.
+
+### 4.3 Hierarchy
+
+The hierarchy has four kinds of block that hold or point to other sheets:
+
+| Kind | How it is stored | Resolved by |
+|---|---|---|
+| Subsystem | `type: 'subsystem'`, nested `parameters.sheets`, `inputPorts`, `outputPorts` | `ModelFlattener` |
+| For Iterator Subsystem | `type: 'for_iterator_subsystem'`, the same parameters plus `iterationLimit`, `resetStates` | `ModelFlattener` |
+| Subsystem reference | A subsystem with `isReference: true` and `referencedSubsystemId`, with no sheets of its own | `src/lib/subsystemReference.ts` |
+| Model reference | A subsystem with `parameters.modelRef = { modelId, version, name }` | `expandModelReferences()` in `src/lib/modelReferences.ts` |
+
+A model reference with `version: null` follows the latest save of the other model. A number pins it to that saved version. The ports of a model reference are the top-level Input and Output Ports of the referenced model (`modelInterface()`).
+
+### 4.4 Diagram-only fields
+
+Some parameters change only the drawing, not simulation or C: `flipped`, `width`, `height`, `subsystemFunction`, `showName` and the wire `routing`. Layout tools change these fields freely. A layout tool that changes structure (Tidy signal labels) must keep the behaviour, see section 6.6.
+
+### 4.5 Validation in practice
+
+The Zod schema (`validateModelData()` and related functions) is used by tests. The server does not validate a model with it when it loads or saves a file. `parseModelDocument()` checks only the file shape. The checks that the user sees come from these modules:
+
+- `src/lib/blockParameterValidator.ts`: block parameters.
+- `src/lib/connectionValidation.ts`: port use and algebraic loops.
+- `src/lib/typeCompatibilityValidator.ts` and `src/lib/multiSheetTypeValidator.ts`: signal types across sheets.
+- `src/lib/codegen/CodeGenerationValidator.ts`: the flattened model, before C is written.
+
+## 5. Layers and directories
+
+### 5.1 Layers
+
+```mermaid
+flowchart TB
+  subgraph L1 [Presentation: browser only]
+    pages[src/app pages]
+    comps[src/components]
+    hooks[src/hooks]
+    store[src/lib/modelStore.ts]
+  end
+  subgraph L2 [Entry points]
+    routes[src/app/api routes]
+    scripts[scripts/*.ts]
+    mcp[mcp-server/src]
+  end
+  subgraph L3 [Pure model logic: src/lib]
+    blocks[blocks/]
+    types[signalTypePropagation.ts<br/>validators]
+    codegen[codegen/ + wasm/codegen/]
+    layout[layout/]
+    export[export/]
+    testing[testing/]
+    refs[modelReferences.ts<br/>subsystemReference.ts]
+  end
+  subgraph L4 [Server only: src/lib/server]
+    storage[storage/]
+    session[session.ts, modelWatcher.ts]
+    refload[modelReferenceLoader.ts]
+  end
+  L1 -- HTTP only --> routes
+  L1 --> L3
+  routes --> L3
+  routes --> L4
+  scripts --> L3
+  scripts --> L4
+  mcp -- HTTP only --> routes
+  L4 --> L3
 ```
 
-#### Benefits
+Rules for the arrows:
 
-**1. Correctness**
-- Cascaded dynamic systems (e.g., multiple transfer functions in series) are handled correctly
-- Integration methods can access intermediate signal values as needed
-- No circular dependencies between state updates and signal computations
+- The browser reaches the server only through HTTP. `src/lib/modelApi.ts` is the browser client for `/api/models`.
+- The block modules, codegen, layout, export and type propagation run in the browser, in routes and in commands. Do not give them a value import from L1 or L4.
+- Many L3 modules import the `BlockData`, `PortInfo` and `WireData` interfaces from `src/components/BlockNode.tsx` and `src/components/Wire.tsx`, and the `Sheet` type from `src/lib/modelStore.ts`. These are type imports only, and TypeScript removes them.
+- Some server-only modules are outside `src/lib/server/`: `src/lib/wasm/cache/`, `src/lib/wasm/ServerWasmExecutor.ts`, `src/lib/apiAuthMiddleware.ts`, `src/lib/api-support/` and `src/lib/testing/resolveTestTargets.ts`. Use them only in routes and commands.
+- The MCP server does not import obliq-2 code. It calls the HTTP API.
 
-**2. Performance**
-- Algebraic evaluation can be optimized independently
-- Potential for parallelization of independent block computations
-- Avoids redundant calculations
+### 5.2 Directory map
 
-**3. Maintainability**
-- Clear interfaces between components
-- Easier to add new integration methods
-- Simplified debugging (can test algebraic layer in isolation)
+| Directory or file | Concern |
+|---|---|
+| `src/app/page.tsx`, `src/app/models/page.tsx` | Start page and My Models list (import, link, duplicate, delete) |
+| `src/app/models/[id]/page.tsx` | The editor page. It starts simulation, code download, layout and PDF export |
+| `src/app/tokens/page.tsx`, `src/app/admin/api-metrics/page.tsx` | API token management and Model Builder API metrics |
+| `src/app/api/` | HTTP routes, see section 8 |
+| `src/middleware.ts` | Loopback `Host` check |
+| `src/components/` | React components: `src/components/CanvasReactFlow.tsx`, `src/components/BlockNode.tsx`, `src/components/CustomEdge.tsx`, `src/components/BlockLibrarySidebar.tsx`, the `*Config.tsx` dialogs, plots |
+| `src/hooks/` | `src/hooks/useModelFileStatus.ts` (external file changes), `src/hooks/useReferencedModelUpdates.ts`, `src/hooks/useWireValidation.ts` |
+| `src/lib/modelStore.ts` | Zustand store: the open model, sheets, selection, clipboard, results, dirty state |
+| `src/lib/modelSchema.ts` | Zod schema and model types |
+| `src/lib/blocks/` | Block modules and `src/lib/blocks/BlockModuleFactory.ts` |
+| `src/lib/blockTypeRegistry.ts`, `src/lib/blockFactory.ts` | Block type metadata, default parameters, block creation |
+| `src/lib/signalTypePropagation.ts` | Signal type propagation for the editor, one sheet or many |
+| `src/lib/typeValidator.ts` | Parse and compare type strings such as `double[3]` and `double[3][3]` |
+| `src/lib/c99*.ts` | C99 expression tokenizer, parser, evaluator, validator and code output |
+| `src/lib/codegen/` | C code generation, see section 7 |
+| `src/lib/wasm/` | WASM wrapper generator, export list, error parser, disk cache, server-side WASM runner |
+| `src/lib/simulation/` | Browser simulation engine, Web Worker, result conversion, Assert results, CSV export |
+| `src/lib/plots/signalPlot.ts` | Plot ranges, ticks and labels, shared by screen and PDF |
+| `src/lib/layout/` | Block geometry, layout engines, wire routing, layout score |
+| `src/lib/export/` | PDF export |
+| `src/lib/testing/` | Native Assert test runner and target resolution |
+| `src/lib/modelReferences.ts`, `src/lib/referencedModels.ts` | Model reference expansion (pure) and the editor's cache of referenced models |
+| `src/lib/subsystemReference.ts` | Subsystem references: resolve, synchronize ports and parameters |
+| `src/lib/api-support/` | Model Builder API helpers: rate limit, responses, model load and save |
+| `src/lib/server/storage/` | SQLite database, paths, `ModelRepository`, `TokenRepository`, reference-model seeding |
+| `src/lib/server/` | Session cookie, file watcher, model reference loader, generator version |
+| `src/lib/mdl2obliq/` | Re-exports of the sibling package `mdl2obliq` |
+| `src/lib/atmosphere/ussa1976.ts` | 1976 standard atmosphere, used by the Atmosphere block |
+| `scripts/` | Commands, see section 10 |
+| `scripts/lib/` | Command helpers: `scripts/lib/pdfExport.ts`, `scripts/lib/fpv-tuning.ts`, `scripts/lib/wmm.ts` |
+| `mcp-server/` | MCP server package |
+| `reference-models/` | Shipped models and their PDFs, generated by the FPV builder |
+| `test-models/fpv/` | FPV validation models, generated by the same builder, not seeded |
+| `__tests__/` | Jest suites, see section 13 |
+| `docs/`, `design/` | Documents. Many files in `docs/` are older plans. Check them against the code |
 
-**4. Extensibility**
-- New integration methods can be added without changing algebraic code
-- Support for co-simulation standards (FMI)
-- Easy to add features like sensitivity analysis or parameter optimization
+## 6. Main flows
 
-#### File Organization
+### 6.1 Open, edit and save a model
 
-The implementation is organized as follows:
+1. `AuthProvider` (`src/lib/auth.tsx`) calls `GET /api/session`. The route sets the `obliq_session` cookie.
+2. The editor page loads the model with `modelApi.getCurrent()`, which calls `GET /api/models/:id`. `ModelRepository.readCurrent()` reads the model file and returns its data and its hash.
+3. `initializeFromModel()` in `src/lib/modelStore.ts` puts the sheets into the store. React Flow (`src/components/CanvasReactFlow.tsx`) draws the active sheet.
+4. Each edit is a store action (`addBlock`, `updateBlock`, `addWire` and others). The store sets `isDirty`.
+5. `useAutoSave()` (`src/lib/useAutoSave.ts`) runs every 5 minutes. When the model is dirty, it calls `saveAutoSave()`, which sends `PUT /api/models/:id/autosave`. The server writes `autosave.json`.
+6. An explicit Save calls `saveModel()`, which sends `POST /api/models/:id/versions` with the data and `baseHash`. `ModelRepository.saveSnapshot()` writes the model file, records a new version and deletes the autosave.
+7. If the file on disk changed after the editor read it, the server records the disk content as a version first. Then it compares `baseHash` and returns `409 MODEL_CONFLICT` if they differ.
+8. `useModelFileStatus()` listens to `GET /api/models/:id/events` (Server-Sent Events). `src/lib/server/modelWatcher.ts` watches the directory of the file and reports external changes and missing files. `src/components/ExternalChangeBanner.tsx` shows them.
 
-**Code Generation:**
-- `/lib/codegen/AlgebraicTypes.ts` - Type definitions for algebraic layer
-- `/lib/codegen/AlgebraicEvaluator.ts` - Generates C code for algebraic evaluation
-- `/lib/codegen/StateIntegrator.ts` - Generates C code for state integration
-- `/lib/codegen/IntegrationOrchestrator.ts` - Generates the main step function
+The Model Builder API and MCP write with `ModelRepository.writeInPlace()`. This updates the model file without a new version, unless the caller sends `checkpoint: true`.
 
-**WASM Simulation:**
-- `/lib/simulation/WasmSimulationEngine.ts` - WASM module execution and data extraction
-- `/lib/simulation/SimulationWorker.ts` - Web Worker for off-thread simulation
-- `/lib/simulation/WasmResultConverter.ts` - Converts WASM output to UI format
+### 6.2 Signal type propagation and validation
 
+1. `src/components/CanvasReactFlow.tsx` calls `propagateSignalTypesMultiSheet()` (`src/lib/signalTypePropagation.ts`) on the sheets. It gives a type, such as `double` or `double[3]`, to each wire.
+2. Types cross sheets through Sheet Label pairs, and they go into and out of subsystems through their port blocks.
+3. The canvas uses the types to draw vector and matrix wires. The PDF export calls the same function.
+4. `useWireValidation()` calls `validateModelTypeCompatibilityMultiSheet()`. `src/components/ModelValidationButton.tsx` and `src/components/ModelValidationModal.tsx` show the errors and warnings.
+5. Before a simulation, `handleRunSimulation()` in the editor page calls `validateMultiSheetTypeCompatibility()` (`src/lib/multiSheetTypeValidator.ts`).
 
+The code generator does not use this propagation. It has its own `TypePropagator` (`src/lib/codegen/TypePropagator.ts`), which runs on the flattened model and asks each block module for its output type. Section 14 lists this duplication.
 
-## Architecture Update: Modular Block Definition
+### 6.3 Simulate in the editor
 
-### Block Module Architecture
+```mermaid
+sequenceDiagram
+  participant P as Editor page
+  participant R as /api/compile-wasm-stream
+  participant S as ModelRepository
+  participant C as FileCacheManager
+  participant G as WasmCodeGenerator
+  participant D as Docker emcc
+  participant W as Web Worker
 
-The application implements a modular block system that centralizes all block-specific behavior in dedicated modules. This architecture supports code generation, simulation execution, and port management through a unified interface.
-
-#### Block Module Interface (IBlockModule)
-
-Each block type implements the `IBlockModule` interface defined in `lib/blocks/BlockModule.ts`, which provides:
-
-##### Code Generation Methods
-- **`generateComputation(block: BlockData, inputs: string[], inputTypes: string[]): string`**
-  Generates C code for the block's computation logic
-
-- **`getOutputType(block: BlockData, inputTypes: string[]): string`**
-  Determines the C type of the block's output based on input types
-
-- **`generateStructMember(block: BlockData, outputType: string): string | null`**
-  Generates signal struct member declarations
-
-- **`requiresState(block: BlockData): boolean`**
-  Indicates if the block needs state variables for integration
-
-- **`generateStateStructMembers(block: BlockData, outputType: string): string[]`**
-  Generates state struct member declarations
-
-- **`generateInitialization?(block: BlockData): string`**
-  Optional initialization code generation
-
-##### Port Management Methods
-- **`getInputPortCount(block: BlockData): number`**  
-  Returns the number of input ports (may be dynamic based on parameters)
-  
-- **`getOutputPortCount(block: BlockData): number`**  
-  Returns the number of output ports
-  
-- **`getInputPortLabels?(block: BlockData): string[]`**  
-  Optional custom labels for input ports (e.g., "row1_col2" for demux)
-  
-- **`getOutputPortLabels?(block: BlockData): string[]`**  
-  Optional custom labels for output ports
-
-#### Block Module Factory
-
-The `BlockModuleFactory` provides centralized access to all block modules:
-
-```typescript
-// Get a block module for any block type
-const module = BlockModuleFactory.getBlockModule('sum')
-
-// Generate C code
-const code = module.generateComputation(block, inputs, inputTypes)
-
-// Get port information
-const inputCount = module.getInputPortCount(block)
-const outputLabels = module.getOutputPortLabels(block)
+  P->>P: saveAutoSave() if the model is dirty
+  P->>R: POST modelId, version 0 or none, O2
+  R->>S: read autosave, version or current file
+  R->>R: expandForBuild(): expand model references
+  R->>C: get(cacheKey)
+  alt cache hit
+    C-->>R: module.wasm, module.js
+  else cache miss
+    R->>G: generateWasm(sheets, parameters)
+    G-->>R: .h, .c, wrapper .c, subsystem files
+    R->>D: docker run obliq-emscripten emcc
+    D-->>R: module.wasm, module.js
+    R->>C: store(cacheKey, ...)
+  end
+  R-->>P: SSE progress events, then the result (base64)
+  P->>W: initialize, run(timeStep, duration)
+  W-->>P: samples of loggers and displays, Assert results
+  P->>P: convertWasmToUIFormat(), store results, plots
 ```
 
-### Port Management System
-
-The port system is now unified across the application:
-
-1. **Port Count Adapter** (`lib/validation/PortCountAdapter.ts`)
-   - Provides consistent port count retrieval
-   - Used by connection validation and UI components
-   - Handles dynamic port counts (mux, demux, subsystems)
-
-2. **Dynamic Port Updates**
-   - Mux blocks update port count based on rows × columns
-   - Demux blocks update based on input signal dimensions
-   - Subsystems reflect their configured input/output ports
-
-3. **Port Label Support**
-   - Blocks can provide custom port labels
-   - Demux shows position labels (e.g., "row1_col2")
-   - UI components display labels when available
-
-### Benefits of the Module System
-
-1. **Single Source of Truth**
-   - All block behavior in one file per block type
-   - No duplication across code generation and validation
-
-2. **Easier Extension**
-   - New blocks only need to implement one interface
-   - Automatic support for all features (codegen, ports, validation)
-
-3. **Better Testing**
-   - Each module can be tested in isolation
-   - Mock modules for testing framework components
-
-4. **Type Safety**
-   - Strong typing throughout the system
-   - Compile-time checks for interface compliance
-
-5. **Performance**
-   - Factory uses singleton pattern for module instances
-   - No repeated instantiation overhead
-
-### Example: Adding a New Block Type
-
-To add a new block type:
-
-1. Create `lib/blocks/NewBlockModule.ts`
-2. Implement all `IBlockModule` methods
-3. Add to `BlockModuleFactory`
-4. The block automatically works in:
-   - Code generation
-   - Connection validation
-   - UI port display
-
-No changes needed in multiple files across the codebase!
-
-### Matrix Support
-
-The WASM simulation engine and C code generation efficiently handle matrix operations:
-
-* **C Code Generation**: Matrices are declared as 2D C arrays (e.g., `double matrix[3][4]`) with row-major layout
-* **WASM Execution**: Matrix operations are compiled to native code for optimal performance
-* **Performance**: Large matrices (up to 100×100) are supported with acceptable performance
-* **State Management**: Transfer functions maintain separate state arrays for each matrix element
-
-### Subsystems can be Disabled and Re-Enabled
-
-Subsystems have a special "enable" Boolean input signal.  By default, its value is True.  While enabled, all blocks in the subsystem operate normally.  It is disabled when the signal connected to the enable pin is "false-y". In this state, no integration is performed on any contained stateful Blocks (e.g., Transfer Function blocks) or Subsystems. Subsystem outputs would be generated as usual including using any frozen state values.  Supporting this, define a new Boolean property for Subsystem blocks called "showEnableInput". The default value will be False. We'll describe how we'll expose "enable" ports in the Canvas/Block UI later - for now, these rules should add proper functionality for C-code generation.  The enabled state of a Subsystem may change from one time step to the next, based on the "truthy-ness" of the connected "Enabled" input. Adding this feature affects the approach to properly flattening the model.  A notion of the scope of each active Enable signal will need to be maintained to correctly handle "disabled" elements during a live simulation - at least for Subsystems that have "showEnableInput" set.
-
-**Enable signal propagation** When a subsystem is disabled (enable=false), should nested subsystems shall be considered, regardless of their own enable signal.
-
-**Output behavior when disabled** You mentioned "Subsystem outputs would be generated as usual including using any frozen state values." Disabled Subsystems should hold their last values from when the subsystem was enabled. This implies that an initial value of all outputs must be computed based on the state of the system (taking into account initial values of all state variables), so that these outputs may be used for the Subsystem until it is enabled.
-
-**Special Port Indices** Certain blocks have special ports that use negative indices to distinguish them from regular input ports. This avoids affecting the order of regular input ports (0, 1, 2, ...) and simplifies connection handling:
-
-| Port Index | Port Type | Description | Handle ID |
-|------------|-----------|-------------|-----------|
-| 0, 1, 2... | Regular   | Standard input ports on the left edge | `input-0`, `input-1`, etc. |
-| -1         | Enable    | Subsystem/Integrator enable port (top edge) | `_enable_` |
-| -2         | Reset     | Integrator reset port (bottom edge) | `_reset_` |
-| -3         | Init x(0) | Integrator initialization port (bottom edge) | `_init_` |
-
-The enable port (-1) is used by Subsystem blocks (when `showEnableInput=true`) and Integrator blocks (when `showEnableInput=true`). The reset port (-2) and init port (-3) are specific to Integrator blocks.
-
-When both reset and init ports are enabled on an Integrator, they appear side by side on the bottom edge (reset on the left, init on the right). The UI uses distinct colors for each special port type: enable is blue, reset is red, and init is green.
-
-**Default enable behavior** Where a subsystem has showEnableInput=false, it is enabled only if immediate parent is enabled. Similar to other rules, the top level model is special: it does not have its own showEnableInput tracking. Instead, it is always considered "enabled".
-
-**Subsystem Enabled Status updates in the Time Step Function** The Enabled state of all subsystems should be re-evaluated and updated at the end of the time step function.
-
-### Multi-Sheet Model Handling
-
-The WASM simulation engine handles multi-sheet models through a flattening process during C code generation:
-
-1. **Model Flattening**: The model is flattened into a single logical structure, with subsystem input/output ports replaced by direct connections.
-
-2. **Global Execution Order**: A global block execution order is calculated that respects dependencies across all sheets and subsystems.
-
-3. **Sheet Label Resolution**: Sheet label connections within each subsystem scope are resolved to direct assignments in the generated code.
-
-4. **Enable State Handling**: Subsystem enable states are tracked and affect the execution of contained blocks during simulation.
-
-## C Code Generation Service
-
-A standout feature is generating a **PlatformIO-compatible C code library** from the model. This allows the user to deploy the logic on embedded systems (e.g., Arduino or similar microcontrollers). The code generation is initiated by the user via the UI ("Generate C Code" button), and the architecture handles this by offloading to a serverless function for processing, since file generation and packaging is better done server-side.
-
-When the user triggers code generation for a model:
-
-* The frontend (model editor page) calls the **Generate Code API** (e.g., `POST /api/generate-code`) either with the model's ID or the model JSON itself. If only an ID is sent, the API route will fetch the latest model data from Supabase.
-* The API route then calls the code generation module (`lib/codeGeneration.ts`). This module translates the model into C code. For each block in the model, it might map to a snippet of C:
-
-  * It will declare a struct or variables for any block that needs state (e.g., internal states for transfer functions).
-  * It will generate an **initialize function** that sets up all initial conditions (clears sums, etc.).
-  * It will generate an **update step function** that, when called periodically (e.g., from a loop in an embedded program), computes all the outputs from inputs, essentially performing one simulation step. This function follows the block execution order determined by the model's topology (similar to how the simulation engine does, but now in C).
-  * **RK4 Integration Support:** For blocks requiring numerical integration (e.g., Transfer Functions), the generator shall produce a separate `<modelName>_derivatives()` function that computes state derivatives given current states and inputs. This enables proper implementation of Runge-Kutta 4th order integration in the `_step()` function.
-  * **Generated Function Signatures:**
-    ```c
-    void modelName_derivatives(
-        double t,
-        const modelName_inputs_t* inputs,
-        const modelName_states_t* current_states,
-        modelName_states_t* state_derivatives
-    );
-    ```
-  * Among the major elements of C-code generated for a model or Subsystem, there shall be a struct defining all inputs to the model or Subsystem, a struct defining the outputs, and a struct defining all required state variables (examples of state variables might be the staeful elements of each transfer function block).  A separate struct definition will be composed of all three of these elements.  That parent struct becomes a key element of the API to the model or Subsystem. An instance of that stuct can be craeted by a caller to create a new distinct instance of the model or Subsystem.
-  * If the model has designated input/output ports (to interface with external hardware signals), those might correspond to function parameters or global variables in the generated code.
-  * The code generator uses the **signal names** and block names from the model to name variables and functions in C. For example, a signal named "engine\_speed" that goes to an Output Port might result in a global variable or function output named `engine_speed`. This makes the generated code easier to integrate and understand.
-* The output of the code generator is a set of C source (`.c`) and header (`.h`) files, possibly with a `platformio.ini` or library manifest if needed. For example, it would produce `src/<document-name>.c`, `src/<document-name>.h`, and any additional files for complex subsystems.
-* The Next.js API route then needs to deliver these files to the user. This could be done by creating a zip archive in-memory (using a library like JSZip) and sending it as a binary response with the appropriate headers so the browser downloads it. Alternatively, the files could be uploaded to Supabase Storage or an S3 bucket and an expiring download link returned. For simplicity, generating a zip and streaming it back is straightforward.
-* The user's browser will receive the response (triggering a download of the zip file). The user can then open the zip to find a ready-to-use PlatformIO project or library containing their model's logic in C.
-
-The code generation service is stateless (it generates code on the fly from the model data) and does not store anything in the database. This ensures that if the model changes, the next code generation will reflect the latest model. It also keeps the database size in check (we're not saving potentially large code text, which can be regenerated as needed).
-
-From an extensibility perspective, the code generation is designed to be easily **extendable for new block types**: when new blocks are introduced, we update the codeGeneration module to handle their code translation. Because the model JSON includes all the needed information (block type and parameters), the code generator can use a factory or lookup pattern to handle each block type. For instance, it might have a mapping like `{ "Sum": generateSumBlockCode, "TransferFunc": generateTFBlockCode, ... }`. This modular approach allows adding new block types without rewriting the entire generator.
-
-### Matrix Code Generation
-
-The code generator produces efficient C code for matrix operations:
-
-* **Type Declarations**: Matrices are declared as 2D C arrays (e.g., `double matrix[3][4]`)
-* **Memory Layout**: Row-major order matching C conventions
-* **Operations**: Generated functions include:
-  - Element-wise operations with nested loops
-  - Optimized matrix multiplication
-  - Mux/demux functions for matrix construction/deconstruction
-* **Initialization**: Matrices are initialized using nested loops or memset for efficiency
-
-## Automation API and External Integrations
-
-To support workflows like continuous integration (CI), automated model validation, or external triggers (perhaps a git hook or an IoT device requesting an update), the application provides a simple **Automation API**. This is implemented as an API route (`/api/automations/[token]` as noted in the structure) which accepts HTTP requests from authorized external sources. We deliberately separate this from the main user interface to keep the web app focused and secure.
-
-**Security:** We generate a secret token (or use an environment-defined API key) that external systems must provide to use this API. This could be part of the URL or an HTTP header. Supabase Auth is not used here (since the caller might be a machine, not a logged-in user), so we implement a simple token check in the route handler. This avoids exposing any user-specific credentials and allows revoking/regenerating the token without affecting users.
-
-**Functionality:** The Automation API can be designed to handle various actions:
-
-* **Trigger Code Generation:** For example, a CI pipeline could call `POST /api/automations/[token]` with a JSON body like `{ "action": "generateCode", "modelId": "<uuid>" }`. The API route would verify the token, then fetch the model JSON from the database (using a Supabase service role key that has read access to all models, since this is a trusted environment operation) and run the code generation. It could respond with a URL to the generated code bundle or even directly attach the zip (similar to the user flow). This way, the latest code can be pulled into a firmware build process automatically.
-* **Run Simulation/Tests:** Another use might be `{ "action": "simulate", "modelId": "...", parameters: { timeStep: 0.01, duration: 10.0, inputs: { "InputPort1": 5.0 }, includeTimeSeries: true } }`. Simulations are executed server-side using WASM (via `ServerWasmExecutor`), providing the same high-performance execution as the browser. Results include output port values, signal statistics, and optionally full time series data. This enables automated regression testing and validation workflows.
-* **Validate Model:** `{ "action": "validateModel", "modelId": "..." }` could trigger a series of model checks (using `lib/validation.ts` if implemented) to ensure the model meets certain criteria (no missing connections, etc.), and return a pass/fail or report.
-
-The Automation API responses are designed to be machine-readable (JSON responses with status and data), since the consumer is likely another software service. We keep these routes lightweight – they mostly orchestrate calls to the same simulation or codegen logic used by the interactive app, just without a UI. Because these run on the server, they might be allowed to take slightly longer (a CI job could wait for code generation or simulation results a few seconds), whereas the interactive UI tries to be as real-time as possible.
-
-By having this API, we maintain a **single source of truth** for simulation and code generation logic (the functions in `lib/`), and simply expose different ways to invoke them (UI vs API). This adheres to DRY principles and ensures consistency: whether a user clicks "Simulate" in the browser or a CI calls the simulate API, the underlying computation is the same.
-
-### Relationship to MCP Server
-
-While the Automation API provides HTTP endpoints for external systems, the MCP server builds upon these same endpoints to offer a more interactive, tool-based interface. The key differences are:
-
-- **Protocol**: Automation API uses HTTP REST, while MCP uses the Model Context Protocol
-- **Granularity**: Automation API offers high-level operations (generate code, run simulation), while MCP provides fine-grained tools (add individual blocks, create specific connections)
-- **Use Cases**: Automation API is ideal for CI/CD pipelines and webhooks, while MCP excels at interactive development, testing, and model construction
-- **State Management**: Both are stateless, but MCP tools can be composed into complex workflows by the client
-
-The MCP server internally uses the Automation API for operations that require server-side processing (like simulation and code generation), while directly interfacing with Supabase for CRUD operations on models. This layered approach ensures consistency while providing flexibility for different use cases.
-
-## MCP Integration Layer
-
-To enhance the testing and development workflow, the application includes a Model Context Protocol (MCP) server that provides programmatic access to model creation, manipulation, and validation. This layer builds upon the existing Automation API to offer a more interactive and efficient interface for automated testing and model generation.
-
-### Rationale for MCP Integration
-
-While the HTTP-based Automation API serves external CI/CD systems well, developing and testing complex models requires a more interactive approach. The MCP integration addresses several needs:
-
-1. **Rapid Test Model Generation**: Creating test models through the UI is time-consuming. MCP allows instantaneous creation of complex test scenarios.
-
-2. **Systematic Testing**: MCP enables systematic testing of edge cases, type propagation scenarios, and multi-sheet configurations that would be tedious to create manually.
-
-3. **Regression Testing**: Automated model creation through MCP facilitates comprehensive regression test suites.
-
-4. **Development Efficiency**: Developers and AI assistants can quickly prototype and test new features by programmatically creating models.
-
-5. **Validation Testing**: Complex validation scenarios (like Sheet Label scoping across multiple sheets) can be tested systematically.
-
-### MCP Server Architecture
-
-The MCP server is implemented as a Node.js application that interfaces with the existing Next.js backend through the Automation API. It exposes model manipulation capabilities as MCP tools, allowing MCP clients to:
-
-- Create and modify models programmatically
-- Execute simulations and retrieve results
-- Validate models and analyze errors
-- Generate C code from models
-- Test complex multi-sheet scenarios
-
-The MCP server maintains no state of its own, instead delegating all operations to the existing backend services. This ensures consistency between MCP operations and UI operations.
-
-### MCP Block Type Discovery Tools
-
-The MCP server provides the `list_block_types` tool for discovering available block types and their configurations:
-
-**Input Parameters:**
-- `category` (optional): Filter by block category (e.g., 'math', 'sources', 'sinks', 'routing', 'dynamics', 'matrix', 'annotation')
-- `includeParameters` (optional): Include detailed parameter specifications (default: true)
-
-**Output:**
-- `blockTypes`: Array of block type definitions, each containing:
-  - `type`: Block type identifier
-  - `displayName`: Human-readable name
-  - `category`: Block category
-  - `description`: Detailed description of block functionality
-  - `inputPorts`: Number and description of input ports
-  - `outputPorts`: Number and description of output ports
-  - `parameters`: Parameter definitions with types, defaults, and validation rules
-  - `hints`: Usage hints for AI assistants and developers
-
-This tool is particularly useful for AI assistants building models programmatically, as it provides comprehensive information about each block type's capabilities, required parameters, and proper configuration. The hints field includes guidance on common use cases and subsystem handling.
-
-### MCP Simulation Tools
-
-The MCP server provides the `run_simulation` tool for executing WASM-based simulations:
-
-**Input Parameters:**
-- `modelId` (required): UUID of the model to simulate
-- `version` (optional): Specific version number to simulate
-- `timeStep` (optional): Simulation time step in seconds (default: 0.01)
-- `duration` (optional): Simulation duration in seconds (default: 10.0)
-- `inputs` (optional): Object mapping input port names to numeric values
-- `optimizationLevel` (optional): WASM compilation level ('O0', 'O1', 'O2', 'O3')
-- `includeTimeSeries` (optional): Include full time series data in results
-- `sampleRate` (optional): Sample every N steps when collecting time series
-
-**Output:**
-- `success`: Boolean indicating success/failure
-- `simulationDuration`: Actual simulated time
-- `timePoints`: Number of simulation steps
-- `outputPorts`: Final values of all output ports
-- `signals`: Signal statistics (samples, min, max, average, finalValue) with optional time series data
-- `performance`: Execution metrics (compilationTimeMs, executionTimeMs, totalTimeMs, cacheHit)
-
-This enables MCP clients to run comprehensive simulations with input variations and retrieve detailed results for analysis or validation.
-
-### MCP Connection API
-
-The MCP `add_connection` tool accepts both port indices (preferred) and port names for flexibility:
-
-- When port indices are provided, they are used directly
-- When port names are provided, they are resolved to indices using block metadata
-- Connections are stored using indices as the canonical format
-- The `get_connection` response includes computed port names for readability
-
-**Special Port Connections via MCP:**
-The MCP API supports connecting to special ports using negative indices:
-- Use target port index `-1` to connect to an enable port
-- Use target port index `-2` to connect to a reset port (Integrator)
-- Use target port index `-3` to connect to an init/x(0) port (Integrator)
-
-Example for connecting to an Integrator's x(0) initialization port:
-```typescript
-await client.addConnection(
-  modelId, sheetId,
-  sourceBlockId, 0,    // Source output port 0
-  integratorId, -3     // Integrator x(0) port (init)
-);
+The steps, with the files:
+
+1. `src/app/models/[id]/page.tsx` saves the autosave if the model is dirty, then posts to `/api/compile-wasm-stream`. Version `0` means the autosave.
+2. The route (`src/app/api/compile-wasm-stream/route.ts`) loads the model and calls `expandForBuild()` (`src/lib/server/modelReferenceLoader.ts`).
+3. `generateCacheKey()` (`src/lib/wasm/cache/cacheKey.ts`) makes a key from `CODEGEN_VERSION`, the model id, a hash of the blocks, wires and parameters, and the compile options.
+4. On a cache miss, `WasmCodeGenerator` (`src/lib/wasm/codegen/WasmCodeGenerator.ts`) calls the normal `CodeGenerator` and adds a wrapper with `EMSCRIPTEN_KEEPALIVE` functions. The route writes the files to a temporary folder and runs `emcc` in the `obliq-emscripten:latest` container. The exported functions come from `src/lib/wasm/wasmExports.ts`.
+5. `FileCacheManager` (`src/lib/wasm/cache/FileCacheManager.ts`) stores the module under the cache folder and records it in the `wasm_cache` table.
+6. The page gives the module to `SimulationWorkerManager`, which starts `src/lib/simulation/SimulationWorker.ts`. If a worker is not available, the page uses `WasmSimulationEngine` on the main thread.
+7. The C code collects samples for Signal Logger and Signal Display blocks in memory that it allocates. `convertWasmToUIFormat()` (`src/lib/simulation/WasmResultConverter.ts`) maps the samples to blocks and sheets.
+8. `readWasmAssertResults()` (`src/lib/simulation/assertResults.ts`) reads the Assert results. An Assert can stop the run early.
+
+The automation API and MCP simulate on the server. `executeServerSimulation()` (`src/lib/wasm/ServerWasmExecutor.ts`) posts to `/api/compile-wasm` with the caller's credentials, then runs the module in a Node `vm` context.
+
+### 6.4 Generate a C project
+
+1. In the editor, **Export → Generate Code** posts to `/api/generate-code`. On the command line, `npm run obliq:cgen` reads a model file.
+2. Both expand model references. The route uses the store. The command uses the model files beside the model file, then the store (`expandModelFile()` in `src/lib/testing/resolveTestTargets.ts`).
+3. Both call `CodeGenerator.generate()` (the route through `ModelCodeGenerator` in `src/lib/codeGenerationNew.ts`).
+4. Both call `buildCProject()` (`src/lib/codegen/cProject.ts`). It returns the files: the model `.c` and `.h`, one pair for each segregated module, `CMakeLists.txt`, `smoke_main.c`, `cgen-manifest.json`, `library.properties` and `README.md`.
+5. The route zips the files with JSZip. The command writes them to `--out` and, with `--compile`, builds and runs the smoke test.
+
+`portsFromHeader()` reads the input and output ports from the generated header, so the manifest lists the ports that a host compiles against. `generatorInfo()` (`src/lib/server/generatorInfo.ts`) records the obliq-2 version and git commit in the manifest.
+
+### 6.5 Run Asserts natively
+
+1. `npm run obliq:test -- <model ...>` runs `scripts/obliq-test.ts`.
+2. `resolveTestTargets()` finds each model by file path, store id or store name. `--all` adds each stored model that has an Assert block.
+3. `runModelTests()` (`src/lib/testing/modelTestRunner.ts`) generates C with `asserts: true` (which defines `OBLIQ_ASSERTS`) and compiles it with `$CC`, else `cc`.
+4. The runner steps the model with its saved settings. The step loop is the same as the browser runner: init, seed from inputs, then `simulationStepCount()` steps.
+5. The runner reads the results table and prints text, JSON or JUnit XML. The exit codes are:
+   - 0: all Asserts passed.
+   - 1: an Assert failed or was not checked, or a named model has no Asserts.
+   - 2: a model could not be found, built or run.
+
+### 6.6 Automatic layout
+
+1. The editor's **Tune Model Layout** dialog (`src/components/TuneLayoutDialog.tsx`) gives the options. The editor page and `npm run obliq:layout` both call `tuneModelLayout()` (`src/lib/layout/tuneModelLayout.ts`).
+2. The scope is `sheet` (default), `subsystem` or `model`. The function is a pure transform of the sheet tree. It does not change the store.
+3. The engine is `elk` (default) or `classic`. `src/lib/layout/elkLayout.ts` converts a sheet to an ELK Layered graph, runs `elkjs` and converts the result back. `src/lib/layout/autoLayout.ts` is the classic layered engine.
+4. `src/lib/layout/satellites.ts` removes satellite blocks from the ELK graph and puts each one beside its host block.
+5. `src/lib/layout/subsystemRole.ts` uses `subsystemFunction` (or a guess from names) to put a loop in the order controller, actuator, plant. `src/lib/layout/returnRow.ts` puts the feedback path on a mirrored row below.
+6. `src/lib/layout/wireRouting.ts` places the vertical segment of each wire. Wires of one net share a track.
+7. Optional adjustments resize subsystems, show or hide port labels and names, and tidy signal labels (`src/lib/layout/tidyLabels.ts`).
+8. `src/lib/layout/layoutMetrics.ts` scores the result. `HARD_METRICS` lists the defects that must be 0.
+
+Tidy signal labels is the only adjustment that changes structure. It replaces a wire with a Sheet Label pair, or the opposite. The behaviour does not change, because `ModelFlattener.resolveSheetLabels()` resolves a label pair to the same connection as a wire.
+
+### 6.7 PDF export
+
+1. The editor's **Export as PDF** dialog (`src/components/ExportPdfDialog.tsx`) gives the options. The editor page and `npm run obliq:pdf` (through `scripts/lib/pdfExport.ts`) both call `planModelPdf()` and `renderModelPdf()` (`src/lib/export/modelPdf.ts`).
+2. `src/lib/export/sheetTree.ts` walks the sheet tree and makes the page list with the breadcrumb path of each page.
+3. `src/lib/export/modelPdf.ts` runs `propagateSignalTypesMultiSheet()` so that vector and matrix wires print correctly.
+4. `src/lib/export/pdfRenderer.ts` draws each sheet as vector graphics with `pdf-lib`, from the model data and `src/lib/layout/blockGeometry.ts`. It does not capture the canvas.
+5. `src/lib/export/blockGlyphs.ts` decides how to draw each block symbol. In the browser, `src/lib/export/browserGlyphs.ts` rasterizes symbols that the standard PDF fonts cannot show. The command has no rasterizer, so those symbols use a fallback.
+6. The editor can add Signal Display plots (`src/lib/export/pdfPlot.ts`). The command prints diagrams only, because it does not simulate.
+
+### 6.8 A Model Builder API or MCP call
+
+1. An MCP client calls a tool, for example `add_block`. The MCP server (`mcp-server/src/index.ts`, stdio by default, HTTP with `--http`) sends a request to `/api/model-builder` with `Authorization: Bearer <token>`.
+2. `src/app/api/model-builder/route.ts` checks the rate limit and authenticates the request. It finds the handler for the `action` in `src/app/api/model-builder/handlers/`.
+3. The handler loads the model (`loadModel()` in `src/lib/api-support/auth.ts`), changes it, and saves it with `writeInPlace()`. A `baseHash` gives conflict detection. A `checkpoint` records a version.
+4. A batch request runs many operations. In transactional mode, the route writes the content from before the batch back if an operation fails.
+5. Simulation and code generation tools call `/api/automations`.
+
+An open editor sees the change through the file watcher (flow 6.1, step 8).
+
+## 7. Code generation pipeline
+
+```mermaid
+sequenceDiagram
+  participant E as Caller
+  participant X as expandModelReferences
+  participant CG as CodeGenerator
+  participant F as ModelFlattener
+  participant V as CodeGenerationValidator
+  participant T as TypePropagator
+  participant S as SubsystemCodeGenerator
+  participant H as HeaderGenerator and source generators
+
+  E->>X: sheets with model references
+  X-->>E: sheets without model references
+  E->>CG: generate(sheets, parameters, dataStores)
+  CG->>F: flattenModel()
+  F-->>CG: flat blocks, connections, segregated subsystems
+  CG->>V: validate(flat model)
+  CG->>T: propagate()
+  T-->>CG: type map
+  loop each segregated module
+    CG->>S: generate()
+    S-->>CG: module .h and .c
+  end
+  CG->>H: header, init, algebra, derivatives, integration, cleanup
+  H-->>E: header, source, subsystemFiles, warnings, stats
 ```
 
-## State Management and Data Flow
+`CodeGenerator.generate()` (`src/lib/codegen/CodeGenerator.ts`) refuses a model that still has model references. The caller must expand them first.
 
-Throughout the system, careful consideration is given to **where state lives** to maintain performance and simplicity:
+The stages:
 
-* **Local UI State:** The React components hold state for instant UI feedback. For example, dragging a block around updates its position in a React state variable (or a Zustand store) immediately, so the block moves with the cursor. The wire drawing might happen in real-time as well, showing a temporary wire as the user drags from a port. This local state is authoritative during the edit session. 
-* **Global Model State in Editor:** When on the model editor page, we maintain a representation of the current model (could be the same JSON structure stored in a React state or store). All components (canvas, sidebars, panels) read and modify this state. We might use a React Context provider at the page level to supply the model and a dispatcher function to child components. For performance, consider immutable updates or state libraries that can handle large object updates efficiently. The model JSON can be large, but since it's mostly tree-structured, focusing updates on specific parts (like a single block's coordinates) helps.
-* **Database State:** On certain triggers (on a manual save action or periodically), the in-memory model state is serialized to JSON and sent to Supabase (update the `models.data` for that model). Likewise, when opening the editor page, we load from Supabase (via server component or client fetch). We ensure the data is synced but not on every minor change (to avoid network and performance overhead).
-* **Auth State:** Supabase Auth provides a session JWT which we keep on the client (Supabase JS library handles this, often storing in local storage or memory and refreshing it). We can also propagate the session to Next.js server-side (Next 13 App Router can use cookies or the auth helper library to get the user on the server). For simplicity, the app can rely on client-side checks for auth to protect most pages, but critical actions (like API routes) double-check the Supabase JWT or the automation token.
-* **Simulation State:** Lives in the simulation engine context (client or server depending on mode). It's not stored globally in React state because simulation is more of a transient process; however, some UI components (like a plot) might have internal state for the data points to display. The simulation engine could emit events or call callbacks (e.g., each time step, send new values to displays). This could be done via a simple pub-sub within the engine or by updating a React state that the Signal Display component is subscribed to. Because React re-renders could be expensive for many time steps, often simulation display is done by directly manipulating a canvas or using a chart library that imperatively updates. We might therefore have the Signal Display component just hold a reference to a chart instance and the simulation engine pushes data to it without full React state updates each step, which is a performance consideration.
-* **Unsaved Changes:** To help the user, we will keep track of a "document dirty" flag – whether the model has unsaved edits. This state can be in the editor component, and if the user tries to navigate away, we can prompt them to save. It's a minor detail but important for UX.
-* **Auto Save and Dirty State Tracking:** The application maintains an `isDirty` flag that tracks whether the model has been modified since the last save. This flag is set to `true` whenever the user:
-- Adds, moves, or deletes blocks
-- Creates or removes connections
-- Modifies block parameters
-- Changes simulation settings
-- Renames sheets
+1. `ModelFlattener` (`src/lib/codegen/ModelFlattener.ts`) removes the hierarchy. It gives each block a scoped name, resolves Sheet Label pairs in their scope and decides the strategy of each subsystem.
+2. `CodeGenerationValidator` checks the flat model.
+3. `TypePropagator` makes the type map. It asks each block module with `getOutputType()`.
+4. `SubsystemCodeGenerator` writes one `.h` and `.c` pair for each segregated module.
+5. `HeaderGenerator` writes the header: the input, output, signal and state structs and the public functions.
+6. The source generators write the functions in this order: `InitFunctionGenerator`, `EnableEvaluator`, `AlgebraicEvaluator`, `RK4Generator` (derivatives), `IntegrationOrchestrator` and `StateIntegrator` (the step), `CleanupFunctionGenerator`.
+7. `CCodeBuilder` gives shared helpers, for example `sanitizeIdentifier()`.
 
-Auto-save runs every five minutes but only persists to the database if `isDirty` is true, preventing unnecessary database writes. The system creates a hash of the model state to detect changes accurately. When auto-saving:
-1. The current sheet data is synchronized to the model's sheet array
-2. If changes exist, the model is saved to version 0
-3. The model is marked as clean after successful auto-save
+### 7.1 Subsystem strategies
 
-Auto-save only runs when viewing the latest version of a model and is disabled when viewing historical versions. A visual indicator shows users when they have unsaved changes and the time of the last auto-save.
+The `codeGenStrategy` parameter of a subsystem selects one of three strategies:
 
-The separation of concerns in state ensures that each part of the app deals with the appropriate form of data:
+| Strategy | Result |
+|---|---|
+| `flatten` (default) | The blocks of the subsystem go into the parent model's code |
+| `segregated` | The subsystem becomes its own C module (`.h` and `.c`). The parent holds an instance of it |
+| `segregated_atomic` | A segregated module. The flattener always uses this strategy for subsystem references and for the definitions that they use |
 
-1. **UI Components** – operate on in-memory state for speed.
-2. **Persistent Model Storage** – only updated occasionally, which also minimizes conflict potential (since no concurrent edits).
-3. **Computation (Simulation/Codegen)** – operates on a snapshot of the model state (we might pass a copy of the model JSON to the simulation engine or code generator to avoid any mutations affecting the UI state). They produce results that are either displayed or downloaded, not directly modifying the model (except maybe adding some meta info like simulation results if we choose).
+A shared module is one C module for a definition and all its subsystem references. The generator writes it once, and each instance gets its own parameter values at init. [docs/NATIVE_SUBSYSTEM_DESIGN.md](../docs/NATIVE_SUBSYSTEM_DESIGN.md) gives more detail about segregated subsystems. Check its statements against `src/lib/codegen/ModelFlattener.ts` and `src/lib/codegen/SubsystemCodeGenerator.ts`.
 
-## User Experience Enhancements
+### 7.2 Integration
 
-### Auto-save and Recovery User Experience
+The generated code separates algebra (outputs from inputs and states) from integration (states from derivatives). `globalSettings.integrationAlgorithm` selects `rk4` or `euler`. In `rk4`, the algebra runs again at each stage, and the major-step values are restored after the stages. `debugMath` adds safe divide and modulo and finite-value checks on each RK4 stage (`src/lib/codegen/DebugMathRuntime.ts`).
 
-The application provides a seamless auto-save experience that protects users' work without interrupting their workflow:
+### 7.3 Profiles
 
-**Visual Feedback:**
-- A small indicator next to the model name shows when there are unsaved changes
-- The auto-save status appears in the header, showing the time since last auto-save
-- Brief confirmation appears when auto-save completes successfully
+A profile changes the files of a command-line C project. `buildCProject()` accepts an optional `profile` with a name, a replacement `smoke_main.c`, extra files and extra sources. `npm run obliq:cgen -- --profile <name>` selects it. `generic` is the default and adds nothing. The editor download always uses `generic`.
 
-**Recovery Flow:**
-1. When opening a model with auto-saved changes, a clear dialog appears before any data loads
-2. The dialog shows human-readable timestamps for both versions
-3. Users can make an informed choice about which version to use
-4. After recovery, a subtle notification confirms the auto-save was restored
-5. The UI behaves exactly as if the user never left - no special "editing older version" warnings
+## 8. HTTP API and authentication
 
-**Intelligent Saving:**
-- Auto-save only runs when actual changes exist, verified by content hashing
-- Manual saves clear both the dirty flag and any auto-save entries
-- The system attempts to save when the browser window closes if changes exist
-- All user actions that modify the model immediately update the dirty state
+### 8.1 Authentication
 
-This design ensures that auto-save is truly transparent - it's a safety net that catches unsaved work without adding complexity to the user's workflow.
+`authenticateRequest()` in `src/lib/apiAuthMiddleware.ts` accepts two credentials, in this order:
 
-### Error and Validation Display Improvements
+1. `Authorization: Bearer <token>`: an API token from the `/tokens` page. The token is 128 hex characters. The database keeps only its SHA-256 hash (`api_tokens` table). MCP, automation clients and scripts use tokens.
+2. The `obliq_session` cookie: `GET /api/session` sets it for same-origin requests. Its value is an HMAC of a constant, with the key in `$OBLIQ_HOME/local-secret` (`src/lib/server/session.ts`). The browser uses the cookie.
 
-The application provides enhanced error display capabilities to help users diagnose and fix issues:
+All requests also pass the loopback `Host` check in `src/middleware.ts`.
 
-**Model Validation Modal:**
-- Displays validation errors and warnings in a structured format
-- **Copy to Clipboard**: A dedicated button copies all validation errors to the clipboard in a formatted text format, making it easy to share errors or paste them into documentation
-- Errors are grouped by severity and include detailed context
+### 8.2 Routes
 
-**WASM Compilation Error Display:**
-- Enhanced error viewer for WebAssembly compilation failures
-- **Expandable Details**: Each error can be expanded to show the full compiler output
-- **Copy Individual Errors**: Each error message has a copy button for quick clipboard access
-- **Copy All Errors**: A button to copy the complete error output including all details
-- Improved formatting makes it easier to identify the source of compilation issues
-- Line numbers and file references are preserved for traceability
+| Route | Methods | Purpose | Authentication |
+|---|---|---|---|
+| `/api/session` | GET | Set the session cookie, return the local user | Same-origin check only |
+| `/api/models` | GET, POST | List models, create a managed model | Token or cookie |
+| `/api/models/link` | POST | Link an external model file | Token or cookie |
+| `/api/models/[id]` | GET, PATCH, DELETE | Read the current file, rename, delete | Token or cookie |
+| `/api/models/[id]/versions` | GET, POST | List versions, explicit save | Token or cookie |
+| `/api/models/[id]/versions/[version]` | GET | Read one version | Token or cookie |
+| `/api/models/[id]/autosave` | GET, PUT, DELETE | Autosave | Token or cookie |
+| `/api/models/[id]/duplicate` | POST | Copy a model | Token or cookie |
+| `/api/models/[id]/unlink` | POST | Copy a linked file into managed storage | Token or cookie |
+| `/api/models/[id]/status` | GET | File status (ok, changed, missing) | Token or cookie |
+| `/api/models/[id]/events` | GET | Server-Sent Events of file status | Token or cookie |
+| `/api/models/[id]/dependents` | GET | Models that reference this model | Token or cookie |
+| `/api/compile-wasm` | POST | Compile to WASM, JSON response | Token or cookie |
+| `/api/compile-wasm-stream` | POST | Compile to WASM, SSE progress and result | Token or cookie |
+| `/api/generate-code` | POST | C project as a zip | Token or cookie |
+| `/api/model-builder` | GET, POST, PUT, DELETE | Model Builder API, by `action` | Token or cookie, rate limit |
+| `/api/automations` | POST | `generateCode`, `simulate`, `validateModel`, `listModels` | Token or cookie |
+| `/api/tokens` | GET, POST | List and create API tokens | Token or cookie |
+| `/api/tokens/[id]` | GET, DELETE | Read and delete a token | Token or cookie |
+| `/api/cache-maintenance` | POST | Evict WASM cache entries | Token or cookie, or `x-api-key` equal to `CACHE_MAINTENANCE_API_KEY` |
 
-These improvements make debugging and error resolution more efficient, especially when working with complex models or when seeking help from others.
+The `/api/models` routes use `modelsRoute()` (`src/lib/server/modelsApi.ts`). It authenticates the request and maps storage errors to HTTP codes (for example 404, 409).
 
-## Code Generation Architecture
+API references:
 
-The application uses a unified approach for handling multi-sheet models in code generation:
+- [docs/model-builder-api.md](../docs/model-builder-api.md): Model Builder actions.
+- [docs/automation-api.md](../docs/automation-api.md): automation actions.
+- [docs/wasm-compilation-api.md](../docs/wasm-compilation-api.md): compile routes.
+- [mcp-server/README.md](../mcp-server/README.md): MCP tools and configuration.
 
-### Core Concepts
+## 9. Storage on disk
 
-1. **Sheet Hierarchy**: The code generator traverses the complete sheet hierarchy, including sheets nested within subsystem blocks.
+### 9.1 Layout
 
-2. **Block Identification**: Blocks maintain their original IDs throughout flattening, enabling consistent tracking.
+`resolveObliqHome()` (`src/lib/server/storage/paths.ts`) selects the store folder: `$OBLIQ_HOME`, else `${XDG_CONFIG_HOME:-~/.config}/obliq-2`.
 
-3. **Signal Flow**: The generator handles:
-   - Direct connections within sheets
-   - Subsystem port mappings (input/output port blocks)
-   - Sheet label connections within subsystem scopes
+| Path under the store folder | Content |
+|---|---|
+| `obliq.db` | SQLite database (WAL mode) |
+| `local-secret` | Key for the session cookie, mode 0600 |
+| `models/<id>/model.json` | The current file of a managed model |
+| `models/<id>/autosave.json` | The autosave, managed or linked |
+| `models/<id>/versions/vNNNN.json` | Saved versions, managed or linked, wrapper shape |
+| `cache/wasm/<cacheKey>/` | `module.wasm` and `module.js` |
 
-4. **Subsystem Semantics**: The ability to dynamically enable/disable subsystems is implemented in the generated C code.
+A linked model keeps its current file where the user put it. Its versions and autosave are in the store folder. Deleting a linked model does not delete the external file. Model ids and cache keys must match `^[A-Za-z0-9._-]+$`, so that they cannot leave their folder.
 
-### Multi-Sheet Code Generation
+### 9.2 SQLite tables
 
-The code generator handles hierarchical multi-sheet models through a flattening process:
+`src/lib/server/storage/db.ts` applies forward-only migrations and records the schema version in `PRAGMA user_version`. A build refuses a database that is newer than its migrations.
 
-1. **Model Flattening**: The C-code Generator makes no distinction between single sheet and multi-sheet models as it generates C-language code. Instead, the code generator shall - early in the code generation process - flatten the entire model into a single logical sheet in all cases. This implies that Subsystem input and output block are removed and replace with direct connections to their connected blocks on both sides. Signal Source and Signal Sink blocks would be handled in the same way.  (inputs and outputs of the top level model must be excluded from this treatment - only inputs and outputs of contained Subsystems should be replaced with direct connections).
+| Table | Content |
+|---|---|
+| `models` | One row per model: name, `storage_kind` (`managed` or `linked`), `file_path`, `file_format` (`wrapper` or `bare`), `file_hash`, `latest_version`, times |
+| `model_versions` | One row per saved version: hash, size, note, time |
+| `api_tokens` | Token name, SHA-256 hash, expiry, last use |
+| `wasm_cache` | One row per cached module: key, model hash, options, sizes, access count |
+| `wasm_compilation_metrics` | One row per compile request: cache hit, time, error |
+| `wasm_simulation_metrics` | Simulation metrics |
+| `meta` | Key and value pairs, for example `reference_models` |
 
-2. **Context Preservation**: A `BlockContextMap` tracks each block's original location:
-   - Original sheet path for comments (e.g., "from Subsystem1 > Controller")
-   - Prefixed names to ensure uniqueness across the flattened model
-   - Proper scoping for signal names and variables
+`getStorage()` (`src/lib/server/storage/index.ts`) opens one connection for each process. It keeps the connection on `globalThis`, so that a Next.js dev reload uses it again.
 
-3. **Execution Order**: The flattened model uses `calculateExecutionOrderMultiSheet()` to determine a global execution order respecting all dependencies.
+### 9.3 Reference-model seeding
 
-4. **Generated Code Structure**:
-   - All signals use prefixed names to avoid conflicts
-   - Comments indicate the original subsystem location
-   - Sheet label connections become direct assignments
-   - States for transfer functions are properly scoped
+When `openStorage()` creates a new store, it imports each `*.json` file in `reference-models/` one time (`src/lib/server/storage/referenceModels.ts`). The `reference_models` meta key records the result. Seeding never changes an existing store. `OBLIQ_REFERENCE_MODELS_DIR` selects a different folder, and an empty value turns seeding off. `jest.setup.js` turns it off for tests.
 
-### Benefits of This Architecture
+## 10. Command-line tools
 
-1. **Consistency**: The same signal flow logic in code generation produces consistent behavior in WASM simulation
-2. **Debugging**: Generated code comments preserve original structure for traceability
-3. **Extensibility**: New block types only need to implement the block module interface
-
-## Extensibility and Performance Considerations
-
-The architecture is designed to be **extensible**. Adding new features or blocks should require minimal changes:
-
-* New block types would involve updating the BlockLibrarySidebar (to list it), adding a Block component or variant, and extending simulation and codegen logic to handle its behavior. Thanks to a modular design (with centralized model schema and dedicated simulation/codegen modules), this is straightforward.
-* Additional features like new result visualization (say, an FFT block for signal analysis, or a custom chart) can be added as new blocks or as new panels subscribing to simulation data, without altering the core architecture.
-* The use of Next.js means we can also easily add new pages, such as a **Profile page** for the user, or a **Help/Documentation** page, within the same project structure.
-
-We also consider **performance** in the architecture:
-
-* The visual canvas can potentially have many blocks and wires. We should use techniques like windowing or canvas layers if the number grows large. Libraries like those mentioned (JointJS, etc.) are built for many nodes and have internal optimizations. If implementing ourselves with React, we'd avoid re-rendering the whole canvas on every minor change – instead, perhaps each block is a React component that moves independently, and connections might be drawn in an SVG that updates efficiently.
-* Using Next.js App Router with server components can optimize data fetching. For example, the model list page can be rendered server-side (faster initial load and SEO if needed). The model editor page could preload the model JSON on the server (so the page renders with data without an extra loading spinner). Next's architecture allows mixing server and client components for an optimal experience.
-* Supabase, being a managed Postgres, is quite scalable for our needs. By storing the heavy data (models) in JSONB, we minimize the number of tables and joins needed; a single query can retrieve the whole model. We should, however, be mindful to not fetch the model JSON more often than needed (since it could be large). This is handled by the state management as described (once loaded, keep it in memory).
-* The serverless functions (API routes) should perform heavy tasks like code generation within reasonable time. If a model is extremely large, code generation could be slow, but typically it's string processing which is fast in Node. PlatformIO code is text, so even a few thousand lines is fine to handle.
-* We avoid using websockets or real-time subscriptions (since no collab or real-time multi-user updates). This simplifies the architecture and removes a class of issues around synchronization and race conditions.
-* We ensure that each service is used appropriately: the database is not doing computation, the client is not doing secure data storage, etc. This clear separation means each part can be optimized or replaced if needed (for instance, if we needed to support extremely heavy simulations, we could introduce a dedicated simulation microservice or WebAssembly module without restructuring the whole app).
-* **Matrix Performance**: Matrix operations are optimized for reasonable sizes (up to 100×100). Larger matrices may impact simulation performance. The UI provides warnings for matrices exceeding 1000×1000 elements. Memory usage scales with the square of matrix dimensions, so appropriate limits are enforced.
-* **Version Performance:** The versioning system uses a two-table design to optimize common operations. Model listings only query the lightweight models table, while version data is fetched on-demand. The unique index on (model_id, version) ensures fast version lookups.
-* **Auto-save Efficiency:** 
-  - Auto-save operations only occur when the model is marked as dirty, preventing unnecessary database writes
-  - The dirty state is tracked using a lightweight hash comparison of the model structure
-  - Change detection happens at the action level - any modification immediately sets the dirty flag
-  - Auto-save data uses version 0 with upsert semantics, preventing version table bloat
-  - The system validates model state before auto-saving to prevent errors during the save cycle
-  - Visual indicators for dirty state and auto-save status have minimal performance impact
-
-### MCP Integration Benefits
-
-The MCP server enhances both extensibility and performance in several ways:
-
-**Extensibility**:
-- New MCP tools can be added without modifying the core application
-- Complex model construction workflows can be scripted and shared
-- Testing scenarios can be versioned and automated
-- Integration with AI assistants and development tools becomes straightforward
-
-**Performance**:
-- Batch operations can be performed without UI overhead
-- Model creation and testing can be parallelized
-- Rapid iteration on model designs without manual clicking
-- Automated performance testing of simulation engine with various model complexities
-
-**Testing Efficiency**:
-- Systematic testing of edge cases (e.g., maximum block counts, complex wire routing)
-- Automated validation of type propagation across multiple sheets
-- Regression test suites can be generated and run programmatically
-- Sheet Label scoping and multi-sheet interactions can be tested comprehensively
-
-### Matrix Support in MCP
-
-The MCP server tools support matrix operations for testing:
-
-* **Matrix Creation**: Tools can create blocks with matrix types and set matrix constant values
-* **Type Validation**: MCP tools validate matrix dimensions during model construction
-* **Testing Scenarios**: Complex matrix signal flows can be created programmatically for comprehensive testing
-* **Performance Testing**: Large matrix models can be generated to test system limits
-
-The MCP server maintains the same performance characteristics as the Automation API since it uses the same underlying services. The primary performance gain comes from eliminating manual UI interactions and enabling batch operations.
-
-## Testing Infrastructure
-
-The application includes a comprehensive testing infrastructure that validates the code generation system and block module implementations.
-
-### Unit Testing
-Standard unit tests are implemented using Jest and cover:
-- **Block module C code generation**: Each block module's `generateComputation`, `generateInitialization`, and struct generation methods
-- **Type propagation system**: Signal type inference and validation across connections
-- **Model validation logic**: Connection rules, port compatibility, and sheet label scoping
-
-Tests focus on C code generation correctness rather than runtime simulation behavior, as WASM is the sole simulation engine.
-
-### Integration Testing for Code Generation
-The code generation testing infrastructure uses Docker to ensure consistent and reproducible compilation environments across different development platforms. This approach eliminates the need for developers to install PlatformIO or other embedded toolchains locally.
-
-### Matrix Operation Testing
-
-The testing infrastructure includes comprehensive matrix support:
-
-* **Type Validation Tests**: Verify correct parsing and validation of matrix type strings
-* **Code Generation Tests**: Ensure generated C code compiles and executes correctly
-* **Performance Tests**: Benchmark large matrix operations to ensure acceptable performance
-* **Integration Tests**: Test complex signal flows involving multiple matrix operations
-
-#### Docker-Based Compilation Pipeline
-The test suite automatically:
-1. Builds a Docker image containing PlatformIO and necessary compilation tools
-2. Generates C code from test models (stored as JSON files)
-3. Creates proper PlatformIO library structures with appropriate configuration
-4. Compiles the generated code in isolated Docker containers
-5. Executes the compiled binaries to verify correctness
-6. Validates outputs against expected results defined in model metadata
-
-#### PlatformIO Library Structure
-Generated libraries follow PlatformIO conventions:
-- C source files are placed in the library root (not in a `src` subdirectory)
-- Header files are placed in the library root for includes
-- A `library.properties` file provides Arduino-compatible metadata
-- A `library.json` file provides PlatformIO-specific configuration
-- The `platformio.ini` configuration includes:
-  - `lib_deps` with the library name for proper dependency resolution
-  - `lib_compat_mode = off` to allow pure C libraries without Arduino dependencies
-
-### Test Model Structure
-Test models are stored in `__tests__/integration/code-generation/models/` as JSON files with optional metadata:
-- `metadata.testInputs`: Object defining input port values for testing
-- `metadata.expectedOutput`: Expected output value for validation
-- `metadata.description`: Human-readable test case description
-
-## Code Generation Service Updates
-
-### C Code Structure
-The generated C code follows a clean, modular structure:
-- **Header files** define structs for inputs, outputs, and internal states
-- **Source files** implement initialization and step functions
-- **RK4 Integration**: Transfer functions use inline Runge-Kutta 4th order integration within the step function
-- **Vector Support**: Proper handling of array types with element-wise operations
-
-### Library Compatibility
-Generated libraries are compatible with:
-- PlatformIO projects (primary target)
-- Arduino IDE (via library.properties)
-- Generic C99 compilers (no platform-specific dependencies)
-
-## Project Structure Updates
-
-### Test Infrastructure Files
-Additional files supporting the Docker-based testing:
-- `__tests__/integration/code-generation/docker/Dockerfile.platformio` - Docker image definition
-- `__tests__/integration/code-generation/models/*.json` - Test model definitions
-- `__tests__/integration/code-generation/code-compilation.test.ts` - Integration test suite
-
-## Development Workflow Enhancements
-
-### Continuous Integration
-The Docker-based approach enables:
-- Consistent test execution across different platforms (Windows, macOS, Linux)
-- No local toolchain installation requirements
-- Parallel test execution in CI/CD pipelines
-- Reproducible builds with specific PlatformIO versions
-
-### Test Execution
-Developers can run code generation tests with a simple command:
-```bash
-npm run test:codegen
-```
-
-This command will:
-- Build the Docker image if not present
-- Run all code generation tests
-- Report compilation errors with full diagnostics
-- Validate program outputs against expected values
-
-## Conclusion
-
-This architecture leverages **Next.js** for a unified frontend and backend codebase, keeping the project structure organized by feature. **Supabase** provides a convenient and secure data layer with minimal overhead in developing our own backend. The design outlined above emphasizes clean separation of concerns: the *UI components* manage interactivity and visualization, the *client-side state* enables responsive editing and simulation, the *server-side API* handles heavy lifting like code export and external automation, and the *database* safely persists user models. By focusing on simplicity (a single-user editing model, on-demand persistence, no unnecessary complexity), the application remains performant and easier to maintain. The folder structure and service interactions described ensure that as the application grows (more block types, larger models, more features), the codebase remains well-organized and extensible, providing a solid foundation for a visual modeling and simulation platform.
+The commands run with `tsx` and import `src/lib/` directly. None of them needs the server to run.
+
+| Command | Script | Purpose |
+|---|---|---|
+| `npm run obliq:cgen` | `scripts/obliq-cgen.ts` | Write a C project from a model file |
+| `npm run obliq:test` | `scripts/obliq-test.ts` | Run the Asserts of models natively |
+| `npm run obliq:layout` | `scripts/obliq-layout.ts` | Apply the editor's layout to a model file, or score its layout |
+| `npm run obliq:pdf` | `scripts/obliq-pdf.ts` | Write a PDF of a model file |
+| `npm run obliq:link` | `scripts/obliq-link.ts` | Link, list or unlink model files in the store |
+| `npm run mdl:ir`, `npm run mdl:emit` | `../mdl2obliq` | Simulink `.mdl` to IR, and IR to an obliq-2 model |
+| `npm run wasm:build-docker` | `__tests__/wasm/docker/Dockerfile.emscripten` | Build the Emscripten image |
+| `npm run mcp-server:dev`, `npm run mcp-server:build` | `mcp-server/` | Run or build the MCP server |
+
+Other scripts:
+
+- `scripts/build-fpv-reference-model.ts` builds the FPV models in `reference-models/` and `test-models/fpv/`, lays them out and writes their PDFs. Run it with `npx tsx --tsconfig tsconfig.json scripts/build-fpv-reference-model.ts`.
+- `scripts/fpv-tuning-sweep.ts` prints the response of the FPV rate loop across mass, motor lag and IMU rate variants. `__tests__/reference-models/fpv-tuning.test.ts` holds the limits.
+
+`obliq:link` always opens the SQLite store. `obliq:test`, `obliq:cgen` and `obliq:pdf` open it when a model reference is not found beside the model file. `obliq:test` also opens it for a model given by store id or name, and for `--all`. The `better-sqlite3` native module must be built for the Node version that runs the command.
+
+## 11. Extension points
+
+### 11.1 Add a block type
+
+A block type is known in many places. Follow [docs/adding-new-block-types.md](../docs/adding-new-block-types.md) and [docs/block-modules.md](../docs/block-modules.md). The minimum is:
+
+1. Write a module in `src/lib/blocks/` that implements `IBlockModule`.
+2. Add it to `BlockModuleFactory.createInstance()` and `getSupportedBlockTypes()`.
+3. Add it to `BlockTypes` and `blockTypeRegistry` in `src/lib/blockTypeRegistry.ts`, and its defaults in `src/lib/blockFactory.ts`.
+4. Add it to the palette in `src/components/BlockLibrarySidebar.tsx` and its symbol in `src/components/BlockNode.tsx`.
+5. Add its PDF symbol class in `src/lib/export/blockGlyphs.ts`.
+6. Add its type rules to `src/lib/signalTypePropagation.ts`, and its parameter checks to `src/lib/blockParameterValidator.ts`.
+7. Add it to the block list of the MCP server, `mcp-server/src/tools/block-types.ts`.
+8. Add a configuration dialog in `src/components/` if it has parameters.
+9. Add its entry to [docs/blocks-reference.md](../docs/blocks-reference.md).
+
+`__tests__/block-type-consistency.test.ts` compares the factory, the registry, the palette and the MCP list. It fails on a new gap. If the block has states, add a native numeric test (section 13).
+
+### 11.2 Add a code generation profile
+
+1. Add the profile name to the `--profile` choices in `scripts/obliq-cgen.ts`.
+2. Give `buildCProject()` a `profile` object with the replacement smoke main, the extra files and their sources.
+3. Add a test that builds the project with the profile.
+
+Do not change `generic`. `__tests__/cgen-project-parity.test.ts` checks that the editor download and the command give the same files.
+
+### 11.3 Add a command
+
+1. Put the logic in `src/lib/` as pure functions, so that the editor and Jest can use them.
+2. Write a thin `scripts/<name>.ts` that parses arguments, reads files and calls the library.
+3. Add an `obliq:<name>` script to `package.json`.
+4. Accept the wrapper and bare file shapes, as the other commands do.
+5. Resolve model references in the same order as `obliq:test`: files beside the model file, by name, then the store.
+
+### 11.4 Add an API route
+
+1. Put the route in `src/app/api/<name>/route.ts` with `export const runtime = 'nodejs'`.
+2. Authenticate with `authenticateRequest()`, or use `modelsRoute()` for model routes.
+3. Read and write models only through `getStorage().models`.
+4. Call `expandForBuild()` before code generation.
+5. Add the route to the table in section 8.2.
+
+### 11.5 Change the generated C or the WASM wrapper
+
+1. Increase `CODEGEN_VERSION` in `src/lib/wasm/cache/cacheKey.ts` and add a line to its history. Otherwise the cache returns old modules.
+2. For a new wrapper function, add it to `WASM_EXPORTED_FUNCTIONS` in `src/lib/wasm/wasmExports.ts`. Both compile routes read this list.
+
+## 12. Invariants and rules
+
+A change must keep these rules. A test protects most of them.
+
+1. **One block geometry.** Block sizes and port positions come only from `src/lib/layout/blockGeometry.ts`. Do not copy the formulas into a component or a renderer.
+2. **Reference models equal the builder output.** Do not edit `reference-models/*.json`, `reference-models/*.pdf` or `test-models/fpv/*.json` by hand. Change `scripts/build-fpv-reference-model.ts` and run it again. Three tests compare the files:
+   - `__tests__/reference-models/fpv-test-models.test.ts`: `test-models/fpv/*.json`, byte for byte.
+   - `__tests__/reference-models/fpv-pdfs.test.ts`: `reference-models/*.pdf`, byte for byte.
+   - `__tests__/reference-models/fpv-plant.test.ts`: `reference-models/*.json`, as parsed JSON. This test does not find a change of key order or white space. Write the files only with the builder, so that they also stay equal byte for byte.
+3. **Public port names of shipped models do not change.** Hosts such as obliq-fpv-unity read the FPV Vehicle ports by name from the generated header. Do not rename the Input or Output Ports of a shipped model without the agreement of the owner.
+4. **The layout score's hard metrics stay 0.** `HARD_METRICS` in `src/lib/layout/layoutMetrics.ts` lists them. `__tests__/layout-metrics.test.ts` compares the scores with `__tests__/layout-metrics.golden.json`.
+5. **Diagram-only fields do not change behaviour.** `flipped`, `subsystemFunction`, sizes and wire routing must not change the generated C. A layout tool that changes structure must give the same connections after `resolveSheetLabels()`.
+6. **One generated-C path.** Simulation, tests and export use `CodeGenerator`. Do not add a second simulation engine or a second generator.
+7. **Editor and command give the same output.** Keep the shared library function as the only implementation (`buildCProject()`, `tuneModelLayout()`, `renderModelPdf()`). `__tests__/cgen-project-parity.test.ts` compares the two C projects.
+8. **Bump `CODEGEN_VERSION`** when the generated C or the wrapper changes (section 11.5).
+9. **Server code stays on the server.** Do not import `src/lib/server/` from a client component.
+10. **Saves go through `ModelRepository`.** Do not write model files directly. The repository keeps the hashes, versions and conflict checks correct.
+11. **Units in names.** In engineering models that you create or change, put a unit suffix on signal names and on blocks with continuous states. The table of suffixes is in [CLAUDE.md](../CLAUDE.md).
+12. **Sensor fidelity.** Check a sensor model against its datasheet, along the whole path, and with independent numbers. Read [CLAUDE.md](../CLAUDE.md) before you change a sensor model.
+13. **Documentation style.** Write documents in ASD-STE100 Simplified Technical English as far as practical (see [CLAUDE.md](../CLAUDE.md)). Put release notes in [CHANGELOG.md](../CHANGELOG.md), not in README.md.
+
+## 13. Testing strategy
+
+All automatic tests are Jest suites under `__tests__/` (`jest.config.js`, environment `jsdom`). `npm test` runs all of them. The groups:
+
+| Group | Location | Needs |
+|---|---|---|
+| Unit tests of blocks, types, store, layout, PDF | `__tests__/*.test.ts`, `__tests__/lib/` | Node only |
+| Code generation | `__tests__/codegen/` | Node; the `*-native` suites also need a host C compiler |
+| Native numeric tests | `__tests__/support/nativeCgen.ts` and its users | `cmake` and `gcc` |
+| Storage and model API | `__tests__/storage/`, `__tests__/model-reference-api.test.ts` | `better-sqlite3` built for the Node that runs Jest |
+| Reference models | `__tests__/reference-models/` | `cmake` and `gcc` for the tests that fly the FPV models (`__tests__/support/nativeCgen.ts`) |
+| WASM | `__tests__/wasm/` (`npm run test:wasm`) | Docker and the `obliq-emscripten:latest` image |
+| Generated C compile | `__tests__/integration/code-generation/` (`npm run test:codegen`) | Docker |
+| HTTP API and MCP | `__tests__/integration/api/`, `__tests__/integration/mcp/` (`npm run test:integration`) | A running server and `TEST_API_TOKEN` |
+
+Golden files and byte comparisons:
+
+- `__tests__/layout-metrics.golden.json`: layout scores of the FPV Vehicle, one entry for each engine. Refresh it only after a change that makes the score better: `UPDATE_LAYOUT_GOLDEN=1 npx jest __tests__/layout-metrics.test.ts`.
+- `reference-models/` and `test-models/fpv/`: the builder output (see section 12, rule 2).
+- `__tests__/cgen-project-parity.test.ts`: the editor and command C projects.
+
+Rules for new tests:
+
+- Test a numeric block or a sensor model against independent numbers, not only against the formula that it implements. Run it through the generated C, natively, with `__tests__/support/nativeCgen.ts` or a model with Asserts.
+- A model with Asserts is also a test. `npm run obliq:test` runs it, and the editor shows its results.
+- `npx tsc --noEmit` reports errors that existed before this document (132 on 13 Nov 2026). `next build` checks only `src/` (`tsconfig.build.json`). Do not add new errors. Compare the count before and after your change.
+
+## 14. Known limits and technical debt
+
+Each item below is true in the code today. Most are kept on purpose until there is time to change them safely.
+
+- **Doubled instance field names.** `ModelFlattener.analyzeSegregatedSubsystem()` joins `parentPath` and the block name, but `parentPath` already ends with the block name. The FPV Vehicle header therefore has fields such as `Motor_RR_Motor_RR`. The names are kept for now, because hosts compile against them.
+- **Two type propagators.** The editor uses `src/lib/signalTypePropagation.ts`. The code generator uses `src/lib/codegen/TypePropagator.ts`. They can disagree.
+- **The Zod schema is not applied at run time.** Section 4.5 tells which checks run. The block `type` enum in `src/lib/modelSchema.ts` lists fewer types than `BlockModuleFactory`.
+- **Two compile routes.** `/api/compile-wasm` and `/api/compile-wasm-stream` hold similar code, so a change to one must go into the other. The automation API and MCP simulations use `/api/compile-wasm`; the editor uses `/api/compile-wasm-stream`.
+- **Unused import function.** `ModelRepository.importModel()` has no caller.
+- **ELK runs on the browser main thread.** `src/lib/layout/elkLayout.ts` loads `elkjs/lib/elk.bundled.js`. A large layout blocks the editor until it ends.
+- **Server-only code is in more than one place.** Section 5.1 lists the server-only modules outside `src/lib/server/`. Model types are declared in components (`BlockData`, `WireData`) and in `src/lib/modelSchema.ts`.
+- **The editor page is large.** `src/app/models/[id]/page.tsx` holds the simulation, code download, layout and PDF actions. `src/lib/modelStore.ts` is also large.
+- **Asserts in segregated subsystems are not checked.** The generator gives a warning and leaves them out.
+- **Sibling dependency.** `mdl2obliq` is `file:../mdl2obliq` in `package.json`, and `jest.config.js` maps it to `../mdl2obliq/src`. `npm install` and some tests need that folder beside obliq-2.
+- **Old compatibility layers.** `src/lib/codeGeneration.ts` is deprecated, and `src/lib/codeGenerationNew.ts` wraps `CodeGenerator`. One test still uses the old function.
+- **Rate limit store in memory.** `checkRateLimit()` in `src/lib/api-support/auth.ts` keeps counts in a `Map`. A server restart clears them.
+- **The command PDFs have no glyph rasterizer.** Some block symbols use a fallback in `obliq:pdf` output (section 6.7).
+- **Pre-existing TypeScript errors** under `tsc --noEmit` (section 13).
+
+## 15. Glossary
+
+| Term | Meaning |
+|---|---|
+| Block | One element of a diagram, with a `type`, a `name`, a `position` and `parameters` |
+| Block module | The class that gives the ports, types and C code of one block type (`src/lib/blocks/`) |
+| Wire | A connection from one output port to one input port (`connections` in a sheet) |
+| Net | All the wires that start at the same output port. The wire router lets one net share a track |
+| Sheet | One diagram page: blocks, wires and extents. A model has top-level sheets, and a subsystem has nested sheets |
+| Subsystem | A block that holds its own sheets, with Input Port and Output Port blocks as its ports |
+| Subsystem reference | A subsystem that uses the sheets of a definition subsystem in the same model, with its own parameter values |
+| Model reference | A subsystem that embeds another saved model. Its ports are the top-level ports of that model |
+| Sheet Label Sink, Sheet Label Source | A pair of blocks that carries a named signal without a drawn wire, in one scope: the top-level sheets, or the sheets of one subsystem |
+| Segregated subsystem | A subsystem with `codeGenStrategy` `segregated` or `segregated_atomic`. It becomes its own C module |
+| Shared module | One C module for a definition subsystem and all its references |
+| Satellite | A leaf block with one wire, such as a Sheet Label, a constant or a display. The ELK layout puts it beside its host block |
+| Return row | The feedback path of a control loop, drawn mirrored on a row below the forward path |
+| Subsystem function | The role of a subsystem in a loop (`controller`, `actuator`, `plant`, `sensor`, `compensator`, `other`). Only the layout uses it |
+| Profile | A command-line variant of the C project files (section 7.3) |
+| Managed model | A model whose current file is in the store folder |
+| Linked model | A model whose current file is outside the store folder |
+| Autosave | The unsaved state of a model, written every 5 minutes when it is dirty. Compile requests call it version 0 |
+
+## 16. Related documents
+
+| Document | Use it for |
+|---|---|
+| [README.md](../README.md) | Features, setup and commands |
+| [CHANGELOG.md](../CHANGELOG.md) | Release history |
+| [docs/blocks-reference.md](../docs/blocks-reference.md) | Block types and parameters |
+| [docs/block-modules.md](../docs/block-modules.md) | The block module interface |
+| [docs/adding-new-block-types.md](../docs/adding-new-block-types.md) | The steps to add a block type |
+| [docs/code-generation-architecture.md](../docs/code-generation-architecture.md) | Generated C structure and integration methods |
+| [docs/NATIVE_SUBSYSTEM_DESIGN.md](../docs/NATIVE_SUBSYSTEM_DESIGN.md) | Segregated subsystems as C modules |
+| [docs/model-testing-plan.md](../docs/model-testing-plan.md) | Assert blocks, the test runner and model references |
+| [docs/layout-engine-comparison.md](../docs/layout-engine-comparison.md), [docs/layout-improvement-plan-pass-2.md](../docs/layout-improvement-plan-pass-2.md) | The ELK layout and its phases |
+| [docs/model-builder-api.md](../docs/model-builder-api.md), [docs/automation-api.md](../docs/automation-api.md) | HTTP APIs |
+| [reference-models/README.md](../reference-models/README.md) | Shipped models, their layout and PDFs |
+| [mcp-server/README.md](../mcp-server/README.md) | MCP server |
+| [__tests__/wasm/README.md](../__tests__/wasm/README.md) | WASM tests and the Docker image |
+
+Some of these documents are older than the code. When a document and the code disagree, the code is correct.
+
+## 17. How to keep this document correct
+
+Update this document in the same change as the code. Use this table to find the sections:
+
+| When you change | Update |
+|---|---|
+| A route under `src/app/api/`, or authentication | Sections 2, 6 and 8 |
+| `src/lib/server/storage/` (paths, tables, migrations) | Section 9 |
+| A `package.json` script or a file in `scripts/` | Section 10 |
+| The model schema or the hierarchy kinds | Section 4 and the glossary |
+| The code generation stages, strategies or profiles | Sections 7 and 11.2 |
+| The simulation path, the cache or the WASM exports | Section 6.3 and section 11.5 |
+| The layout engines or the layout score | Sections 6.6 and 12 |
+| The PDF export | Section 6.7 |
+| The places that know a block type | Section 11.1 |
+| A test group, a golden file or a tool that tests need | Section 13 |
+| An item in section 14 is fixed | Remove it from section 14 |
+| A new top-level directory | Section 5.2 |
+
+Before you commit, check that each path in backticks exists and that each `npm run` command is in `package.json`.
