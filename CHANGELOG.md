@@ -1,5 +1,21 @@
 # obliq-2 Change Log
 
+## What's New in 3.8.3
+
+Two defects in the C code generator are fixed, and the full test suite passes again. Thirty tests failed before this release. **The generated code of the FPV Vehicle does not change.** You do not have to export the model again.
+
+- **Fixed: a Source block that uses a vector or matrix model parameter gave C code that did not compile.** The Source block reads each parameter as `PARAM_<name>`, but the model header defined that name only for scalar parameters. The compiler reported `PARAM_<name>` as undeclared. The header now defines it for vector and matrix parameters also.
+- **Fixed: a `float` value that is a whole number gave an invalid literal.** The value `1` was written as `1f`, which C does not accept. It is now `1.0f`. This applied to scalar, vector and matrix `float` parameters, and to `float` initial values.
+- **New test: parameter code is compiled.** `parameter-code-generation.test.ts` compiles the generated code of six parameter types with `gcc -std=c99`. A check of the text cannot find code that does not compile. The test does not run when `gcc` is not installed.
+- **Tests corrected.** These tests expected the output of earlier versions of the generator. The generator was correct.
+  - `source-block-parameters` and `feature3-type-propagation`: a Source block reads `PARAM_<name>`, and a literal constant is set one time in `_init`.
+  - `codegen/parameter-code-generation`: the storage of a vector or matrix parameter is in the `.c` file. The header declares it as `extern`.
+  - `divide-block`: the operands of a division are in parentheses.
+  - `codegen/segregated-subsystem`, `codegen/subsystem-reference-codegen` and `codegen/subsystem-reference-larger-model`: the field of a subsystem instance has the parent path and the block name, for example `Blade_Blade`. The name generation does not change in this release.
+  - `transfer-function-howlett-servos`: the test compared the text `3125`, but `1 / 0.00032` is `3124.9999999999995` as a `double`. It now compares the number.
+- **Test harness corrected: `integration/code-generation/code-compilation`.** All models compiled and ran, but the Docker container left a build folder that `root` owned, and the test could not remove it. The container now removes that folder when it stops. The test also removes such a folder from an earlier run before it starts.
+- **Removed: `uh60-import-smoke.test.ts` and `scripts/smoke-uh60-import.ts`.** They read a UH-60 rotor model from a different repository. That model is obsolete.
+
 ## What's New in 3.8.2
 
 You can now make a PDF of a model from the command line. The PDF has the same pages as **Export as PDF…** in the editor. Each shipped reference model now has a PDF beside it.
