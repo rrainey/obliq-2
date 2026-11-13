@@ -183,10 +183,11 @@ describe('return row on the FPV vehicle', () => {
     // Between the controller and the plant
     expect(x('Sensors')).toBeGreaterThan(x('FlightController'))
     expect(x('Sensors')).toBeLessThan(x('Frame') + rect(at('Frame')).w)
-    // Its Sheet Label Sinks and the gnss_env Input Port are on the row too, flipped
-    const flipped = main.blocks.filter(b => b.parameters?.flipped).map(b => b.name)
-    expect(flipped).toContain('gnss_env')
-    expect(flipped.filter(n => n.startsWith('Tag_')).length).toBeGreaterThan(5)
+    // Its Output Ports (beside its outputs) and the gnss_env Input Port are on the row too, flipped
+    const flipped = main.blocks.filter(b => b.parameters?.flipped)
+    expect(flipped.map(b => b.name)).toContain('gnss_env')
+    expect(flipped.filter(b => b.type === 'output_port').map(b => b.name).sort()).toEqual(
+      ['gnss_course', 'gnss_fix', 'gnss_pos', 'gnss_vel_ned', 'imu_accel', 'imu_gyro', 'mag', 'pressure'])
   })
 
   it('has no hard fault on any sheet and flips nothing on the inner sheets', () => {
@@ -205,13 +206,14 @@ describe('return row on the FPV vehicle', () => {
     expect(score(tuned).crossings).toBeLessThan(score(flat).crossings)
   })
 
-  it('reproduces the Phase 3 result with the option off', () => {
+  it('gives the known result with the option off', () => {
+    // Phase 3 gave Main 86 crossings, 3226 × 1821 px, and 3540 crossings in
+    // total (3546 after the micro-jog fix of Phase 6). Release 3.8.1 removed
+    // the Telemetry sheet and put the Output Ports on Main, beside their hosts.
     const main = scoreSheetTree(flat).find(s => s.path.join('/') === 'Main')!.metrics
-    expect(main).toMatchObject({ crossings: 86, width: 3226, height: 1821 })
+    expect(main).toMatchObject({ crossings: 88, width: 3568, height: 1739 })
     const total = scoreSheetTree(flat).reduce((n, s) => n + s.metrics.crossings, 0)
-    // 3540 in Phase 3. The micro-jog fix (Phase 6) counts 6 more: crossings
-    // that a sub-pixel step of one wire hid, with its bend on the other wire.
-    expect(total).toBe(3546)
+    expect(total).toBe(3261)
     expect(buildFullPlan(flat).sheets.flatMap(s => s.blocks).some(b => b.parameters?.flipped)).toBe(false)
   })
 })

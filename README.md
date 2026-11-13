@@ -111,10 +111,11 @@ To lay out a model, right-click the empty canvas and choose **Tune Model Layout.
 A scope can include sheets in subsystems that are not open. The dialog shows how many sheets a scope covers, and it warns when that is more than one. You cannot undo a layout, but each Save keeps a version snapshot.
 
 **Block placement (ELK Layered)**
-- Blocks go into layers by signal flow, so data goes from left to right. Input Ports go in the first layer and Output Ports in the last layer.
+- Blocks go into layers by signal flow, so data goes from left to right. Input Ports go in the first layer and Output Ports in the last layer, with the exception that follows.
+- **Output Ports beside their hosts.** The layout also lays out each sheet that has an Output Port with each Output Port beside the block output that drives it, as a satellite (see below). On a flipped host, the Output Port is on the left of the host. The layout keeps this result only when it has fewer crossings and no wire through a block, overlap, wire end against its port direction or small step. Else the Output Ports stay in the last layer. This follows MAB guideline db_0042: Outports go on the right, but you can move them to prevent wire crossings. The command line can force one result (`--output-ports column` or `beside`).
 - In a feedback loop, the feedback wires are the wires that go back to an earlier block in the signal-flow order.
-- **Satellite blocks** are leaf blocks with one wire: Sheet Label Sinks and Sources, constants, clocks, data store reads and writes, No Connection blocks, displays and loggers. The layout puts a satellite beside the block that it connects to (its host), on the row of the host port, so that its wire is straight:
-  - a Sheet Label Sink, a data store write, a display or a logger goes to the right of the host's output port;
+- **Satellite blocks** are leaf blocks with one wire: Sheet Label Sinks and Sources, constants, clocks, data store reads and writes, No Connection blocks, displays and loggers (and Output Ports, see above). The layout puts a satellite beside the block that it connects to (its host), on the row of the host port, so that its wire is straight:
+  - a Sheet Label Sink, a data store write, a display, a logger or an Output Port goes to the right of the host's output port;
   - a Sheet Label Source, a constant or a data store read goes to the left of the host's input port.
 - When adjacent satellites do not fit in one column, the layout **staggers** them across two or more sub-columns. The wire to a farther satellite goes past the nearer satellites and their names.
 - When the ports of a host are too near each other for its satellites, each satellite wire turns one time. These wires do not cross. To make more of these wires straight, also select **Resize Subsystems**.
@@ -125,6 +126,7 @@ A scope can include sheets in subsystems that are not open. The dialog shows how
 - **Port names.** When a block shows its port names outside its edges, the layout keeps that space free. The first bend of a wire comes after the widest port name of that side.
 - Comment blocks do not move.
 - The layout does not use the current block positions. Thus a second layout of a laid-out sheet changes nothing.
+- **Names and port labels first.** The tune applies **Subsystem Ports Labeling** and **Hide unnecessary block names** before the layout, so that the layout reserves space only for the names and port names that the blocks show. Thus a second tune with the same options changes nothing.
 
 **Wire routing (ELK Layered)**
 - Each wire goes around the blocks with horizontal and vertical segments. No wire goes through a block. On the shipped reference models, no wire overlaps a wire of a different net.
@@ -176,7 +178,7 @@ With this option, the layout owns the flip: it flips the blocks on the return ro
 **Resize Subsystems**
 - Resizing fits the height of each subsystem to the positions of the blocks that it connects to. Then it limits the height, so that adjacent ports are at most **Maximum port spacing** apart. The resize ignores wires to blocks that another subsystem also feeds (for example a mux fed by four motors), because no size can align them all.
 - Each resize starts from the natural size of the subsystem. Thus the result does not depend on earlier sizes, also sizes set by hand, and a second resize gives the same result.
-- The result goes into the model as `width` and `height`. With ELK Layered, the layout uses the Classic fit for the sizes, then lays out the sheet with these sizes.
+- The result goes into the model as `width` and `height`. With ELK Layered, the layout uses the Classic fit for the sizes, then lays out the sheet with these sizes. For this fit, the order in each column starts from the order of the block list, not from the current block positions. Thus the sizes do not depend on the block positions.
 - To resize a subsystem by hand, right-click the block, choose **Resize...**, and drag a corner handle.
 
 **Tidy signal labels**
@@ -191,11 +193,11 @@ This adjustment changes the model. It adds, removes or moves Sheet Label Sinks a
   - the wires of the forward path of a loop, and the wires between two subsystems that have a function other than Other;
   - the wires between the return row and the forward path;
   - the last drawn wire from one subsystem to another (MAB guideline jc_0171);
-  - a wire into an Output Port, and a Sheet Label Source that feeds an Output Port (for example, the Telemetry sheet of the FPV vehicle).
+  - a wire into an Output Port, and a Sheet Label Source that feeds an Output Port.
 - **Names.** A new signal name comes from the output port name of a subsystem, the port name of an Input Port, or the block name. A unit suffix stays at the end of the name. When the name is already in the model, the adjustment adds a number before the unit suffix (`rate_2_dps`). The adjustment does not add a unit, and it does not rename an existing Sheet Label or port.
 - **End points.** After the layout, each Sheet Label Sink is at the right end of its wire and each Source at the left end (on a flipped block, the opposite). The summary counts the labels that do not obey this rule.
 - The summary counts the edits of each kind. The command line lists each edit with `--report`.
-- The adjustment is slow on large models: about 30 s for all 29 sheets of the FPV vehicle, against about 3 s without it.
+- The adjustment is slow on large models: about 60 s for all 28 sheets of the FPV vehicle, against about 6 s without it.
 
 **Wire crossings and junctions**
 

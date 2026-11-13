@@ -49,7 +49,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true
+                        "showName": false
                       }
                     },
                     {
@@ -61,7 +61,7 @@
                         "y": 278
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 8,
                         "cols": 1,
                         "baseType": "double",
@@ -77,7 +77,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -98,7 +98,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -119,7 +119,7 @@
                         "y": 242
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -140,7 +140,7 @@
                         "y": 326
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           0.5,
@@ -167,7 +167,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -188,7 +188,7 @@
                         "y": 494
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           0.25,
@@ -211,7 +211,7 @@
                         "y": 578
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -232,7 +232,7 @@
                         "y": 662
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           4.999,
@@ -255,7 +255,7 @@
                         "y": 345.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "sticks",
                         "dataType": "double[8]"
                       }
@@ -479,7 +479,9 @@
                 "version": null,
                 "name": "FPV Vehicle"
               },
-              "modelRefName": "FPV Vehicle"
+              "modelRefName": "FPV Vehicle",
+              "width": 200,
+              "height": 840
             }
           },
           {
@@ -516,7 +518,7 @@
                         "y": 486
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 4,
                         "cols": 1,
                         "baseType": "double",
@@ -532,7 +534,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 14,
                         "dataType": "double"
@@ -547,7 +549,7 @@
                         "y": 494
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0.8,
                         "dataType": "double"
@@ -562,7 +564,7 @@
                         "y": 578
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1.3,
                         "dataType": "double"
@@ -577,7 +579,7 @@
                         "y": 662
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1,
                         "dataType": "double"
@@ -592,7 +594,7 @@
                         "y": 513.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "gnss_env",
                         "dataType": "double[4]"
                       }
@@ -606,7 +608,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1.2425,
                         "dataType": "double"
@@ -621,7 +623,7 @@
                         "y": 167.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "grid_convergence_deg",
                         "dataType": "double"
                       }
@@ -635,7 +637,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1,
                         "dataType": "double"
@@ -650,7 +652,7 @@
                         "y": 83.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "rc_link_valid",
                         "dataType": "double"
                       }
@@ -664,7 +666,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 2,
                         "dataType": "double"
@@ -679,7 +681,7 @@
                         "y": 83.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "failsafe_procedure",
                         "dataType": "double"
                       }
@@ -693,7 +695,7 @@
                         "y": 234
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 3,
                         "cols": 1,
                         "baseType": "double",
@@ -709,7 +711,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           9.999,
@@ -732,7 +734,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true
+                        "showName": false
                       }
                     },
                     {
@@ -744,7 +746,7 @@
                         "y": 242
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -759,7 +761,7 @@
                         "y": 326
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -774,7 +776,7 @@
                         "y": 251.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "wind_ned",
                         "dataType": "double[3]"
                       }
@@ -889,11 +891,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_pos_ned",
             "position": {
-              "x": 710,
+              "x": 816,
               "y": 208
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "pos_ned"
             }
           },
@@ -902,11 +904,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler",
             "position": {
-              "x": 846,
+              "x": 952,
               "y": 268
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "euler"
             }
           },
@@ -915,11 +917,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_warnings",
             "position": {
-              "x": 710,
+              "x": 816,
               "y": 608
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_warnings"
             }
           }
@@ -1002,7 +1004,7 @@
           }
         ],
         "extents": {
-          "width": 1146,
+          "width": 1252,
           "height": 808
         }
       },
@@ -1019,7 +1021,7 @@
               "y": 324
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "pos_ned"
             }
           },
@@ -1032,7 +1034,7 @@
               "y": 324
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           },
@@ -1045,7 +1047,7 @@
               "y": 412
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_warnings"
             }
           },
@@ -1058,7 +1060,7 @@
               "y": 412
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           }
@@ -1094,10 +1096,10 @@
             "name": "From_fc_warnings",
             "position": {
               "x": 110,
-              "y": 500
+              "y": 494
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_warnings"
             }
           },
@@ -1107,10 +1109,10 @@
             "name": "FailBit",
             "position": {
               "x": 262,
-              "y": 500
+              "y": 494
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 1,
               "expression": "fmod(floor(in(0) / 4.0 + 1e-9), 2.0)"
             }
@@ -1121,10 +1123,10 @@
             "name": "HoldsBeforeGust",
             "position": {
               "x": 586,
-              "y": 500
+              "y": 494
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 0,
               "upper": 0,
@@ -1139,10 +1141,10 @@
             "name": "FailedOncePrev",
             "position": {
               "x": 928,
-              "y": 416
+              "y": 410
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "initialValue": 0,
               "sampleInterval": 0
             }
@@ -1153,10 +1155,10 @@
             "name": "FailedOnce",
             "position": {
               "x": 596,
-              "y": 416
+              "y": 410
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 2,
               "expression": "(in(0) > 0.5 || in(1) > 0.5) ? 1.0 : 0.0"
             }
@@ -1167,10 +1169,10 @@
             "name": "FailsAfterGust",
             "position": {
               "x": 928,
-              "y": 332
+              "y": 326
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 1,
               "upper": 1,
@@ -1185,10 +1187,10 @@
             "name": "StaysFailed",
             "position": {
               "x": 586,
-              "y": 332
+              "y": 326
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 1,
               "upper": 1,
@@ -1203,10 +1205,10 @@
             "name": "RollPitchDeg",
             "position": {
               "x": 334,
-              "y": 248
+              "y": 242
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "gain": 57.29577951308232
             }
           },
@@ -1216,10 +1218,10 @@
             "name": "From_euler",
             "position": {
               "x": 110,
-              "y": 248
+              "y": 242
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "euler"
             }
           },
@@ -1229,10 +1231,10 @@
             "name": "RollPitch",
             "position": {
               "x": 222,
-              "y": 248
+              "y": 242
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 0,
                 1
@@ -1245,10 +1247,10 @@
             "name": "StaysUpright",
             "position": {
               "x": 446,
-              "y": 248
+              "y": 242
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": -60,
               "upper": 60,
@@ -1293,19 +1295,19 @@
               "waypoints": [
                 {
                   "x": 1024,
-                  "y": 448
+                  "y": 442
                 },
                 {
                   "x": 1024,
-                  "y": 490
+                  "y": 484
                 },
                 {
                   "x": 580,
-                  "y": 490
+                  "y": 484
                 },
                 {
                   "x": 580,
-                  "y": 458.6666666666667
+                  "y": 452.6666666666667
                 }
               ]
             }
@@ -1355,7 +1357,7 @@
         ],
         "extents": {
           "width": 1228,
-          "height": 700
+          "height": 694
         }
       }
     ]

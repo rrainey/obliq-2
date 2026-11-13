@@ -60,6 +60,11 @@ Layout options (the same as the Tune Model Layout dialog):
                             --engine elk.
   --no-port-name-clearance  Do not reserve the space of the port names outside
                             blocks. Only with --engine elk.
+  --output-ports <auto|column|beside>
+                            Where the Output Ports go (default auto): in the right
+                            column, beside the block output that drives them, or
+                            the one of the two with fewer crossings. Only with
+                            --engine elk.
   --no-mirror               Do not mirror the feedback-path blocks: no return row
                             below the forward path, and the stored flip of each
                             block does not change. Only with --engine elk.
@@ -106,7 +111,7 @@ interface CliArgs {
   options: TuneLayoutOptions
 }
 
-const VALUE_FLAGS = new Set(['-o', '--out', '--scope', '--sheet', '--max-port-spacing', '--port-labels', '--engine', '--elk-order'])
+const VALUE_FLAGS = new Set(['-o', '--out', '--scope', '--sheet', '--max-port-spacing', '--port-labels', '--engine', '--elk-order', '--output-ports'])
 
 function parseArgs(argv: string[]): CliArgs {
   const values = new Map<string, string>()
@@ -169,6 +174,9 @@ function parseArgs(argv: string[]): CliArgs {
   if (flags.has('--no-roles') && engine !== 'elk') fail('--no-roles needs --engine elk')
   if (flags.has('--no-port-name-clearance') && engine !== 'elk') fail('--no-port-name-clearance needs --engine elk')
   if (flags.has('--no-mirror') && engine !== 'elk') fail('--no-mirror needs --engine elk')
+  const outputPorts = values.get('--output-ports') as 'auto' | 'column' | 'beside' | undefined
+  if (outputPorts !== undefined && !['auto', 'column', 'beside'].includes(outputPorts)) fail('--output-ports must be auto, column or beside')
+  if (outputPorts !== undefined && engine !== 'elk') fail('--output-ports needs --engine elk')
   if (flags.has('--tidy-labels') && (engine !== 'elk' || flags.has('--no-clean-up'))) fail('--tidy-labels needs --engine elk and the clean-up')
   if (Object.keys(tidyOptions).length > 0 && !flags.has('--tidy-labels')) fail('--tidy-option needs --tidy-labels')
 
@@ -193,6 +201,7 @@ function parseArgs(argv: string[]): CliArgs {
       useSubsystemFunctions: !flags.has('--no-roles'),
       mirrorReturnPath: !flags.has('--no-mirror'),
       ...(flags.has('--no-port-name-clearance') ? { portNameClearance: false } : {}),
+      ...(outputPorts ? { outputPorts } : {}),
       ...(flags.has('--tidy-labels') ? { tidySignalLabels: true } : {}),
       ...(Object.keys(tidyOptions).length > 0 ? { tidyLabelOptions: tidyOptions as Partial<TidyLabelOptions> } : {}),
     },

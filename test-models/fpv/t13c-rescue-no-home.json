@@ -49,7 +49,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true
+                        "showName": false
                       }
                     },
                     {
@@ -61,7 +61,7 @@
                         "y": 278
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 8,
                         "cols": 1,
                         "baseType": "double",
@@ -77,7 +77,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -98,7 +98,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -119,7 +119,7 @@
                         "y": 242
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -140,7 +140,7 @@
                         "y": 326
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           2,
@@ -167,7 +167,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -188,7 +188,7 @@
                         "y": 494
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           0.249,
@@ -223,7 +223,7 @@
                         "y": 578
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           5.999,
@@ -250,7 +250,7 @@
                         "y": 662
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           3.999,
@@ -273,7 +273,7 @@
                         "y": 345.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "sticks",
                         "dataType": "double[8]"
                       }
@@ -497,7 +497,9 @@
                 "version": null,
                 "name": "FPV Vehicle"
               },
-              "modelRefName": "FPV Vehicle"
+              "modelRefName": "FPV Vehicle",
+              "width": 200,
+              "height": 840
             }
           },
           {
@@ -534,7 +536,7 @@
                         "y": 486
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 4,
                         "cols": 1,
                         "baseType": "double",
@@ -550,7 +552,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           0.799,
@@ -573,7 +575,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true
+                        "showName": false
                       }
                     },
                     {
@@ -585,7 +587,7 @@
                         "y": 494
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0.8,
                         "dataType": "double"
@@ -600,7 +602,7 @@
                         "y": 578
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1.3,
                         "dataType": "double"
@@ -615,7 +617,7 @@
                         "y": 662
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1,
                         "dataType": "double"
@@ -630,7 +632,7 @@
                         "y": 513.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "gnss_env",
                         "dataType": "double[4]"
                       }
@@ -644,7 +646,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1.2425,
                         "dataType": "double"
@@ -659,7 +661,7 @@
                         "y": 167.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "grid_convergence_deg",
                         "dataType": "double"
                       }
@@ -673,7 +675,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1,
                         "dataType": "double"
@@ -688,7 +690,7 @@
                         "y": 83.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "rc_link_valid",
                         "dataType": "double"
                       }
@@ -702,7 +704,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 2,
                         "dataType": "double"
@@ -717,7 +719,7 @@
                         "y": 83.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "failsafe_procedure",
                         "dataType": "double"
                       }
@@ -731,7 +733,7 @@
                         "y": 234
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 3,
                         "cols": 1,
                         "baseType": "double",
@@ -747,7 +749,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -762,7 +764,7 @@
                         "y": 242
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -777,7 +779,7 @@
                         "y": 326
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -792,7 +794,7 @@
                         "y": 251.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "wind_ned",
                         "dataType": "double[3]"
                       }
@@ -907,11 +909,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_armed",
             "position": {
-              "x": 710,
+              "x": 816,
               "y": 462
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_armed"
             }
           },
@@ -920,11 +922,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_home_valid",
             "position": {
-              "x": 846,
+              "x": 952,
               "y": 522
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "home_valid"
             }
           },
@@ -933,11 +935,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_warnings",
             "position": {
-              "x": 710,
+              "x": 816,
               "y": 602
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_warnings"
             }
           },
@@ -946,11 +948,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_alt_est",
             "position": {
-              "x": 846,
+              "x": 952,
               "y": 642
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "alt_est"
             }
           },
@@ -959,11 +961,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_rescue_phase",
             "position": {
-              "x": 710,
+              "x": 816,
               "y": 762
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "rescue_phase"
             }
           }
@@ -1060,7 +1062,7 @@
           }
         ],
         "extents": {
-          "width": 1146,
+          "width": 1252,
           "height": 962
         }
       },
@@ -1077,7 +1079,7 @@
               "y": 280
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "rescue_phase"
             }
           },
@@ -1090,7 +1092,7 @@
               "y": 280
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           },
@@ -1103,7 +1105,7 @@
               "y": 368
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_warnings"
             }
           },
@@ -1116,7 +1118,7 @@
               "y": 368
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           },
@@ -1129,7 +1131,7 @@
               "y": 456
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "alt_est"
             }
           },
@@ -1142,7 +1144,7 @@
               "y": 456
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           }
@@ -1188,7 +1190,7 @@
               "y": 655
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "rescue_phase"
             }
           },
@@ -1198,10 +1200,10 @@
             "name": "From_fc_warnings",
             "position": {
               "x": 626,
-              "y": 154
+              "y": 70
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_warnings"
             }
           },
@@ -1211,10 +1213,10 @@
             "name": "WarnRescueOff",
             "position": {
               "x": 778,
-              "y": 154
+              "y": 70
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 1,
               "expression": "fmod(floor(in(0) / 2.0 + 1e-9), 2.0)"
             }
@@ -1225,10 +1227,10 @@
             "name": "From_home_valid",
             "position": {
               "x": 364,
-              "y": 82
+              "y": 70
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "home_valid"
             }
           },
@@ -1238,10 +1240,10 @@
             "name": "NoHomeOnReArm",
             "position": {
               "x": 516,
-              "y": 82
+              "y": 70
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 0,
               "upper": 0,
@@ -1259,7 +1261,7 @@
               "y": 154
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 1,
               "upper": 1,
@@ -1277,7 +1279,7 @@
               "y": 70
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 0,
               "upper": 0,
@@ -1295,7 +1297,7 @@
               "y": 406
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 1,
               "expression": "(fabs(in(0) - 7.0) < 0.5) ? 1.0 : 0.0"
             }
@@ -1309,7 +1311,7 @@
               "y": 490
             },
             "parameters": {
-              "showName": true
+              "showName": false
             }
           },
           {
@@ -1321,7 +1323,7 @@
               "y": 490
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "initialValue": -1,
               "sampleInterval": 0
             }
@@ -1335,7 +1337,7 @@
               "y": 482
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 3,
               "expression": "(in(2) < 0.0 && in(0) > 0.5) ? in(1) : in(2)"
             }
@@ -1349,7 +1351,7 @@
               "y": 406
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 5.999,
               "upper": 6.02,
@@ -1367,7 +1369,7 @@
               "y": 311
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 1,
               "expression": "(fabs(in(0) - 2) < 0.5) ? 1.0 : 0.0"
             }
@@ -1381,7 +1383,7 @@
               "y": 321.6666666666667
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "initialValue": 0,
               "sampleInterval": 0
             }
@@ -1395,7 +1397,7 @@
               "y": 321.6666666666667
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 2,
               "expression": "(in(0) > 0.5 || in(1) > 0.5) ? 1.0 : 0.0"
             }
@@ -1409,7 +1411,7 @@
               "y": 238
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 0,
               "upper": 0,
@@ -1427,7 +1429,7 @@
               "y": 655
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 1,
               "expression": "(fabs(in(0) - 8) < 0.5) ? 1.0 : 0.0"
             }
@@ -1441,7 +1443,7 @@
               "y": 665.6666666666666
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "initialValue": 0,
               "sampleInterval": 0
             }
@@ -1455,7 +1457,7 @@
               "y": 665.6666666666666
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 2,
               "expression": "(in(0) > 0.5 || in(1) > 0.5) ? 1.0 : 0.0"
             }
@@ -1469,7 +1471,7 @@
               "y": 582
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 0,
               "upper": 0,
@@ -1484,10 +1486,10 @@
             "name": "From_fc_armed",
             "position": {
               "x": 110,
-              "y": 82
+              "y": 70
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_armed"
             }
           },
@@ -1497,10 +1499,10 @@
             "name": "DisarmedOnImpact",
             "position": {
               "x": 254,
-              "y": 82
+              "y": 70
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 0,
               "upper": 0,

@@ -58,6 +58,15 @@ export const SATELLITE_TYPES = new Set<string>([
   'signal_logger',
 ])
 
+/**
+ * The Output Port as a satellite (ElkLayoutOptions.outputPorts). It is not
+ * in SATELLITE_TYPES: by default an Output Port goes in the right column of
+ * the sheet (the ELK layer constraint LAST). With `beside`, an Output Port
+ * goes beside the host output port that drives it, as a Sheet Label Sink
+ * does.
+ */
+export const OUTPUT_PORT_SATELLITE_TYPE = 'output_port'
+
 /** Gap between the block edge and a port name outside the block (px): BlockNode `.port-name-label`. */
 export const PORT_LABEL_MARGIN = 12
 /** ELK's least distance between a node border and a wire bend in the next layer (`elk.spacing.edgeNodeBetweenLayers`, default 10 px). */
@@ -100,12 +109,15 @@ export interface SatelliteDetection {
  *   - another satellite already uses the same host output port;
  *   - the block is flipped and its host is not, or the opposite.
  * `isLaidOut` tells which blocks are in the layout (not comments).
+ * `notSatellites` gives blocks that are never satellites (the connector
+ * nodes of returnRow.ts, which are not blocks of the model).
  */
 export function findSatellites(
   blocks: BlockData[],
   wires: WireData[],
   isLaidOut: (b: BlockData) => boolean = () => true,
   types: ReadonlySet<string> = SATELLITE_TYPES,
+  notSatellites: ReadonlySet<string> = new Set(),
 ): SatelliteDetection {
   const byId = new Map(blocks.filter(isLaidOut).map(b => [b.id, b]))
   const wiresOf = new Map<string, WireData[]>()
@@ -119,7 +131,7 @@ export function findSatellites(
       wiresOf.get(id)!.push(w)
     }
   }
-  const candidate = (b: BlockData) => types.has(b.type) && (wiresOf.get(b.id)?.length ?? 0) === 1
+  const candidate = (b: BlockData) => types.has(b.type) && !notSatellites.has(b.id) && (wiresOf.get(b.id)?.length ?? 0) === 1
     && wiresOf.get(b.id)![0].sourceBlockId !== wiresOf.get(b.id)![0].targetBlockId
 
   const satellites = new Map<string, Satellite>()

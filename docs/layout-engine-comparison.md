@@ -892,3 +892,80 @@ FPV vehicle, 29 sheets: crossings 3544 (no change), bends 3574 → 3570, straigh
 
 The golden test lays out the stored file with each engine. The classic engine starts the order of each column from the stored block positions, and it keeps the stored flip and the grown subsystem heights. Thus its result on the new file is different: 557 wires through blocks (529 before), 320 overlaps (277), 5026 crossings (5425), 197 wire ends against the port direction (205), and 136 small steps. With the old heights and no flip, but the new positions, it gives 549, 271 and 5066: most of the change comes from the positions. The ELK result does not change, because ELK does not read the positions. The golden file has the new classic values.
 
+## 3.8.1 results
+
+Release 3.8.1 changes the FPV vehicle and the layout of the shipped models. It also adds one layout rule and fixes two causes of a second tune that changes the layout.
+
+### Changes
+
+- **The vehicle has no Telemetry sheet.** The builder puts the 41 Output Ports on Main. Each Output Port has a direct wire from the block output that computes it. The 41 Sheet Label Sinks on Main and the 41 Sheet Label Sources on Telemetry are removed: no other block, sheet or model read them. The vehicle has 28 sheets; it had 29.
+- **Output Ports beside their hosts (`outputPorts`, `elkLayout.ts`).** Before, each Output Port had the ELK layer constraint LAST and was not a satellite. Now, with `auto` (the default), `computeElkLayout()` lays out each sheet that has an Output Port two times: with the Output Ports in the last layer (`column`), and with each Output Port that has one wire as a satellite beside its host output port (`beside`). On a mirrored return-row host, the satellite is on the left of the host. `chooseOutputPorts()` keeps `beside` only when it has no hard fault or small step and fewer crossings than `column`. On a tie, `column` stays, because the right column is the usual place of an Output Port (MAB db_0042). The return row receives the same satellite types, so an Output Port of a return-row block goes on the row.
+- **Names and port labels before the layout (`tuneModelLayout.ts`).** The tune now applies `subsystemPortLabels` and `hideBlockNames` before the layout. Before, the layout reserved space for the names that the tune then hid, and a second tune gave another layout.
+- **Resize Subsystems does not read the positions (`layoutSheetElk()`).** The Classic fit starts the order of each column from the stored y positions. With ELK, the fit now gets the order of the block list. Before, a second tune could give other sizes (PositionControl: 260 px, then 250 px).
+- **The shipped and test models** are laid out with `SHIPPED_LAYOUT_OPTIONS` in the builder: the defaults, and also Resize Subsystems (maximum port spacing 40 px), subsystem port labels shown, and the names of all blocks except subsystems hidden. Not Tidy signal labels.
+
+### Output Ports: column, beside and auto
+
+FPV vehicle, all with the 3.8.1 options of the builder. Area is the sum of width × height of the sheets.
+
+| Rule | Main crossings | Main bends | Main size (px) | Total crossings | Total bends | Straight | Area (Mpx) |
+|---|---|---|---|---|---|---|---|
+| `column` (the 3.8.0 rule) | 161 | 260 | 2569 × 3760 | 3627 | 3512 | 522 | 143.7 |
+| `beside` on all sheets | 84 | 182 | 2627 × 2088 | 3271 | 3612 | 573 | 134.4 |
+| `auto` (chosen) | 84 | 182 | 2627 × 2088 | 3257 | 3566 | 582 | 133.4 |
+
+With `auto`, 7 of the 28 sheets keep `beside`. The other sheets keep `column`: their crossings are equal, or `beside` has more crossings (for example AltHold 37 → 42, Failsafe 54 → 57). The sheets that change from `column` to `auto`:
+
+| Sheet | Cross | Bends | Strt | Size (px) |
+|---|---|---|---|---|
+| Main | 161 → 84 | 260 → 182 | 8 → 46 | 2569 × 3760 → 2627 × 2088 |
+| FlightController | 616 → 453 | 318 → 408 | 23 → 37 | 4886 × 3758 → 6771 × 2403 |
+| GpsRescue | 1530 → 1432 | 908 → 946 | 61 → 62 | 8510 × 6279 → 9372 × 5273 |
+| PosHold | 99 → 94 | 178 → 172 | 18 → 22 | 3406 × 1525 → 3837 × 1406 |
+| Frame | 37 → 28 | 146 → 158 | 29 → 31 | 1654 × 1746 → 1926 × 1520 |
+| GNSS | 133 → 116 | 216 → 210 | 46 → 47 | 4379 × 1400 → 4379 × 1348 |
+| Battery | 1 → 0 | 14 → 18 | 7 → 7 | 846 × 279 → 1014 × 188 |
+
+Costs. The rule puts crossings first, as the satellite candidates do. On five sheets, a decrease in crossings costs other values:
+- More bends on FlightController (+90), GpsRescue (+38), Frame (+12) and Battery (+4). On Battery, the feedback wire of the voltage goes around the right side of the sheet.
+- Wider sheets: FlightController (+1885 px), GpsRescue (+862 px), PosHold (+431 px), Frame (+272 px) and Battery (+168 px). Each of these sheets is less high, and only PosHold (+3.5 %) and Frame (+1.5 %) have a larger area.
+
+The FPV Demo Flight, FPV Acro Rate Step and the Tnn test models do not change with the rule: on each of their sheets, `beside` has no fewer crossings.
+
+### Maximum port spacing
+
+With Resize Subsystems, FlightController's 22 outputs are 40 px apart, and an Output Port is 45 px high. Thus the Output Ports of FlightController are staggered across two sub-columns, on straight wires. On Main, the straight Output Port wires and the size are:
+
+| Maximum port spacing | Straight Output Port wires on Main | Main crossings | Main size (px) | Vehicle area (Mpx) |
+|---|---|---|---|---|
+| 40 (default, chosen) | 39 of 41 | 84 | 2627 × 2088 | 133.4 |
+| 50 | 37 of 41 | 90 | 2617 × 2480 | 135.5 |
+| 60 | 41 of 41 | 84 | 2572 × 2695 | 137.4 |
+
+50 px has more crossings and fewer straight wires. 60 px makes all 41 wires straight but Main 29 % higher. The builder keeps 40 px. The two wires that are not straight at 40 px are `battery_voltage` (its net also feeds the four motors) and `battery_soc` (its net also feeds MahDrawn). Battery has only three outputs, so its Output Ports do not fit beside it on straight wires, and each of these wires has two bends.
+
+### Before and after (3.8.0 → 3.8.1)
+
+FPV vehicle:
+
+| Value | 3.8.0 (29 sheets) | 3.8.1 (28 sheets) |
+|---|---|---|
+| Wires through blocks, overlaps, block overlaps, diagonal segments, port direction, small steps | 0 | 0 |
+| Crossings | 3544 | 3257 |
+| Bends | 3570 | 3566 |
+| Straight wires | 561 | 582 |
+| Total wire length (px) | 1598409 | 1527291 |
+| Total sheet area | 139.5 Mpx | 133.4 Mpx |
+| Main | 84 crossings, 300 bends, 2562 × 2514 px | 84 crossings, 182 bends, 2627 × 2088 px |
+
+FPV Demo Flight: crossings 0 → 0, bends 120 → 110, area 3.4 → 3.8 Mpx. FPV Acro Rate Step: crossings 1 → 1, bends 64 → 60, area 1.7 → 1.9 Mpx. The Vehicle block in these models is larger (Resize Subsystems), so their Main sheets are larger. In `test-models/fpv/`, the crossings of T11 and T20 go from 67 to 68; no other file has more crossings. All hard metrics are 0 on all sheets of all regenerated files, and `npm run obliq:layout -- <file> --report --resize-subsystems --port-labels show --hide-block-names` changes nothing on each file.
+
+Run time of the layout of the whole vehicle: about 5.8 s; it is 3.3 s with `--output-ports column`. With Tidy signal labels, about 62 s.
+
+### Readability with the names hidden
+
+- Input Ports and Output Ports show their port name inside the block. Sheet Labels show their signal name inside the block. These stay readable.
+- Subsystems keep their names, and they show their port names.
+- Other blocks show only their symbol or their parameter: for example `INT`, `SUM`, `(x)`, `2×2`, `3×4 matrix` or an expression. The name of such a block (for example `v_ned`, `p_ned` or `PosSplit` on Frame) is not on the diagram now. A reader must open the block, or read the Output Port or the subsystem port that it feeds.
+- Not new in 3.8.1: the text of some Gain blocks (for example `1.3333333333333333` on Frame and `-0.00021367521367521368` on Battery) and of some long Evaluate expressions is wider than the block. With the names hidden, this text is the only label of these blocks.
+

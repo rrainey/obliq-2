@@ -323,7 +323,9 @@ describe('FPV vehicle', () => {
     expect(out[0].blocks.some(b => b.parameters?.flipped)).toBe(false)
     const names = (returnPath![main.id] ?? []).map(id => main.blocks.find(b => b.id === id)!.name)
     expect(names).toEqual(['Sensors'])
-    // The FlightController block grows to its natural height: 22 outputs at 20 px
-    expect(out[0].blocks.find(b => b.name === 'FlightController')!.parameters!.height).toBe(460)
+    // The FlightController block is at least its natural height (22 outputs
+    // at 20 px: 460 px). The shipped file is resized (Resize Subsystems,
+    // ports 40 px apart), and the minimum height does not make it smaller.
+    expect(out[0].blocks.find(b => b.name === 'FlightController')!.parameters!.height).toBeGreaterThanOrEqual(460)
   })
 })

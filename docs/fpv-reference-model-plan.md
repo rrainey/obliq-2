@@ -206,6 +206,7 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
      - The previous airborne demo is `AIRBORNE_DEMO_STICKS`, used with the `initialAltitude` build option.
    - **Layout:** model outputs and scopes moved to a second top-level sheet, **Telemetry**, fed by sheet labels from Main. Main now shows only the vehicle; run results appear on the Telemetry tab.
      - This exposed a WASM wrapper bug: scopes and outputs fed by a sheet label on another top-level sheet read a non-existent `From_*` signal. Fixed (codegen v34).
+     - Release 3.8.1 removed the Telemetry sheet. The Output Ports are on Main, and each one has a direct wire from the block output that computes it. In the single-file model, the scopes are also on Main. A Sheet Label Sink stays on Main only for each signal that the Tests sheet reads.
    - **Tests sheet:** 11 Assert blocks check the default demo against `DEMO_TESTS` in the builder:
      - motors stay off before arming and at least at idle after;
      - the climb, a level climb, the bank, the pitch and the yaw turn;
@@ -214,7 +215,7 @@ A general-purpose obliq block (`random_noise`), useful well beyond this model.
      - the quad stays upright, which stops the run on failure.
 
      They pass in the editor and with `npm run obliq:test -- "FPV Quadcopter"`. `__tests__/reference-models/fpv-tests-sheet.test.ts` also checks that each Assert reads the intended signal in the intended units. Other builds (custom sticks, open loop, airborne) have no Tests sheet.    - **Split into a vehicle and test models** (with model references, Part B of [model-testing-plan.md](model-testing-plan.md)). The shipped files are now:
-     - `fpv-vehicle.json` (**FPV Vehicle**): the model above without its Pilot. The sticks come in on a top-level Input Port, and the Telemetry sheet holds only Output Ports.
+     - `fpv-vehicle.json` (**FPV Vehicle**): the model above without its Pilot. The sticks come in on a top-level Input Port, and the Telemetry sheet holds only Output Ports. (Release 3.8.1: the vehicle has only the Main sheet, and the Output Ports are on Main.)
      - `fpv-demo-flight.json` (**FPV Demo Flight**): the Pilot's demo profile, the Telemetry scopes and the Tests sheet, around a Model Reference to FPV Vehicle.
      - `fpv-acro-rate-step.json` (**FPV Acro Rate Step**): an acro roll-rate step with 6 Asserts (`ACRO_STEP_TESTS`).
 

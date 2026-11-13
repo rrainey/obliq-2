@@ -49,7 +49,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true
+                        "showName": false
                       }
                     },
                     {
@@ -61,7 +61,7 @@
                         "y": 278
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 8,
                         "cols": 1,
                         "baseType": "double",
@@ -77,7 +77,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           7,
@@ -104,7 +104,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -125,7 +125,7 @@
                         "y": 242
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -146,7 +146,7 @@
                         "y": 326
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           0.5,
@@ -173,7 +173,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -194,7 +194,7 @@
                         "y": 494
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           0.25,
@@ -217,7 +217,7 @@
                         "y": 578
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           19.999,
@@ -244,7 +244,7 @@
                         "y": 662
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           5.999,
@@ -271,7 +271,7 @@
                         "y": 345.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "sticks",
                         "dataType": "double[8]"
                       }
@@ -495,7 +495,9 @@
                 "version": null,
                 "name": "FPV Vehicle"
               },
-              "modelRefName": "FPV Vehicle"
+              "modelRefName": "FPV Vehicle",
+              "width": 200,
+              "height": 840
             }
           },
           {
@@ -532,7 +534,7 @@
                         "y": 486
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 4,
                         "cols": 1,
                         "baseType": "double",
@@ -548,7 +550,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           26.999,
@@ -571,7 +573,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true
+                        "showName": false
                       }
                     },
                     {
@@ -583,7 +585,7 @@
                         "y": 494
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0.8,
                         "dataType": "double"
@@ -598,7 +600,7 @@
                         "y": 578
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1.3,
                         "dataType": "double"
@@ -613,7 +615,7 @@
                         "y": 662
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1,
                         "dataType": "double"
@@ -628,7 +630,7 @@
                         "y": 513.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "gnss_env",
                         "dataType": "double[4]"
                       }
@@ -642,7 +644,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1.2425,
                         "dataType": "double"
@@ -657,7 +659,7 @@
                         "y": 167.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "grid_convergence_deg",
                         "dataType": "double"
                       }
@@ -671,7 +673,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1,
                         "dataType": "double"
@@ -686,7 +688,7 @@
                         "y": 83.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "rc_link_valid",
                         "dataType": "double"
                       }
@@ -700,7 +702,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 2,
                         "dataType": "double"
@@ -715,7 +717,7 @@
                         "y": 83.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "failsafe_procedure",
                         "dataType": "double"
                       }
@@ -729,7 +731,7 @@
                         "y": 234
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 3,
                         "cols": 1,
                         "baseType": "double",
@@ -745,7 +747,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -760,7 +762,7 @@
                         "y": 242
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -775,7 +777,7 @@
                         "y": 326
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -790,7 +792,7 @@
                         "y": 251.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "wind_ned",
                         "dataType": "double[3]"
                       }
@@ -905,11 +907,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_pos_ned",
             "position": {
-              "x": 846,
+              "x": 816,
               "y": 202
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "pos_ned"
             }
           },
@@ -918,11 +920,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler",
             "position": {
-              "x": 710,
+              "x": 944,
               "y": 262
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "euler"
             }
           },
@@ -931,11 +933,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_armed",
             "position": {
-              "x": 846,
+              "x": 816,
               "y": 462
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_armed"
             }
           },
@@ -944,11 +946,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_fc_warnings",
             "position": {
-              "x": 710,
+              "x": 944,
               "y": 602
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_warnings"
             }
           },
@@ -957,11 +959,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_alt_est",
             "position": {
-              "x": 846,
+              "x": 816,
               "y": 642
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "alt_est"
             }
           },
@@ -970,11 +972,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_rescue_phase",
             "position": {
-              "x": 710,
+              "x": 944,
               "y": 762
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "rescue_phase"
             }
           }
@@ -1078,7 +1080,7 @@
           }
         ],
         "extents": {
-          "width": 1146,
+          "width": 1244,
           "height": 962
         }
       },
@@ -1095,7 +1097,7 @@
               "y": 236
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "pos_ned"
             }
           },
@@ -1108,7 +1110,7 @@
               "y": 236
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           },
@@ -1121,7 +1123,7 @@
               "y": 324
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "rescue_phase"
             }
           },
@@ -1134,7 +1136,7 @@
               "y": 324
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           },
@@ -1147,7 +1149,7 @@
               "y": 412
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_warnings"
             }
           },
@@ -1160,7 +1162,7 @@
               "y": 412
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           },
@@ -1173,7 +1175,7 @@
               "y": 500
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "alt_est"
             }
           },
@@ -1186,7 +1188,7 @@
               "y": 500
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           }
@@ -1236,10 +1238,10 @@
             "name": "From_rescue_phase",
             "position": {
               "x": 100,
-              "y": 16
+              "y": 10
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "rescue_phase"
             }
           },
@@ -1249,10 +1251,10 @@
             "name": "Time",
             "position": {
               "x": 471,
-              "y": 246
+              "y": 240
             },
             "parameters": {
-              "showName": true
+              "showName": false
             }
           },
           {
@@ -1261,10 +1263,10 @@
             "name": "PhaseAtLossPrev",
             "position": {
               "x": 868,
-              "y": 120
+              "y": 114
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "initialValue": 0,
               "sampleInterval": 0
             }
@@ -1275,10 +1277,10 @@
             "name": "PhaseAtLoss",
             "position": {
               "x": 593,
-              "y": 28
+              "y": 22
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 3,
               "expression": "(in(1) <= 27) ? in(0) : in(2)"
             }
@@ -1289,10 +1291,10 @@
             "name": "InFlyHomeAtSatelliteLoss",
             "position": {
               "x": 868,
-              "y": 36
+              "y": 30
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 4,
               "upper": 4,
@@ -1307,10 +1309,10 @@
             "name": "From_fc_warnings",
             "position": {
               "x": 364,
-              "y": -68
+              "y": -74
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_warnings"
             }
           },
@@ -1320,10 +1322,10 @@
             "name": "WarnRescueNA",
             "position": {
               "x": 516,
-              "y": -68
+              "y": -74
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 1,
               "expression": "fmod(floor(in(0) / 1.0 + 1e-9), 2.0)"
             }
@@ -1334,10 +1336,10 @@
             "name": "RescueNotAvailable",
             "position": {
               "x": 840,
-              "y": -68
+              "y": -74
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 1,
               "upper": 1,
@@ -1352,10 +1354,10 @@
             "name": "InDoNothing",
             "position": {
               "x": 252,
-              "y": 436
+              "y": 430
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 1,
               "expression": "(fabs(in(0) - 7.0) < 0.5) ? 1.0 : 0.0"
             }
@@ -1366,10 +1368,10 @@
             "name": "FirstDoNothingPrev",
             "position": {
               "x": 955,
-              "y": 640
+              "y": 634
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "initialValue": -1,
               "sampleInterval": 0
             }
@@ -1380,10 +1382,10 @@
             "name": "FirstDoNothing",
             "position": {
               "x": 603,
-              "y": 448
+              "y": 442
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 3,
               "expression": "(in(2) < 0.0 && in(0) > 0.5) ? in(1) : in(2)"
             }
@@ -1394,10 +1396,10 @@
             "name": "DoNothingOnLowSats",
             "position": {
               "x": 955,
-              "y": 456
+              "y": 450
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 35.5,
               "upper": 37,
@@ -1412,10 +1414,10 @@
             "name": "InAbort",
             "position": {
               "x": 252,
-              "y": 723
+              "y": 717
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 1,
               "expression": "(fabs(in(0) - 8.0) < 0.5) ? 1.0 : 0.0"
             }
@@ -1426,10 +1428,10 @@
             "name": "FirstAbortPrev",
             "position": {
               "x": 915,
-              "y": 816
+              "y": 810
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "initialValue": -1,
               "sampleInterval": 0
             }
@@ -1440,10 +1442,10 @@
             "name": "FirstAbort",
             "position": {
               "x": 583,
-              "y": 735
+              "y": 729
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 3,
               "expression": "(in(2) < 0.0 && in(0) > 0.5) ? in(1) : in(2)"
             }
@@ -1454,10 +1456,10 @@
             "name": "DoNothingDuration",
             "position": {
               "x": 955,
-              "y": 732.3333333333334
+              "y": 726.3333333333334
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 2,
               "expression": "in(1) - in(0)"
             }
@@ -1468,10 +1470,10 @@
             "name": "AbortAfter20s",
             "position": {
               "x": 1118,
-              "y": 732.3333333333334
+              "y": 726.3333333333334
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 19.98,
               "upper": 20.02,
@@ -1486,10 +1488,10 @@
             "name": "DoNothingSettled",
             "position": {
               "x": 955,
-              "y": 540
+              "y": 534
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 3,
               "expression": "(in(0) > 0.5 && in(2) - in(1) > 2.0) ? 1.0 : 0.0"
             }
@@ -1500,10 +1502,10 @@
             "name": "From_euler",
             "position": {
               "x": 1063,
-              "y": 204
+              "y": 198
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "euler"
             }
           },
@@ -1513,10 +1515,10 @@
             "name": "Roll",
             "position": {
               "x": 1175,
-              "y": 288
+              "y": 282
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 0
               ]
@@ -1528,10 +1530,10 @@
             "name": "Pitch",
             "position": {
               "x": 1175,
-              "y": 372
+              "y": 366
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 1
               ]
@@ -1543,10 +1545,10 @@
             "name": "TiltDeg",
             "position": {
               "x": 1297,
-              "y": 344
+              "y": 338
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 3,
               "expression": "(in(0) > 0.5) ? fmax(fabs(in(1)), fabs(in(2))) * 57.29577951308232 : 0.0"
             }
@@ -1557,10 +1559,10 @@
             "name": "LevelInDoNothing",
             "position": {
               "x": 1629,
-              "y": 352
+              "y": 346
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 0,
               "upper": 7,
@@ -1575,10 +1577,10 @@
             "name": "From_fc_armed",
             "position": {
               "x": 110,
-              "y": -68
+              "y": -74
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "fc_armed"
             }
           },
@@ -1588,10 +1590,10 @@
             "name": "DisarmedByAbort",
             "position": {
               "x": 254,
-              "y": -68
+              "y": -74
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 0,
               "upper": 0,
@@ -1606,10 +1608,10 @@
             "name": "RollPitchDeg",
             "position": {
               "x": 1287,
-              "y": 204
+              "y": 198
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "gain": 57.29577951308232
             }
           },
@@ -1619,10 +1621,10 @@
             "name": "RollPitch",
             "position": {
               "x": 1175,
-              "y": 204
+              "y": 198
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 0,
                 1
@@ -1635,10 +1637,10 @@
             "name": "StaysUpright",
             "position": {
               "x": 1399,
-              "y": 204
+              "y": 198
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": -60,
               "upper": 60,
@@ -1676,19 +1678,19 @@
               "waypoints": [
                 {
                   "x": 964,
-                  "y": 152
+                  "y": 146
                 },
                 {
                   "x": 964,
-                  "y": 194
+                  "y": 188
                 },
                 {
                   "x": 577,
-                  "y": 194
+                  "y": 188
                 },
                 {
                   "x": 577,
-                  "y": 88
+                  "y": 82
                 }
               ]
             }
@@ -1755,19 +1757,19 @@
               "waypoints": [
                 {
                   "x": 1051,
-                  "y": 672
+                  "y": 666
                 },
                 {
                   "x": 1051,
-                  "y": 714
+                  "y": 708
                 },
                 {
                   "x": 587,
-                  "y": 714
+                  "y": 708
                 },
                 {
                   "x": 587,
-                  "y": 508
+                  "y": 502
                 }
               ]
             }
@@ -1820,19 +1822,19 @@
               "waypoints": [
                 {
                   "x": 1011,
-                  "y": 848
+                  "y": 842
                 },
                 {
                   "x": 1011,
-                  "y": 890
+                  "y": 884
                 },
                 {
                   "x": 567,
-                  "y": 890
+                  "y": 884
                 },
                 {
                   "x": 567,
-                  "y": 795
+                  "y": 789
                 }
               ]
             }
@@ -1878,19 +1880,19 @@
               "waypoints": [
                 {
                   "x": 577,
-                  "y": 468
+                  "y": 462
                 },
                 {
                   "x": 577,
-                  "y": 724
+                  "y": 718
                 },
                 {
                   "x": 929,
-                  "y": 724
+                  "y": 718
                 },
                 {
                   "x": 929,
-                  "y": 560
+                  "y": 554
                 }
               ]
             }
@@ -1994,7 +1996,7 @@
         ],
         "extents": {
           "width": 1929,
-          "height": 1016
+          "height": 1010
         }
       }
     ]

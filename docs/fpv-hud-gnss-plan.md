@@ -122,7 +122,7 @@ As built in Phase 3 the fast term was white (`hWhite`, `vWhite`) and the slow te
 
 **Ideal mode:** no noise and no quantization, so position is truth n, e, −d and velocity is rotated truth. The fix logic still applies.
 
-**Sensors outputs:** `gnss_pos` (double[3]), `gnss_vel_ned` (double[3]), `gnss_fix` (double[3]), `gnss_course` (double[4]). They are published as vehicle outputs on the Telemetry sheet.
+**Sensors outputs:** `gnss_pos` (double[3]), `gnss_vel_ned` (double[3]), `gnss_fix` (double[3]), `gnss_course` (double[4]). They are published as vehicle outputs (Output Ports on the Main sheet; before release 3.8.1, on the Telemetry sheet).
 
 **Tests:** a new `__tests__/reference-models/fpv-gnss.test.ts`.
 - Ideal: the fix equals truth (n, e, −d) at every 10 Hz sample, and velocity equals rotated truth.

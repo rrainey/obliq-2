@@ -2,23 +2,23 @@
   "fpv-vehicle": {
     "Main": {
       "wires": 91,
-      "throughBlock": 13,
-      "overlaps": 60,
-      "crossings": 174,
+      "throughBlock": 8,
+      "overlaps": 48,
+      "crossings": 224,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 7,
-      "microJogs": 3
+      "microJogs": 4
     },
     "Main/FlightController/FlightController": {
       "wires": 154,
-      "throughBlock": 56,
-      "overlaps": 23,
-      "crossings": 755,
+      "throughBlock": 59,
+      "overlaps": 16,
+      "crossings": 590,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 6,
-      "microJogs": 4
+      "microJogs": 6
     },
     "Main/FlightController/FlightController/Failsafe/Failsafe": {
       "wires": 62,
@@ -132,9 +132,9 @@
     },
     "Main/FlightController/FlightController/PosHold/PosHold": {
       "wires": 79,
-      "throughBlock": 21,
+      "throughBlock": 14,
       "overlaps": 11,
-      "crossings": 136,
+      "crossings": 135,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 10,
@@ -173,8 +173,8 @@
     "Main/FlightController/FlightController/Home/Home": {
       "wires": 28,
       "throughBlock": 4,
-      "overlaps": 4,
-      "crossings": 26,
+      "overlaps": 2,
+      "crossings": 25,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 3,
@@ -212,12 +212,12 @@
     },
     "Main/Frame/Frame": {
       "wires": 83,
-      "throughBlock": 24,
-      "overlaps": 17,
-      "crossings": 105,
+      "throughBlock": 21,
+      "overlaps": 14,
+      "crossings": 99,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
-      "portDirection": 15,
+      "portDirection": 14,
       "microJogs": 10
     },
     "Main/Sensors/Sensors": {
@@ -228,7 +228,7 @@
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 0,
-      "microJogs": 4
+      "microJogs": 2
     },
     "Main/Sensors/Sensors/IMU/IMU": {
       "wires": 10,
@@ -273,22 +273,12 @@
     "Main/Sensors/Sensors/GNSS/GNSS": {
       "wires": 137,
       "throughBlock": 33,
-      "overlaps": 18,
-      "crossings": 212,
+      "overlaps": 13,
+      "crossings": 201,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 12,
       "microJogs": 4
-    },
-    "Telemetry": {
-      "wires": 41,
-      "throughBlock": 0,
-      "overlaps": 0,
-      "crossings": 0,
-      "blockOverlaps": 0,
-      "diagonalSegments": 0,
-      "portDirection": 0,
-      "microJogs": 41
     }
   },
   "fpv-vehicle:elk": {
@@ -306,7 +296,7 @@
       "wires": 154,
       "throughBlock": 0,
       "overlaps": 0,
-      "crossings": 616,
+      "crossings": 453,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 0,
@@ -416,7 +406,7 @@
       "wires": 384,
       "throughBlock": 0,
       "overlaps": 0,
-      "crossings": 1530,
+      "crossings": 1432,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 0,
@@ -426,7 +416,7 @@
       "wires": 79,
       "throughBlock": 0,
       "overlaps": 0,
-      "crossings": 93,
+      "crossings": 94,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 0,
@@ -496,7 +486,7 @@
       "wires": 12,
       "throughBlock": 0,
       "overlaps": 0,
-      "crossings": 1,
+      "crossings": 0,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 0,
@@ -506,7 +496,7 @@
       "wires": 83,
       "throughBlock": 0,
       "overlaps": 0,
-      "crossings": 37,
+      "crossings": 28,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 0,
@@ -566,17 +556,7 @@
       "wires": 137,
       "throughBlock": 0,
       "overlaps": 0,
-      "crossings": 133,
-      "blockOverlaps": 0,
-      "diagonalSegments": 0,
-      "portDirection": 0,
-      "microJogs": 0
-    },
-    "Telemetry": {
-      "wires": 41,
-      "throughBlock": 0,
-      "overlaps": 0,
-      "crossings": 0,
+      "crossings": 116,
       "blockOverlaps": 0,
       "diagonalSegments": 0,
       "portDirection": 0,

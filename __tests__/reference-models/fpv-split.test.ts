@@ -23,13 +23,26 @@ const expandAgainstVehicle = (data: any) =>
   expandModelReferences(data, () => ({ id: 'v', name: vehicle.name, version: null, hash: 'v', data: vehicle.data as any })).data
 
 describe('FPV vehicle model', () => {
-  test('takes the sticks as an Input Port and publishes telemetry as Output Ports', () => {
+  test('takes the sticks as an Input Port and publishes its outputs as Output Ports on Main', () => {
     expect(vehicle.name).toBe(FPV_VEHICLE_NAME)
     const iface = modelInterface(vehicle.data as any)
     expect(iface.inputs).toEqual(['sticks', 'gnss_env', 'grid_convergence_deg', 'rc_link_valid', 'failsafe_procedure', 'wind_ned'])
     expect(iface.outputs).toEqual(expect.arrayContaining(['pos_ned', 'euler', 'gyro_dps', 'rate_setpoint', 'motor_cmd', 'alt_est', 'vario_est', 'battery_voltage']))
     const sheets = (vehicle.data as any).sheets as any[]
-    expect(sheets.map(s => s.name)).toEqual(['Main', 'Telemetry'])
+    // One sheet: the Output Ports are on Main, each wired directly from the
+    // block output that computes it (no Telemetry sheet, no Sheet Labels)
+    expect(sheets.map(s => s.name)).toEqual(['Main'])
+    const main = sheets[0]
+    const outputs = main.blocks.filter((b: any) => b.type === 'output_port')
+    expect(outputs.map((b: any) => b.parameters.portName)).toEqual(iface.outputs)
+    expect(outputs).toHaveLength(41)
+    const byId = new Map(main.blocks.map((b: any) => [b.id, b]))
+    for (const o of outputs) {
+      const feed = main.connections.filter((w: any) => w.targetBlockId === o.id)
+      expect(feed).toHaveLength(1)
+      expect((byId.get(feed[0].sourceBlockId) as any).type).not.toBe('sheet_label_source')
+    }
+    expect(main.blocks.some((b: any) => b.type === 'sheet_label_sink' || b.type === 'sheet_label_source')).toBe(false)
     const types = new Set(sheets.flatMap(s => s.blocks.map((b: any) => b.type)))
     expect(types.has('signal_display')).toBe(false)
     expect(types.has('assert')).toBe(false)

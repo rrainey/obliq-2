@@ -114,6 +114,8 @@ export async function layoutWithReturnRow(
   runPart: RunPart,
   origin: { x: number; y: number },
   storedBlocks: BlockData[] = blocks,
+  /** The satellite types of the layout (satelliteTypeSet() in elkLayout.ts). Default SATELLITE_TYPES. */
+  satelliteTypes?: ReadonlySet<string>,
 ): Promise<AutoLayoutResult | null> {
   const laidOut = blocks.filter(b => !isAnnotation(b.type))
   const byId = new Map(laidOut.map(b => [b.id, b]))
@@ -128,7 +130,7 @@ export async function layoutWithReturnRow(
     const outs = wires.filter(w => w.sourceBlockId === b.id && byId.has(w.targetBlockId))
     if (outs.length > 0 && outs.every(w => inR.has(w.targetBlockId))) inR.add(b.id)
   }
-  for (const s of findSatellites(laidOut, wires).satellites.values()) {
+  for (const s of findSatellites(laidOut, wires, undefined, satelliteTypes).satellites.values()) {
     if (inR.has(s.hostId)) inR.add(s.id)
   }
   const fBlocks = laidOut.filter(b => !inR.has(b.id))

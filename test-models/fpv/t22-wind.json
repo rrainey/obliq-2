@@ -49,7 +49,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true
+                        "showName": false
                       }
                     },
                     {
@@ -61,7 +61,7 @@
                         "y": 278
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 8,
                         "cols": 1,
                         "baseType": "double",
@@ -77,7 +77,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -98,7 +98,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -119,7 +119,7 @@
                         "y": 242
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -140,7 +140,7 @@
                         "y": 326
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           0.5,
@@ -167,7 +167,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -188,7 +188,7 @@
                         "y": 494
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           0.25,
@@ -211,7 +211,7 @@
                         "y": 578
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -232,7 +232,7 @@
                         "y": 662
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -253,7 +253,7 @@
                         "y": 345.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "sticks",
                         "dataType": "double[8]"
                       }
@@ -477,7 +477,9 @@
                 "version": null,
                 "name": "FPV Vehicle"
               },
-              "modelRefName": "FPV Vehicle"
+              "modelRefName": "FPV Vehicle",
+              "width": 200,
+              "height": 840
             }
           },
           {
@@ -514,7 +516,7 @@
                         "y": 486
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 4,
                         "cols": 1,
                         "baseType": "double",
@@ -530,7 +532,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 14,
                         "dataType": "double"
@@ -545,7 +547,7 @@
                         "y": 494
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0.8,
                         "dataType": "double"
@@ -560,7 +562,7 @@
                         "y": 578
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1.3,
                         "dataType": "double"
@@ -575,7 +577,7 @@
                         "y": 662
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1,
                         "dataType": "double"
@@ -590,7 +592,7 @@
                         "y": 513.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "gnss_env",
                         "dataType": "double[4]"
                       }
@@ -604,7 +606,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1.2425,
                         "dataType": "double"
@@ -619,7 +621,7 @@
                         "y": 167.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "grid_convergence_deg",
                         "dataType": "double"
                       }
@@ -633,7 +635,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1,
                         "dataType": "double"
@@ -648,7 +650,7 @@
                         "y": 83.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "rc_link_valid",
                         "dataType": "double"
                       }
@@ -662,7 +664,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 2,
                         "dataType": "double"
@@ -677,7 +679,7 @@
                         "y": 83.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "failsafe_procedure",
                         "dataType": "double"
                       }
@@ -691,7 +693,7 @@
                         "y": 234
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 3,
                         "cols": 1,
                         "baseType": "double",
@@ -707,7 +709,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           2.999,
@@ -730,7 +732,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true
+                        "showName": false
                       }
                     },
                     {
@@ -742,7 +744,7 @@
                         "y": 242
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -757,7 +759,7 @@
                         "y": 326
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -772,7 +774,7 @@
                         "y": 251.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "wind_ned",
                         "dataType": "double[3]"
                       }
@@ -887,11 +889,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_pos_ned",
             "position": {
-              "x": 718,
-              "y": 151
+              "x": 824,
+              "y": 163
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "pos_ned"
             }
           },
@@ -900,11 +902,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_vel_ned",
             "position": {
-              "x": 718,
+              "x": 824,
               "y": 235
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "vel_ned"
             }
           },
@@ -913,11 +915,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler",
             "position": {
-              "x": 718,
-              "y": 319
+              "x": 824,
+              "y": 307
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "euler"
             }
           }
@@ -1009,8 +1011,8 @@
           }
         ],
         "extents": {
-          "width": 1018,
-          "height": 519
+          "width": 1124,
+          "height": 507
         }
       },
       {
@@ -1026,7 +1028,7 @@
               "y": 324
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "vel_ned"
             }
           },
@@ -1039,7 +1041,7 @@
               "y": 324
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           },
@@ -1052,7 +1054,7 @@
               "y": 412
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "pos_ned"
             }
           },
@@ -1065,7 +1067,7 @@
               "y": 412
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           }
@@ -1101,10 +1103,10 @@
             "name": "From_vel_ned",
             "position": {
               "x": 110,
-              "y": 342
+              "y": 261
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "vel_ned"
             }
           },
@@ -1114,10 +1116,10 @@
             "name": "VelNorth",
             "position": {
               "x": 250,
-              "y": 342
+              "y": 261
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 0
               ]
@@ -1129,10 +1131,10 @@
             "name": "CalmBeforeWind",
             "position": {
               "x": 362,
-              "y": 258
+              "y": 261
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": -0.5,
               "upper": 0.5,
@@ -1147,10 +1149,10 @@
             "name": "DriftsWithWind",
             "position": {
               "x": 362,
-              "y": 342
+              "y": 345
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 2.55,
               "upper": 3.4499999999999997,
@@ -1165,10 +1167,10 @@
             "name": "RollPitchDeg",
             "position": {
               "x": 362,
-              "y": 478
+              "y": 475
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "gain": 57.29577951308232
             }
           },
@@ -1178,10 +1180,10 @@
             "name": "From_euler",
             "position": {
               "x": 138,
-              "y": 478
+              "y": 475
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "euler"
             }
           },
@@ -1191,10 +1193,10 @@
             "name": "RollPitch",
             "position": {
               "x": 250,
-              "y": 478
+              "y": 475
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 0,
                 1
@@ -1207,10 +1209,10 @@
             "name": "StaysUpright",
             "position": {
               "x": 474,
-              "y": 478
+              "y": 475
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": -60,
               "upper": 60,
@@ -1266,7 +1268,7 @@
         ],
         "extents": {
           "width": 774,
-          "height": 678
+          "height": 675
         }
       }
     ]

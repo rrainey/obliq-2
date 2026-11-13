@@ -10,7 +10,7 @@ This plan implements the goals in [layout-improvement-goals-pass-2.md](layout-im
 | Feedback path | Draw the blocks on the feedback path mirrored. Add flip support to the canvas and to the PDF renderer. |
 | Subsystem role | Add a `subsystemFunction` property. Suggest its value with rules. Do not build a neural network. |
 | Label edits | Changes to Sheet Label blocks are a separate adjustment. The default is off. |
-| A `sheet_label_source` that feeds an `output_port` directly | Deferred. Examine this after the other phases are complete. Until then, the layout does not change this structure. |
+| A `sheet_label_source` that feeds an `output_port` directly | Resolved in 3.8.1 for the FPV models: the builder does not make this structure now (see "Resolved in 3.8.1" below). The layout does not change this structure. |
 
 ## Baseline
 
@@ -161,11 +161,14 @@ Status: done, with the changes that [layout-engine-comparison.md](layout-engine-
 
 ## Deferred
 
-- A `sheet_label_source` that feeds an `output_port` directly. Decide if the layout must flag it or change it. The Tidy keeps these pairs.
-- The construction of the Telemetry sheet of the FPV vehicle (41 Sheet Label Source and Output Port pairs). This is a matter for the builder, not for the layout.
 - The size of the GpsRescue sheet (8510 × 6279 px). Its height comes from about 20 blocks in each layer and the tracks of its long and feedback wires. A smaller sheet needs a change to the construction of the sheet (for example more subsystems), not to the layout.
 - A learned classifier for `subsystemFunction`. This needs some hundreds of labelled subsystems. No public corpus has these labels.
 - A smaller Sheet Label height (45 px instead of 64 px). See [Sheet Label height](layout-engine-comparison.md#sheet-label-height).
 - A view setting to show or hide the hop marks.
 - Levelling the forward row on Main: FlightController, the motors and Frame are not on one row.
-- The run time of Tidy signal labels (about 30 s for the FPV vehicle). A web worker or fewer trial layouts can make it shorter.
+- The run time of Tidy signal labels (about 30 s for the FPV vehicle in 3.8.0, about 60 s in 3.8.1). A web worker or fewer trial layouts can make it shorter.
+
+### Resolved in 3.8.1
+
+- **A `sheet_label_source` that feeds an `output_port` directly** (MAB guideline na_0011). The FPV models do not have this pattern now. The layout does not flag it. The Tidy keeps such pairs, as before.
+- **The construction of the Telemetry sheet of the FPV vehicle** (41 Sheet Label Source and Output Port pairs). The builder does not make the Telemetry sheet now. The 41 Output Ports are on Main, each with a direct wire from the block output that computes it. The layout puts an Output Port beside that block output when this gives fewer crossings (`outputPorts: 'auto'` in `elkLayout.ts`). See [layout-engine-comparison.md](layout-engine-comparison.md#381-results).

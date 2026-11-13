@@ -21,7 +21,7 @@ import * as path from 'path'
 import type { BlockData } from '@/components/BlockNode'
 import type { WireData } from '@/components/Wire'
 import type { Sheet } from '@/lib/simulationTypes'
-import { tuneModelLayoutSync, tuneModelLayout as tuneModelLayoutElk, DEFAULT_TUNE_OPTIONS } from '@/lib/layout/tuneModelLayout'
+import { tuneModelLayoutSync, tuneModelLayout as tuneModelLayoutElk, DEFAULT_TUNE_OPTIONS, type TuneLayoutOptions } from '@/lib/layout/tuneModelLayout'
 import { ussa1976, USSA1976 } from '@/lib/atmosphere/ussa1976'
 import { loadWmm2025, wmmField } from './lib/wmm'
 import { modelInterface } from '@/lib/modelReferences'
@@ -3701,8 +3701,8 @@ export interface VibrationOptions {
 export interface FpvModelOptions {
   /**
    * The vehicle alone, for embedding with a model reference: the pilot's
-   * sticks come in on a top-level Input Port "sticks" (double[8]) and the
-   * Telemetry sheet holds only the Output Ports (no scopes, no Tests sheet).
+   * sticks come in on a top-level Input Port "sticks" (double[8]). The model
+   * has one sheet, Main, with the Output Ports (no scopes, no Tests sheet).
    */
   vehicleOnly?: boolean
   /** Plant only: a constant motor command (default hover) instead of pilot and flight controller. */
@@ -3751,16 +3751,14 @@ export const FPV_VEHICLE_NO_MAG_NAME = 'FPV Vehicle No Mag'
 
 export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data: Record<string, unknown> } {
   const main = new SheetBuilder('main', 'Main')
-  // Model outputs and scopes live on their own top-level sheet, fed by sheet
-  // labels, so the main diagram stays about the vehicle
-  const telemetry = new SheetBuilder('telemetry', 'Telemetry')
-  const published = new Map<string, string>()
+  // Model outputs: an Output Port on Main for each, wired directly from the
+  // block output that computes it. The order of the publish() calls is the
+  // order of the model's outputs (modelInterface(), code generation), so do
+  // not change it.
+  const published = new Map<string, [string, number]>()
   const publish = (name: string, from: string, dataType: string, port = 0) => {
-    const tag = main.add('sheet_label_sink', `Tag_${name}`, { signalName: name })
-    main.wire(from, tag, 0, port)
-    const src = telemetry.add('sheet_label_source', `From_${name}`, { signalName: name })
-    telemetry.output(name, src, dataType)
-    published.set(name, src)
+    main.output(name, from, dataType, port)
+    published.set(name, [from, port])
   }
   const initialQuat = eulerToQuat(opts.initialEuler ?? [0, 0, 0])
   const magnetometer = opts.magnetometer ?? true
@@ -3906,7 +3904,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
     }
   }
 
-  // Scopes, on the Telemetry sheet
+  // Scopes (not on the vehicle alone), on Main beside the outputs
   const displays: Array<[string, string]> = [
     ['Position', 'pos_ned'],
     ['Attitude', 'euler'],
@@ -3920,16 +3918,30 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
   }
   if (!opts.vehicleOnly) {
     for (const [label, signal] of displays) {
-      const d = telemetry.add('signal_display', label, { maxSamples: 10000 })
-      telemetry.wire(published.get(signal)!, d)
+      // "Battery" is the battery subsystem's name on Main
+      const d = main.add('signal_display', label === 'Battery' ? 'BatteryVoltage' : label, { maxSamples: 10000 })
+      const [from, port] = published.get(signal)!
+      main.wire(from, d, 0, port)
     }
   }
 
-  // The default demo flight carries its pass/fail checks on a Tests sheet
+  // The default demo flight carries its pass/fail checks on a Tests sheet.
+  // Its Sheet Label Sources read the published signals: a Sheet Label Sink
+  // on Main for each signal that they read, and for no other.
   const isDefaultDemo =
     !!fc && !opts.vehicleOnly && opts.sticks === undefined && !opts.initialAltitude && !opts.initialEuler && !opts.initialOmega
-  let sheets: Sheet[] = [main.sheet(), telemetry.sheet()]
-  if (isDefaultDemo) sheets.push(buildTestsSheet().sheet())
+  const tests = isDefaultDemo ? buildTestsSheet() : null
+  if (tests) {
+    const read = new Set(tests.blocks.filter(b => b.type === 'sheet_label_source').map(b => String(b.parameters?.signalName)))
+    const unknown = [...read].filter(name => !published.has(name))
+    if (unknown.length) throw new Error(`Tests sheet reads signals that are not published: ${unknown.join(', ')}`)
+    for (const [name, [from, port]] of published) {
+      if (!read.has(name)) continue
+      main.wire(from, main.add('sheet_label_sink', `Tag_${name}`, { signalName: name }), 0, port)
+    }
+  }
+  let sheets: Sheet[] = [main.sheet()]
+  if (tests) sheets.push(tests.sheet())
   sheets = tuneModelLayoutSync(sheets as any, null, {
     ...DEFAULT_TUNE_OPTIONS,
     cleanUpLayout: true,
@@ -3958,7 +3970,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
           'their rotor-acceleration reaction torque is included. ' +
           'Ground contact (spring-damper legs) and Betaflight-style arming: the Pilot subsystem arms at 0.25 s, takes off ' +
           'from rest on the field, hovers, then in angle (self-level) mode flies a 24 deg bank, an 18 deg forward pitch and a ' +
-          'yaw turn. Model outputs and scopes are on the Telemetry sheet (run results show there). ' +
+          'yaw turn. Model outputs (Output Ports) and scopes are on the Main sheet (run results show there). ' +
           'Assert blocks on the Tests sheet check the flight: arming, the climb, each manoeuvre, the estimators and the ' +
           'battery (npm run obliq:test -- "FPV Quadcopter"). ' +
           'Parameters from the kingfisher model in uzh-rpg/agile_flight (MIT) and Kaufmann et al. 2022; ' +
@@ -3983,7 +3995,7 @@ export function buildFpvModel(opts: FpvModelOptions = {}): { name: string; data:
       `and a Betaflight-style flight controller (acro and angle modes, arming, Mahony and altitude estimators) at ${LOCATION.name}. ` +
       'Inputs: sticks = [roll, pitch, yaw, throttle, AUX1 angle mode, AUX2 arm, AUX3 GPS rescue, AUX4 hold (3-position)] (double[8], sticks -1..1, throttle 0..1, switches above 0.5 on); ' +
       'gnss_env = [satellites, HDOP, VDOP, UERE scale]; grid_convergence_deg; rc_link_valid; failsafe_procedure (0 drop, 1 auto-land, 2 GPS rescue); wind_ned (m/s). ' +
-      'Outputs (Telemetry sheet): the true state, sensor readings, motor commands and speeds, rate setpoints, estimates and battery. ' +
+      'Outputs (Output Ports on the Main sheet): the true state, sensor readings, motor commands and speeds, rate setpoints, estimates and battery. ' +
       'Test models such as "FPV Demo Flight" drive it and check it with Assert blocks. Built by scripts/build-fpv-reference-model.ts; ' +
       'see docs/fpv-reference-model-plan.md.'
   }
@@ -4212,15 +4224,27 @@ export async function SHIPPED_FPV_MODELS(): Promise<Array<[string, { name: strin
   return models
 }
 
-/** Lay out a built model again with the editor's default layout (ELK), in place. Used for reference-models/ and test-models/fpv/. */
+/**
+ * The layout of the files in reference-models/ and test-models/fpv/: Tune
+ * Model Layout with ELK, the subsystem functions and the mirrored return row
+ * (as the defaults), and also Resize Subsystems, subsystem port labels shown
+ * and the names of all blocks except subsystems hidden. Not Tidy signal
+ * labels. The fpv-plant and fpv-test-models tests compare the files on disk
+ * with the output of the builder, so the files always have this layout.
+ */
+export const SHIPPED_LAYOUT_OPTIONS: TuneLayoutOptions = {
+  ...DEFAULT_TUNE_OPTIONS,
+  cleanUpLayout: true,
+  resizeSubsystems: true,
+  subsystemPortLabels: 'show',
+  hideBlockNames: true,
+  tidySignalLabels: false,
+  scope: 'model',
+}
+
+/** Lay out a built model again with SHIPPED_LAYOUT_OPTIONS, in place. Used for reference-models/ and test-models/fpv/. */
 async function layOutShipped(model: { name: string; data: Record<string, unknown> }): Promise<void> {
-  const result = await tuneModelLayoutElk(model.data.sheets as any, null, {
-    ...DEFAULT_TUNE_OPTIONS,
-    cleanUpLayout: true,
-    resizeSubsystems: false,
-    tidySignalLabels: false,
-    scope: 'model',
-  })
+  const result = await tuneModelLayoutElk(model.data.sheets as any, null, SHIPPED_LAYOUT_OPTIONS)
   const sheets = result.sheets as unknown as Sheet[]
   fitExtents(sheets)
   model.data.sheets = sheets
@@ -5638,7 +5662,7 @@ function builtTestFpvModels(): Array<[string, { name: string; data: Record<strin
 /** Grow each sheet's extents to cover its laid-out blocks. */
 /**
  * The Tests sheet: Assert blocks that check the default demo flight against
- * DEMO_TESTS, fed by sheet labels from Main like the Telemetry sheet.
+ * DEMO_TESTS, fed by sheet labels from Main.
  */
 function buildTestsSheet(): SheetBuilder {
   const t = DEMO_TESTS

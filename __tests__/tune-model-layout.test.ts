@@ -299,3 +299,26 @@ describe('scope counting', () => {
     }
   })
 })
+
+describe('a second tune with the same options changes nothing (ELK)', () => {
+  const all = opts({ scope: 'model', resizeSubsystems: true, subsystemPortLabels: 'show', hideBlockNames: true })
+
+  test('the layout sees the names and port labels that the tune shows or hides', async () => {
+    // The names are shown before the tune and hidden by it. The layout
+    // reserves no space for a hidden name, so it must see the hidden names.
+    const first = await tuneModelLayout(model(), 'main', all)
+    expect(first.summary.namesHidden).toBeGreaterThan(0)
+    expect(first.summary.portLabelsChanged).toBe(1)
+    const second = await tuneModelLayout(first.sheets, 'main', all)
+    expect(second.summary).toMatchObject({ sheetsAffected: 0, blocksMoved: 0, wiresRouted: 0, blocksResized: 0, namesHidden: 0, portLabelsChanged: 0 })
+    expect(second.sheets).toEqual(first.sheets)
+  })
+
+  test('the subsystem sizes of Resize Subsystems do not depend on the stored positions', async () => {
+    const moved = model()
+    for (const blk of moved[0].blocks) blk.position = { x: 1000 - blk.position.x, y: 900 - blk.position.y }
+    const a = await tuneModelLayout(model(), 'main', all)
+    const c = await tuneModelLayout(moved, 'main', all)
+    expect(c.sheets).toEqual(a.sheets)
+  })
+})

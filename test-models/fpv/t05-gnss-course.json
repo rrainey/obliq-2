@@ -49,7 +49,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true
+                        "showName": false
                       }
                     },
                     {
@@ -61,7 +61,7 @@
                         "y": 278
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 8,
                         "cols": 1,
                         "baseType": "double",
@@ -77,7 +77,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -98,7 +98,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           4,
@@ -121,7 +121,7 @@
                         "y": 242
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -142,7 +142,7 @@
                         "y": 326
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           0.5,
@@ -173,7 +173,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -194,7 +194,7 @@
                         "y": 494
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           0.25,
@@ -217,7 +217,7 @@
                         "y": 578
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -238,7 +238,7 @@
                         "y": 662
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "inputValues": [
                           0,
                           1
@@ -259,7 +259,7 @@
                         "y": 345.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "sticks",
                         "dataType": "double[8]"
                       }
@@ -483,7 +483,9 @@
                 "version": null,
                 "name": "FPV Vehicle"
               },
-              "modelRefName": "FPV Vehicle"
+              "modelRefName": "FPV Vehicle",
+              "width": 200,
+              "height": 840
             }
           },
           {
@@ -520,7 +522,7 @@
                         "y": 486
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 4,
                         "cols": 1,
                         "baseType": "double",
@@ -536,7 +538,7 @@
                         "y": 410
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 14,
                         "dataType": "double"
@@ -551,7 +553,7 @@
                         "y": 494
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0.8,
                         "dataType": "double"
@@ -566,7 +568,7 @@
                         "y": 578
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1.3,
                         "dataType": "double"
@@ -581,7 +583,7 @@
                         "y": 662
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1,
                         "dataType": "double"
@@ -596,7 +598,7 @@
                         "y": 513.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "gnss_env",
                         "dataType": "double[4]"
                       }
@@ -610,7 +612,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1.2425,
                         "dataType": "double"
@@ -625,7 +627,7 @@
                         "y": 167.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "grid_convergence_deg",
                         "dataType": "double"
                       }
@@ -639,7 +641,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 1,
                         "dataType": "double"
@@ -654,7 +656,7 @@
                         "y": 83.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "rc_link_valid",
                         "dataType": "double"
                       }
@@ -668,7 +670,7 @@
                         "y": 74
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 2,
                         "dataType": "double"
@@ -683,7 +685,7 @@
                         "y": 83.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "failsafe_procedure",
                         "dataType": "double"
                       }
@@ -697,7 +699,7 @@
                         "y": 234
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "rows": 3,
                         "cols": 1,
                         "baseType": "double",
@@ -713,7 +715,7 @@
                         "y": 158
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -728,7 +730,7 @@
                         "y": 242
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -743,7 +745,7 @@
                         "y": 326
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "signalType": "constant",
                         "value": 0,
                         "dataType": "double"
@@ -758,7 +760,7 @@
                         "y": 251.5
                       },
                       "parameters": {
-                        "showName": true,
+                        "showName": false,
                         "portName": "wind_ned",
                         "dataType": "double[3]"
                       }
@@ -866,11 +868,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_gnss_course",
             "position": {
-              "x": 710,
-              "y": 144
+              "x": 816,
+              "y": 188
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "gnss_course"
             }
           },
@@ -879,11 +881,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_vel_ned",
             "position": {
-              "x": 710,
+              "x": 952,
               "y": 228
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "vel_ned"
             }
           },
@@ -892,11 +894,11 @@
             "type": "sheet_label_sink",
             "name": "Tag_euler",
             "position": {
-              "x": 710,
-              "y": 312
+              "x": 816,
+              "y": 268
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "euler"
             }
           }
@@ -961,10 +963,7 @@
             "sourceBlockId": "main__Vehicle",
             "sourcePortIndex": 11,
             "targetBlockId": "main__Tag_gnss_course",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 48
-            }
+            "targetPortIndex": 0
           },
           {
             "id": "w_8_main__Vehicle_main__Tag_vel_ned",
@@ -978,15 +977,12 @@
             "sourceBlockId": "main__Vehicle",
             "sourcePortIndex": 15,
             "targetBlockId": "main__Tag_euler",
-            "targetPortIndex": 0,
-            "routing": {
-              "midpointOffset": 48
-            }
+            "targetPortIndex": 0
           }
         ],
         "extents": {
-          "width": 1010,
-          "height": 512
+          "width": 1252,
+          "height": 468
         }
       },
       {
@@ -1002,7 +998,7 @@
               "y": 324
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "gnss_course"
             }
           },
@@ -1015,7 +1011,7 @@
               "y": 324
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           },
@@ -1028,7 +1024,7 @@
               "y": 412
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "vel_ned"
             }
           },
@@ -1041,7 +1037,7 @@
               "y": 412
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "maxSamples": 10000
             }
           }
@@ -1077,10 +1073,10 @@
             "name": "From_gnss_course",
             "position": {
               "x": 108,
-              "y": 120
+              "y": 114
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "gnss_course"
             }
           },
@@ -1090,10 +1086,10 @@
             "name": "From_vel_ned",
             "position": {
               "x": 100,
-              "y": 604
+              "y": 598
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "vel_ned"
             }
           },
@@ -1103,10 +1099,10 @@
             "name": "Track",
             "position": {
               "x": 260,
-              "y": 341
+              "y": 335
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 0
               ]
@@ -1118,10 +1114,10 @@
             "name": "TrackMagnetic",
             "position": {
               "x": 260,
-              "y": 120
+              "y": 114
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 1
               ]
@@ -1133,10 +1129,10 @@
             "name": "GroundSpeed",
             "position": {
               "x": 260,
-              "y": 520
+              "y": 514
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 2
               ]
@@ -1148,10 +1144,10 @@
             "name": "TrackValid",
             "position": {
               "x": 260,
-              "y": 215
+              "y": 209
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 3
               ]
@@ -1163,10 +1159,10 @@
             "name": "TrackInvalidInHover",
             "position": {
               "x": 382,
-              "y": 299
+              "y": 293
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 0,
               "upper": 0,
@@ -1181,10 +1177,10 @@
             "name": "Time",
             "position": {
               "x": 260,
-              "y": 436
+              "y": 430
             },
             "parameters": {
-              "showName": true
+              "showName": false
             }
           },
           {
@@ -1193,10 +1189,10 @@
             "name": "TrackAtHoverPrev",
             "position": {
               "x": 664,
-              "y": 436
+              "y": 430
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "initialValue": 0,
               "sampleInterval": 0
             }
@@ -1207,10 +1203,10 @@
             "name": "TrackAtHover",
             "position": {
               "x": 382,
-              "y": 428
+              "y": 422
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 3,
               "expression": "(in(1) <= 0.5) ? in(0) : in(2)"
             }
@@ -1221,10 +1217,10 @@
             "name": "TrackChange",
             "position": {
               "x": 664,
-              "y": 351.6666666666667
+              "y": 345.6666666666667
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 2,
               "expression": "in(0) - in(1)"
             }
@@ -1235,10 +1231,10 @@
             "name": "TrackHeldInHover",
             "position": {
               "x": 827,
-              "y": 351.6666666666667
+              "y": 345.6666666666667
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 0,
               "upper": 0,
@@ -1253,10 +1249,10 @@
             "name": "TrackValidInFlight",
             "position": {
               "x": 382,
-              "y": 215
+              "y": 209
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": 1,
               "upper": 1,
@@ -1271,10 +1267,10 @@
             "name": "TruthVelNorth",
             "position": {
               "x": 240,
-              "y": 604
+              "y": 598
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 0
               ]
@@ -1286,10 +1282,10 @@
             "name": "TruthVelEast",
             "position": {
               "x": 240,
-              "y": 688
+              "y": 682
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 1
               ]
@@ -1301,10 +1297,10 @@
             "name": "TrackError",
             "position": {
               "x": 372,
-              "y": 696
+              "y": 690
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 3,
               "expression": "fmod(in(0) - (atan2(in(2), in(1)) * 57.29577951308232 + 1.2425) + 540.0, 360.0) - 180.0"
             }
@@ -1315,10 +1311,10 @@
             "name": "TrackMatchesTruth",
             "position": {
               "x": 704,
-              "y": 704
+              "y": 698
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": -3,
               "upper": 3,
@@ -1333,10 +1329,10 @@
             "name": "SpeedError",
             "position": {
               "x": 382,
-              "y": 596
+              "y": 590
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 3,
               "expression": "in(0) - sqrt(in(1) * in(1) + in(2) * in(2))"
             }
@@ -1347,10 +1343,10 @@
             "name": "GroundSpeedMatchesTruth",
             "position": {
               "x": 714,
-              "y": 604
+              "y": 598
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": -0.5,
               "upper": 0.5,
@@ -1365,10 +1361,10 @@
             "name": "MagneticError",
             "position": {
               "x": 372,
-              "y": 130.66666666666666
+              "y": 124.66666666666667
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "numInputs": 2,
               "expression": "fmod(in(0) - in(1) + 2.484937570673121 + 540.0, 360.0) - 180.0"
             }
@@ -1379,10 +1375,10 @@
             "name": "MagneticIsTrueMinusDeclination",
             "position": {
               "x": 704,
-              "y": 130.66666666666666
+              "y": 124.66666666666667
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": -1e-9,
               "upper": 1e-9,
@@ -1397,10 +1393,10 @@
             "name": "RollPitchDeg",
             "position": {
               "x": 334,
-              "y": 36
+              "y": 30
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "gain": 57.29577951308232
             }
           },
@@ -1410,10 +1406,10 @@
             "name": "From_euler",
             "position": {
               "x": 110,
-              "y": 36
+              "y": 30
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "signalName": "euler"
             }
           },
@@ -1423,10 +1419,10 @@
             "name": "RollPitch",
             "position": {
               "x": 222,
-              "y": 36
+              "y": 30
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "indices": [
                 0,
                 1
@@ -1439,10 +1435,10 @@
             "name": "StaysUpright",
             "position": {
               "x": 446,
-              "y": 36
+              "y": 30
             },
             "parameters": {
-              "showName": true,
+              "showName": false,
               "mode": "bounds",
               "lower": -60,
               "upper": 60,
@@ -1518,19 +1514,19 @@
               "waypoints": [
                 {
                   "x": 760,
-                  "y": 468
+                  "y": 462
                 },
                 {
                   "x": 760,
-                  "y": 517.5
+                  "y": 511.5
                 },
                 {
                   "x": 366,
-                  "y": 517.5
+                  "y": 511.5
                 },
                 {
                   "x": 366,
-                  "y": 488
+                  "y": 482
                 }
               ]
             }
@@ -1694,7 +1690,7 @@
         ],
         "extents": {
           "width": 1127,
-          "height": 904
+          "height": 898
         }
       }
     ]

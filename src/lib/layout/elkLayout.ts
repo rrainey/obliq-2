@@ -95,7 +95,7 @@ import {
 import { layoutWithReturnRow, withoutFlips, flipChanges } from './returnRow'
 import type { SubsystemFunction } from './subsystemRole'
 import {
-  findSatellites, arrangeSide, satelliteGeometry, portLabelWidth,
+  findSatellites, arrangeSide, satelliteGeometry, portLabelWidth, SATELLITE_TYPES, OUTPUT_PORT_SATELLITE_TYPE,
   type ArrangeParams, type PlacedSatellite, type Satellite, type SatelliteDetection, type SatelliteSide,
   type SideArrangement, type SidePort,
 } from './satellites'
@@ -204,6 +204,16 @@ export interface ElkLayoutOptions {
   metricsOverride?: ReadonlyMap<string, Metrics>
   /** Input and Output Port blocks that get no FIRST or LAST layer constraint (connector nodes of returnRow.ts). */
   unconstrained?: ReadonlySet<string>
+  /**
+   * Where the Output Ports go. `column`: in the right column of the sheet
+   * (the layer constraint LAST). `beside`: an Output Port with one wire is a
+   * satellite beside the host output port that drives it, as a Sheet Label
+   * Sink is (on a mirrored return-row host, on its left). `auto` (the
+   * default): the sheet is laid out both ways, and `beside` is kept only when
+   * it has no hard fault and fewer crossings than `column`
+   * (chooseOutputPorts()). A sheet without an Output Port is laid out once.
+   */
+  outputPorts?: 'column' | 'beside' | 'auto'
 }
 
 // --- ELK graph types (the subset this adapter uses) -----------------------
@@ -351,6 +361,15 @@ export interface ElkGraphOptions {
   metricsOverride?: ReadonlyMap<string, Metrics>
   /** Input and Output Port blocks that get no FIRST or LAST layer constraint. */
   unconstrained?: ReadonlySet<string>
+  /** Output Ports with one wire are satellites too (ElkLayoutOptions.outputPorts `beside`). */
+  outputPortSatellites?: boolean
+}
+
+/** The satellite types of a layout: `types` (default SATELLITE_TYPES), and the Output Port with `outputPorts`. */
+export function satelliteTypeSet(types: readonly string[] | undefined, outputPorts: boolean): Set<string> {
+  const set = new Set(types ?? SATELLITE_TYPES)
+  if (outputPorts) set.add(OUTPUT_PORT_SATELLITE_TYPE)
+  return set
 }
 
 /**
@@ -387,7 +406,8 @@ export function buildElkGraph(
   const laidOutAll = blocks.filter(b => !isAnnotation(b.type))
   const detection: SatelliteDetection = graphOptions.satellites === false
     ? { satellites: new Map(), kept: [] }
-    : findSatellites(laidOutAll, wires, undefined, graphOptions.satelliteTypes ? new Set(graphOptions.satelliteTypes) : undefined)
+    : findSatellites(laidOutAll, wires, undefined, satelliteTypeSet(graphOptions.satelliteTypes, !!graphOptions.outputPortSatellites),
+      new Set(graphOptions.metricsOverride?.keys() ?? []))
   const { satellites } = detection
   // The order of all blocks, satellites included, so that the feedback wires
   // that ELK selects do not change when the satellites leave the graph
@@ -641,6 +661,38 @@ export async function computeElkLayout(
   if (options.resizeBlocks) {
     throw new Error('computeElkLayout does not resize blocks. Give it the resized blocks (see tuneModelLayout.ts).')
   }
+  const mode = options.outputPorts ?? 'auto'
+  if (mode !== 'auto') return layoutWithOutputPorts(blocks, wires, options, mode === 'beside')
+  if (!blocks.some(b => b.type === 'output_port')) return layoutWithOutputPorts(blocks, wires, options, false)
+  const column = await layoutWithOutputPorts(blocks, wires, options, false)
+  if (options.routeWires === false) return column
+  const beside = await layoutWithOutputPorts(blocks, wires, options, true)
+  const score = (layout: AutoLayoutResult) => scoreSheetLayout(...applyToSheet(blocks, wires, layout))
+  return chooseOutputPorts(score(column), score(beside)) ? beside : column
+}
+
+/**
+ * The rule of ElkLayoutOptions.outputPorts `auto`. True when the layout with
+ * the Output Ports beside their hosts (`beside`) replaces the layout with
+ * the Output Ports in the right column (`column`): `beside` has no hard
+ * fault or small step, and it has fewer crossings. On a tie, the right
+ * column stays, because it is the usual place of an Output Port (MAB
+ * db_0042: Outports on the right, moved only to prevent crossings).
+ */
+export function chooseOutputPorts(column: ReturnType<typeof scoreSheetLayout>, beside: ReturnType<typeof scoreSheetLayout>): boolean {
+  if (hardFaults(beside) + beside.microJogs !== 0) return false
+  if (hardFaults(column) + column.microJogs !== 0) return true
+  return beside.crossings < column.crossings
+}
+
+/** computeElkLayout() with the Output Ports in the right column, or (`beside`) as satellites. */
+async function layoutWithOutputPorts(
+  blocks: BlockData[],
+  wires: WireData[],
+  options: ElkLayoutOptions,
+  beside: boolean,
+): Promise<AutoLayoutResult> {
+  options = { ...options, outputPorts: beside ? 'beside' : 'column' }
   if (!options.mirrorReturnPath) return computeElkLayoutDetail(blocks, wires, options)
 
   // Mirror the return path: the layout owns the flags. It lays out the
@@ -660,6 +712,7 @@ export async function computeElkLayout(
       }),
       { x: options.originX ?? 100, y: options.originY ?? 400 },
       blocks,
+      satelliteTypeSet(options.satelliteTypes, beside),
     )
     if (row && options.routeWires !== false) {
       const score = scoreSheetLayout(...applyToSheet(blocks, wires, row))
@@ -730,6 +783,7 @@ async function computeElkLayoutDetail(
       roles: options.roles,
       metricsOverride: options.metricsOverride,
       unconstrained: options.unconstrained,
+      outputPortSatellites: options.outputPorts === 'beside',
     })
     if (conversion.graph.children.length === 0) {
       const empty: ElkLayoutDetail = { moves: [], resizes: [], routes: [], returnPath: [], paths: new Map(), positions: new Map() }
@@ -762,10 +816,12 @@ async function computeElkLayoutDetail(
   // crossings. Then lay out the sheet with Sheet Label satellites only also,
   // and keep the result with fewer faults, then fewer crossings. On a
   // crossing tie, tieWorse() decides.
+  // With `beside`, the Output Port satellites stay in both candidates
+  const besideTypes = options.outputPorts === 'beside' ? [OUTPUT_PORT_SATELLITE_TYPE] : []
   const others = [...first.conversion.satellites.keys()]
-    .some(id => !LABEL_SATELLITE_TYPES.includes(blocks.find(b => b.id === id)!.type))
+    .some(id => ![...LABEL_SATELLITE_TYPES, ...besideTypes].includes(blocks.find(b => b.id === id)!.type))
   if (options.satelliteTypes || !others || !first.score) return first.layout
-  const second = await runChecked(LABEL_SATELLITE_TYPES)
+  const second = await runChecked([...LABEL_SATELLITE_TYPES, ...besideTypes])
   const a = first.score, b = second.score!
   const worse = faults(a) !== faults(b) ? faults(a) > faults(b) : a.crossings !== b.crossings ? a.crossings > b.crossings : tieWorse(a, b)
   return worse ? second.layout : first.layout

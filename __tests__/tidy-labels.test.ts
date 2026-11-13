@@ -289,7 +289,7 @@ describe('FPV vehicle', () => {
   const sheets: Sheet[] = vehicle.data.sheets
   const plan = buildFullPlan(sheets).sheets
   const posHold = plan.find(s => s.name === 'PosHold')!
-  const telemetry = plan.find(s => s.name === 'Telemetry')!
+  const main = plan.find(s => s.path.join('/') === 'Main')!
   const tidy = (input: Sheet[], active: string, scope: 'subsystem' | 'sheet' = 'subsystem', extra: Partial<TidyLabelOptions> = {}) =>
     tuneModelLayout(input, active, { ...DEFAULT_TUNE_OPTIONS, scope, tidySignalLabels: true, tidyLabelOptions: extra })
 
@@ -324,13 +324,13 @@ describe('FPV vehicle', () => {
     expect(second.summary.sheetsAffected).toBe(0)
   }, 60000)
 
-  test('Telemetry is not touched, with every edit kind on', async () => {
-    const r = await tidy(sheets, telemetry.id, 'sheet', { pairToWire: true, splitSources: true, wireMinCrossings: 0, wireMinLength: 0 })
-    expect(r.labelTidy!.edits).toEqual([])
-    const before = telemetry
-    const after = buildFullPlan(r.sheets).sheets.find(s => s.id === telemetry.id)!
-    expect(after.blocks.map(b => [b.id, b.type, b.parameters?.signalName])).toEqual(before.blocks.map(b => [b.id, b.type, b.parameters?.signalName]))
-    expect(after.connections.map(w => [w.sourceBlockId, w.targetBlockId])).toEqual(before.connections.map(w => [w.sourceBlockId, w.targetBlockId]))
+  test('Main: the wires into the Output Ports stay wires, with every edit kind on', async () => {
+    const r = await tidy(sheets, main.id, 'sheet', { pairToWire: true, splitSources: true, wireMinCrossings: 0, wireMinLength: 0 })
+    const after = buildFullPlan(r.sheets).sheets.find(s => s.id === main.id)!
+    const feeds = (s: { blocks: BlockData[]; connections: WireData[] }) => s.blocks.filter(b => b.type === 'output_port')
+      .map(b => s.connections.filter(w => w.targetBlockId === b.id).map(w => [b.name, w.sourceBlockId, w.sourcePortIndex]))
+    expect(main.blocks.filter(b => b.type === 'output_port')).toHaveLength(41)
+    expect(feeds(after)).toEqual(feeds(main))
   }, 60000)
 
   test('validation and type propagation give no new errors or warnings', () => {

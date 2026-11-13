@@ -57,6 +57,11 @@ export interface TuneLayoutOptions {
    */
   portNameClearance?: boolean
   /**
+   * Where the Output Ports go (ELK engine only): ElkLayoutOptions.outputPorts.
+   * Absent means `auto`. For comparisons: the dialog does not show it.
+   */
+  outputPorts?: 'column' | 'beside' | 'auto'
+  /**
    * Mirror feedback-path blocks (ELK engine with subsystem functions only).
    * Absent means on. When on, the layout owns the `flipped` flag of the
    * blocks it lays out: the return-path blocks go on a row below the forward
@@ -180,6 +185,12 @@ export async function tuneModelLayout(
   if (engine === 'classic' || isNoOp(options) || !options.cleanUpLayout) {
     return tuneModelLayoutSync(sheets, activeSheetId, { ...options, engine: 'classic' })
   }
+  // The names and port labels first, so that the layout sees the shown ones
+  // (see tuneWith()). This step moves no block.
+  const displayed = new Set<string>()
+  const display = tuneWith(sheets, activeSheetId, { ...options, cleanUpLayout: false, resizeSubsystems: false },
+    () => ({ moves: [], resizes: [], routes: [] }), new Set(), displayed)
+  sheets = display.sheets
   let tidy: TidyResult | undefined
   if (options.tidySignalLabels) {
     const { tidySignalLabels } = await import('./tidyLabels')
@@ -199,8 +210,10 @@ export async function tuneModelLayout(
     layouts.set(s.id, layout)
     if (layout.returnPath?.length) returnPath[s.id] = layout.returnPath
   }
-  const tidied = new Set(tidy?.edits.map(e => e.sheetId) ?? [])
-  const result = tuneWith(sheets, activeSheetId, options, sheet => layouts.get(sheet.id) ?? { moves: [], resizes: [], routes: [] }, tidied)
+  const changedBefore = new Set([...displayed, ...(tidy?.edits.map(e => e.sheetId) ?? [])])
+  const result = tuneWith(sheets, activeSheetId, options, sheet => layouts.get(sheet.id) ?? { moves: [], resizes: [], routes: [] }, changedBefore)
+  result.summary.namesHidden += display.summary.namesHidden
+  result.summary.portLabelsChanged += display.summary.portLabelsChanged
   if (!tidy) return { ...result, returnPath }
   const { labelEndpointFaults } = await import('./tidyLabels')
   const endpointFaults = buildExportPlan(result.sheets, options.scope, activeSheetId).sheets
@@ -239,7 +252,12 @@ export async function layoutSheetElk(
     // of its neighbours, capped by maxPortSpacing). ELK then lays out the
     // sheet with these sizes. The fit never goes below the natural height,
     // so it replaces the growth above where it resizes a block.
-    const fitted = computeAutoLayout(blocks, s.connections, {
+    // The classic engine starts its column order from the stored y
+    // positions. The ELK layout must not depend on the stored positions
+    // (else a second tune gives other sizes), so the fit gets the order of
+    // the block list instead.
+    const listOrder = blocks.map((b, i) => ({ ...b, position: { x: 0, y: i } }))
+    const fitted = computeAutoLayout(listOrder, s.connections, {
       resizeBlocks: true,
       maxPortSpacing: options.maxPortSpacing,
       routeWires: false,
@@ -257,6 +275,7 @@ export async function layoutSheetElk(
     order: options.elkOrder,
     roles,
     portNameClearance: options.portNameClearance,
+    outputPorts: options.outputPorts,
     // The mirror needs the subsystem functions: without them there is no return path
     mirrorReturnPath: useRoles && options.mirrorReturnPath !== false,
   })
@@ -330,6 +349,36 @@ export function tuneModelLayoutSync(
   })
 }
 
+/**
+ * One block with the display options of the tune: the port labels of a
+ * subsystem (`subsystemPortLabels`) and the block name (`hideBlockNames`).
+ * Returns the block itself when nothing changes. Counts the changes in
+ * `summary`.
+ */
+function withDisplayOptions(block: BlockData, options: TuneLayoutOptions, summary: TuneLayoutSummary): BlockData {
+  let next = block
+  if (options.subsystemPortLabels !== 'asis' && block.type === 'subsystem') {
+    // Unlike showName, showPortNames is opt-in on the canvas: absent means
+    // hidden. Writing it explicitly makes the result independent of that.
+    const wanted = options.subsystemPortLabels === 'show'
+    if ((next.parameters?.showPortNames ?? false) !== wanted) {
+      next = { ...next, parameters: { ...(next.parameters || {}), showPortNames: wanted } }
+      summary.portLabelsChanged++
+    }
+  }
+  if (options.hideBlockNames) {
+    // "All but Subsystem blocks": subsystems keep their names, everything
+    // else is hidden. Written explicitly so the result does not depend on
+    // whether the block predates the showName setting.
+    const wanted = block.type === 'subsystem'
+    if (next.parameters?.showName !== wanted) {
+      next = { ...next, parameters: { ...(next.parameters || {}), showName: wanted } }
+      if (!wanted) summary.namesHidden++
+    }
+  }
+  return next
+}
+
 function tuneWith(
   sheets: Sheet[],
   activeSheetId: string | null,
@@ -337,6 +386,8 @@ function tuneWith(
   layoutOf: LayoutBySheet,
   /** Sheets that an earlier step changed (the tidy of signal labels): they count as affected. */
   changedBefore: ReadonlySet<string> = new Set(),
+  /** When given, receives the ids of the affected sheets. */
+  affected?: Set<string>,
 ): TuneLayoutResult {
   const summary: TuneLayoutSummary = {
     sheetsAffected: 0, blocksMoved: 0, wiresRouted: 0, blocksResized: 0, blocksFlipped: 0, namesHidden: 0,
@@ -352,7 +403,11 @@ function tuneWith(
   )
 
   /** Apply the requested adjustments to one sheet's blocks and wires. */
-  const tuneSheetContents = (sheet: Sheet, blocks: BlockData[]): { blocks: BlockData[]; connections: Sheet['connections'] } => {
+  const tuneSheetContents = (sheet: Sheet, input: BlockData[]): { blocks: BlockData[]; connections: Sheet['connections'] } => {
+    // The names and port labels first: the layout reserves space for the
+    // names and port labels that the blocks show, so it must see the shown
+    // ones. Else a second tune with the same options gives another layout.
+    const blocks = input.map(block => withDisplayOptions(block, options, summary))
     const layout = layoutOf(sheet, blocks)
 
     // Wire routes only make sense for the arrangement they were computed for,
@@ -414,28 +469,6 @@ function tuneWith(
         summary.blocksFlipped++
       }
 
-      if (options.subsystemPortLabels !== 'asis' && block.type === 'subsystem') {
-        // Unlike showName, showPortNames is opt-in on the canvas: absent means
-        // hidden. Writing it explicitly makes the result independent of that.
-        const wanted = options.subsystemPortLabels === 'show'
-        if ((next.parameters?.showPortNames ?? false) !== wanted) {
-          next = { ...next, parameters: { ...(next.parameters || {}), showPortNames: wanted } }
-          summary.portLabelsChanged++
-        }
-      }
-
-      if (options.hideBlockNames) {
-        // "All but Subsystem blocks": subsystems keep their names, everything
-        // else is hidden. Written explicitly so the result does not depend on
-        // whether the block predates the showName setting.
-        const wanted = block.type === 'subsystem'
-        const current = next.parameters?.showName
-        if (current !== wanted) {
-          next = { ...next, parameters: { ...(next.parameters || {}), showName: wanted } }
-          if (!wanted) summary.namesHidden++
-        }
-      }
-
       return next
     })
     return { blocks: tunedBlocks, connections }
@@ -471,7 +504,10 @@ function tuneWith(
         if (wiresChanged) connections = tuned.connections
         changed = true
       }
-      if (blocksChanged || wiresChanged || changedBefore.has(sheet.id)) summary.sheetsAffected++
+      if (blocksChanged || wiresChanged || changedBefore.has(sheet.id)) {
+        summary.sheetsAffected++
+        affected?.add(sheet.id)
+      }
     }
 
     return changed ? { ...sheet, blocks, connections } : sheet
