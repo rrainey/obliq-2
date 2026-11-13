@@ -1,5 +1,45 @@
 # obliq-2 Change Log
 
+## What's New in 3.8.0
+
+**Tune Model Layout** has a new default engine, ELK Layered. No wire goes through a block, and control loops read controller, actuator, plant, with the sensors on a mirrored row below. **The shipped FPV models have a new layout, but their blocks, wires, parameters and behaviour do not change.** Simulation and generated code are the same.
+
+- **New default layout engine: ELK Layered** (`elkjs`). The engine of earlier releases stays available as **Classic** in the dialog and as `--engine classic`. On the 29 sheets of the FPV vehicle, ELK has:
+  - 0 wires through blocks (Classic: 529) and 0 overlaps between wires of different nets (Classic: 277);
+  - 3544 crossings (Classic: 5425), and 561 straight wires (Classic: 226).
+- **Leaf blocks beside their ports.** Sheet Labels, constants, displays and other blocks with one wire go beside the port that they connect to, on its row. When they do not fit in one column, the layout staggers them across sub-columns. On a sheet with constants, the layout also tries the sheet with the constants as usual blocks. It keeps the result with fewer crossings. If the crossings are equal, it keeps the result with fewer bends, then shorter wires, then a smaller sheet. A sheet with only small independent parts, such as Telemetry, becomes a grid: Telemetry is 1406 × 1064 px; it was 376 × 5824 px.
+- **Subsystem Function.** A subsystem and a model reference have a new property, **Subsystem Function**: Controller, Actuator, Plant, Sensor, Compensator or Other. When it is not set, the dialog suggests a value from the name, the content and the position in the loop. Simulation and code generation do not use it. The Model Builder API and the MCP server accept it as `subsystemFunction`.
+- **Signal-flow order from the functions.** A control loop reads from left to right: controller, actuator, plant. Sensors and compensators are on the return path.
+- **Mirrored return row and Flip Block.** With **Mirror feedback-path blocks** (on by default), the return path that a plant feeds goes on a flipped row below the forward path. To flip a block yourself, right-click it and choose **Flip Block**. A flipped block has its inputs on the right and its outputs on the left. The flip has no effect on simulation or code generation. **An earlier version of the editor ignores the flip** and draws the block unflipped.
+- **Minimum subsystem height.** The layout grows a subsystem whose ports are nearer than 20 px to each other. On the FPV vehicle, FlightController grows from 180 px to 460 px.
+- **Port-name clearance.** When a block shows its port names, no wire turns through the names.
+- **No small steps in wires.** Each laid-out wire is straight, or its bends are at least 2 px apart. Before, 276 wires of the FPV vehicle had a step of less than 2 px, because each block position was rounded on its own. The score has a new hard metric, `microJogs`.
+- **Tidy signal labels** (new, off by default). This adjustment changes the model: it replaces long wires that cross many other wires with Sheet Label pairs. Simulation and generated code do not change. On the FPV vehicle it makes 38 edits and decreases the crossings from 3538 to 3017. It is slow on large models: about 30 s for the FPV vehicle. The shipped models do not use it.
+- **Hop marks and junction dots.** Where wires of two nets cross, the canvas and the PDF export draw a small hop. A dot shows where a net divides.
+- **New command: `npm run obliq:layout`.** It applies the layout to a model file (`-o` or `--in-place`), or prints a layout score for each sheet (`--report`, `--json`). It has all options of the dialog. See the README, "Command-line layout".
+- **The Tune Model Layout dialog shows work in progress.** After you select **Tune Now**, the dialog stays open, shows "Tuning the layout" and locks its options. It closes when the tuning is complete.
+- **Fixed: block dialogs dropped parameters when you saved them.** A save removed `showName` from each block, and `width`, `height` and `sampleTimeSec` from a subsystem. The dialogs now keep these parameters and `flipped`.
+- **Waypoints follow block moves.** When you move or resize a block, the editor moves the waypoints of its wires to the new port positions. If a wire cannot keep its shape, the editor removes the waypoints and draws the default shape.
+- **New dependency: `elkjs` 0.12.1**, licence EPL-2.0 OR GPL-3.0-or-later. The editor loads it only when a layout uses ELK (a separate chunk of 1.49 MB, 441 kB with gzip).
+- **The shipped FPV models are laid out again** with the new default (not with Tidy signal labels or Resize Subsystems). Only block positions, wire routes, subsystem heights, the flip and the sheet extents change. FPV vehicle, 29 sheets:
+
+  | Value | 3.7.2 | 3.8.0 |
+  |---|---|---|
+  | Wires through blocks | 528 | 0 |
+  | Overlaps | 269 | 0 |
+  | Crossings | 5442 | 3544 |
+  | Straight wires | 229 | 561 |
+  | Bends | 3304 | 3570 |
+  | Total sheet area | 120.4 Mpx | 139.5 Mpx |
+  | Main sheet | 2136 × 4474 px | 2562 × 2514 px |
+
+  The crossings of FPV Demo Flight go from 11 to 0, and of FPV Acro Rate Step from 2 to 1. The files in `test-models/fpv/` have the same new layout, with the same limits: only layout data changes.
+- **Costs:**
+  - More bends: 8 % more on the FPV vehicle, because a wire that goes around a block turns four times.
+  - Larger sheets on some models: the total area of the FPV vehicle is 16 % larger. GpsRescue is 8510 × 6279 px; it was 9594 × 2744 px.
+  - Slower layout: about 3.2 s for the whole FPV vehicle, against 0.4 s with Classic. The editor does not respond during a layout. A layout of one sheet takes at most 0.7 s (GpsRescue).
+- **`docs/layout-engine-comparison.md`** gives all measurements, and `docs/layout-improvement-plan-pass-2.md` gives the plan and the deferred items.
+
 ## What's New in 3.7.2
 
 GPS Rescue on the FPV Vehicle is steadier. Pitch was unsteady in FLY_HOME, and pitch and roll were unsteady in DESCENT and LANDING. **The ports do not change, but flight traces do.** Export the model again for each host.
