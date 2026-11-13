@@ -21,6 +21,18 @@ The test models reference FPV Vehicle by name, so they find it after they are se
 
 These files are generated: edit `scripts/build-fpv-reference-model.ts`, then run `npx tsx --tsconfig tsconfig.json scripts/build-fpv-reference-model.ts`. A test fails if a committed file drifts from the builder. The builder lays out these three files with **Tune Model Layout**: ELK Layered, with subsystem functions and the mirrored return row (the defaults), and also **Resize Subsystems** (maximum port spacing 40 px), subsystem port labels shown, and the names of all blocks except subsystems hidden. It does not use Tidy signal labels. These options are `SHIPPED_LAYOUT_OPTIONS` in the builder. The builder gives the files in `test-models/fpv/` the same layout. A test compares each file with the builder output, byte for byte, so the files on disk always have this layout.
 
+## PDFs
+
+Each model has a PDF of its diagrams beside it: `fpv-vehicle.pdf` (28 pages), `fpv-demo-flight.pdf` (5 pages) and `fpv-acro-rate-step.pdf` (5 pages). Each PDF has one page for each sheet, with the subsystem sheets in the order of the model. A model reference, such as the `Vehicle` block of the test models, shows as its block. Its sheets are in `fpv-vehicle.pdf`.
+
+- `fpv-vehicle.pdf` uses ARCH E pages (36 × 48 in, landscape). The large sheets are scaled to fit the page, down to 36 % for `GpsRescue`. The other sheets print at 100 %. To read a dense sheet, zoom in: the PDF is vector graphics.
+- The test models use Tabloid pages (11 × 17 in, landscape), with the same scaling rule.
+- The footer date is 12 Nov 2026, 00:00 UTC. It is the date of the release that added the PDFs, not the date of the build.
+
+The builder writes the PDFs after it writes the models, with `npm run obliq:pdf` code. The options and the date are `SHIPPED_PDF_OPTIONS` and `SHIPPED_PDF_DATE` in `scripts/build-fpv-reference-model.ts`. To make the PDFs again, run the builder (see above). Do not edit a PDF by hand. The test `__tests__/reference-models/fpv-pdfs.test.ts` fails if a PDF is missing, or if it is not the same, byte for byte, as the output of the builder.
+
+Only `*.json` files are seeded. The PDFs and this README stay in the folder.
+
 ## Sources and licensing
 
 Each model lists its sources in its own description. The models are re-implemented from published equations, datasheets and permissively licensed (MIT, BSD-3, Apache-2.0) references. No GPL code is translated.

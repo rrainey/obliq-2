@@ -29,6 +29,8 @@ beforeEach(() => {
   fs.writeFileSync(path.join(refDir, 'b-second.json'), JSON.stringify({ name: 'Second', data: model('b') }))
   fs.writeFileSync(path.join(refDir, 'a-first.json'), JSON.stringify(model('a'))) // bare form, name from file
   fs.writeFileSync(path.join(refDir, 'README.md'), '# not a model')
+  // The PDF beside each shipped model (npm run obliq:pdf) is not a model
+  fs.writeFileSync(path.join(refDir, 'b-second.pdf'), '%PDF-1.7\n%\xff\n')
 })
 
 afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }))
@@ -46,6 +48,15 @@ describe('reference model seeding', () => {
     expect(first.storage_kind).toBe('managed')
     expect(s.models.listVersions(first.id)).toHaveLength(1)
     expect(s.models.readCurrent(first.id).data.globalSettings).toMatchObject({ integrationAlgorithm: 'rk4' })
+    s.db.close()
+  })
+
+  it('reads only *.json: a PDF or a README in the folder is not imported and is not an error', () => {
+    const s = openStorage(home, { referenceModelsDir: refDir })
+    const record = readReferenceModelsRecord(s.db) as ReferenceModelsRecord
+    expect(record.models.map(m => m.file)).toEqual(['a-first.json', 'b-second.json'])
+    expect(record.errors).toEqual([])
+    expect(s.models.list()).toHaveLength(2)
     s.db.close()
   })
 

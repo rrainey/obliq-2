@@ -129,7 +129,15 @@ export function resolveTestTargets(args: string[], opts: ResolveOptions = {}): R
  * name, then from the store when one exists. Used by the command line C generator.
  */
 export function expandModelFile<T extends { sheets?: any[] }>(data: T, filePath: string, name: string): T {
-  const home = resolveObliqHome()
+  return expandModelReferences(data as any, modelFileLoader(filePath), { rootName: name }).data as T
+}
+
+/**
+ * The loader for the model references of a model file: the model files beside
+ * it, by name, then the store (OBLIQ_HOME, or `home`) when one exists. The
+ * C generator (expandModelFile) and the PDF export (npm run obliq:pdf) use it.
+ */
+export function modelFileLoader(filePath: string, home: string = resolveObliqHome()): ModelLoader {
   const loaders: ModelLoader[] = [siblingFileLoader(path.dirname(filePath))]
   let storage: Storage | null = null
   if (fs.existsSync(createStoragePaths(home).db)) {
@@ -138,7 +146,7 @@ export function expandModelFile<T extends { sheets?: any[] }>(data: T, filePath:
       return storageModelLoader(storage)(ref)
     })
   }
-  const load: ModelLoader = ref => {
+  return ref => {
     let last: Error | null = null
     for (const l of loaders) {
       try {
@@ -149,7 +157,6 @@ export function expandModelFile<T extends { sheets?: any[] }>(data: T, filePath:
     }
     throw last ?? new ModelReferenceError(`the referenced model (${ref.modelId}) does not exist`)
   }
-  return expandModelReferences(data as any, load, { rootName: name }).data as T
 }
 
 /**

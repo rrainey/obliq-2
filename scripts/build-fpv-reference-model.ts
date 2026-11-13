@@ -1,7 +1,8 @@
 /**
  * Builds the FPV quadcopter reference models in reference-models/: the
  * vehicle (fpv-vehicle.json) and test models that embed it with a model
- * reference (fpv-demo-flight.json, fpv-acro-rate-step.json). See
+ * reference (fpv-demo-flight.json, fpv-acro-rate-step.json), and a PDF of
+ * each (SHIPPED_PDF_OPTIONS). See
  * docs/fpv-reference-model-plan.md for the design, parameters and sources.
  *
  *   npx tsx --tsconfig tsconfig.json scripts/build-fpv-reference-model.ts [out-dir]
@@ -25,6 +26,7 @@ import { tuneModelLayoutSync, tuneModelLayout as tuneModelLayoutElk, DEFAULT_TUN
 import { ussa1976, USSA1976 } from '@/lib/atmosphere/ussa1976'
 import { loadWmm2025, wmmField } from './lib/wmm'
 import { modelInterface } from '@/lib/modelReferences'
+import { resolvePrintDate, writeModelPdf, type PdfCommandOptions } from './lib/pdfExport'
 
 // ---------------------------------------------------------------------------
 // Parameters (kingfisher 5-inch, agile_flight MIT; see the plan for sources)
@@ -4242,6 +4244,28 @@ export const SHIPPED_LAYOUT_OPTIONS: TuneLayoutOptions = {
   scope: 'model',
 }
 
+/**
+ * The PDF beside each file in reference-models/, as `npm run obliq:pdf` writes
+ * it (whole model, landscape, 100 %, Scale large sheets to fit). The vehicle
+ * uses ARCH E (36 x 48 in), the largest page of the export dialog: the large
+ * sheets then print at 36 % (GpsRescue) to 100 % of their size. On Letter,
+ * "fit" would print GpsRescue at 8 %, and 100 % cuts most sheets. The test
+ * models are small and use Tabloid (11 x 17 in).
+ */
+export const SHIPPED_PDF_OPTIONS: Record<string, Partial<PdfCommandOptions>> = {
+  'fpv-vehicle.json': { pageSizeId: 'arch_e', orientation: 'landscape', scaling: '100', fitLargeSheets: true },
+  'fpv-demo-flight.json': { pageSizeId: 'tabloid', orientation: 'landscape', scaling: '100', fitLargeSheets: true },
+  'fpv-acro-rate-step.json': { pageSizeId: 'tabloid', orientation: 'landscape', scaling: '100', fitLargeSheets: true },
+}
+
+/**
+ * The print date of the shipped PDFs (footer and PDF metadata). It is a
+ * constant, so a build that does not change a model does not change its PDF.
+ * Set it to the release date when a release changes the models or the PDF
+ * export.
+ */
+export const SHIPPED_PDF_DATE = '2026-11-12'
+
 /** Lay out a built model again with SHIPPED_LAYOUT_OPTIONS, in place. Used for reference-models/ and test-models/fpv/. */
 async function layOutShipped(model: { name: string; data: Record<string, unknown> }): Promise<void> {
   const result = await tuneModelLayoutElk(model.data.sheets as any, null, SHIPPED_LAYOUT_OPTIONS)
@@ -5766,7 +5790,13 @@ if (require.main === module) {
     }
   }
   ;(async () => {
-    write(process.argv[2] || path.join(__dirname, '..', 'reference-models'), await SHIPPED_FPV_MODELS())
+    const referenceDir = process.argv[2] || path.join(__dirname, '..', 'reference-models')
+    write(referenceDir, await SHIPPED_FPV_MODELS())
+    // The PDFs, from the files just written (the test models find the vehicle beside them)
+    for (const [file, options] of Object.entries(SHIPPED_PDF_OPTIONS)) {
+      const result = await writeModelPdf(path.join(referenceDir, file), undefined, options, resolvePrintDate(SHIPPED_PDF_DATE))
+      console.log(`Wrote ${result.out} (${result.pageCount} pages)`)
+    }
     write(process.argv[3] || path.join(__dirname, '..', 'test-models', 'fpv'), await TEST_FPV_MODELS())
     console.log(`(hover command ${HOVER_COMMAND.toFixed(4)}, omega_max ${OMEGA_MAX.toFixed(1)} rad/s)`)
   })().catch(e => {

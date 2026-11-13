@@ -78,16 +78,13 @@ import CommentConfig from '@/components/CommentConfig'
 import ModelValidationButton from '@/components/ModelValidationButton'
 import TestResultsButton from '@/components/TestResultsButton'
 import ModelReferenceConfig from '@/components/ModelReferenceConfig'
-import type { PdfPlot } from '@/lib/export/pdfPlot'
-import { resultsToColumns } from '@/lib/plots/signalPlot'
 import { isModelReference } from '@/lib/modelReferences'
 import { collectModelRefs, modelRefKey } from '@/lib/referencedModels'
 import { useReferencedModelUpdates } from '@/hooks/useReferencedModelUpdates'
 import ExportPdfDialog from '@/components/ExportPdfDialog'
 import { tuneModelLayout, type TuneLayoutOptions } from '@/lib/layout/tuneModelLayout'
-import { buildExportPlan } from '@/lib/export/sheetTree'
-import { renderModelToPdf, type PdfExportOptions } from '@/lib/export/pdfRenderer'
-import { propagateSignalTypesMultiSheet } from '@/lib/signalTypePropagation'
+import type { PdfExportOptions } from '@/lib/export/pdfRenderer'
+import { planModelPdf, renderModelPdf } from '@/lib/export/modelPdf'
 import { createGlyphRasterizer, downloadPdf, defaultPdfFileName } from '@/lib/export/browserGlyphs'
 import SheetBreadcrumbs from '@/components/SheetBreadcrumbs'
 import { getSheetPath } from '@/lib/navigationUtils'
@@ -1933,7 +1930,7 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
       saveCurrentSheetData()
       const currentSheets = useModelStore.getState().sheets
 
-      const plan = buildExportPlan(currentSheets, options.scope, activeSheetId)
+      const plan = planModelPdf(currentSheets, options, activeSheetId)
       if (plan.sheets.length === 0) {
         notifications.show({
           title: 'Nothing to export',
@@ -1943,40 +1940,16 @@ export default function ModelEditorPage({ params }: ModelEditorPageProps) {
         return
       }
 
-      // Type propagation runs on the whole model, not the scoped plan: an
-      // in-scope wire can be typed by a source that lives outside the scope.
-      // The call is memoised, so repeat exports pay nothing.
-      const typeResult = propagateSignalTypesMultiSheet(
-        currentSheets.map(s => ({ blocks: s.blocks, connections: s.connections }))
-      )
-
-      // Signal Display plots from the last run, per sheet, for the plot column
-      const plotResults = new Map<string, PdfPlot[]>()
-      if (options.includePlotResults && globalSimulationResults) {
-        for (const sheet of plan.sheets) {
-          const results = globalSimulationResults.get(sheet.id)
-          if (!results) continue
-          const plots: PdfPlot[] = []
-          for (const block of sheet.blocks) {
-            if (block.type !== 'signal_display') continue
-            const values = results.signalData.get(block.id)
-            if (!values || values.length === 0) continue
-            plots.push({
-              blockId: block.id,
-              title: block.name,
-              columns: resultsToColumns(results.timePoints, values as any, block.parameters?.maxSamples || 1000),
-            })
-          }
-          if (plots.length > 0) plotResults.set(sheet.id, plots)
-        }
-      }
-
-      const bytes = await renderModelToPdf(plan, options, {
+      // The same render path as `npm run obliq:pdf` (src/lib/export/modelPdf.ts):
+      // wire types from propagation over the whole model, and the Signal
+      // Display plots of the last run when the dialog asks for them.
+      const bytes = await renderModelPdf(plan, {
+        sheets: currentSheets,
         modelName: model?.name || 'Untitled Model',
+        options,
         printedAt: new Date(),
         rasterizeGlyph: createGlyphRasterizer(),
-        signalTypes: typeResult.signalTypes,
-        plotResults,
+        simulationResults: globalSimulationResults ?? undefined,
       })
 
       downloadPdf(bytes, options.fileName)

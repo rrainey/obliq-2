@@ -8,7 +8,10 @@
 // Block sizes and port offsets come from blockGeometry.ts, the same module the
 // canvas renders from, so PDF coordinates cannot drift from what is on screen.
 
-import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from 'pdf-lib'
+import {
+  PDFDocument, PDFFont, PDFPage, StandardFonts, rgb,
+  pushGraphicsState, popGraphicsState, rectangle, clip, endPath,
+} from 'pdf-lib'
 import type { BlockData } from '@/components/BlockNode'
 import type { WireData } from '@/components/Wire'
 import { PortCountAdapter } from '@/lib/validation/PortCountAdapter'
@@ -70,7 +73,14 @@ export const DEFAULT_PDF_OPTIONS: Omit<PdfExportOptions, 'fileName'> = {
 
 export interface PdfRenderContext {
   modelName: string
+  /** The print date: the PDF's creation and modification dates, and the footer date. */
   printedAt: Date
+  /**
+   * The footer's date text. When absent, printedAt is formatted for the
+   * runtime's locale and time zone (the editor). The command line gives a
+   * fixed text with --date, so that the file does not depend on the locale.
+   */
+  footerDate?: string
   /**
    * Wire signal types, keyed by wire id. Wires whose type is known are drawn
    * as bundles: single line for scalars, double for vectors/1D arrays, triple
@@ -575,6 +585,37 @@ export function wrapText(text: string, font: PDFFont, size: number, maxWidth: nu
   return lines
 }
 
+/** Line advance of in-block text, as a multiple of the font size. */
+const IN_BLOCK_LINE_HEIGHT = 1.15
+/** The smallest font size that fitInBox goes down to, in points. */
+const IN_BLOCK_MIN_SIZE = 1
+
+/**
+ * Lines and a font size that put `text` inside a box of maxWidth x maxHeight
+ * points, without shortening it (the PDF stays searchable). Text that fits
+ * keeps `size`. Text without spaces (a gain such as 1.3333333333333333) stays
+ * on one line at a smaller size. Text with spaces (an expression) breaks onto
+ * more lines, and gets smaller only when the lines are too tall for the box.
+ * The size does not go below IN_BLOCK_MIN_SIZE; at that size the text can
+ * still be larger than the box.
+ */
+export function fitInBox(
+  text: string, font: PDFFont, size: number, maxWidth: number, maxHeight: number,
+): { lines: string[]; size: number } {
+  const width = font.widthOfTextAtSize(text, size)
+  if (width <= maxWidth) return { lines: [text], size }
+  if (!text.includes(' ')) {
+    return { lines: [text], size: Math.max(IN_BLOCK_MIN_SIZE, size * (maxWidth / width)) }
+  }
+  let s = size
+  for (;;) {
+    const lines = wrapBreakingWords(text, font, s, maxWidth)
+    const fits = lines.length * s * IN_BLOCK_LINE_HEIGHT <= maxHeight
+    if (fits || s * 0.9 < IN_BLOCK_MIN_SIZE) return { lines, size: s }
+    s *= 0.9
+  }
+}
+
 /** Tabler IconCube (MIT), 24-unit viewBox, stroked: the canvas' subsystem symbol. */
 const CUBE_ICON_PATHS = [
   'M21 16.008v-8.018a1.98 1.98 0 0 0 -1 -1.717l-7 -4.008a2.016 2.016 0 0 0 -2 0l-7 4.008c-.619 .355 -1 1.01 -1 1.718v8.018c0 .709 .381 1.363 1 1.717l7 4.008a2.016 2.016 0 0 0 2 0l7 -4.008c.619 -.355 1 -1.01 1 -1.718',
@@ -629,6 +670,9 @@ export async function renderModelToPdf(
   doc.setTitle(ctx.modelName)
   doc.setCreator('obliq-2')
   doc.setProducer('obliq-2')
+  // Dates from the context, not the clock: the same input gives the same file.
+  doc.setCreationDate(ctx.printedAt)
+  doc.setModificationDate(ctx.printedAt)
 
   const helv = await doc.embedFont(StandardFonts.Helvetica)
   const helvBold = await doc.embedFont(StandardFonts.HelveticaBold)
@@ -648,7 +692,7 @@ export async function renderModelToPdf(
   const page = resolvePageSize(options.pageSizeId, options.orientation)
   const contentWidth = page.width - MARGIN * 2
 
-  const footerDate = ctx.printedAt.toLocaleString(undefined, {
+  const footerDate = ctx.footerDate ?? ctx.printedAt.toLocaleString(undefined, {
     year: 'numeric', month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit',
   })
@@ -846,6 +890,19 @@ export async function renderModelToPdf(
 
     const tx = (mx: number) => offsetX + (mx - bounds.minX) * scale
     const ty = (my: number) => offsetTop - (my - bounds.minY) * scale
+
+    // A sheet larger than the area (at 100% or 50% without fitLargeSheets)
+    // is cut at the edges of the area, so that it cannot cover the footer,
+    // the plot column or the page margins.
+    const overflows = drawnW > printable.width + 0.01 || drawnH > printable.height + 0.01
+    if (overflows) {
+      p.pushOperators(
+        pushGraphicsState(),
+        rectangle(printable.x, printable.y, printable.width, printable.height),
+        clip(),
+        endPath(),
+      )
+    }
 
     // Hop marks where wires of different nets cross, and junction dots, from
     // the same module as the canvas (wireDecorations.ts). Enable and reset
@@ -1065,6 +1122,25 @@ export async function renderModelToPdf(
       const symSize = Math.max(3, (spec.fontSize ?? 10) * scale)
       if (spec.text && symSize >= 3 && block.type !== 'subsystem') {
         const font = spec.mono ? mono : helv
+        // In-block text, centred on the symbol. With truncation allowed, a
+        // long text is shortened to one line. Else it stays whole and is
+        // made to fit the block (fitInBox), so it does not cover the blocks
+        // and wires around it.
+        const drawInBlockText = (raw: string) => {
+          const fitted = allowTruncation.inBlockText
+            ? { lines: [fitInBlock(raw, font, symSize, w * 0.9)], size: symSize }
+            : fitInBox(raw, font, symSize, w * 0.9, h * 0.85)
+          const lineAdvance = fitted.size * IN_BLOCK_LINE_HEIGHT
+          // Baseline of the first line, so that the lines are centred on symbolCy
+          const firstBaseline = yTop - symbolCy + ((fitted.lines.length - 1) * lineAdvance) / 2 - fitted.size * 0.35
+          fitted.lines.forEach((line, i) => {
+            const lw = font.widthOfTextAtSize(line, fitted.size)
+            p.drawText(line, {
+              x: x + (w - lw) / 2, y: firstBaseline - i * lineAdvance,
+              size: fitted.size, font, color: BLACK,
+            })
+          })
+        }
         if (spec.kind === 'raster' || needsRaster(spec.text)) {
           const raster = await getRaster(spec.text, spec.fontSize ?? 10)
           if (raster) {
@@ -1077,20 +1153,10 @@ export async function renderModelToPdf(
               height: drawH,
             })
           } else {
-            const fallback = fitInBlock(transliterate(spec.text), font, symSize, w * 0.9)
-            const fw = font.widthOfTextAtSize(fallback, symSize)
-            p.drawText(fallback, {
-              x: x + (w - fw) / 2, y: yTop - symbolCy - symSize * 0.35,
-              size: symSize, font, color: BLACK,
-            })
+            drawInBlockText(transliterate(spec.text))
           }
         } else {
-          const text = fitInBlock(spec.text, font, symSize, w * 0.9)
-          const tw = font.widthOfTextAtSize(text, symSize)
-          p.drawText(text, {
-            x: x + (w - tw) / 2, y: yTop - symbolCy - symSize * 0.35,
-            size: symSize, font, color: BLACK,
-          })
+          drawInBlockText(spec.text)
         }
       }
 
@@ -1146,6 +1212,8 @@ export async function renderModelToPdf(
         }
       }
     }
+
+    if (overflows) p.pushOperators(popGraphicsState())
   }
 
   // --- Subsystem summary pages -------------------------------------------

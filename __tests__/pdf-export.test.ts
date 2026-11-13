@@ -1,10 +1,10 @@
-import { PDFDocument } from 'pdf-lib'
+import { PDFDocument, StandardFonts } from 'pdf-lib'
 import { buildFullPlan, buildExportPlan, applyScope } from '@/lib/export/sheetTree'
 import {
   renderModelToPdf, DEFAULT_PDF_OPTIONS,
   roundedRectPath, terminatorPath, arrowHeadPath, showsPortNames, portLabel,
   wrapText, wrapBreakingWords, subsystemPathOf, sheetNameOf, footerHeightForLines,
-  wireLineCount, drawLookupPlot, drawTransferFunction, polynomialChunks,
+  wireLineCount, drawLookupPlot, drawTransferFunction, polynomialChunks, fitInBox,
 } from '@/lib/export/pdfRenderer'
 import { resolvePageSize, getPageSize, PAGE_SIZES } from '@/lib/export/pageSizes'
 import { getGlyphSpec, glyphWorkList, needsRaster } from '@/lib/export/blockGlyphs'
@@ -809,6 +809,58 @@ describe('wire hops and junction dots', () => {
       expect(hopLines).toBe(2 * r0.hopLines)
     } finally {
       paths.mockRestore()
+    }
+  })
+})
+
+describe('in-block text, dates and the print area (3.8.2)', () => {
+  test('fitInBox: text that fits is unchanged; a long number gets smaller on one line; an expression wraps', async () => {
+    const doc = await PDFDocument.create()
+    const font = await doc.embedFont(StandardFonts.Helvetica)
+    expect(fitInBox('2', font, 11, 50, 50)).toEqual({ lines: ['2'], size: 11 })
+    const gain = fitInBox('1.3333333333333333', font, 11, 50, 50)
+    expect(gain.lines).toEqual(['1.3333333333333333'])
+    expect(gain.size).toBeLessThan(11)
+    expect(font.widthOfTextAtSize('1.3333333333333333', gain.size)).toBeLessThanOrEqual(50.001)
+    const expr = '(in(0) > 0.5) ? ((in(1) < in(2)) ? 1.0 : 0.0) : in(3)'
+    const fitted = fitInBox(expr, font, 7, 60, 40)
+    expect(fitted.lines.length).toBeGreaterThan(1)
+    expect(fitted.lines.join('').replace(/ /g, '')).toBe(expr.replace(/ /g, '')) // not shortened
+    for (const line of fitted.lines) expect(font.widthOfTextAtSize(line, fitted.size)).toBeLessThanOrEqual(60.001)
+    expect(fitted.lines.length * fitted.size * 1.15).toBeLessThanOrEqual(40.001)
+  })
+
+  test('an Assert block prints a stand-in for the canvas checklist icon, not "?"', () => {
+    expect(getGlyphSpec(block('a', 'assert')).text).toBe('Assert')
+  })
+
+  test('the PDF dates are the print date; footerDate replaces the locale date', async () => {
+    const at = new Date('2026-11-12T09:30:00Z')
+    const plan = buildFullPlan([simpleSheet()])
+    const a = await renderModelToPdf(plan, opts(), { modelName: 'M', printedAt: at, footerDate: 'FIXED DATE' })
+    const b = await renderModelToPdf(plan, opts(), { modelName: 'M', printedAt: at, footerDate: 'FIXED DATE' })
+    expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true)
+    const doc = await PDFDocument.load(a, { updateMetadata: false })
+    expect(doc.getCreationDate()?.toISOString()).toBe(at.toISOString())
+    expect(doc.getModificationDate()?.toISOString()).toBe(at.toISOString())
+  })
+
+  test('a sheet larger than the print area is clipped to it, so it cannot cover the footer', async () => {
+    const { PDFPage } = await import('pdf-lib')
+    const ops = jest.spyOn(PDFPage.prototype, 'pushOperators')
+    const wide = { id: 'w', name: 'Wide', blocks: [block('l', 'source', { value: 1 }, 0, 0), block('r', 'source', { value: 1 }, 3000, 2000)], connections: [] }
+    try {
+      await renderModelToPdf(buildFullPlan([simpleSheet()]), opts(), ctx)
+      const small = ops.mock.calls.flat().filter(op => String(op) === 'W').length
+      await renderModelToPdf(buildFullPlan([wide]), opts(), ctx)
+      const total = ops.mock.calls.flat().filter(op => String(op) === 'W').length
+      expect(small).toBe(0)
+      expect(total).toBe(1)
+      ops.mockClear()
+      await renderModelToPdf(buildFullPlan([wide]), opts({ fitLargeSheets: true }), ctx)
+      expect(ops.mock.calls.flat().filter(op => String(op) === 'W').length).toBe(0)
+    } finally {
+      ops.mockRestore()
     }
   })
 })

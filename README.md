@@ -271,6 +271,53 @@ The hard metrics are `Thru`, `Ovlp`, `Cross`, `BlkOvl`, `Diag`, `PortDir` and `J
 - Optional **subsystem summary pages** list a subsystem's input and output ports, its parameters with types and values, and its sheet hierarchy
 - Every page carries a footer: the owning subsystem's full path in bold on its own wrapping line, then the model name, sheet name, page number, and print date
 - Text is **never shortened by default**, so everything in the document stays findable by search. An **Allow Text Truncation** group re-enables ellipses separately for block names and for in-block information (port labels, expressions)
+- Long in-block text, such as an Evaluate expression or a Gain of `1.3333333333333333`, stays inside its block: an expression breaks onto more lines, and a number gets a smaller font. The text is not shortened
+- A sheet that is larger than the print area is cut at the edge of the area, so that it does not cover the footer. To see all of a large sheet, select **Scale large sheets to fit the printing area**, or a larger page
+
+**Command-line PDF export**
+
+The `obliq:pdf` script writes a PDF of a model file. The pages are the same as the pages of **Export as PDF…** in the editor, because both use the same code (`src/lib/export/modelPdf.ts`). The script reads the same files as `obliq:cgen` and `obliq:layout`: a bare model with `sheets`, or a `{ name, data }` file from the model store.
+
+- To write a PDF beside the model, run `npm run obliq:pdf -- model.json`. The output is `model.pdf` in the same folder.
+- To write a PDF of more than one model, give all the model files. Each model gets its own PDF. With `-o`, give an existing folder.
+- To make a PDF that does not change when you make it again, add `--date`. Two runs with the same date and the same model give the same bytes.
+- To see all options, run `npm run obliq:pdf -- --help`.
+
+| Option | Effect |
+|--------|--------|
+| `-o, --out <path>` | With one model: the PDF file to write. With more than one model: an existing folder. The default is the model path with `.pdf` in place of `.json`. |
+| `--date <ISO 8601>` | A fixed print date, for example `2026-11-12` or `2026-11-12T09:30:00Z`. It sets the footer date and the PDF creation and modification dates. The footer shows it in UTC. A time without a zone is UTC. |
+| `--page-size <id>` | The page size. The default is `letter`. The values are `letter`, `legal`, `tabloid`, `a5` to `a0`, `ansi_c`, `ansi_d`, `ansi_e`, `arch_a` to `arch_e` and `arch_e1`. |
+| `--orientation landscape\|portrait` | The default is `landscape`. |
+| `--scaling 100\|50\|fit` | The default is `100`. `fit` scales each sheet to the print area. |
+| `--fit-large-sheets` | Scale only the sheets that are larger than the print area. |
+| `--scope model\|subsystem\|sheet` | The sheets to print. The default is `model`. |
+| `--sheet <name, id or path>` | The active sheet for the `subsystem` and `sheet` scopes. The default is the first top-level sheet. A path is the breadcrumb joined with `/`, for example `Main/FlightController/FlightController`. |
+| `--summaries` | Add a summary page before the sheets of each subsystem. |
+| `--truncate-block-names` | Shorten long block names with an ellipsis. |
+| `--truncate-in-block-text` | Shorten port names and in-block expressions with an ellipsis. |
+| `-h, --help` | Show the help. |
+
+The defaults are the defaults of the editor dialog. Without `--date`, the script uses the `SOURCE_DATE_EPOCH` environment variable (seconds since 1970) if it is set, else the current time, as the editor does.
+
+Examples:
+
+```bash
+# A PDF of each test model, in a folder
+mkdir -p build/pdf
+npm run obliq:pdf -- reference-models/fpv-demo-flight.json reference-models/fpv-acro-rate-step.json -o build/pdf
+
+# One subsystem of the vehicle on an A3 page, with a fixed date
+npm run obliq:pdf -- reference-models/fpv-vehicle.json -o rescue.pdf --scope sheet \
+  --sheet Main/FlightController/FlightController/GpsRescue/GpsRescue --page-size a3 --scaling fit --date 2026-11-12
+```
+
+Differences from the editor:
+- **Model references.** The script finds a referenced model as `obliq:test` and `obliq:cgen` do: the model files in the same folder, by name, then the store. The PDF shows a model reference as its block, as in the editor. It does not print the sheets of the referenced model. The script uses the referenced model to find the types of the wires from the block, so that vector and matrix wires have two or three lines. If the script cannot find a referenced model, it stops with an error. The editor prints the PDF without the wire types.
+- **No plot results.** The editor can print the plots of the last simulation run. That run is WebAssembly in the browser. The script does not simulate, so it prints the diagrams only.
+- **Symbols.** The editor draws symbols that Helvetica does not have (`∑`, `∫`, `↓`) as small images. The script cannot draw these images, so it prints text in their place, for example `SUM`, `INT` and `v`.
+
+The script exits with code 0 when it writes all the PDFs. It exits with code 1, and writes no PDF for that model, when a model file cannot be read, a sheet or page size is unknown, or a model reference cannot be resolved.
 
 ### Simulation Engine
 - **Client-side simulation** - Models are compiled dynamically and executed as [Web Assemblies](https://webassembly.org/)
@@ -640,6 +687,7 @@ obliq-2/
     ├── obliq-link.ts                 # npm run obliq:link — link/list/unlink model files
     ├── migrate-from-supabase.ts      # npm run migrate:supabase — one-time import from 2.x
     ├── obliq-cgen.ts                 # npm run obliq:cgen — C code from a model JSON file
+    ├── obliq-pdf.ts                  # npm run obliq:pdf — PDF of a model JSON file
     └── obliq-test.ts                 # npm run obliq:test — run models' Assert blocks
 ```
 
