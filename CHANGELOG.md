@@ -1,5 +1,13 @@
 # obliq-2 Change Log
 
+## What's New in 3.8.5
+
+- **Fixed: discrete state advanced four times per step under RK4.** A `unit_delay` or Memory block in a model that runs with RK4 wrote its state during each stage of the integrator, not once per major step. The first write (before the stage snapshot) stuck; stages `k2..k4` then read the just-written state through the delayed signal. A derivative that depended on it integrated the wrong value. GitHub issues [#7](https://github.com/rrainey/obliq-2/issues/7) and [#8](https://github.com/rrainey/obliq-2/issues/8).
+  - The fix: all `unit_delay` and Memory state updates now run in `_update_memory_states`, which the step function calls once per major step after the RK4 loop. Segregated subsystems get the same split: `_compute_outputs` is per stage, `_update_memory_states` is once per step.
+  - Behaviour change in `seed_from_inputs`: it no longer advances a discrete state. The initial value of a `unit_delay` is the state until the first step's `_update_memory_states` fires. Simulation output of the shipped FPV models does not change (verified).
+  - New tests: `__tests__/codegen/rk4-unit-delay-state-timing.test.ts`. The counter test in `__tests__/codegen/rk4-stage-evaluation.test.ts` is updated to the correct Simulink semantics (10 steps → state 10, not 11).
+- **Documented: the calling convention for hand-edited `compute_outputs`.** `compute_outputs` of a segregated subsystem runs up to four times per major step under RK4. Hand-edited code must not advance per-call `static` state by itself. Use `model->sample_tick` (stable across the four stages) as a per-tick guard, or move the state transition to `_update_memory_states`. See `docs/NATIVE_SUBSYSTEM_DESIGN.md` §4.3 and `docs/code-generation-architecture.md`.
+
 ## What's New in 3.8.4
 
 This release puts the **Saturation Dynamic** block on the block palette, documents four more blocks and adds them to the MCP server, fixes defects in those blocks and in two server routes, and removes material that referred to other repositories or to the retired cloud design. **The models and the generated code of the FPV Vehicle do not change.** Only page 16 of `reference-models/fpv-vehicle.pdf` changes, where the Saturation Dynamic block now has its symbol.

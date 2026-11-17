@@ -1,6 +1,6 @@
 {
   "name": "obliq-2",
-  "version": "3.8.4",
+  "version": "3.8.5",
   "private": true,
   "scripts": {
     "dev": "next dev -H 127.0.0.1",
