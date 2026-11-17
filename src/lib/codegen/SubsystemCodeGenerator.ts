@@ -862,9 +862,11 @@ export class SubsystemCodeGenerator {
       }
     }
 
-    // Discrete unit_delay only; Memory (delayMode:memory) latches in
-    // update_memory_states after parent RK4 (UH60 P3).
-    code += this.generateDeferredStateUpdates(executionOrder, 'unit_delay')
+    // GitHub issues #7 and #8: unit_delay and Memory state updates both run
+    // once per major step in update_memory_states, after the parent's RK4.
+    // Derivative / VTD latches stay here, because their "u vs state" output
+    // pattern needs the fresh state to compute each stage's output.
+    code += this.generateDeferredStateUpdates(executionOrder, 'in_algebra')
 
     // Copy signals to outputs
     code += '\n    /* Copy signals to outputs */\n'
@@ -941,7 +943,7 @@ export class SubsystemCodeGenerator {
 
   private generateDeferredStateUpdates(
     executionOrder: FlattenedBlock[],
-    mode: 'unit_delay' | 'memory' | 'all' = 'all'
+    mode: 'in_algebra' | 'post_integration' | 'all' = 'all'
   ): string {
     let code = ''
     let header = false
@@ -955,13 +957,9 @@ export class SubsystemCodeGenerator {
       ) {
         continue
       }
-      if (block.block.type === 'unit_delay') {
-        const isMemory = block.block.parameters?.delayMode === 'memory'
-        if (mode === 'unit_delay' && isMemory) continue
-        if (mode === 'memory' && !isMemory) continue
-      } else if (mode === 'memory') {
-        continue
-      }
+      const isUnitDelay = block.block.type === 'unit_delay'
+      if (mode === 'in_algebra' && isUnitDelay) continue
+      if (mode === 'post_integration' && !isUnitDelay) continue
       try {
         const generator = BlockModuleFactory.getBlockModule(block.block.type)
         if (!generator.generateDeferredStateUpdate) continue
@@ -985,11 +983,11 @@ export class SubsystemCodeGenerator {
 
         if (!header) {
           const label =
-            mode === 'memory'
-              ? 'Memory major-step hold updates (post-integration)'
-              : mode === 'unit_delay'
-                ? 'Deferred discrete state updates (unit_delay)'
-                : 'Deferred discrete state updates (unit_delay / Memory)'
+            mode === 'post_integration'
+              ? 'Deferred unit_delay / Memory state updates (post-integration)'
+              : mode === 'in_algebra'
+                ? 'Deferred state updates (derivative / VTD latches)'
+                : 'Deferred discrete state updates'
           code += `\n    /* ${label} */\n`
           header = true
         }
@@ -1002,13 +1000,18 @@ export class SubsystemCodeGenerator {
     return code
   }
 
-  /** UH60 P3: Memory latch after parent RK4 (called from parent update_memory_states). */
+  /**
+   * All deferred discrete state updates (unit_delay and Memory) run here,
+   * called by the parent's update_memory_states once per major step after
+   * RK4 (GitHub issues #7 and #8).
+   */
   private generateUpdateMemoryStatesFunction(): string {
     const name = this.typeName()
     const executionOrder = this.calculateExecutionOrder()
-    const body = this.generateDeferredStateUpdates(executionOrder, 'memory')
+    const body = this.generateDeferredStateUpdates(executionOrder, 'post_integration')
     let code = CCodeBuilder.generateCommentBlock([
-      'UH60 P3: Memory major-step hold — latch after parent RK4/Euler'
+      'Deferred discrete state updates (unit_delay and Memory): state = u',
+      'Called by the parent after RK4 / Euler, once per major step.'
     ])
     code += `void ${name}_update_memory_states(${name}_t* model) {\n`
     if (!body.trim()) {
@@ -1020,12 +1023,9 @@ export class SubsystemCodeGenerator {
     return code
   }
 
+  /** True when this subsystem has a unit_delay block (every delayMode). */
   private hasMemoryDelayBlocks(): boolean {
-    return this.info.flattenedModel.blocks.some(
-      b =>
-        b.block.type === 'unit_delay' &&
-        b.block.parameters?.delayMode === 'memory'
-    )
+    return this.info.flattenedModel.blocks.some(b => b.block.type === 'unit_delay')
   }
 
   private generateBlockComputation(block: FlattenedBlock): string {

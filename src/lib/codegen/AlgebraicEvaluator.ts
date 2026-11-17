@@ -390,9 +390,14 @@ export class AlgebraicEvaluator {
       }
     }
 
-    // Phase 2: discrete unit_delay state = u (Memory major-step hold waits until
-    // after RK4 — see generatePostIntegrationMemoryUpdates / UH60 P3).
-    code += this.generateDeferredStateUpdates(executionOrder, 'unit_delay')
+    // GitHub issues #7 and #8: unit_delay and Memory updates have moved to
+    // update_memory_states (post-RK4). A per-stage state write would be
+    // visible to later stages through the delayed output, which breaks
+    // Simulink semantics. Derivative / VTD latches stay here, because the
+    // RK4 snapshot-and-restore keeps their per-stage state correct and their
+    // "u vs state" output pattern needs the fresh state to compute each
+    // stage's output value.
+    code += this.generateDeferredStateUpdates(executionOrder, 'in_algebra')
 
     // Add sample storage for data collection blocks
     code += this.generateDataCollectionStorage(executionOrder)
@@ -402,17 +407,33 @@ export class AlgebraicEvaluator {
   }
 
   /**
-   * UH60 P3: Memory (delayMode:memory) latches after continuous integration so
-   * RK4 minor stages see a stable major-step hold (Simulink Memory semantics
-   * under fixed-step). Emitted as `${model}_update_memory_states`.
+   * All deferred discrete state updates (unit_delay and Memory) run here,
+   * once per major step, after RK4 completes. If a state update ran during
+   * the per-stage evaluate_algebraic, stages k2..k4 would read the just-
+   * written state through the delayed signal, and derivatives that depend
+   * on it would integrate the wrong value (GitHub issues #7 and #8).
+   *
+   * Emitted as `${model}_update_memory_states`.
    */
   generatePostIntegrationMemoryUpdates(): string {
     const executionOrder = this.getExecutionOrderForDeferred()
-    const body = this.generateDeferredStateUpdates(executionOrder, 'memory')
-    if (!body.trim()) {
+    const body = this.generateDeferredStateUpdates(executionOrder, 'post_integration')
+    // Segregated modules may hold their own unit_delay or Memory blocks;
+    // the top level calls each one's update_memory_states after the parent's
+    // RK4, so the inner state transitions also fire once per major step.
+    let subCalls = ''
+    for (const sub of this.model.segregatedSubsystems || []) {
+      const hasDeferred = (sub.flattenedModel?.blocks || []).some(
+        b => b.block.type === 'unit_delay'
+      )
+      if (hasDeferred) {
+        subCalls += `    ${(sub.moduleTypeName || sub.sanitizedName)}_update_memory_states(&model->${sub.sanitizedName});\n`
+      }
+    }
+    if (!body.trim() && !subCalls) {
       // Still emit an empty function so _step can call it unconditionally
       let code = CCodeBuilder.generateCommentBlock([
-        'UH60 P3: no Memory (delayMode:memory) blocks — major-step hold no-op'
+        'No deferred state updates (no unit_delay or Memory blocks)'
       ])
       code += `void ${this.modelName}_update_memory_states(${this.modelName}_t* model) {\n`
       code += '    (void)model;\n'
@@ -420,22 +441,13 @@ export class AlgebraicEvaluator {
       return code
     }
     let code = CCodeBuilder.generateCommentBlock([
-      'UH60 P3: Memory major-step hold — latch state = u after RK4/Euler',
-      'Output phase already published previous state during evaluate_algebraic'
+      'Deferred discrete state updates (unit_delay and Memory): state = u',
+      'Runs once per major step, after RK4 / Euler integration completes.',
+      'Output phase already published the previous state during evaluate_algebraic.'
     ])
     code += `void ${this.modelName}_update_memory_states(${this.modelName}_t* model) {\n`
-    code += body
-    // Segregated modules may contain Memory; update after parent integration
-    for (const sub of this.model.segregatedSubsystems || []) {
-      const memBlocks = (sub.flattenedModel?.blocks || []).filter(
-        b =>
-          b.block.type === 'unit_delay' &&
-          b.block.parameters?.delayMode === 'memory'
-      )
-      if (memBlocks.length > 0) {
-        code += `    ${(sub.moduleTypeName || sub.sanitizedName)}_update_memory_states(&model->${sub.sanitizedName});\n`
-      }
-    }
+    if (body.trim()) code += body
+    if (subCalls) code += subCalls
     code += '}\n'
     return code
   }
@@ -451,16 +463,28 @@ export class AlgebraicEvaluator {
   }
 
   /**
-   * Emit deferred unit_delay state updates (state = u) after producers have run.
+   * Emit deferred state updates (state = u) after producers have run.
    * Enable-gates updates so disabled subsystems freeze delay lines (RTW).
    *
-   * @param mode `unit_delay` = discrete z⁻¹ (algebra phase);
-   *             `memory` = major-step hold (post-integration);
-   *             `all` = both (legacy / subsystem without split)
+   * Two groups of blocks have deferred updates:
+   * - `unit_delay` (both `delayMode` values): the output IS the state, so
+   *   the state update must wait until after RK4 to keep the four stages'
+   *   outputs stable (GitHub issues #7 and #8).
+   * - `derivative`, `variable_transport_delay`: the output is computed from
+   *   `u` and the state, then the state latches `u` for the next step. The
+   *   RK4 snapshot-and-restore keeps these correct when the latch runs in
+   *   `evaluate_algebraic`; the stage sees a state from the pre-snapshot
+   *   write, which is the right value for its own `u`-vs-state calculation.
+   *
+   * @param mode `in_algebra` = everything except unit_delay (fires during
+   *             evaluate_algebraic);
+   *             `post_integration` = unit_delay only, both delay modes
+   *             (fires in update_memory_states, after RK4);
+   *             `all` = both (legacy / where a split is not needed)
    */
   private generateDeferredStateUpdates(
     executionOrder: FlattenedBlock[],
-    mode: 'unit_delay' | 'memory' | 'all' = 'all'
+    mode: 'in_algebra' | 'post_integration' | 'all' = 'all'
   ): string {
     let code = ''
     let header = false
@@ -472,16 +496,9 @@ export class AlgebraicEvaluator {
       if (block.isSegregated || !BlockModuleFactory.isSupported(block.block.type)) {
         continue
       }
-      if (block.block.type === 'unit_delay') {
-        const dm = block.block.parameters?.delayMode
-        const isMemory = dm === 'memory'
-        if (mode === 'unit_delay' && isMemory) continue
-        if (mode === 'memory' && !isMemory) continue
-        // mode === 'all' → both
-      } else if (mode === 'memory') {
-        // Only unit_delay participates in memory latch
-        continue
-      }
+      const isUnitDelay = block.block.type === 'unit_delay'
+      if (mode === 'in_algebra' && isUnitDelay) continue
+      if (mode === 'post_integration' && !isUnitDelay) continue
 
       try {
         const generator = BlockModuleFactory.getBlockModule(block.block.type)
@@ -510,11 +527,11 @@ export class AlgebraicEvaluator {
 
         if (!header) {
           const label =
-            mode === 'memory'
-              ? 'Memory major-step hold updates (post-integration)'
-              : mode === 'unit_delay'
-                ? 'Deferred discrete state updates (unit_delay)'
-                : 'Deferred discrete state updates (unit_delay / Memory)'
+            mode === 'post_integration'
+              ? 'Deferred unit_delay / Memory state updates (post-integration)'
+              : mode === 'in_algebra'
+                ? 'Deferred state updates (derivative / VTD latches)'
+                : 'Deferred discrete state updates'
           code += `\n    /* ${label} */\n`
           header = true
         }

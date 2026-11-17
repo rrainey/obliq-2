@@ -93,9 +93,12 @@ describe('RK4 stage evaluation', () => {
 
   it('stage evaluations leave discrete states alone: the counter advances once per step', () => {
     const rows = parse(run('rk4').stdout)
-    // seed_from_inputs' final algebra pass latches 1; each step then adds exactly
-    // one. Stage evaluations leaking through would add about four per step.
-    expect(rows.map(r => r.n)).toEqual([11, 21, 41])
+    // seed_from_inputs leaves the unit_delay at its initial value. The state
+    // transition belongs to the per-step update_memory_states function, and
+    // seed does not call it (GitHub issues #7 and #8). Each step then adds
+    // exactly one. Stage evaluations leaking through would add about four
+    // per step.
+    expect(rows.map(r => r.n)).toEqual([10, 20, 40])
   })
 
   it('Euler stays first order (for comparison)', () => {

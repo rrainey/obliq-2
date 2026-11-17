@@ -74,6 +74,7 @@ Port field types use Obliq declarations (`double`, `double[3]`, `double[3][3]`, 
 void Name_init(Name_t* model);
 void Name_compute_outputs(Name_t* model);
 void Name_compute_derivatives(const Name_t* model, Name_states_t* derivatives); /* if hasState */
+void Name_update_memory_states(Name_t* model);      /* once per major step; discrete state transitions */
 void Name_reset_states(Name_t* model); /* if hasResetInput */
 ```
 
@@ -84,8 +85,31 @@ Parent call pattern (unchanged from segregated):
 3. If enabled: `Name_compute_outputs(&model->Name)`
 4. Downstream reads `model->Name.outputs.*`
 5. RK4 stages also call `Name_compute_derivatives` when `hasState`
+6. **Once per major step, after RK4 completes**: `Name_update_memory_states(&model->Name)`
 
 **No new macros required for v1** beyond what segregated bodies already assume (`dt` passed at parent init into model context as today). If LVDC needs sample-tick / enable-scope helpers, add thin wrappers in the native public header that mirror existing flattened-model helpers — document any addition here.
+
+### 4.3 Calling convention for stateful hand-edits
+
+**`compute_outputs` runs multiple times per major step** when the parent integrates with RK4 — one call at the start of the step and one for each of the stages `k1..k4`, for a total of up to four calls (GitHub issues #7 and #8).
+
+The generated algebraic code is safe under this convention, because the intermediate stages write to `model->states.*` which the parent restores with `*model = rk4_major` after each stage. Only `k1`'s write sticks, and it writes the same value every step boundary. Hand-edited code that lives in the same file does not get this snapshot-and-restore, because `static` locals and host globals are outside `model`.
+
+**Rules for a hand-edit inside `compute_outputs`:**
+
+1. **Writes to `model->*` are fine.** Writes outside the model struct must gate on the simulation tick, so that they fire once per major step.
+2. **`model->sample_tick` is stable across the four RK4 stages of one major step.** The parent increments it after the whole step. Use it, not a local call counter.
+3. **Per-tick-guard pattern** for a `static` accumulator:
+
+   ```c
+   static unsigned long long s_last_tick = (unsigned long long)-1;
+   if (model->sample_tick != s_last_tick) {
+       /* State transition that must fire once per step */
+       s_last_tick = model->sample_tick;
+   }
+   ```
+
+4. **Prefer `update_memory_states` for a true state transition.** A long-lived state transition belongs in `update_memory_states`, which the parent calls once per major step after the RK4 loop completes. `compute_outputs` is for algebraic read/compute, not for state advance.
 
 ---
 

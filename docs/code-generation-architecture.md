@@ -80,18 +80,37 @@ This function computes all signal values and outputs based on current inputs and
 #### 2. Time Step Function
 ```c
 void model_step(model_t* model) {
-    // Evaluate algebraic relationships
-    model_evaluate_algebraic(&model->inputs, &model->states, 
-                           &model->signals, &model->outputs,
-                           &model->enable_states);
-    
-    // Perform integration (Euler, RK4, etc.)
+    // Evaluate algebraic relationships at the start of the step (k1)
+    model_evaluate_algebraic(model);
+
+    // Perform integration (Euler, or RK4 with three more algebra calls)
     integrate_states(model);
-    
+
+    // Discrete state transitions (unit_delay, Memory): once per major step,
+    // after RK4 completes, so that the four RK4 stages see a stable state.
+    model_update_memory_states(model);
+
     // Update time
     model->time += model->dt;
+    model->sample_tick++;
 }
 ```
+
+**Discrete state and RK4**
+
+Under RK4, `evaluate_algebraic` runs four times per major step — once at the
+start, then once at each of stages `k1..k4`. A discrete state update
+(`unit_delay`, Memory, data-store write) must not fire inside
+`evaluate_algebraic`: the first write before the stage snapshot would stick,
+and stages `k2..k4` would read the just-written state through the delayed
+signal. A derivative that depends on that signal would then integrate the
+wrong value. See GitHub issues #7 and #8.
+
+The generator puts all discrete state updates in `_update_memory_states`,
+which the step function calls once per major step after the RK4 loop.
+Segregated subsystems have the same split: their `_compute_outputs` is
+called per stage by the parent, and their `_update_memory_states` is
+called once per step from the parent's `_update_memory_states`.
 
 #### 3. Derivatives Function (for RK4)
 ```c
